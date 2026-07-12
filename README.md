@@ -2,6 +2,8 @@
 
 **Effortlessly switch between multiple concurrent Claude Code terminal sessions — a macOS app.**
 
+![Logic Loop](docs/assets/logic-loop-ui.png)
+
 Logic Loop is an open-source macOS app that aids the human's context-switching
 limits while running several Claude Code terminal sessions at once. Every
 competing tool tells you what your *agents* are doing. Logic Loop tells you what
