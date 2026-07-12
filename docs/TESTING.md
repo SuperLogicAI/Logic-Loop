@@ -252,8 +252,55 @@ the app should surface it as an open "decision" so nothing slips by.
       know" incidents. Any miss becomes a new golden fixture.
         *unable to test - less than 24hrs of testing*
 
+## 13. Phase 4 — Landing note / residue / momentum
+
+Background: the ritual layer — reduce switch-recovery cost. Leaving a tab that
+had agent activity prompts a "next physical action" note; the rail shows what
+you left behind and one thing to do next.
+
+### Landing Note modal
+- [ ] In tab A, let an agent do something (any hook event — a tool use, a Stop).
+      Switch to tab B. → Landing-note modal appears for A within a moment.
+- [ ] The textarea pre-fills with a suggested next action (drafted from A's last
+      transcript turns). If the draft backend is slow/off, the box stays empty —
+      terminals unaffected either way.
+- [ ] 60s circular countdown ticks down. Hitting zero auto-skips (modal closes,
+      never held hostage).
+- [ ] Esc skips. Skip closes with no saved action (but IS logged — see metric).
+- [ ] Type an action, Save (or ⌘/Ctrl+Enter). Modal closes.
+- [ ] Flip A↔B repeatedly within 10 min → at most ONE prompt per tab (debounce).
+- [ ] Close a tab (⌘W or ✕) that had agent activity → modal appears after the
+      PTY dies; the draft still works (reads persisted transcript).
+- [ ] App quit (⌘Q) → NO landing modal; only the existing quit-confirm dialog.
+- [ ] Skip-rate metric: skips write a `notes` row with `kind='landing',
+      status='skipped', body=''`. Verify:
+      `sqlite3 <db> "SELECT status,count(*) FROM notes WHERE kind='landing' GROUP BY status"`
+
+### Attention Residue (rail, "Left behind" section)
+- [ ] Switch A→B: the rail's "Left behind" section shows A's project name, A's
+      last agent-state dot, and A's landing note (or "no landing note").
+- [ ] Type in its quick-add input + Enter → residue row filed against A's cwd,
+      input clears, row appears in the list (up to 3 shown).
+- [ ] Switch back to A: the section is gone (A is current now, not previous).
+- [ ] ✕ on a residue row clears it (marked done).
+
+### Momentum Builder (rail top, "Next" card)
+- [ ] Seed an open landing note + an open decision + an open blocker for a
+      project. The "Next" card shows the landing note (labeled `landing note`).
+- [ ] Click ✓ Done → ~800ms confetti burst; card advances to the oldest open
+      decision → Done → oldest open blocker → Done → card disappears entirely.
+- [ ] Underlying rows actually change state (landing→done, decision→answered,
+      blocker→resolved); badges update.
+
+### Exit criterion (self-tracked, manual)
+- [ ] Note the clock at a context switch; note when the first productive
+      keystroke lands after returning. Switch-recovery time should measurably
+      drop with landing notes vs. without.
+
 ## Quality gates (machine-run, not manual)
 
-- [x] `npx tsc --noEmit` clean. *(rerun 2026-07-11 after bookmark fix)*
+- [x] `npx tsc --noEmit` clean. *(rerun 2026-07-12 for Phase 4)*
 - [x] `cargo clippy --all-targets -- -D warnings` clean (in `src-tauri/`).
-- [x] `cargo test` passes (settings.json hook editing round-trip).
+- [x] `cargo test` passes (settings.json hook editing round-trip). *(3/3)*
+- [x] `npm run golden` — 12/12 (claude). *(rerun 2026-07-12; decision prompt unchanged)*
+- [x] `npm run landing:check` — landing-draft parser assertions pass. *(new, Phase 4)*

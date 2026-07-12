@@ -53,6 +53,16 @@ export interface Decision {
   ts: number;
 }
 
+export interface Note {
+  id: number;
+  cwd: string;
+  kind: "landing" | "residue";
+  body: string;
+  status: "open" | "done" | "skipped";
+  session_id: string | null;
+  ts: number;
+}
+
 export interface ExtractorSettings {
   backend: "claude" | "lmstudio";
   lmstudioUrl: string;
