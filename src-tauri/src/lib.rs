@@ -68,6 +68,21 @@ pub fn run() {
                 value TEXT NOT NULL
               );",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 5,
+        description: "create notes",
+        sql: "CREATE TABLE IF NOT EXISTS notes (
+                id INTEGER PRIMARY KEY,
+                cwd TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                body TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'open',
+                session_id TEXT,
+                ts INTEGER NOT NULL
+              );
+              CREATE INDEX IF NOT EXISTS idx_notes_cwd ON notes(cwd, kind, status);",
+        kind: MigrationKind::Up,
     }];
 
     tauri::Builder::default()

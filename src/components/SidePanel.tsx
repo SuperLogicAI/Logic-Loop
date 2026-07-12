@@ -1,15 +1,25 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import * as repo from "../lib/repo";
-import type { Blocker, Commit, Decision, ToolEvent } from "../types";
+import { burst } from "../lib/confetti";
+import type { AgentState, Blocker, Commit, Decision, Note, ToolEvent } from "../types";
 
 interface Props {
   cwd: string; // expanded absolute project dir of the active tab
   refreshKey: number; // bump to force reload (new events / blocker changes)
+  prevCwd: string | null; // project of the tab we switched away from (residue)
+  prevState?: AgentState; // that tab's last agent state
   onBlockersChanged: () => void;
   onDecisionsChanged: () => void;
   onAnswerNow: (d: Decision) => void; // prefill terminal — user still hits Enter
 }
+
+const STATE_DOT: Record<AgentState, string> = {
+  working: "bg-sky-400",
+  waiting: "bg-amber-400",
+  idle: "bg-zinc-500",
+  error: "bg-red-400",
+};
 
 function ago(ts: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
@@ -19,30 +29,101 @@ function ago(ts: number): string {
   return `${Math.floor(s / 86400)}d`;
 }
 
-export function SidePanel({ cwd, refreshKey, onBlockersChanged, onDecisionsChanged, onAnswerNow }: Props) {
+export function SidePanel({ cwd, refreshKey, prevCwd, prevState, onBlockersChanged, onDecisionsChanged, onAnswerNow }: Props) {
   const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
   const [commits, setCommits] = useState<Commit[]>([]);
   const [blockers, setBlockers] = useState<Blocker[]>([]);
   const [decisions, setDecisions] = useState<Decision[]>([]);
+  const [landing, setLanding] = useState<Note | null>(null); // active project, momentum
+  const [prevLanding, setPrevLanding] = useState<Note | null>(null); // previous project
+  const [residue, setResidue] = useState<Note[]>([]); // previous project, open residue
   const [context, setContext] = useState<Decision | null>(null);
   const [draft, setDraft] = useState("");
+  const [residueDraft, setResidueDraft] = useState("");
 
   const reload = useCallback(async () => {
-    const [te, bl, gl, dc] = await Promise.all([
+    const [te, bl, gl, dc, ln] = await Promise.all([
       repo.listToolEvents(cwd).catch(() => []),
       repo.listBlockers(cwd).catch(() => []),
       invoke<Commit[]>("git_log", { cwd, limit: 15 }).catch(() => []),
       repo.listDecisions(cwd).catch(() => []),
+      repo.latestLandingNote(cwd).catch(() => null),
     ]);
     setToolEvents(te);
     setBlockers(bl);
     setCommits(gl);
     setDecisions(dc);
+    setLanding(ln);
   }, [cwd]);
+
+  const reloadResidue = useCallback(async () => {
+    if (!prevCwd || prevCwd === cwd) {
+      setPrevLanding(null);
+      setResidue([]);
+      return;
+    }
+    const [pl, rn] = await Promise.all([
+      repo.latestLandingNote(prevCwd).catch(() => null),
+      repo.listNotes(prevCwd, "residue").catch(() => []),
+    ]);
+    setPrevLanding(pl);
+    setResidue(rn.filter((n) => n.status === "open").slice(0, 3));
+  }, [prevCwd, cwd]);
 
   useEffect(() => {
     void reload();
   }, [reload, refreshKey]);
+
+  useEffect(() => {
+    void reloadResidue();
+  }, [reloadResidue, refreshKey]);
+
+  const addResidue = async () => {
+    const text = residueDraft.trim();
+    if (!text || !prevCwd) return;
+    await repo.addNote(prevCwd, "residue", text, null);
+    setResidueDraft("");
+    await reloadResidue();
+  };
+
+  const dismissResidue = async (n: Note) => {
+    await repo.setNoteStatus(n.id, "done");
+    await reloadResidue();
+  };
+
+  // Momentum: latest open landing note → oldest open decision → oldest open
+  // blocker. Nothing open → no card. Done advances to the next candidate.
+  const doneRef = useRef<HTMLButtonElement>(null);
+  const oldestOpenDecision = decisions
+    .filter((d) => d.status === "open")
+    .reduce<Decision | null>((a, d) => (!a || d.ts < a.ts ? d : a), null);
+  const oldestOpenBlocker = blockers
+    .filter((b) => b.resolved === 0)
+    .reduce<Blocker | null>((a, b) => (!a || b.ts < a.ts ? b : a), null);
+  const momentum: { label: string; text: string; done: () => Promise<void> } | null = landing
+    ? { label: "landing note", text: landing.body, done: () => repo.setNoteStatus(landing.id, "done") }
+    : oldestOpenDecision
+      ? {
+          label: "decision",
+          text: oldestOpenDecision.question,
+          done: () => repo.setDecisionStatus(oldestOpenDecision.id, "answered"),
+        }
+      : oldestOpenBlocker
+        ? {
+            label: "blocker",
+            text: oldestOpenBlocker.text,
+            done: () => repo.setBlockerResolved(oldestOpenBlocker.id, true),
+          }
+        : null;
+
+  const finishMomentum = async () => {
+    if (!momentum) return;
+    if (doneRef.current) burst(doneRef.current);
+    await momentum.done();
+    await reload();
+    onBlockersChanged();
+    onDecisionsChanged();
+  };
 
   const addManual = async () => {
     const text = draft.trim();
@@ -81,6 +162,24 @@ export function SidePanel({ cwd, refreshKey, onBlockersChanged, onDecisionsChang
       <p className="truncate border-b border-zinc-800 pb-1.5 font-mono text-[10px] text-zinc-500" title={cwd}>
         project: {cwd.split("/").filter(Boolean).pop() ?? cwd}
       </p>
+
+      {momentum && (
+        <section className="rounded-lg border border-teal-800/60 bg-teal-950/20 p-3">
+          <h2 className="mb-1 flex items-center gap-1.5 font-semibold tracking-wide text-teal-300 uppercase">
+            ▸ Next
+            <span className="ml-auto font-normal text-[10px] normal-case text-zinc-500">{momentum.label}</span>
+          </h2>
+          <p className="mb-2 break-words text-zinc-200">{momentum.text}</p>
+          <button
+            ref={doneRef}
+            className="rounded bg-teal-700 px-2.5 py-1 text-zinc-100 hover:bg-teal-600"
+            onClick={() => void finishMomentum()}
+          >
+            ✓ Done
+          </button>
+        </section>
+      )}
+
       <section>
         <h2 className="mb-1.5 font-semibold tracking-wide text-violet-400 uppercase">
           Decisions {openDecisions.length > 0 && `(${openDecisions.length})`}
@@ -194,6 +293,45 @@ export function SidePanel({ cwd, refreshKey, onBlockersChanged, onDecisionsChang
           ))}
         </ul>
       </section>
+
+      {prevCwd && prevCwd !== cwd && (
+        <section className="border-t border-zinc-800 pt-3">
+          <h2 className="mb-1.5 flex items-center gap-1.5 font-semibold tracking-wide text-zinc-400 uppercase">
+            Left behind
+            {prevState && <span className={`h-2 w-2 rounded-full ${STATE_DOT[prevState]}`} title={prevState} />}
+            <span className="ml-auto truncate font-normal text-[10px] normal-case text-zinc-600" title={prevCwd}>
+              {prevCwd.split("/").filter(Boolean).pop() ?? prevCwd}
+            </span>
+          </h2>
+          <p className="mb-2 text-zinc-500">
+            {prevLanding ? (
+              <>
+                <span className="text-zinc-600">landing: </span>
+                <span className="text-zinc-300">{prevLanding.body}</span>
+              </>
+            ) : (
+              "no landing note"
+            )}
+          </p>
+          <input
+            className="mb-2 w-full rounded bg-zinc-800 px-2 py-1 text-zinc-200 outline-none placeholder:text-zinc-600"
+            placeholder="Park a thought before it's gone…"
+            value={residueDraft}
+            onChange={(e) => setResidueDraft(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && void addResidue()}
+          />
+          <ul className="flex flex-col gap-1">
+            {residue.map((n) => (
+              <li key={n.id} className="flex items-start gap-2">
+                <span className="min-w-0 flex-1 break-words text-zinc-400">{n.body}</span>
+                <button className="shrink-0 text-zinc-600 hover:text-zinc-200" title="Clear" onClick={() => void dismissResidue(n)}>
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {context && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/60" onClick={() => setContext(null)}>

@@ -1,5 +1,5 @@
 import Database from "@tauri-apps/plugin-sql";
-import type { Blocker, Bookmark, Decision, ExtractorSettings, ToolEvent } from "../types";
+import type { Blocker, Bookmark, Decision, ExtractorSettings, Note, ToolEvent } from "../types";
 import type { ExtractedDecision } from "./extractor";
 
 let db: Database | null = null;
@@ -178,6 +178,55 @@ export async function setExtractorSettings(s: ExtractorSettings): Promise<void> 
       [k, v]
     );
   }
+}
+
+// --- Notes: landing prompts + attention residue (Phase 4) ---
+
+export async function addNote(
+  cwd: string,
+  kind: Note["kind"],
+  body: string,
+  sessionId: string | null,
+  status: Note["status"] = "open"
+): Promise<void> {
+  const d = await getDb();
+  await d.execute(
+    "INSERT INTO notes (cwd, kind, body, status, session_id, ts) VALUES ($1, $2, $3, $4, $5, $6)",
+    [cwd, kind, body, status, sessionId, Date.now()]
+  );
+}
+
+export async function listNotes(cwd: string, kind: Note["kind"]): Promise<Note[]> {
+  const d = await getDb();
+  return d.select<Note[]>(
+    "SELECT * FROM notes WHERE cwd = $1 AND kind = $2 ORDER BY ts DESC LIMIT 100",
+    [cwd, kind]
+  );
+}
+
+export async function setNoteStatus(id: number, status: Note["status"]): Promise<void> {
+  const d = await getDb();
+  await d.execute("UPDATE notes SET status = $1 WHERE id = $2", [status, id]);
+}
+
+/** Momentum + residue: the most recent open landing note for a project, if any. */
+export async function latestLandingNote(cwd: string): Promise<Note | null> {
+  const d = await getDb();
+  const rows = await d.select<Note[]>(
+    "SELECT * FROM notes WHERE cwd = $1 AND kind = 'landing' AND status = 'open' AND body != '' ORDER BY ts DESC LIMIT 1",
+    [cwd]
+  );
+  return rows[0] ?? null;
+}
+
+/** Landing draft: the session's last few transcript-line payloads, oldest first. */
+export async function recentTranscript(sessionId: string, limit = 20): Promise<string[]> {
+  const d = await getDb();
+  const rows = await d.select<{ payload_json: string }[]>(
+    "SELECT payload_json FROM events WHERE session_id = $1 AND type = 'transcript' ORDER BY ts DESC LIMIT $2",
+    [sessionId, limit]
+  );
+  return rows.map((r) => r.payload_json).reverse();
 }
 
 /** Tab badges: open-blocker count per project cwd. */

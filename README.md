@@ -1,4 +1,7 @@
-# Logic Loop
+<h1>
+  <img src="docs/assets/logo.png" alt="Logic Loop logo" height="32" valign="middle">
+  &nbsp;Logic Loop
+</h1>
 
 **Effortlessly switch between multiple concurrent Claude Code terminal sessions — a macOS app.**
 

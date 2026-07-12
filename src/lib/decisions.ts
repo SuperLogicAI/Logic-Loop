@@ -8,7 +8,7 @@ import * as repo from "./repo";
 const assistantBuf = new Map<string, string>(); // session_id -> pending assistant text
 let queue: Promise<void> = Promise.resolve(); // serialize LLM calls
 
-function textFromTranscriptLine(line: string): { role: string; text: string } | null {
+export function textFromTranscriptLine(line: string): { role: string; text: string } | null {
   try {
     const obj = JSON.parse(line) as {
       type?: string;

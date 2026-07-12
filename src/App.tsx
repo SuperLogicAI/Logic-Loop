@@ -6,7 +6,8 @@ import { onHookEvent, onTranscriptLine, stateForHook } from "./lib/ingest";
 import { detectBlockers } from "./lib/detectors";
 import * as decisions from "./lib/decisions";
 import { SidePanel } from "./components/SidePanel";
-import type { Decision } from "./types";
+import { LandingNoteModal } from "./components/LandingNoteModal";
+import type { AgentState, Decision } from "./types";
 import { ptyWrite } from "./lib/pty";
 import { TabBar } from "./components/TabBar";
 import { BookmarksBar } from "./components/BookmarksBar";
@@ -33,10 +34,45 @@ export default function App() {
   const [blockerCountsByCwd, setBlockerCountsByCwd] = useState<Record<string, number>>({});
   const [unseenStops, setUnseenStops] = useState<Set<string>>(new Set());
 
+  // Landing-note ritual: agent activity per tab, and when we last prompted it.
+  const tabActivityRef = useRef(new Map<string, number>()); // tab id -> last agent-activity ts
+  const tabPromptRef = useRef(new Map<string, number>()); // tab id -> last landing-prompt ts
+  const [landingPrompt, setLandingPrompt] = useState<{
+    cwd: string;
+    projectName: string;
+    sessionId: string | null;
+  } | null>(null);
+  const landingPromptRef = useRef(landingPrompt);
+  landingPromptRef.current = landingPrompt;
+  // Attention residue: snapshot of the tab we most recently switched away from.
+  const [prevSnap, setPrevSnap] = useState<{ cwd: string; state?: AgentState } | null>(null);
+  const prevActiveRef = useRef<string | null>(null);
+
   const expand = useCallback(
     (p: string) =>
       (p === "~" ? home : p.startsWith("~/") ? home + p.slice(1) : p).replace(/\/$/, ""),
     [home]
+  );
+
+  // Prompt a landing note when leaving a tab that had agent activity since the
+  // last prompt. Debounced to one prompt per tab per 10 min (tab-flipping while
+  // testing must not spam the ritual). Never stacks over an open modal.
+  const maybePromptLanding = useCallback(
+    (tab: Tab) => {
+      if (landingPromptRef.current) return;
+      const activity = tabActivityRef.current.get(tab.id);
+      const lastPrompt = tabPromptRef.current.get(tab.id) ?? 0;
+      if (!activity || activity <= lastPrompt) return;
+      if (Date.now() - lastPrompt < 10 * 60 * 1000) return;
+      tabPromptRef.current.set(tab.id, Date.now());
+      tabActivityRef.current.delete(tab.id);
+      setLandingPrompt({
+        cwd: expand(tab.cwd),
+        projectName: expand(tab.cwd).split("/").filter(Boolean).pop() ?? tab.cwd,
+        sessionId: tab.sessionId ?? null,
+      });
+    },
+    [expand]
   );
 
   const [decisionCountsByCwd, setDecisionCountsByCwd] = useState<Record<string, number>>({});
@@ -74,6 +110,9 @@ export default function App() {
     setTabs((prev) => {
       const tab = prev.find((t) => t.id === tabId);
       if (tab && tab.status === "live") void ptyKill(tab.ptyId);
+      // PTY dies now; the landing modal collects the note after the fact,
+      // reading the (already-persisted) transcript for its draft.
+      if (tab) maybePromptLanding(tab);
       const next = prev.filter((t) => t.id !== tabId);
       setActiveId((a) => {
         if (a !== tabId) return a;
@@ -82,7 +121,7 @@ export default function App() {
       });
       return next;
     });
-  }, []);
+  }, [maybePromptLanding]);
 
   const markDead = useCallback((tabId: string) => {
     setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, status: "dead" as const } : t)));
@@ -183,6 +222,7 @@ export default function App() {
         }
       }
       if (!tabId) return; // session from an outside terminal
+      tabActivityRef.current.set(tabId, Date.now()); // for the landing-note ritual
 
       const state = stateForHook(p);
       const cwd = sessionCwd.get(p.session_id);
@@ -304,6 +344,18 @@ export default function App() {
     return () => window.removeEventListener("keydown", handler);
   }, [openTab, closeTab]);
 
+  // On tab switch: snapshot the tab we left (residue panel) and offer its
+  // landing prompt. A closed tab is gone here — closeTab already handled it.
+  useEffect(() => {
+    const prevId = prevActiveRef.current;
+    prevActiveRef.current = activeId;
+    if (!prevId || prevId === activeId) return;
+    const prevTab = tabsRef.current.find((t) => t.id === prevId);
+    if (!prevTab) return;
+    setPrevSnap({ cwd: expand(prevTab.cwd), state: prevTab.agentState });
+    maybePromptLanding(prevTab);
+  }, [activeId, expand, maybePromptLanding]);
+
   const activeTab = tabs.find((t) => t.id === activeId) ?? null;
 
   // Answer-now prefill: writes a draft into the bound tab's terminal and marks
@@ -343,6 +395,8 @@ export default function App() {
           <SidePanel
             cwd={expand(activeTab.cwd)}
             refreshKey={panelRefresh}
+            prevCwd={prevSnap?.cwd ?? null}
+            prevState={prevSnap?.state}
             onBlockersChanged={refreshBlockerCounts}
             onDecisionsChanged={refreshDecisionCounts}
             onAnswerNow={answerNow}
@@ -360,6 +414,26 @@ export default function App() {
           ))}
         </div>
       </div>
+      {landingPrompt && (
+        <LandingNoteModal
+          projectName={landingPrompt.projectName}
+          sessionId={landingPrompt.sessionId}
+          onSave={(text) => {
+            void repo
+              .addNote(landingPrompt.cwd, "landing", text, landingPrompt.sessionId)
+              .then(() => setPanelRefresh((n) => n + 1))
+              .catch(() => undefined);
+            setLandingPrompt(null);
+          }}
+          onSkip={() => {
+            // skip is a first-class outcome — logged as a status='skipped' row
+            void repo
+              .addNote(landingPrompt.cwd, "landing", "", landingPrompt.sessionId, "skipped")
+              .catch(() => undefined);
+            setLandingPrompt(null);
+          }}
+        />
+      )}
     </div>
   );
 }
