@@ -1,0 +1,12 @@
+{
+  "assistant": "Three things before I continue:\n1. Target Node 18 or 20?\n2. Should errors go to Sentry or just console?\n3. Do you want the retry logic in this PR or a follow-up?",
+  "user": "Node 20. Sentry. Follow-up PR for retries.",
+  "expect": {
+    "count": 3,
+    "answered": [
+      true,
+      true,
+      true
+    ]
+  }
+}

@@ -1,0 +1,259 @@
+# Manual Test Script — v2
+
+## v3 — Bug-fix sprint re-verify (2026-07-11)
+
+**First run was invalidated**: the stale copy at `/Applications/Context
+Terminal.app` was tested, not the new build. That copy has now been replaced
+with the current build — launch from /Applications (or Dock/Spotlight) and
+re-run. Also new this round: ✕ button on blocker rows deletes them
+permanently.
+
+Rebuild first, then re-check ONLY these (everything else unchanged):
+
+- [failed] **Panels follow the real project** (was: blockers shared across empty
+      tabs / no history loading): open a plain ⌘T tab, `cd` into a project,
+      run `claude`, give it a task. The rail should now show THAT project's
+      blockers/decisions/accomplished + git log (not home-folder data), and
+      the tab's dot should track the agent. History from earlier sessions in
+      that project should appear.
+      Note: two idle ⌘T tabs where no agent has run still share home-folder
+      blockers — cwd is only known once an agent reports it. Accepted limit.
+      *blockers still pre-existing from previous tests- for instance brand new terminal window upon launch has leftover 'test' blocker from last test session even though it's a fresh brand new terminal. Also it might make sense to have an 'x' so you can make them go away overtime those hanging on could get annoying.*
+- [failed] **⌘Q guard**: several tabs open, press ⌘Q → confirm dialog appears.
+      Cancel keeps everything; confirm quits.
+      *⌘Q unguarded - 5 terminals open bookmarked and non-bookmarked immediately closes upon ⌘Q*
+- [failed] **Dock badge on finish**: run claude, minimize/switch away, let it
+      finish → dock badge appears; clicking back into the app clears it.
+- [x] **No orphan shell**: `echo $$` in a tab, close the tab, `ps -p <pid>`
+      elsewhere → header line only.
+      *I think this passed the response was ' PID TTY           TIME CMD '*
+- [-] **Multiline paste into claude**: paste a 3-line block → lands intact in
+      the input box, does not submit line-by-line.
+      *when copy/pasting from 'Notes' app in mac the line breaks are not preserved but when copy/pasting from terminal copy the line breaks are preserved - Is that a pass or fail? *
+- [failed] **Tab overflow**: open 12+ tabs, shrink the window → tab strip scrolls
+      horizontally (thin scrollbar), + button stays visible.
+- [failed] **⚙ settings** button now larger with a label.
+
+Judgment calls resolved: 1.2 colors = pass (default LSCOLORS is blue/white);
+5.2 heap crash = user typed `` `yes` `` in backticks (command substitution
+captured infinite output — zsh died, not the app; overlay behaved correctly);
+5.3 orphan shell = real bug, fixed this sprint (process-group kill).
+
+
+Fresh run, all manual checkboxes reset. Items marked *(auto ✓)* were verified by
+script on 2026-07-11 and don't need redoing.
+
+## Before you start — use the RELEASE build
+
+The earlier failures (app wiping all tabs when you resized or clicked away) were
+caused by testing in dev mode (`npm run tauri dev`), where the app auto-reloads
+itself. **Do not test in dev mode.**
+
+Open the release app instead:
+
+```
+open "src-tauri/target/release/bundle/macos/Logic Loop.app"
+```
+
+(You can also double-click it in Finder at that path.)
+
+How to mark results: `[x]` = passed, `[Failed]` = failed — add a line below
+describing exactly what you saw and what you did right before it happened.
+
+---
+
+## 1. Launch
+
+- [x] App opens with one tab showing a live shell prompt (you can type commands).
+- [-] Colors work: type `ls -G` and press Enter — folder names should be colored.
+      Then type `echo $TERM` — it should print `xterm-256color`.
+      *Result: I see color but only blue and white if that's the expected outcome if so passed*
+- [x] Full-screen apps work: type `vim` and Enter (opens a text editor that takes
+      over the whole terminal). Press `i`, type a few words, then press `Esc`,
+      type `:q!`, Enter. You should be back at a normal prompt with no leftover
+      garbage on screen.
+
+## 2. Three simultaneous sessions under load
+
+- [x] Open 3 tabs total (⌘T twice). In each tab run `claude` and give it a task —
+      or for a simpler stress test run: `yes | head -100000` (floods the screen
+      with output for a few seconds).
+- [x] While all 3 tabs are producing output, click rapidly between the tabs for
+      ~10 seconds. App should stay up — no blank screen, no reset to one tab.
+      *caught a little lag but it didn't break! the 'DECISIONS (1)' section in the left sidebar is properly surfacing claude code decisions to be made*
+- [x] Check each tab: output belongs to that tab only (no lines from tab 1
+      showing up in tab 2), and scrolling up shows that tab's own history.
+- [x] Open 10+ tabs (keep pressing ⌘T), then click back to the first few — each
+      should still show its terminal, not a blank area.
+- [x] While one tab is streaming output, drag the window to resize it AND switch
+      tabs a few times. App should not reset or go blank.
+
+## 3. Resize
+
+- [x] Drag the window edges and corners around for a few seconds. The prompt
+      should reflow to the new width — no frozen/smeared text, no app reset.
+- [x] After resizing, type `tput cols` and Enter. The number printed should
+      roughly match how many characters fit across the window (bigger window =
+      bigger number; make the window wider and rerun to confirm it changes).
+- [-] With two tabs open: stay on tab A, resize the window, then click tab B.
+      Tab B should fit the new window size correctly (no cut-off or dead space).
+        *This works but when the window is smaller there is no way to navigate to terminals at the end so multiple 'terminal tabs' are cutoff and inaccessible with smaller windows we may need a horizontal scrollbar you can use when sceen is smaller. - if this is acceptable then it passes*
+## 4. Paste
+
+- [x] Copy these three lines somewhere (e.g. from this file), then paste (⌘V)
+      into a shell tab:
+      ```
+      echo one
+      echo two
+      echo three
+      ```
+      They should appear as pasted text waiting for you — NOT run themselves
+      line-by-line the instant you paste.
+- [failed] Run `claude`, then paste a multi-line block into its prompt. The whole
+      block should land in the input box intact (line breaks preserved), not
+      submit after the first line.
+    *Line breaks are not preserved but the paste itself works*
+    
+## 5. Tab close
+
+- [x] In a tab, type `echo $$` and Enter — this prints the shell's process ID
+      (a number, e.g. 48231). Write it down.
+      *got it for 5.3 below*
+- [failed] Start something long-running in that tab (e.g. `yes` — endless output), then close the tab (✕ on the tab, or ⌘W).
+    *I have like ten terminals open and when I typed '`yes` — endless output' and hit enter I got 'zsh: fatal error: out of heap memory' in the terminal and separately a pop-up grey box that reads "Process exited" with a 'Restart' button. terminal still available but reset.* 
+- [-] In ANOTHER tab (or Terminal.app), run `ps -p <that number>` (e.g.
+      `ps -p 48231`). It should show only the header line — meaning the process
+      is gone. If it lists a process, that's a fail (orphaned shell).
+      * if this is acceptable pass output was: '   PID TTY           TIME CMD
+ <that number> ttys005    0:00.01 /bin/zsh -l  '*
+
+## 6. Dead tab
+
+- [x] In a tab, type `exit` and Enter. An overlay saying "Process exited" should
+      appear and the tab's dot should turn red.
+- [x] Click the Restart button in the overlay — you get a fresh working shell in
+      the same tab, screen cleared.
+
+## 7. Quit with live sessions
+
+- [failed] With 3 open tabs, press ⌘Q. A dialog should warn "3 active sessions will be terminated."
+    *I had approximately ten tabs open and it immediately closed the application*
+- [-] Click Cancel — app stays open, all tabs still work.
+    *unable to test initially - retested on test 9.3 see notes in test 9.3*
+- [-] ⌘Q again and confirm — app quits.
+    *unable to test*
+- [x] No orphan shells after quit. *(auto ✓ 2026-07-11: SIGTERM quit, 0 orphan shells)*
+
+## 8. Relaunch recovery
+
+- [x] Relaunch opens clean with one fresh tab. *(auto ✓ 2026-07-11)*
+- [x] Bookmarks survive relaunch. *(auto ✓ 2026-07-11)*
+
+## 9. Bookmarks
+
+- [x] Click "＋ bookmark". Fill in a name, a working directory (e.g.
+      `~/Desktop/context_terminal`), pick a color, Save. A colored chip appears
+      in the bookmarks bar.
+- [x] Click the chip — a new tab opens. Type `pwd` and Enter: it should print
+      that directory. Tab shows the bookmark's name and color.
+      *After unexpected abrupt ⌘Q closure- the DECISIONS (1) in the sidebar still remain from previous session* 
+- [x] Right-click the chip → Edit. Change the name, Save, then quit and relaunch
+      the app — the change should still be there.
+      *The expected pop-up from 7.1 test - dialog should warn "3 active sessions will be terminated." did work when clicking the red x to quit the app - I did test the cancel button and all terminal windows stayed open*
+- [x] Right-click the chip → Delete. Chip disappears, and stays gone after
+      relaunch.
+- [x] NEW BUG FIX TO VERIFY: create a bookmark with name + color but leave the
+      working directory EMPTY — Save should work now (previously blocked).
+      Clicking the chip opens a tab in your home folder (`pwd` prints
+      your `$HOME`).
+- [x] Also try a bookmark with a made-up directory like `~/does-not-exist` —
+      the tab should still open (falls back to home folder), no crash.
+
+## 10. Phase 1 — Event spine
+
+Background: when hooks are ON, Claude Code sessions report their activity to the
+app, which drives the colored status dot on each tab.
+
+- [x] Click the "hooks off" button (top right) → it turns "hooks on".
+- [ ] Click it again a couple of times, ending at whatever state you want.
+      Nothing should error, and your other Claude Code setups keep working.
+- [x] `~/.context-terminal/ingest.env` exists, private permissions. *(auto ✓ 2026-07-11)*
+- [-] With hooks ON: run `claude` in a tab, give it a task. Watch the tab's dot:
+      - Blue = agent working (should appear when it starts using tools)
+      - Amber + pulsing = agent waiting on you (asks permission or finishes and
+        wants input)
+      - Back to blue the moment you answer it
+      - Green = agent idle/done
+      *during other tests earlier I saw the color dots in the terminal tabs working but during this test it was not? odd outcome*
+- [failed] Minimize the app while the agent works. When it needs you, the dock icon should show a red badge number. Answering clears it.
+    *executed something with claude and minimized when it finished the app icon in dockhad no notification signal*
+      *(badge mechanics auto ✓ 2026-07-11; visual check still worth one pass)*
+- [x] Open two tabs in the SAME project folder, run `claude` in both. Each tab's
+      dot should track its own session, not mirror each other.
+- [x] Run `claude` in Terminal.app (OUTSIDE this app) — nothing in the app
+      should change (no dots, no errors), and that outside session works fine.
+      *tested both claude outputs the terminal app and context terminal and both worked as expected*
+- [x] Events landing in database. *(auto ✓ 2026-07-11)*
+- [x] Fail open: QUIT the app entirely, then run `claude` in Terminal.app —
+      it must work completely normally (no hangs, no errors) even though the
+      app isn't there to receive events.
+
+## 11. Phase 2 — Deterministic panels
+
+- [x] Press ⌘B — a left rail appears with Blockers / Accomplished / Git log for
+      the active tab's project. ⌘B again hides it.
+- [x] Accomplished feed populates from agent tool use. *(auto ✓ 2026-07-11)*
+- [x] Git log section: with a tab in a git project (e.g. context_terminal), the
+      rail lists recent commits. In a tab on a non-git folder it says
+      "Not a git repo."
+- [x] Switch between tabs in different projects — the rail's content follows.
+- [x] Blocker detector fires on "permission denied" / test failures / merge
+      conflict in agent output. *(auto ✓ 2026-07-11)*
+- [x] Duplicate detector hits collapse to one row. *(auto ✓ 2026-07-11)*
+- [-] Manual blocker: type into the rail's input, Enter — it appears in the
+      list. Click its checkbox — it moves to a struck-through "resolved" list.
+      Un-check — it reopens.
+      *This worked well but I was testing edge cases and found this - blockers on an empty terminal are shared accross other empty terminal tabs. Even if the two empty terminals diverge (I open a different folder in one and the other remains in initial state) the blockers are still shared in each.* 
+- [x] Tabs whose project has open blockers show an amber count badge; resolving
+      clears it.
+- [failed] Real-world drill: open a project you worked on yesterday — can the rail alone (blockers + accomplished + git log) tell you where you left off in
+      under 30 seconds?
+        *the git log is the only one that populates no historical Decisions, Blockers, or Accomplished loads from previous sessions*
+
+## 12. Phase 3 — Decision Tracker
+
+Background: when an agent asks you a question and moves on without an answer,
+the app should surface it as an open "decision" so nothing slips by.
+
+- [x] Golden set: 12/12 extraction cases pass. *(auto ✓ 2026-07-11, claude backend.
+      Rerun `npm run golden` after ANY prompt change.)*
+- [x] E2E: question in transcript → open decision row within ~15s. *(auto ✓ 2026-07-11)*
+- [-] Rail shows the open decision card with the question (and the agent's
+      assumption, if it stated one); tab gets a violet count badge.
+      *In earlier tests this was working but this current run the questions aren't surfacing in the decisions side bar - reference test 2.2*
+- [-] Click ⌕ on a decision — modal shows the agent's message and your reply
+      (or "no reply").
+      *unable to test*
+- [-] Click ✎ — app switches to that tab and pre-types
+      `Re: "<question>" — ` into the terminal WITHOUT sending it. You finish
+      the sentence and press Enter yourself.
+        *unable to test*
+- [-] Click ⤳ (delegate) — decision moves to the closed list marked delegated,
+      badge count drops.
+        *unable to test currently but in earlier tests I was clicking around and got this reaction*
+- [-] Questions you already answered in the conversation show up pre-closed and
+      never badge.
+        *unable to test*
+- [-] ⚙ settings → switch extractor to LM Studio. With LM Studio running,
+      decisions still get extracted. With LM Studio STOPPED, extraction just
+      silently does nothing — terminals must be completely unaffected.
+        *unable to test - I need to setup LM studio properly but I can confirm the UI for ' ⚙ ' is too small it looks microscopic and needs to be more visible*
+- [-] Week-of-use exit criterion: zero "agent decided without me and I didn't
+      know" incidents. Any miss becomes a new golden fixture.
+        *unable to test - less than 24hrs of testing*
+
+## Quality gates (machine-run, not manual)
+
+- [x] `npx tsc --noEmit` clean. *(rerun 2026-07-11 after bookmark fix)*
+- [x] `cargo clippy --all-targets -- -D warnings` clean (in `src-tauri/`).
+- [x] `cargo test` passes (settings.json hook editing round-trip).

@@ -1,0 +1,10 @@
+{
+  "assistant": "Do you want me to use Tailwind or CSS modules for the new settings page?",
+  "user": "whatever you think is best",
+  "expect": {
+    "count": 1,
+    "answered": [
+      true
+    ]
+  }
+}

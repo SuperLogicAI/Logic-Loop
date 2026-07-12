@@ -1,0 +1,11 @@
+{
+  "assistant": "The spec doesn't say which currency to default to. I'll assume USD and proceed with the checkout flow \u2014 flag me if that's wrong.",
+  "user": null,
+  "expect": {
+    "count": 1,
+    "answered": [
+      false
+    ],
+    "has_assumption": true
+  }
+}

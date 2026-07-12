@@ -1,0 +1,194 @@
+use base64::Engine;
+use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
+use std::collections::HashMap;
+use std::io::{Read, Write};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Mutex;
+use tauri::{AppHandle, Emitter, State};
+
+pub struct PtySession {
+    master: Box<dyn MasterPty + Send>,
+    child: Box<dyn Child + Send + Sync>,
+    writer: Box<dyn Write + Send>,
+}
+
+#[derive(Default)]
+pub struct PtyManager {
+    sessions: Mutex<HashMap<u32, PtySession>>,
+    next_id: AtomicU32,
+}
+
+/// child.kill() alone can leave the shell alive (observed orphan zsh after
+/// tab close) — SIGKILL the whole process group so the shell and anything it
+/// spawned die together.
+fn kill_session(mut s: PtySession) {
+    if let Some(pid) = s.child.process_id() {
+        unsafe {
+            libc::killpg(pid as i32, libc::SIGKILL);
+        }
+    }
+    let _ = s.child.kill();
+}
+
+impl PtyManager {
+    pub fn live_count(&self) -> usize {
+        self.sessions.lock().map(|s| s.len()).unwrap_or(0)
+    }
+
+    pub fn kill_all(&self) {
+        if let Ok(mut sessions) = self.sessions.lock() {
+            for (_, s) in sessions.drain() {
+                kill_session(s);
+            }
+        }
+    }
+}
+
+#[tauri::command]
+pub fn pty_spawn(
+    app: AppHandle,
+    state: State<'_, PtyManager>,
+    cwd: Option<String>,
+    cols: Option<u16>,
+    rows: Option<u16>,
+) -> Result<u32, String> {
+    let pty_system = native_pty_system();
+    let pair = pty_system
+        .openpty(PtySize {
+            rows: rows.unwrap_or(24),
+            cols: cols.unwrap_or(80),
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|e| e.to_string())?;
+
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+    let mut cmd = CommandBuilder::new(&shell);
+    cmd.arg("-l");
+    cmd.env("TERM", "xterm-256color");
+    let cwd = cwd.map(|c| match (c.strip_prefix("~"), std::env::var("HOME")) {
+        (Some(rest), Ok(home)) => format!("{home}{rest}"),
+        _ => c,
+    });
+    if let Some(cwd) = cwd.filter(|c| std::path::Path::new(c).is_dir()) {
+        cmd.cwd(cwd);
+    }
+
+    let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+    drop(pair.slave);
+
+    let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
+    let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+
+    let id = state.next_id.fetch_add(1, Ordering::SeqCst);
+    state
+        .sessions
+        .lock()
+        .map_err(|e| e.to_string())?
+        .insert(
+            id,
+            PtySession {
+                master: pair.master,
+                child,
+                writer,
+            },
+        );
+
+    // Reader thread: stream output as base64 chunks; on EOF emit exit event.
+    std::thread::spawn(move || {
+        let mut buf = [0u8; 8192];
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    let data = base64::engine::general_purpose::STANDARD.encode(&buf[..n]);
+                    let _ = app.emit(&format!("pty://output/{id}"), data);
+                }
+            }
+        }
+        let _ = app.emit(&format!("pty://exit/{id}"), ());
+    });
+
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn pty_write(state: State<'_, PtyManager>, id: u32, data: String) -> Result<(), String> {
+    let mut sessions = state.sessions.lock().map_err(|e| e.to_string())?;
+    let session = sessions.get_mut(&id).ok_or("no such session")?;
+    session
+        .writer
+        .write_all(data.as_bytes())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn pty_resize(state: State<'_, PtyManager>, id: u32, cols: u16, rows: u16) -> Result<(), String> {
+    let sessions = state.sessions.lock().map_err(|e| e.to_string())?;
+    let session = sessions.get(&id).ok_or("no such session")?;
+    session
+        .master
+        .resize(PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn pty_kill(state: State<'_, PtyManager>, id: u32) -> Result<(), String> {
+    let mut sessions = state.sessions.lock().map_err(|e| e.to_string())?;
+    if let Some(session) = sessions.remove(&id) {
+        kill_session(session);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn pty_live_count(state: State<'_, PtyManager>) -> usize {
+    state.live_count()
+}
+
+/// Frontend calls this on load: after a webview crash/reload the old tabs'
+/// PTYs are unreachable — reap them all before spawning fresh ones.
+#[tauri::command]
+pub fn pty_kill_all(state: State<'_, PtyManager>) {
+    state.kill_all();
+}
+
+#[derive(serde::Serialize)]
+pub struct Commit {
+    pub hash: String,
+    pub ts: i64,
+    pub subject: String,
+}
+
+/// Recent git commits for a project dir. Not ANSI parsing — plain
+/// machine-format subprocess output. Empty vec if not a repo / no git.
+#[tauri::command]
+pub fn git_log(cwd: String, limit: Option<u32>) -> Vec<Commit> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&cwd)
+        .arg("log")
+        .arg(format!("-n{}", limit.unwrap_or(20)))
+        .arg("--pretty=format:%h%x09%ct%x09%s")
+        .output();
+    let Ok(out) = out else { return vec![] };
+    if !out.status.success() {
+        return vec![];
+    }
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|l| {
+            let mut parts = l.splitn(3, '\t');
+            Some(Commit {
+                hash: parts.next()?.to_string(),
+                ts: parts.next()?.parse().ok()?,
+                subject: parts.next()?.to_string(),
+            })
+        })
+        .collect()
+}

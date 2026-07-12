@@ -1,0 +1,10 @@
+{
+  "assistant": "To fix the flaky CI I need to delete the cached node_modules artifact (about 400MB, will be rebuilt next run). Should I delete it or leave the cache alone?",
+  "user": null,
+  "expect": {
+    "count": 1,
+    "answered": [
+      false
+    ]
+  }
+}

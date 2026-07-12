@@ -1,0 +1,8 @@
+{
+  "assistant": "I refactored the helper. Note the existing comment I preserved:\n```python\n# TODO: should this handle negative inputs? ask design team\ndef clamp(x):\n    return max(0, x)\n```\nAll 14 tests pass.",
+  "user": "nice",
+  "expect": {
+    "count": 0,
+    "answered": []
+  }
+}

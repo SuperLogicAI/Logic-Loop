@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #18181b;
+}
+
+/* Tab strip overflow scrollbar — must stay clearly visible on the dark bar */
+.tab-strip::-webkit-scrollbar {
+  height: 7px;
+}
+.tab-strip::-webkit-scrollbar-track {
+  background: #27272a;
+}
+.tab-strip::-webkit-scrollbar-thumb {
+  background: #71717a;
+  border-radius: 4px;
+}
+.tab-strip::-webkit-scrollbar-thumb:hover {
+  background: #a1a1aa;
+}

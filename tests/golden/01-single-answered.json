@@ -1,0 +1,10 @@
+{
+  "assistant": "I found two auth approaches in the codebase. Should I use the JWT middleware pattern from api/auth.ts, or the session-cookie approach from legacy/?",
+  "user": "Use the JWT middleware pattern.",
+  "expect": {
+    "count": 1,
+    "answered": [
+      true
+    ]
+  }
+}

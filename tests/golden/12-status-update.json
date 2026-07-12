@@ -1,0 +1,8 @@
+{
+  "assistant": "Done. Added the rate limiter to all three endpoints, tests green, lint clean. The middleware lives in src/middleware/rateLimit.ts.",
+  "user": "thanks",
+  "expect": {
+    "count": 0,
+    "answered": []
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "assistant": "Why does this test fail intermittently? Because the mock clock is not frozen \u2014 the assertion races the timer. I froze it with sinon and reran the suite 20 times; the flake is gone and all tests pass.",
+  "user": "thanks",
+  "expect": {
+    "count": 0,
+    "answered": []
+  }
+}

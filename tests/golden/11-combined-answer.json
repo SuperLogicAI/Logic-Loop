@@ -1,0 +1,11 @@
+{
+  "assistant": "Should the webhook retry on 5xx? And separately, should 4xx responses be logged as errors or warnings?",
+  "user": "Yes retry on 5xx, and log 4xx as warnings.",
+  "expect": {
+    "count": 2,
+    "answered": [
+      true,
+      true
+    ]
+  }
+}

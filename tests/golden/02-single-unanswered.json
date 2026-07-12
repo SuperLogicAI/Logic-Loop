@@ -1,0 +1,10 @@
+{
+  "assistant": "The migration will drop the `temp_users` table. Should I proceed with the drop, or keep it and just rename?",
+  "user": null,
+  "expect": {
+    "count": 1,
+    "answered": [
+      false
+    ]
+  }
+}

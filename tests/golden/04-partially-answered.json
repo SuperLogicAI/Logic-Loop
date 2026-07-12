@@ -1,0 +1,11 @@
+{
+  "assistant": "Two questions: (a) should the cache TTL be 5 minutes or configurable? (b) do you want cache invalidation on user logout?",
+  "user": "Make the TTL configurable.",
+  "expect": {
+    "count": 2,
+    "answered": [
+      true,
+      false
+    ]
+  }
+}
