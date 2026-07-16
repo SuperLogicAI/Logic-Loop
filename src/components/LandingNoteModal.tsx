@@ -28,6 +28,19 @@ export function LandingNoteModal({ projectName, sessionId, onSave, onSkip }: Pro
     areaRef.current?.focus();
   }, []);
 
+  // Esc skips no matter where focus sits — clicking the overlay must not
+  // strand the user (never hostage).
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        skipRef.current();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   // Pre-draft: fill the textarea unless the user already typed. Late arrivals
   // (modal still open) fill; if it unmounted first, the setState is a no-op.
   useEffect(() => {
@@ -68,15 +81,7 @@ export function LandingNoteModal({ projectName, sessionId, onSave, onSkip }: Pro
   };
 
   return (
-    <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-black/60"
-      onKeyDown={(e) => {
-        if (e.key === "Escape") {
-          e.preventDefault();
-          onSkip();
-        }
-      }}
-    >
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60">
       <div className="w-[32rem] max-w-[90vw] rounded-lg border border-zinc-700 bg-zinc-900 p-4 shadow-xl">
         <div className="mb-2 flex items-center gap-3">
           <div className="min-w-0 flex-1">

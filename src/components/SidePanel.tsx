@@ -6,6 +6,7 @@ import type { AgentState, Blocker, Commit, Decision, Note, ToolEvent } from "../
 
 interface Props {
   cwd: string; // expanded absolute project dir of the active tab
+  accent: string | null; // matching bookmark's color, if the project is bookmarked
   refreshKey: number; // bump to force reload (new events / blocker changes)
   prevCwd: string | null; // project of the tab we switched away from (residue)
   prevState?: AgentState; // that tab's last agent state
@@ -29,7 +30,7 @@ function ago(ts: number): string {
   return `${Math.floor(s / 86400)}d`;
 }
 
-export function SidePanel({ cwd, refreshKey, prevCwd, prevState, onBlockersChanged, onDecisionsChanged, onAnswerNow }: Props) {
+export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, onBlockersChanged, onDecisionsChanged, onAnswerNow }: Props) {
   const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
   const [commits, setCommits] = useState<Commit[]>([]);
   const [blockers, setBlockers] = useState<Blocker[]>([]);
@@ -158,11 +159,17 @@ export function SidePanel({ cwd, refreshKey, prevCwd, prevState, onBlockersChang
   const closedDecisions = decisions.filter((d) => d.status !== "open").slice(0, 10);
 
   return (
-    <div className="flex h-full w-72 shrink-0 flex-col gap-4 overflow-y-auto border-r border-zinc-800 bg-zinc-900 p-3 text-xs text-zinc-300">
-      <p className="truncate border-b border-zinc-800 pb-1.5 font-mono text-[10px] text-zinc-500" title={cwd}>
+    <div className="flex h-full w-72 shrink-0 flex-col border-r border-zinc-800 bg-zinc-900 text-xs text-zinc-300">
+      {/* Pinned header: never scrolls away. Text takes the project's bookmark
+          color when one exists; plain grey otherwise. */}
+      <p
+        className="shrink-0 truncate border-b border-zinc-800 px-3 pt-3 pb-1.5 font-mono text-[10px] text-zinc-500"
+        style={accent ? { color: accent } : undefined}
+        title={cwd}
+      >
         project: {cwd.split("/").filter(Boolean).pop() ?? cwd}
       </p>
-
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3">
       {momentum && (
         <section className="rounded-lg border border-teal-800/60 bg-teal-950/20 p-3">
           <h2 className="mb-1 flex items-center gap-1.5 font-semibold tracking-wide text-teal-300 uppercase">
@@ -363,6 +370,7 @@ export function SidePanel({ cwd, refreshKey, prevCwd, prevState, onBlockersChang
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
