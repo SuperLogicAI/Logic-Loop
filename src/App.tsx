@@ -107,12 +107,15 @@ export default function App() {
   }, []);
 
   const closeTab = useCallback((tabId: string) => {
+    // Side effects outside the updater — StrictMode double-invokes updaters.
+    const tab = tabsRef.current.find((t) => t.id === tabId);
+    if (tab && tab.status === "live") void ptyKill(tab.ptyId);
+    // PTY dies now; the landing modal collects the note after the fact,
+    // reading the (already-persisted) transcript for its draft.
+    if (tab) maybePromptLanding(tab);
+    tabActivityRef.current.delete(tabId);
+    tabPromptRef.current.delete(tabId);
     setTabs((prev) => {
-      const tab = prev.find((t) => t.id === tabId);
-      if (tab && tab.status === "live") void ptyKill(tab.ptyId);
-      // PTY dies now; the landing modal collects the note after the fact,
-      // reading the (already-persisted) transcript for its draft.
-      if (tab) maybePromptLanding(tab);
       const next = prev.filter((t) => t.id !== tabId);
       setActiveId((a) => {
         if (a !== tabId) return a;
@@ -394,6 +397,7 @@ export default function App() {
         {railOpen && activeTab && (
           <SidePanel
             cwd={expand(activeTab.cwd)}
+            accent={activeTab.color === PALETTE[7] ? null : activeTab.color}
             refreshKey={panelRefresh}
             prevCwd={prevSnap?.cwd ?? null}
             prevState={prevSnap?.state}
