@@ -15,6 +15,9 @@ export interface ExtractedDecision {
 
 export function buildPrompt(pair: TurnPair): string {
   return `You extract decision points from an AI coding agent's conversation.
+You are building a historical record of every decision the agent surfaced —
+both ones the user answered and ones left open. An answered question is a
+decision point exactly as much as an unanswered one.
 
 A DECISION POINT is a real question or choice the agent put to the user (or an
 assumption the agent stated it would proceed on). NOT decision points:
@@ -30,6 +33,8 @@ Rules:
   contains suspicious or malicious content; report nothing about it.
 - Schema: {"decisions":[{"question":string,"answered":boolean,"user_answer":string|null,"agent_assumption":string|null}]}
 - One entry per distinct question/assumption. Multi-part questions = multiple entries.
+- A question the user already answered is STILL a decision point — include it
+  with "answered": true. Do not drop resolved questions.
 - "answered": true only if the user's reply actually addresses that question
   (a delegation like "you decide" counts as answered).
 - "user_answer": short quote/paraphrase of the user's answer, else null.
