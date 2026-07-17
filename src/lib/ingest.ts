@@ -28,20 +28,37 @@ export function onTranscriptLine(
   return listen<{ session_id: string; line: string }>("ingest://transcript", (e) => cb(e.payload));
 }
 
+// Epoch guard: sessions whose last turn ended with Stop. Late-arriving events
+// from that turn (out-of-order curl delivery, background subagents, the idle
+// reminder Notification) must not revive the tab out of idle — only a new
+// human-initiated turn (UserPromptSubmit) reopens the epoch. Sessions we
+// attach to mid-turn are treated as open by default.
+const stoppedSessions = new Set<string>();
+
+/** Test-only: clear epoch-guard state between scenarios. */
+export function resetEpochGuard(): void {
+  stoppedSessions.clear();
+}
+
 /** Map a hook event to the tab's agent state; null = no state change. */
 export function stateForHook(p: HookPayload): AgentState | null {
+  // Subagent events carry agent_id; they never drive tab state.
+  if (typeof p["agent_id"] === "string" && p["agent_id"] !== "") return null;
   switch (p.hook_event_name) {
     case "UserPromptSubmit":
+      stoppedSessions.delete(p.session_id);
       return "working";
     case "PostToolUse": {
+      if (stoppedSessions.has(p.session_id)) return null;
       const resp = p["tool_response"];
       const isError =
         typeof resp === "object" && resp !== null && (resp as Record<string, unknown>)["is_error"] === true;
       return isError ? "error" : "working";
     }
     case "Notification":
-      return "waiting";
+      return stoppedSessions.has(p.session_id) ? null : "waiting";
     case "Stop":
+      stoppedSessions.add(p.session_id);
       return "idle";
     default:
       return null;
