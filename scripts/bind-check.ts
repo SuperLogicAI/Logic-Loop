@@ -70,6 +70,14 @@ assert.equal(
   "tab-1",
   "active-tab fallback did not fire"
 );
+// Root cwd is never a project: the app's own `claude -p` extractor children run
+// with cwd `/` and post hooks back. Binding one overwrote the active tab's cwd
+// with `/`, which expands to "" and blanks the whole panel.
+assert.equal(
+  bind(ev(), two, { active: "tab-1", projectKey: "/" }),
+  null,
+  "a rootless session hijacked the active tab"
+);
 // A dead tab is never a fallback target.
 assert.equal(
   bind(ev(), [{ id: "tab-1", cwd: "/Users/x/dev/other", status: "exited" }], { active: "tab-1" }),

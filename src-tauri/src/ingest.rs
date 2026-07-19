@@ -7,6 +7,13 @@ use tauri::{AppHandle, Emitter};
 
 const MARKER: &str = "context-terminal/ingest.env";
 
+/// Tether value stamped on the app's own `claude -p` extractor children. Those
+/// children inherit the user's hooks and post back here, so without this the app
+/// ingests its own extraction runs: they key on the app's cwd (`/`), bind to
+/// whatever tab is active, overwrite its cwd, and their transcripts feed the
+/// extractor again — a self-amplifying loop. Dropped at the door.
+pub const EXTRACTOR_TETHER: &str = "__logic_loop_extractor__";
+
 fn home() -> String {
     std::env::var("HOME").unwrap_or_else(|_| "/tmp".into())
 }
@@ -77,6 +84,12 @@ pub fn start(app: AppHandle) {
             }
             // Headers must be read before `as_reader` borrows the request.
             let tab_id = header_value(&request, "X-Logic-Loop-Tab");
+            // Our own extractor child — never ingest it, or the app observes
+            // itself and the loop feeds forever.
+            if tab_id.as_deref() == Some(EXTRACTOR_TETHER) {
+                let _ = request.respond(tiny_http::Response::empty(204));
+                continue;
+            }
             let hook_version = header_value(&request, "X-Logic-Loop-Hook");
             let mut body = String::new();
             if request.as_reader().take(1_000_000).read_to_string(&mut body).is_err() {
@@ -140,38 +153,60 @@ fn ensure_tailer(app: &AppHandle, session_id: String, path: String) {
     }
     let app = app.clone();
     std::thread::spawn(move || {
-        let Ok(mut file) = fs::File::open(&path) else { return };
-        let mut offset = file.seek(SeekFrom::End(0)).unwrap_or(0);
-        loop {
-            std::thread::sleep(std::time::Duration::from_millis(500));
-            let Ok(meta) = fs::metadata(&path) else { return };
-            if meta.len() < offset {
-                offset = 0; // truncated/rotated
-            }
-            if meta.len() == offset {
-                continue;
-            }
-            if file.seek(SeekFrom::Start(offset)).is_err() {
-                return;
-            }
-            let mut reader = BufReader::new(&mut file);
-            let mut line = String::new();
-            while let Ok(n) = reader.read_line(&mut line) {
-                if n == 0 {
-                    break;
-                }
-                offset += n as u64;
-                let trimmed = line.trim();
-                if !trimmed.is_empty() {
-                    let _ = app.emit(
-                        "ingest://transcript",
-                        serde_json::json!({ "session_id": session_id, "line": trimmed }),
-                    );
-                }
-                line.clear();
-            }
+        tail(&app, &session_id, &path);
+        // Every exit path lands here — missing file, deleted file, seek error.
+        // Dropping the registry entry lets the next hook re-arm the session;
+        // leaving it meant one failed open silently blinded the session for the
+        // life of the app, with no transcripts and so no decisions.
+        if let Ok(mut set) = app.state::<TailerRegistry>().0.lock() {
+            set.remove(&session_id);
         }
     });
+}
+
+/// The tail loop proper. Returning means "stop tailing"; the caller
+/// de-registers so a later hook can start it again.
+fn tail(app: &AppHandle, session_id: &str, path: &str) {
+    let Ok(mut file) = fs::File::open(path) else {
+        // Claude Code can report a transcript_path it has not created. That is
+        // invisible without this — the session keeps sending hooks and the
+        // panels just stay empty.
+        let _ = app.emit(
+            "ingest://tailer-failed",
+            serde_json::json!({ "session_id": session_id, "path": path }),
+        );
+        return;
+    };
+    let mut offset = file.seek(SeekFrom::End(0)).unwrap_or(0);
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let Ok(meta) = fs::metadata(path) else { return };
+        if meta.len() < offset {
+            offset = 0; // truncated/rotated
+        }
+        if meta.len() == offset {
+            continue;
+        }
+        if file.seek(SeekFrom::Start(offset)).is_err() {
+            return;
+        }
+        let mut reader = BufReader::new(&mut file);
+        let mut line = String::new();
+        while let Ok(n) = reader.read_line(&mut line) {
+            if n == 0 {
+                break;
+            }
+            offset += n as u64;
+            let trimmed = line.trim();
+            if !trimmed.is_empty() {
+                let _ = app.emit(
+                    "ingest://transcript",
+                    serde_json::json!({ "session_id": session_id, "line": trimmed }),
+                );
+            }
+            line.clear();
+        }
+    }
 }
 
 /// Payload shape version. Bump when the emitted payload changes in a way a

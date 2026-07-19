@@ -4,7 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { homeDir } from "@tauri-apps/api/path";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { bindSession, onHookEvent, onTranscriptLine, stateForHook } from "./lib/ingest";
+import { bindSession, onHookEvent, onTailerFailed, onTranscriptLine, stateForHook } from "./lib/ingest";
 import { detectBlockers } from "./lib/detectors";
 import * as decisions from "./lib/decisions";
 import { SidePanel } from "./components/SidePanel";
@@ -35,6 +35,9 @@ export default function App() {
   const [panelRefresh, setPanelRefresh] = useState(0);
   const [blockerCountsByCwd, setBlockerCountsByCwd] = useState<Record<string, number>>({});
   const [unseenStops, setUnseenStops] = useState<Set<string>>(new Set());
+  // Sessions whose transcript file could not be opened — they emit hooks but no
+  // transcript, so decisions never extract for them. Silent until surfaced.
+  const [blindSessions, setBlindSessions] = useState<Record<string, string>>({});
 
   // Landing-note ritual: agent activity per tab, and when we last prompted it.
   const tabActivityRef = useRef(new Map<string, number>()); // tab id -> last agent-activity ts
@@ -260,6 +263,17 @@ export default function App() {
       void repo.addEvent(p.session_id, "transcript", p.line).catch(() => undefined);
       runDetectors(p.session_id, p.line);
       decisions.onTranscript(p.session_id, sessionCwd.get(p.session_id), p.line, refreshDecisionCounts);
+      // transcripts flowing again → clear any warning for this session
+      setBlindSessions((s) => {
+        if (!(p.session_id in s)) return s;
+        const next = { ...s };
+        delete next[p.session_id];
+        return next;
+      });
+    }).then(track);
+
+    void onTailerFailed((p) => {
+      setBlindSessions((s) => (s[p.session_id] === p.path ? s : { ...s, [p.session_id]: p.path }));
     }).then(track);
 
     return () => {
@@ -481,6 +495,7 @@ export default function App() {
             refreshKey={panelRefresh}
             prevCwd={prevSnap?.cwd ?? null}
             prevState={prevSnap?.state}
+            blindPaths={Object.values(blindSessions)}
             onBlockersChanged={refreshBlockerCounts}
             onDecisionsChanged={refreshDecisionCounts}
             onAnswerNow={answerNow}
