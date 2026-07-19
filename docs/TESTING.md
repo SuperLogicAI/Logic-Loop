@@ -350,14 +350,24 @@ contract-version headers). Toggle hooks **off then on** in ⚙ Settings, or ever
 check below silently tests the old contract.
 
 ### Project identity
-- [ ] Open a tab at a repo root, run `claude`, let it produce a blocker or
+- [x] Open a tab at a repo root, run `claude`, let it produce a blocker or
       decision. Open a second tab, `cd` into a subdir of the same repo
       (e.g. `src-tauri`), run `claude` there. Both tabs' side panels show the
       **same** rows — the project no longer splits by subdir.
-- [ ] With the app open, check the DB has no new split keys:
-      `sqlite3 "$HOME/Library/Application Support/com.vandershark.context-terminal/context-terminal.db" "SELECT DISTINCT cwd FROM blockers;"`
-      → no `…/context_terminal/src-tauri` alongside `…/context_terminal`.
-- [ ] Open a tab in a non-repo dir (e.g. `~/Desktop/inbox`) → panels key on that
+  
+- [x] With both tabs from the previous check still open, confirm no **new** row
+      landed under a subdir key. Run from `~/Library/Application Support/
+      com.vandershark.context-terminal/` (the space in the path breaks
+      copy-paste; `cd` there first):
+      `sqlite3 -header -column context-terminal.db "SELECT cwd, datetime(ts/1000,'unixepoch','localtime') t FROM blockers WHERE ts > (strftime('%s','now')-3600)*1000 ORDER BY ts;"`
+      → every row from the last hour reads `…/context_terminal`, none reads
+      `…/context_terminal/src-tauri`.
+      **Rows written before the Phase 5 fix stay under their old split key** —
+      the fix changes writes only, there is no backfill. Without the time
+      window this check fails forever on a working build. *(cost an hour of
+      false debugging 2026-07-19)*
+
+- [x] Open a tab in a non-repo dir (e.g. `~/Desktop/inbox`) → panels key on that
       dir itself, not on `~`, and not on some parent repo.
 
 ### Tab tether
@@ -368,6 +378,24 @@ check below silently tests the old contract.
       have a tab open for → still binds to that tab (untethered cwd fallback).
 - [ ] Close a tab while its agent is mid-turn → its late events bind to nothing;
       no other tab's dot flickers.
+
+### Ingestion failure is visible
+- [ ] **Missing transcript warns.** Run `claude` in a tab, send one prompt, then
+      delete that session's JSONL while it is still live:
+      `rm ~/.claude/projects/<slug>/<session-id>.jsonl` (the path is in the
+      `transcript_path` of its hook rows). Send another prompt → within ~5s the
+      side panel shows a red strip: `⚠ no transcript for 1 session — decisions
+      incomplete`, and hovering it lists the missing path. Deleting a transcript
+      is safe: Claude Code recreates it, which also verifies recovery — the
+      strip clears on its own once lines flow again.
+- [ ] **The app never ingests its own extractor.** With the decision extractor
+      set to `claude` (⚙ Settings), use the app until a decision is extracted,
+      then check no session keyed on `/` was ingested:
+      `sqlite3 context-terminal.db "SELECT COUNT(*) FROM events WHERE json_extract(payload_json,'\$.project_key')='/';"`
+      → the count must not grow. It growing means the extractor tether broke and
+      the app is observing itself (see CLAUDE.md landmines). Cross-check that
+      `project:` in the side panel still shows a real directory name on every
+      tab — a blank one is this bug's first visible symptom.
 
 ### Hook contract
 - [ ] Back up `~/.claude/settings.json`. Toggle hooks off → on → off. `diff`

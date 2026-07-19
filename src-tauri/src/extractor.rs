@@ -46,6 +46,9 @@ pub fn run_extractor(
         _ => {
             let mut child = Command::new(claude_bin())
                 .args(["-p", "--output-format", "text", "--model", "sonnet"])
+                // The child inherits the user's hooks and will post back to our
+                // ingest server; the tether tells the server to drop it.
+                .env("LOGIC_LOOP_TAB_ID", crate::ingest::EXTRACTOR_TETHER)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null())

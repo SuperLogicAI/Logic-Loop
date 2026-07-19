@@ -125,6 +125,17 @@ Add `"v": 1` to hook POST payloads and a version marker in the
 settings.json hook entry we write. Ingest logs-and-ignores unknown versions.
 Byte-identical-reversal tests must stay green.
 
+## Spec-file detection — Phase 6+ candidate
+
+From neurophysica/claude-workflow-template: convention where the unit of work
+is a spec file under `docs/dev/specs/`. Machine-detectable — if a project uses
+this pattern, re-entry / unclaimed-results panels could link sessions and
+decisions to the spec file that drove them (richer anchor than the raw prompt).
+Cheap: path convention + panel query, no new ingestion. Their
+"superseded, never edited" decision-log rule also maps cleanly onto our
+append-only decisions table — surfacing supersedes-links in the decisions
+panel is a related idea.
+
 ## Isolated loops — v1.1 (unchanged from spec non-goals)
 
 New-tab flow: "isolate this loop" → `git worktree add` under
@@ -132,9 +143,31 @@ New-tab flow: "isolate this loop" → `git worktree add` under
 (user names the loop — no generated names), tab bound to worktree path.
 Tab close prompts for cleanup; never auto-deletes.
 
-## Adapters — v2
+## Split-pane tabs — v1.x UI
 
-Codex / Gemini / Copilot expose native hook or extension systems, so
-multi-agent support never requires screen parsing (invariant #1 survives).
-Zero build work now; standing design constraint: keep `events.type` and
-payloads agent-agnostic — Claude-specific knowledge stays inside ingestion.
+Chrome-style side-by-side panes inside one tab, so two agent CLIs are
+visible at once (e.g. Claude + Codex on the same project). Pure xterm.js
+layout work — no ingestion or schema changes. Note WebGL landmine: only one
+pane gets the WebGL addon; the other uses DOM renderer.
+
+## Adapters — v2 (multi-agent observation)
+
+Positioning (decided 2026-07-19): Logic Loop observes heterogeneous agents;
+it does not orchestrate them. Agent-to-agent collaboration is already free —
+OpenAI's codex-plugin-cc runs inside any Claude Code session in a tab
+(adversarial review, delegation). Building our own cross-agent orchestration
+would duplicate that and violate invariant #4. The differentiated product is
+one pane of glass over a mixed agent fleet.
+
+Adapter order:
+1. **OpenCode** first — real plugin/event API, client-server architecture,
+   built to be scripted. Richest semantic surface after Claude.
+2. **Antigravity** second, shallow — its statusline scripts receive a JSON
+   payload on stdin (`agent_state`, vcs, context usage). A forwarder script
+   (exit 0, fail open) gives presence/momentum signals only; no per-tool
+   events or transcript equivalent yet. Deep panels wait for real hooks.
+3. Codex / Gemini / Copilot as their hook/log surfaces mature.
+
+Standing design constraint unchanged: keep `events.type` and payloads
+agent-agnostic — agent-specific knowledge stays inside ingestion; never
+screen parsing (invariant #1 survives).

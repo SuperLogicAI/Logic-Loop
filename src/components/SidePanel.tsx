@@ -10,6 +10,7 @@ interface Props {
   refreshKey: number; // bump to force reload (new events / blocker changes)
   prevCwd: string | null; // project of the tab we switched away from (residue)
   prevState?: AgentState; // that tab's last agent state
+  blindPaths: string[]; // transcripts that failed to open — panels are incomplete
   onBlockersChanged: () => void;
   onDecisionsChanged: () => void;
   onAnswerNow: (d: Decision) => void; // prefill terminal — user still hits Enter
@@ -35,7 +36,7 @@ function ago(ts: number): string {
   return `${Math.floor(s / 86400)}d`;
 }
 
-export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, onBlockersChanged, onDecisionsChanged, onAnswerNow }: Props) {
+export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, blindPaths, onBlockersChanged, onDecisionsChanged, onAnswerNow }: Props) {
   const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
   const [commits, setCommits] = useState<Commit[]>([]);
   const [blockers, setBlockers] = useState<Blocker[]>([]);
@@ -185,6 +186,18 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, onBlock
       >
         project: {cwd.split("/").filter(Boolean).pop() ?? cwd}
       </p>
+      {/* Blind sessions: hooks arrive but the transcript file will not open, so
+          decisions and every transcript-fed panel are silently incomplete. This
+          says so rather than looking like a quiet day. */}
+      {blindPaths.length > 0 && (
+        <p
+          className="shrink-0 border-b border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[10px] text-red-300"
+          title={blindPaths.join("\n")}
+        >
+          ⚠ no transcript for {blindPaths.length} session{blindPaths.length > 1 ? "s" : ""} — decisions
+          incomplete
+        </p>
+      )}
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3">
       {momentum && (
         <section className="rounded-lg border border-yellow-500/30 bg-yellow-400/5 p-3">

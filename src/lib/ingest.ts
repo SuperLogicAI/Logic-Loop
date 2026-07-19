@@ -28,6 +28,15 @@ export function onTranscriptLine(
   return listen<{ session_id: string; line: string }>("ingest://transcript", (e) => cb(e.payload));
 }
 
+/** A session's transcript could not be opened: it sends hooks but no transcript
+ *  lines, so decisions and any transcript-fed panel stay empty for it. Re-fires
+ *  on every hook while the file is missing; the UI keys on session_id. */
+export function onTailerFailed(
+  cb: (p: { session_id: string; path: string }) => void
+): Promise<UnlistenFn> {
+  return listen<{ session_id: string; path: string }>("ingest://tailer-failed", (e) => cb(e.payload));
+}
+
 /** The subset of a tab this module needs to bind a session to it. */
 export interface BindCandidate {
   id: string;
@@ -58,6 +67,10 @@ export function bindSession(
   }
   const { boundTabIds, activeTabId, projectKey } = opts;
   if (!projectKey) return null;
+  // `/` is never a real project: it means the session was started somewhere with
+  // no meaningful cwd. Binding it would overwrite the tab's cwd with a key that
+  // matches nothing, blanking the panel. Untethered + rootless = not ours.
+  if (projectKey === "/") return null;
   return (
     tabs.find((t) => t.cwd === projectKey && !boundTabIds.has(t.id))?.id ??
     tabs.find((t) => t.cwd === projectKey)?.id ??
