@@ -340,8 +340,8 @@ rd (⌃⇧⌘4), ⌘V in a terminal running claude → a
 
 ### Tabs & bookmarks
 - [x] Active tab is visibly lighter than inactive tabs.
-- [failed] Drag a tab onto another → order changes. Drag a bookmark onto another →
-      order changes and survives app restart.
+- [x] Drag a tab onto another → order changes. Drag a bookmark onto another →
+      order changes and survives app restart. *(reverified 2026-07-19)*
 
 ## 15. Phase 5 — Hardening (project identity / tab tether / hook contract)
 
