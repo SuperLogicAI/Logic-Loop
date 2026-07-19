@@ -5,6 +5,11 @@ export function ptySpawn(cwd: string | null, cols: number, rows: number): Promis
   return invoke<number>("pty_spawn", { cwd, cols, rows });
 }
 
+/** Resolve `~` and case/symlinks to the real path — the project key panels use. */
+export function canonicalizeCwd(path: string): Promise<string> {
+  return invoke<string>("canonicalize_cwd", { path });
+}
+
 export function ptyWrite(id: number, data: string): Promise<void> {
   return invoke("pty_write", { id, data });
 }

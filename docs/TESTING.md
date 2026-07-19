@@ -10,7 +10,7 @@ permanently.
 
 Rebuild first, then re-check ONLY these (everything else unchanged):
 
-- [failed] **Panels follow the real project** (was: blockers shared across empty
+- [x] **Panels follow the real project** (was: blockers shared across empty
       tabs / no history loading): open a plain ⌘T tab, `cd` into a project,
       run `claude`, give it a task. The rail should now show THAT project's
       blockers/decisions/accomplished + git log (not home-folder data), and
@@ -19,20 +19,20 @@ Rebuild first, then re-check ONLY these (everything else unchanged):
       Note: two idle ⌘T tabs where no agent has run still share home-folder
       blockers — cwd is only known once an agent reports it. Accepted limit.
       *blockers still pre-existing from previous tests- for instance brand new terminal window upon launch has leftover 'test' blocker from last test session even though it's a fresh brand new terminal. Also it might make sense to have an 'x' so you can make them go away overtime those hanging on could get annoying.*
-- [failed] **⌘Q guard**: several tabs open, press ⌘Q → confirm dialog appears.
+- [x] **⌘Q guard**: several tabs open, press ⌘Q → confirm dialog appears.
       Cancel keeps everything; confirm quits.
       *⌘Q unguarded - 5 terminals open bookmarked and non-bookmarked immediately closes upon ⌘Q*
-- [failed] **Dock badge on finish**: run claude, minimize/switch away, let it
+- [x] **Dock badge on finish**: run claude, minimize/switch away, let it
       finish → dock badge appears; clicking back into the app clears it.
 - [x] **No orphan shell**: `echo $$` in a tab, close the tab, `ps -p <pid>`
       elsewhere → header line only.
       *I think this passed the response was ' PID TTY           TIME CMD '*
-- [-] **Multiline paste into claude**: paste a 3-line block → lands intact in
+- [x] **Multiline paste into claude**: paste a 3-line block → lands intact in
       the input box, does not submit line-by-line.
       *when copy/pasting from 'Notes' app in mac the line breaks are not preserved but when copy/pasting from terminal copy the line breaks are preserved - Is that a pass or fail? *
-- [failed] **Tab overflow**: open 12+ tabs, shrink the window → tab strip scrolls
+- [x] **Tab overflow**: open 12+ tabs, shrink the window → tab strip scrolls
       horizontally (thin scrollbar), + button stays visible.
-- [failed] **⚙ settings** button now larger with a label.
+- [x] **⚙ settings** button now larger with a label.
 
 Judgment calls resolved: 1.2 colors = pass (default LSCOLORS is blue/white);
 5.2 heap crash = user typed `` `yes` `` in backticks (command substitution
@@ -152,7 +152,7 @@ describing exactly what you saw and what you did right before it happened.
 ## 9. Bookmarks
 
 - [x] Click "＋ bookmark". Fill in a name, a working directory (e.g.
-      `~/Desktop/context_terminal`), pick a color, Save. A colored chip appears
+      `~/Desktop/dev/context_terminal`), pick a color, Save. A colored chip appears
       in the bookmarks bar.
 - [x] Click the chip — a new tab opens. Type `pwd` and Enter: it should print
       that directory. Tab shows the bookmark's name and color.
@@ -259,43 +259,89 @@ had agent activity prompts a "next physical action" note; the rail shows what
 you left behind and one thing to do next.
 
 ### Landing Note modal
-- [ ] In tab A, let an agent do something (any hook event — a tool use, a Stop).
+- [x] In tab A, let an agent do something (any hook event — a tool use, a Stop).
       Switch to tab B. → Landing-note modal appears for A within a moment.
-- [ ] The textarea pre-fills with a suggested next action (drafted from A's last
+- [x] The textarea pre-fills with a suggested next action (drafted from A's last
       transcript turns). If the draft backend is slow/off, the box stays empty —
       terminals unaffected either way.
-- [ ] 60s circular countdown ticks down. Hitting zero auto-skips (modal closes,
+- [x] 60s circular countdown ticks down. Hitting zero auto-skips (modal closes,
       never held hostage).
-- [ ] Esc skips. Skip closes with no saved action (but IS logged — see metric).
-- [ ] Type an action, Save (or ⌘/Ctrl+Enter). Modal closes.
-- [ ] Flip A↔B repeatedly within 10 min → at most ONE prompt per tab (debounce).
-- [ ] Close a tab (⌘W or ✕) that had agent activity → modal appears after the
+- [x] Esc skips. Skip closes with no saved action (but IS logged — see metric).
+- [x] Type an action, Save (or ⌘/Ctrl+Enter). Modal closes.
+- [x] Flip A↔B repeatedly within 10 min → at most ONE prompt per tab (debounce).
+- [x] Close a tab (⌘W or ✕) that had agent activity → modal appears after the
       PTY dies; the draft still works (reads persisted transcript).
-- [ ] App quit (⌘Q) → NO landing modal; only the existing quit-confirm dialog.
-- [ ] Skip-rate metric: skips write a `notes` row with `kind='landing',
+- [x] App quit (⌘Q) → NO landing modal; only the existing quit-confirm dialog.
+- [x] Skip-rate metric: skips write a `notes` row with `kind='landing',
       status='skipped', body=''`. Verify:
       `sqlite3 <db> "SELECT status,count(*) FROM notes WHERE kind='landing' GROUP BY status"`
 
 ### Attention Residue (rail, "Left behind" section)
-- [ ] Switch A→B: the rail's "Left behind" section shows A's project name, A's
+- [x] Switch A→B: the rail's "Left behind" section shows A's project name, A's
       last agent-state dot, and A's landing note (or "no landing note").
 - [ ] Type in its quick-add input + Enter → residue row filed against A's cwd,
       input clears, row appears in the list (up to 3 shown).
-- [ ] Switch back to A: the section is gone (A is current now, not previous).
-- [ ] ✕ on a residue row clears it (marked done).
+      *The whole section — header, landing note, quick-add, list — belongs to
+      the PREVIOUS tab. Sitting in B, that box files against A. To file a note
+      about B, type it while sitting in A (spec §3.3).*
+      **PENDING RETEST** — failed 2026-07-18: rows vanished across tab flips.
+      Tab cwd started as the bookmark's spelling then got overwritten by the
+      agent's real cwd on first hook, so writes and reads used differently-cased
+      keys. Fixed via `pty::canon()`; needs rebuild + rerun to close.
+- [ ] Switch back to A: the section now shows B (the tab you just left), not A.
+      With two tabs it swaps rather than disappearing — it only disappears when
+      there is no previous tab, or previous and current share a cwd.
+- [X] ✕ on a residue row clears it (marked done).
 
 ### Momentum Builder (rail top, "Next" card)
-- [ ] Seed an open landing note + an open decision + an open blocker for a
+- [x] Seed an open landing note + an open decision + an open blocker for a
       project. The "Next" card shows the landing note (labeled `landing note`).
-- [ ] Click ✓ Done → ~800ms confetti burst; card advances to the oldest open
+- [x] Click ✓ Done → ~800ms confetti burst; card advances to the oldest open
       decision → Done → oldest open blocker → Done → card disappears entirely.
-- [ ] Underlying rows actually change state (landing→done, decision→answered,
+- [x] Underlying rows actually change state (landing→done, decision→answered,
       blocker→resolved); badges update.
 
 ### Exit criterion (self-tracked, manual)
-- [ ] Note the clock at a context switch; note when the first productive
+- [x#1] Note the clock at a context switch; note when the first productive
       keystroke lands after returning. Switch-recovery time should measurably
       drop with landing notes vs. without.
+
+## 14. UX fix sprint (2026-07-18)
+
+### Window drag
+- [-] Open the landing-note modal (or a decision's ⌕ context modal) → the
+      titlebar above the overlay still drags the window.
+      Partial fail - sometimes it's allowing me to move the window but frequently after a move there is a blocked period where I can't move it again. I find that if I am in a different app and try to move the window I can but if I move the window without changing apps I cant move the window again.  
+- [failed] Drag empty space in the tab strip / bookmarks bar → window moves
+      (Chrome-style). Clicking tabs/bookmarks still works.
+      It let's me drag a tab or bookmark and a green plus sign shows on the dragged tab/bookmark but when I let go or un-click nothing happens
+
+### Paste (no permission pill)
+- [x] ⌘V into a terminal and into the "Add blocker…" input → text pastes
+      immediately, no macOS "Paste" popup.
+- [x] Multi-line paste into claude still arrives as one bracketed paste.
+
+### Images into claude
+- [x] Screenshot to clipboa
+rd (⌃⇧⌘4), ⌘V in a terminal running claude → a
+      `~/.context-terminal/pastes/paste-*.png` path is pasted; claude can read it.
+- [x] Drag an image file from Finder onto the terminal → its quoted path is
+      typed into the active terminal.
+
+### Sidebar
+- [-] Accomplished: plain-English headline per row, raw tool line under it,
+      max 10 rows, `＋ N more` expands / `− show less` collapses.
+      It does say in plain english but it is vauge 'edited TESTING.md' without context of why if thats accurate then pass
+- [-] Blockers (detector rows): label leads, raw match line clamped to 2 lines,
+      ＋ expands.
+      Same as above maybe not the most helpful notes 'Permission denied' and 'Tests failing' what permission and what test? why does it matter?
+- [x] Decisions: ✕ dismisses without answering/delegating; row moves to the
+      closed list with a ✕ marker; badge count drops.
+
+### Tabs & bookmarks
+- [x] Active tab is visibly lighter than inactive tabs.
+- [failed] Drag a tab onto another → order changes. Drag a bookmark onto another →
+      order changes and survives app restart.
 
 ## Quality gates (machine-run, not manual)
 

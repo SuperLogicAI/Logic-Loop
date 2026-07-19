@@ -37,6 +37,14 @@ export async function deleteBookmark(id: number): Promise<void> {
   await d.execute("DELETE FROM bookmarks WHERE id = $1", [id]);
 }
 
+/** Persist a drag-reorder: positions follow the given id order. */
+export async function reorderBookmarks(ids: number[]): Promise<void> {
+  const d = await getDb();
+  for (let i = 0; i < ids.length; i++) {
+    await d.execute("UPDATE bookmarks SET position = $1 WHERE id = $2", [i + 1, ids[i]]);
+  }
+}
+
 export async function addEvent(sessionId: string, type: string, payloadJson: string): Promise<void> {
   const d = await getDb();
   await d.execute(
@@ -54,22 +62,37 @@ export async function listToolEvents(cwd: string, limit = 50): Promise<ToolEvent
      ORDER BY ts DESC LIMIT $2`,
     [cwd, limit]
   );
+  const VERB: Record<string, string> = {
+    Edit: "Edited",
+    Write: "Wrote",
+    Read: "Read",
+    NotebookEdit: "Edited",
+    Grep: "Searched",
+    Glob: "Searched",
+  };
+  const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
   return rows.map((r) => {
     let tool = "?";
     let detail = "";
+    let plain = "";
     try {
       const p = JSON.parse(r.payload_json) as Record<string, unknown>;
       tool = typeof p.tool_name === "string" ? p.tool_name : "?";
       const input = (p.tool_input ?? {}) as Record<string, unknown>;
-      detail =
-        (typeof input.file_path === "string" && input.file_path) ||
-        (typeof input.command === "string" && input.command) ||
-        (typeof input.description === "string" && input.description) ||
-        "";
+      const filePath = typeof input.file_path === "string" ? input.file_path : "";
+      const command = typeof input.command === "string" ? input.command : "";
+      const description = typeof input.description === "string" ? input.description : "";
+      detail = filePath || command || description || "";
+      // Plain-English headline: hook descriptions first (Bash sends one),
+      // else verb + filename, else the tool name.
+      plain =
+        description ||
+        (filePath ? `${VERB[tool] ?? tool} ${base(filePath)}` : "") ||
+        (command ? `Ran ${command.slice(0, 60)}` : tool);
     } catch {
       // keep defaults
     }
-    return { id: r.id, ts: r.ts, tool, detail };
+    return { id: r.id, ts: r.ts, tool, detail, plain };
   });
 }
 

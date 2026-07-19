@@ -44,6 +44,27 @@ impl PtyManager {
     }
 }
 
+/// Expand `~`, then resolve to the real on-disk path. macOS is case-insensitive,
+/// so `Desktop/Dev/x` and `Desktop/dev/x` open the same folder but are different
+/// SQL keys — panels then split one project into several. Canonicalizing here
+/// makes tab cwds agree with the cwd Claude Code hooks report.
+/// Falls back to the expanded string when the path doesn't exist (bookmarks may
+/// point at folders that are gone).
+pub fn canon(p: &str) -> String {
+    let expanded = match (p.strip_prefix("~"), std::env::var("HOME")) {
+        (Some(rest), Ok(home)) => format!("{home}{rest}"),
+        _ => p.to_string(),
+    };
+    std::fs::canonicalize(&expanded)
+        .map(|c| c.to_string_lossy().into_owned())
+        .unwrap_or(expanded)
+}
+
+#[tauri::command]
+pub fn canonicalize_cwd(path: String) -> String {
+    canon(&path)
+}
+
 #[tauri::command]
 pub fn pty_spawn(
     app: AppHandle,
@@ -66,10 +87,7 @@ pub fn pty_spawn(
     let mut cmd = CommandBuilder::new(&shell);
     cmd.arg("-l");
     cmd.env("TERM", "xterm-256color");
-    let cwd = cwd.map(|c| match (c.strip_prefix("~"), std::env::var("HOME")) {
-        (Some(rest), Ok(home)) => format!("{home}{rest}"),
-        _ => c,
-    });
+    let cwd = cwd.map(|c| canon(&c));
     if let Some(cwd) = cwd.filter(|c| std::path::Path::new(c).is_dir()) {
         cmd.cwd(cwd);
     }
@@ -191,4 +209,21 @@ pub fn git_log(cwd: String, limit: Option<u32>) -> Vec<Commit> {
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::canon;
+
+    #[test]
+    fn canon_resolves_case_and_tilde_to_one_key() {
+        let home = std::env::var("HOME").unwrap();
+        // `~` expands, and a case-variant spelling of an existing dir resolves to
+        // the same string — that equality is what keeps a project from splitting
+        // into several SQL keys.
+        assert_eq!(canon("~"), canon(&home));
+        assert_eq!(canon(&format!("{home}/Library")), canon(&format!("{home}/library")));
+        // Nonexistent paths fall through expanded, never panic.
+        assert_eq!(canon("~/definitely-not-a-real-dir-xyz"), format!("{home}/definitely-not-a-real-dir-xyz"));
+    }
 }

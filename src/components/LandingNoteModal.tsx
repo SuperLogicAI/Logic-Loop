@@ -81,7 +81,8 @@ export function LandingNoteModal({ projectName, sessionId, onSave, onSkip }: Pro
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60">
+    // top-7 keeps the titlebar drag region reachable under the overlay
+    <div className="fixed inset-x-0 top-7 bottom-0 z-40 flex items-center justify-center bg-black/60">
       <div className="w-[32rem] max-w-[90vw] rounded-lg border border-zinc-700 bg-zinc-900 p-4 shadow-xl">
         <div className="mb-2 flex items-center gap-3">
           <div className="min-w-0 flex-1">

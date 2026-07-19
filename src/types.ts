@@ -33,6 +33,7 @@ export interface ToolEvent {
   ts: number;
   tool: string;
   detail: string;
+  plain: string; // human-readable headline derived in the repo layer
 }
 
 export interface Commit {
@@ -46,7 +47,7 @@ export interface Decision {
   session_id: string;
   cwd: string;
   question: string;
-  status: "open" | "answered" | "delegated";
+  status: "open" | "answered" | "delegated" | "dismissed";
   user_answer: string | null;
   assumption: string | null;
   context_json: string;

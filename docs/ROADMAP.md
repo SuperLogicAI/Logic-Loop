@@ -10,6 +10,7 @@ codebase; concepts only, re-derived against our architecture invariants.
 | Item | Slot | Size | Depends on |
 |---|---|---|---|
 | Event epoch guard | Now (spine correctness bugfix) | 0.5d | — |
+| Project identity | Phase 5 (do early — data correctness) | 0.5d | — |
 | Tab tether | Phase 5 | 0.5d | — |
 | Re-entry | Phase 5 | 1d | Tab tether |
 | Unclaimed results | Phase 5 | 1d | — |
@@ -32,6 +33,40 @@ open a new epoch. Completion events from an older epoch are still appended to
 
 - Tests: event-sequence unit tests (`Stop → SubagentStop` stays IDLE; dup
   events don't double-transition). Gates: cargo test, golden 12/12.
+
+## Project identity — Phase 5, do early
+
+Panels key every row on a raw cwd string, so one project splits into several
+SQL keys and each fragment shows a partial view. Found 2026-07-18 while
+debugging the Phase 4 residue panel.
+
+Two causes, one fixed:
+
+1. **Case / path spelling** (FIXED 2026-07-18). macOS is case-insensitive:
+   `Desktop/Dev/x` and `Desktop/dev/x` open the same folder, are different SQL
+   keys. `pty::canon()` now canonicalizes at tab open + bookmark add, so tab
+   cwds agree with the cwd hooks report. Unit test in `pty.rs`.
+2. **Subdirectory splitting** (OPEN — this item). `cd src-tauri && claude`
+   files against a different project than running claude from the repo root.
+   Observed live: `context_terminal` (5 blockers / 11 decisions),
+   `context_terminal/src-tauri` (2 / 1), and `dev/context_terminal/src-tauri`
+   (2 / 0) are three separate projects today. Same for `super_cowork` and
+   `NSSA_2026` with their subdirs.
+
+Fix: derive a stable project key by walking up to the nearest `.git` (fall
+back to the cwd itself when not in a repo). Applies to tab cwd AND the hook
+cwd on the ingestion side — both must resolve identically or the split
+returns. This redefines "project" app-wide, hence a phase item, not a patch.
+
+- Not solved by Tab tether: the tether fixes session→tab binding; the project
+  key stays cwd-derived either way.
+- Decided 2026-07-18: pre-fix rows stay orphaned, no merge migration. They're
+  mostly Phase 1–4 test noise, blockers/decisions self-obsolete, and a
+  case-only merge wouldn't have touched the dominant subdir split anyway.
+- Also seen: one `notes` row keyed `~ /Desktop/superlogicai_IO` — literal
+  unexpanded tilde-space, so some write path bypasses `expand()`. Find it.
+- Test: run claude from a repo root and from a subdir → both file against the
+  same project; panel counts don't split.
 
 ## Tab tether — Phase 5
 

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { homeDir } from "@tauri-apps/api/path";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { onHookEvent, onTranscriptLine, stateForHook } from "./lib/ingest";
@@ -12,7 +14,7 @@ import { ptyWrite } from "./lib/pty";
 import { TabBar } from "./components/TabBar";
 import { BookmarksBar } from "./components/BookmarksBar";
 import { Terminal } from "./components/Terminal";
-import { ptyKill, ptyKillAll, ptySpawn } from "./lib/pty";
+import { canonicalizeCwd, ptyKill, ptyKillAll, ptySpawn } from "./lib/pty";
 import * as repo from "./lib/repo";
 import type { Bookmark, Tab } from "./types";
 import { PALETTE } from "./types";
@@ -93,12 +95,15 @@ export default function App() {
   }, [refreshBlockerCounts, refreshDecisionCounts]);
 
   const openTab = useCallback(async (opts?: { name?: string; cwd?: string; color?: string }) => {
-    const ptyId = await ptySpawn(opts?.cwd ?? null, 80, 24);
+    // Canonicalize before the tab record exists — tab.cwd is the project key
+    // every panel queries by, and it must match the cwd hooks report.
+    const cwd = await canonicalizeCwd(opts?.cwd ?? "~").catch(() => opts?.cwd ?? "~");
+    const ptyId = await ptySpawn(cwd, 80, 24);
     const tab: Tab = {
       id: `tab-${++tabCounter}`,
       ptyId,
       title: opts?.name ?? "Terminal",
-      cwd: opts?.cwd ?? "~",
+      cwd,
       color: opts?.color ?? PALETTE[7],
       status: "live",
     };
@@ -257,6 +262,57 @@ export default function App() {
     };
   }, [expand, refreshBlockerCounts, refreshDecisionCounts]);
 
+  // File drag-drop: the webview intercepts native drops (no DOM drop events),
+  // so paste dropped paths into the active terminal — the human dragged them,
+  // the app is not typing on its own.
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+    void getCurrentWebview().onDragDropEvent((ev) => {
+      if (ev.payload.type !== "drop" || ev.payload.paths.length === 0) return;
+      const tab = tabsRef.current.find((t) => t.id === activeIdRef.current && t.status === "live");
+      if (!tab) return;
+      const quoted = ev.payload.paths.map((p) => `'${p.replace(/'/g, `'\\''`)}'`).join(" ");
+      void ptyWrite(tab.ptyId, quoted + " ");
+    }).then((u) => {
+      if (cancelled) u();
+      else unlisten = u;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  const reorderTabs = useCallback((srcId: string, dstId: string) => {
+    if (srcId === dstId) return;
+    setTabs((prev) => {
+      const from = prev.findIndex((t) => t.id === srcId);
+      const to = prev.findIndex((t) => t.id === dstId);
+      if (from < 0 || to < 0) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }, []);
+
+  const reorderBookmarks = useCallback(
+    (srcId: number, dstId: number) => {
+      if (srcId === dstId) return;
+      const ids = bookmarks.map((b) => b.id);
+      const from = ids.indexOf(srcId);
+      const to = ids.indexOf(dstId);
+      if (from < 0 || to < 0) return;
+      ids.splice(to, 0, ...ids.splice(from, 1));
+      // optimistic: live hover-reorder fires per crossing, so don't make the
+      // next move compute off a pre-refresh (stale) order
+      setBookmarks(ids.map((id) => bookmarks.find((b) => b.id === id)!));
+      void repo.reorderBookmarks(ids).then(refreshBookmarks);
+    },
+    [bookmarks, refreshBookmarks]
+  );
+
   // Dock badge = agents waiting on the user + agents that finished while the
   // app was in the background (cleared on refocus).
   useEffect(() => {
@@ -315,8 +371,9 @@ export default function App() {
           (el instanceof HTMLTextAreaElement && !el.classList.contains("xterm-helper-textarea"));
         if (isField) {
           e.preventDefault();
-          void navigator.clipboard
-            .readText()
+          // pbpaste via Rust — navigator.clipboard triggers the macOS
+          // "Paste" permission pill in WKWebView.
+          void invoke<string>("clipboard_text")
             .then((t) => {
               if (!t) return;
               const field = el as HTMLInputElement | HTMLTextAreaElement;
@@ -377,21 +434,38 @@ export default function App() {
 
   return (
     <div className="flex h-screen flex-col bg-zinc-900">
+      {/* Custom titlebar (native one hidden via titleBarStyle: Overlay).
+          Left padding clears the macOS traffic lights; drag region keeps
+          move + double-click-to-zoom working. */}
+      <div
+        data-tauri-drag-region
+        className="flex h-7 shrink-0 items-center gap-1.5 bg-zinc-900 pl-[78px]"
+      >
+        <img src="/loop.png" alt="" className="pointer-events-none h-4 w-4" />
+        <span className="pointer-events-none text-xs font-semibold text-zinc-400">Logic Loop</span>
+      </div>
       <TabBar
         tabs={tabs}
         activeId={activeId}
         onSelect={setActiveId}
         onClose={closeTab}
         onNew={() => void openTab()}
+        onReorder={reorderTabs}
         blockerCount={(t) => blockerCountsByCwd[expand(t.cwd)] ?? 0}
         decisionCount={(t) => decisionCountsByCwd[expand(t.cwd)] ?? 0}
       />
       <BookmarksBar
         bookmarks={bookmarks}
         onOpen={(b) => void openTab({ name: b.name, cwd: b.cwd, color: b.color })}
-        onAdd={(name, cwd, color) => void repo.addBookmark(name, cwd, color).then(refreshBookmarks)}
+        onAdd={(name, cwd, color) =>
+          void canonicalizeCwd(cwd)
+            .catch(() => cwd)
+            .then((c) => repo.addBookmark(name, c, color))
+            .then(refreshBookmarks)
+        }
         onUpdate={(b) => void repo.updateBookmark(b).then(refreshBookmarks)}
         onDelete={(id) => void repo.deleteBookmark(id).then(refreshBookmarks)}
+        onReorder={reorderBookmarks}
       />
       <div className="flex min-h-0 flex-1">
         {railOpen && activeTab && (

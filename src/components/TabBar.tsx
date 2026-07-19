@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Tab } from "../types";
 
 // WAITING pulses — that dot is the whole point of the product.
@@ -23,13 +24,24 @@ interface Props {
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
   onNew: () => void;
+  onReorder: (srcId: string, dstId: string) => void;
   blockerCount: (tab: Tab) => number;
   decisionCount: (tab: Tab) => number;
 }
 
-export function TabBar({ tabs, activeId, onSelect, onClose, onNew, blockerCount, decisionCount }: Props) {
+export function TabBar({ tabs, activeId, onSelect, onClose, onNew, onReorder, blockerCount, decisionCount }: Props) {
+  const [dragId, setDragId] = useState<string | null>(null);
   return (
-    <div className="flex items-end gap-1 bg-zinc-900 px-2 pt-2">
+    // data-tauri-drag-region: empty strip space moves the window, Chrome-style
+    // select-none: a pointer-drag starting here otherwise runs a DOM text
+    // selection into the terminal below, which only paints on pointerup.
+    <div
+      data-tauri-drag-region
+      // release outside a tab cancels the drag instead of leaving it armed
+      onPointerUp={() => setDragId(null)}
+      onPointerLeave={() => setDragId(null)}
+      className="flex select-none items-end gap-1 bg-zinc-900 px-2 pt-2"
+    >
       <div className="tab-strip flex min-w-0 items-end gap-1 overflow-x-auto">
         {tabs.map((tab) => (
         <div
@@ -38,11 +50,21 @@ export function TabBar({ tabs, activeId, onSelect, onClose, onNew, blockerCount,
           onAuxClick={(e) => {
             if (e.button === 1) onClose(tab.id);
           }}
-          className={`group flex max-w-52 min-w-28 cursor-pointer items-center gap-2 rounded-t-md border-t-2 px-3 py-1.5 text-sm ${
+          // ponytail: pointer events, not HTML5 drag — the webview's native
+          // drag-drop handler (App.tsx onDragDropEvent, needed for file drops)
+          // swallows DOM drop events, so draggable never completes here.
+          onPointerDown={() => setDragId(tab.id)}
+          // reorder live as the cursor crosses a tab, Chrome-style — the strip
+          // reflows under the pointer, so no separate drop indicator is needed
+          onPointerEnter={() => {
+            if (dragId && dragId !== tab.id) onReorder(dragId, tab.id);
+          }}
+          onPointerUp={() => setDragId(null)}
+          className={`group flex max-w-52 min-w-28 cursor-pointer items-center gap-2 rounded-t-md border-t-2 px-3 py-1.5 text-sm transition-[background-color,opacity] ${
             tab.id === activeId
-              ? "bg-[#1e2127] text-zinc-100"
-              : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-          }`}
+              ? "bg-zinc-700 text-zinc-100"
+              : "bg-zinc-800/70 text-zinc-500 hover:bg-zinc-700/50 hover:text-zinc-300"
+          } ${dragId === tab.id ? "opacity-60 ring-1 ring-zinc-500" : ""}`}
           style={{ borderTopColor: tab.color }}
         >
           <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass(tab)}`} />
