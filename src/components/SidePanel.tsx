@@ -22,6 +22,11 @@ const STATE_DOT: Record<AgentState, string> = {
   error: "bg-red-400",
 };
 
+// Long lists collapse to this many rows behind a full-width ＋ toggle.
+const ROW_CAP = 5;
+const EXPAND_BTN =
+  "mt-1.5 w-full rounded border border-zinc-800 py-0.5 text-center text-zinc-500 hover:border-zinc-700 hover:bg-zinc-800/50 hover:text-zinc-200";
+
 function ago(ts: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
   if (s < 60) return `${s}s`;
@@ -42,6 +47,7 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, onBlock
   const [draft, setDraft] = useState("");
   const [residueDraft, setResidueDraft] = useState("");
   const [showAllTools, setShowAllTools] = useState(false);
+  const [showAllCommits, setShowAllCommits] = useState(false);
   const [expandedBlockers, setExpandedBlockers] = useState<Set<number>>(new Set());
 
   const toggleBlocker = (id: number) =>
@@ -181,15 +187,15 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, onBlock
       </p>
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3">
       {momentum && (
-        <section className="rounded-lg border border-teal-800/60 bg-teal-950/20 p-3">
-          <h2 className="mb-1 flex items-center gap-1.5 font-semibold tracking-wide text-teal-300 uppercase">
+        <section className="rounded-lg border border-yellow-500/30 bg-yellow-400/5 p-3">
+          <h2 className="mb-1 flex items-center gap-1.5 font-semibold tracking-wide text-yellow-300 uppercase">
             ▸ Next
             <span className="ml-auto font-normal text-[10px] normal-case text-zinc-500">{momentum.label}</span>
           </h2>
           <p className="mb-2 break-words text-zinc-200">{momentum.text}</p>
           <button
             ref={doneRef}
-            className="rounded bg-teal-700 px-2.5 py-1 text-zinc-100 hover:bg-teal-600"
+            className="ml-auto block rounded bg-yellow-400 px-2.5 py-1 font-medium text-zinc-950 hover:bg-yellow-300"
             onClick={() => void finishMomentum()}
           >
             ✓ Done
@@ -198,31 +204,35 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, onBlock
       )}
 
       <section>
-        <h2 className="mb-1.5 font-semibold tracking-wide text-violet-400 uppercase">
+        <h2 className="mb-1.5 font-semibold tracking-wide text-orange-400 uppercase">
           Decisions {openDecisions.length > 0 && `(${openDecisions.length})`}
         </h2>
         {openDecisions.length === 0 && <p className="text-zinc-600">Nothing waiting on you.</p>}
         <ul className="flex flex-col gap-2">
           {openDecisions.map((d) => (
-            <li key={d.id} className="rounded border border-violet-900/50 bg-violet-950/20 p-2">
-              <p className="break-words">{d.question}</p>
+            <li key={d.id} className="relative rounded border border-yellow-800/60 bg-yellow-950/20 p-2">
+              <button
+                className="absolute top-1 right-1 leading-none text-yellow-800 hover:text-yellow-500"
+                title="Dismiss — not a real decision"
+                onClick={() => void setStatus(d, "dismissed")}
+              >
+                ✕
+              </button>
+              <p className="break-words pr-5 text-orange-300">{d.question}</p>
               {d.assumption && (
-                <p className="mt-1 text-amber-400/90">agent assumed: {d.assumption}</p>
+                <p className="mt-1 text-zinc-400">agent assumed: {d.assumption}</p>
               )}
               <div className="mt-1.5 flex gap-2 text-zinc-400">
-                <button className="hover:text-zinc-100" title="Prefill answer in terminal" onClick={() => onAnswerNow(d)}>
+                <button className="text-red-400 hover:text-red-300" title="Prefill answer in terminal" onClick={() => onAnswerNow(d)}>
                   ✎ answer
                 </button>
-                <button className="hover:text-zinc-100" title="Show surrounding conversation" onClick={() => setContext(d)}>
+                <button className="text-yellow-400 hover:text-yellow-300" title="Show surrounding conversation" onClick={() => setContext(d)}>
                   ⌕ context
                 </button>
-                <button className="hover:text-zinc-100" title="Fine — agent's call" onClick={() => void setStatus(d, "delegated")}>
+                <button className="text-green-400 hover:text-green-300" title="Fine — agent's call" onClick={() => void setStatus(d, "delegated")}>
                   ⤳ delegate
                 </button>
                 <span className="ml-auto text-zinc-600">{ago(d.ts)}</span>
-                <button className="text-zinc-600 hover:text-zinc-100" title="Dismiss — not a real decision" onClick={() => void setStatus(d, "dismissed")}>
-                  ✕
-                </button>
               </div>
             </li>
           ))}
@@ -239,7 +249,7 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, onBlock
       </section>
 
       <section>
-        <h2 className="mb-1.5 font-semibold tracking-wide text-amber-400 uppercase">
+        <h2 className="mb-1.5 font-semibold tracking-wide text-red-400 uppercase">
           Blockers {open.length > 0 && `(${open.length})`}
         </h2>
         <div className="mb-2 flex gap-1">
@@ -252,20 +262,31 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, onBlock
           />
         </div>
         {open.length === 0 && <p className="text-zinc-600">None open.</p>}
-        <ul className="flex flex-col gap-1.5">
+        <ul className="flex flex-col gap-2">
           {open.map((b) => (
-            <li key={b.id} className="flex items-start gap-2">
-              <input type="checkbox" checked={false} onChange={() => void resolve(b)} className="mt-0.5" />
+            <li key={b.id} className="relative flex items-start gap-2 rounded border border-red-800/60 bg-red-950/20 p-2 pr-5">
+              <button
+                className="absolute top-1 right-1 leading-none text-red-800 hover:text-red-500"
+                title="Delete"
+                onClick={() => void remove(b)}
+              >
+                ✕
+              </button>
+              <input
+                type="checkbox"
+                checked={false}
+                onChange={() => void resolve(b)}
+                className="mt-0.5 accent-red-500"
+              />
               <span className="min-w-0 flex-1">
                 {b.source !== "manual" ? (
                   // Detector blockers: human label leads, raw match line below,
                   // clamped to two lines with a ＋ to expand.
                   <>
-                    <span className="break-words text-zinc-200">
+                    <span className="break-words text-red-300">
                       {b.source}
-                      <span className="ml-1 text-zinc-600">· {ago(b.ts)}</span>
                       <button
-                        className="ml-1 text-zinc-600 hover:text-zinc-200"
+                        className="ml-1 text-zinc-100 hover:text-white"
                         title={expandedBlockers.has(b.id) ? "Collapse" : "Expand"}
                         onClick={() => toggleBlocker(b.id)}
                       >
@@ -281,15 +302,10 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, onBlock
                     </p>
                   </>
                 ) : (
-                  <span className="break-words">
-                    {b.text}
-                    <span className="ml-1 text-zinc-600">· {ago(b.ts)}</span>
-                  </span>
+                  <span className="break-words text-red-300">{b.text}</span>
                 )}
+                <span className="mt-1.5 block text-right text-zinc-600">{ago(b.ts)}</span>
               </span>
-              <button className="shrink-0 text-zinc-600 hover:text-zinc-200" title="Delete" onClick={() => void remove(b)}>
-                ✕
-              </button>
             </li>
           ))}
         </ul>
@@ -312,11 +328,11 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, onBlock
         <h2 className="mb-1.5 font-semibold tracking-wide text-emerald-400 uppercase">Accomplished</h2>
         {toolEvents.length === 0 && <p className="text-zinc-600">No tool activity recorded.</p>}
         <ul className="flex flex-col gap-1.5">
-          {(showAllTools ? toolEvents : toolEvents.slice(0, 10)).map((e) => (
+          {(showAllTools ? toolEvents : toolEvents.slice(0, ROW_CAP)).map((e) => (
             <li key={e.id} className="flex gap-2">
               <span className="w-8 shrink-0 text-right text-zinc-600">{ago(e.ts)}</span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-zinc-200" title={e.plain}>
+                <span className="block truncate text-emerald-300" title={e.plain}>
                   {e.plain}
                 </span>
                 {e.detail && (
@@ -328,12 +344,12 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, onBlock
             </li>
           ))}
         </ul>
-        {toolEvents.length > 10 && (
+        {toolEvents.length > ROW_CAP && (
           <button
-            className="mt-1.5 text-zinc-500 hover:text-zinc-200"
+            className={EXPAND_BTN}
             onClick={() => setShowAllTools((s) => !s)}
           >
-            {showAllTools ? "− show less" : `＋ ${toolEvents.length - 10} more`}
+            {showAllTools ? "−" : `＋ ${toolEvents.length - ROW_CAP}`}
           </button>
         )}
       </section>
@@ -342,15 +358,23 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, onBlock
         <h2 className="mb-1.5 font-semibold tracking-wide text-sky-400 uppercase">Git log</h2>
         {commits.length === 0 && <p className="text-zinc-600">Not a git repo.</p>}
         <ul className="flex flex-col gap-1">
-          {commits.map((c) => (
+          {(showAllCommits ? commits : commits.slice(0, ROW_CAP)).map((c) => (
             <li key={c.hash} className="flex gap-2">
               <span className="w-8 shrink-0 text-right text-zinc-600">{ago(c.ts * 1000)}</span>
-              <span className="min-w-0 flex-1 truncate" title={c.subject}>
+              <span className="min-w-0 flex-1 truncate text-sky-300" title={c.subject}>
                 <span className="font-mono text-zinc-500">{c.hash}</span> {c.subject}
               </span>
             </li>
           ))}
         </ul>
+        {commits.length > ROW_CAP && (
+          <button
+            className={EXPAND_BTN}
+            onClick={() => setShowAllCommits((s) => !s)}
+          >
+            {showAllCommits ? "−" : `＋ ${commits.length - ROW_CAP}`}
+          </button>
+        )}
       </section>
 
       {prevCwd && prevCwd !== cwd && (
@@ -399,7 +423,7 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, onBlock
             className="max-h-[70vh] w-[36rem] max-w-[90vw] overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="mb-2 font-semibold text-violet-400">{context.question}</h3>
+            <h3 className="mb-2 font-semibold text-orange-400">{context.question}</h3>
             {(() => {
               try {
                 const pair = JSON.parse(context.context_json) as { assistant: string; user: string | null };

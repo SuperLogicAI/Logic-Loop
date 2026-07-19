@@ -70,12 +70,12 @@ export function TabBar({ tabs, activeId, onSelect, onClose, onNew, onReorder, bl
           <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass(tab)}`} />
           <span className="truncate">{tab.title}</span>
           {blockerCount(tab) > 0 && (
-            <span className="shrink-0 rounded-full bg-amber-500/20 px-1.5 text-[10px] font-semibold text-amber-400">
+            <span className="shrink-0 rounded-full bg-red-500/20 px-1.5 text-[10px] font-semibold text-red-400">
               {blockerCount(tab)}
             </span>
           )}
           {decisionCount(tab) > 0 && (
-            <span className="shrink-0 rounded-full bg-violet-500/20 px-1.5 text-[10px] font-semibold text-violet-400">
+            <span className="shrink-0 rounded-full bg-orange-500/20 px-1.5 text-[10px] font-semibold text-orange-400">
               {decisionCount(tab)}
             </span>
           )}
