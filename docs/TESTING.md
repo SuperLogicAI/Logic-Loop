@@ -382,6 +382,22 @@ check below silently tests the old contract.
 - [x] `cargo clippy --all-targets -- -D warnings` clean (in `src-tauri/`).
 - [x] `cargo test` passes (settings.json hook editing round-trip). *(3/3)*
 - [x] `npm run golden` — 12/12 (claude). *(rerun 2026-07-12; decision prompt unchanged)*
+- [x] `EXTRACTOR=lmstudio LMSTUDIO_MODEL=<id> npm run golden` — local backend.
+      Measured 2026-07-19; **use `qwen3.6-35b-a3b`** for ⚙ Sidebar LM:
+
+      | Model | Score | Failure mode |
+      |---|---|---|
+      | `qwen3.6-35b-a3b` | 12/12 | — |
+      | `qwen3.5-27b-opus-distilled-mlx` | 11/12 | under-extracts: misses assumption-and-proceed |
+      | `nvidia/nemotron-3-nano-omni` | 10/12 | over-extracts: invents decisions from rhetorical questions and questions inside code blocks |
+
+      Over-extraction is the worse failure here — a Decisions panel full of
+      non-decisions trains you to ignore it. Requalify any new model against
+      the golden set before trusting the panel; small models pass the easy
+      fixtures and fail exactly the ones the panel exists for.
+      `LMSTUDIO_MODEL` is required when LM Studio has several models loaded
+      (it 400s otherwise). Endpoint overrides go in `LMSTUDIO_URL` or the app's
+      settings — never in a tracked file.
 - [x] `npm run landing:check` — landing-draft parser assertions pass. *(new, Phase 4)*
 - [x] `npm run epoch:check` — hook→state epoch guard assertions pass.
 - [x] `npm run bind:check` — session→tab binding assertions pass. *(new, Phase 5)*
