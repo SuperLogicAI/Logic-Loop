@@ -27,16 +27,26 @@ function runClaude(prompt: string): string {
 }
 
 async function runLmStudio(prompt: string): Promise<string> {
-  const res = await fetch("http://127.0.0.1:1234/v1/chat/completions", {
+  const res = await fetch(`${process.env.LMSTUDIO_URL ?? "http://127.0.0.1:1234"}/v1/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       messages: [{ role: "user", content: prompt }],
       temperature: 0,
+      // LM Studio 400s when several models are loaded and none is named. The
+      // app always sends one (⚙ Sidebar LM); mirror that here or every fixture
+      // fails on the error body rather than on model quality.
+      ...(process.env.LMSTUDIO_MODEL ? { model: process.env.LMSTUDIO_MODEL } : {}),
     }),
   });
-  const body = (await res.json()) as { choices: { message: { content: string } }[] };
-  return body.choices[0]?.message.content ?? "";
+  const body = (await res.json()) as {
+    choices?: { message: { content: string } }[];
+    error?: { message: string };
+  };
+  // Surface the API's own error; otherwise a bad request shows up as an
+  // undefined-property TypeError that reads like a model failure.
+  if (body.error) throw new Error(`lmstudio: ${body.error.message}`);
+  return body.choices?.[0]?.message.content ?? "";
 }
 
 function check(name: string, f: Fixture, raw: string): string[] {
