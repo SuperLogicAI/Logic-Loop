@@ -419,20 +419,24 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, onBlock
       {context && (
         // top-7 keeps the titlebar drag region reachable under the overlay
         <div className="fixed inset-x-0 top-7 bottom-0 z-30 flex items-center justify-center bg-black/60" onClick={() => setContext(null)}>
+          {/* Same skin as a decision card (border-yellow-800/60 +
+              bg-yellow-950/20), but the modal floats over a translucent
+              overlay — so the tint is pre-composited against zinc-900 rather
+              than layered. Keep in sync with the decision <li> above. */}
           <div
-            className="max-h-[70vh] w-[36rem] max-w-[90vw] overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-4"
+            className="max-h-[70vh] w-[36rem] max-w-[90vw] overflow-y-auto rounded-lg border border-yellow-800/60 bg-[#201a17] p-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="mb-2 font-semibold text-orange-400">{context.question}</h3>
+            <h3 className="mb-2 font-semibold text-orange-300">{context.question}</h3>
             {(() => {
               try {
                 const pair = JSON.parse(context.context_json) as { assistant: string; user: string | null };
                 return (
                   <>
                     <p className="mb-1 text-zinc-500">agent said:</p>
-                    <pre className="mb-3 whitespace-pre-wrap rounded bg-zinc-800 p-2 text-zinc-300">{pair.assistant}</pre>
+                    <pre className="mb-3 whitespace-pre-wrap rounded bg-black/30 p-2 text-zinc-300">{pair.assistant}</pre>
                     <p className="mb-1 text-zinc-500">you replied:</p>
-                    <pre className="whitespace-pre-wrap rounded bg-zinc-800 p-2 text-zinc-300">
+                    <pre className="whitespace-pre-wrap rounded bg-black/30 p-2 text-zinc-300">
                       {pair.user ?? "(no reply — turn ended)"}
                     </pre>
                   </>
@@ -441,7 +445,10 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, onBlock
                 return <p className="text-zinc-500">context unavailable</p>;
               }
             })()}
-            <button className="mt-3 rounded bg-zinc-700 px-3 py-1 text-zinc-200 hover:bg-zinc-600" onClick={() => setContext(null)}>
+            <button
+              className="mt-3 rounded bg-orange-400 px-3 py-1 font-medium text-zinc-950 hover:bg-orange-300"
+              onClick={() => setContext(null)}
+            >
               Close
             </button>
           </div>

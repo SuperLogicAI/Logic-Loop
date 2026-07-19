@@ -12,6 +12,16 @@ const SECONDS = 60;
 const R = 20;
 const C = 2 * Math.PI * R;
 
+// Continuous sweep, 0 = red → 270 = violet. Drives the countdown ring.
+// 62% lightness keeps yellow and green legible on the dark card.
+const roygbv = (t: number) => `hsl(${t * 270} 85% 62%)`;
+
+// Discrete ROYGBV for the old-school per-letter cycle: first letter red, one
+// hue per letter, wrapping back to red after violet.
+const HUES = [0, 32, 55, 130, 215, 280];
+const cycle = (i: number, alpha = 0.85) => `hsl(${HUES[i % HUES.length]} 85% 62% / ${alpha})`;
+const RAINBOW_GRADIENT = `linear-gradient(135deg, ${HUES.map((_, i) => cycle(i, 0.6)).join(", ")})`;
+
 /** Leaving a tab with recent agent activity → capture the next physical action.
  *  Never hostage: Esc skips, and the countdown auto-skips at zero. */
 export function LandingNoteModal({ projectName, sessionId, onSave, onSkip }: Props) {
@@ -86,8 +96,19 @@ export function LandingNoteModal({ projectName, sessionId, onSave, onSkip }: Pro
       <div className="w-[32rem] max-w-[90vw] rounded-lg border border-zinc-700 bg-zinc-900 p-4 shadow-xl">
         <div className="mb-2 flex items-center gap-3">
           <div className="min-w-0 flex-1">
-            <h3 className="font-semibold text-teal-300">Landing note — {projectName}</h3>
-            <p className="text-xs text-zinc-500">
+            <h3 className="font-semibold">
+              {(() => {
+                // Whitespace doesn't consume a hue — otherwise the cycle looks
+                // like it skips a color across every gap.
+                let slot = 0;
+                return [...`Landing note — ${projectName}`].map((ch, i) => (
+                  <span key={i} style={{ color: cycle(ch === " " ? slot : slot++) }}>
+                    {ch}
+                  </span>
+                ));
+              })()}
+            </h3>
+            <p className="text-xs text-white/85">
               What's the next physical action here when you come back?
             </p>
           </div>
@@ -98,14 +119,26 @@ export function LandingNoteModal({ projectName, sessionId, onSave, onSkip }: Pro
               cy="24"
               r={R}
               fill="none"
-              stroke="#2dd4bf"
+              // Runs the sweep backwards: violet with a full minute left,
+              // red in the last seconds.
+              stroke={roygbv(remaining / SECONDS)}
               strokeWidth="3"
               strokeLinecap="round"
               strokeDasharray={C}
               strokeDashoffset={C * (1 - remaining / SECONDS)}
-              style={{ transition: "stroke-dashoffset 1s linear" }}
+              style={{ transition: "stroke-dashoffset 1s linear, stroke 1s linear" }}
             />
-            <text x="24" y="28" textAnchor="middle" className="rotate-90" fill="#a1a1aa" fontSize="12" transform="rotate(90 24 24)">
+            <text
+              x="24"
+              y="24"
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill="rgb(255 255 255 / 0.4)"
+              fontSize="13"
+              // The <svg> is -rotate-90 so the ring starts at 12 o'clock; undo
+              // it here or the digits read sideways.
+              transform="rotate(90 24 24)"
+            >
               {remaining}
             </text>
           </svg>
@@ -130,7 +163,16 @@ export function LandingNoteModal({ projectName, sessionId, onSave, onSkip }: Pro
           <button className="rounded px-3 py-1 text-zinc-400 hover:text-zinc-200" onClick={onSkip}>
             Skip
           </button>
-          <button className="rounded bg-teal-700 px-3 py-1 text-zinc-100 hover:bg-teal-600" onClick={save}>
+          <button
+            className="rounded border-2 border-transparent px-3 py-1 font-medium text-white hover:brightness-125"
+            // Gradient border: charcoal fill clipped to the padding box, rainbow
+            // clipped to the border box. hover uses brightness because the
+            // background is inline and can't be swapped by a hover: class.
+            style={{
+              background: `linear-gradient(#18181b, #18181b) padding-box, ${RAINBOW_GRADIENT} border-box`,
+            }}
+            onClick={save}
+          >
             Save
           </button>
         </div>
