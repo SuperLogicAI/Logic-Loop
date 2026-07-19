@@ -4,7 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { homeDir } from "@tauri-apps/api/path";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { onHookEvent, onTranscriptLine, stateForHook } from "./lib/ingest";
+import { bindSession, onHookEvent, onTranscriptLine, stateForHook } from "./lib/ingest";
 import { detectBlockers } from "./lib/detectors";
 import * as decisions from "./lib/decisions";
 import { SidePanel } from "./components/SidePanel";
@@ -14,7 +14,7 @@ import { ptyWrite } from "./lib/pty";
 import { TabBar } from "./components/TabBar";
 import { BookmarksBar } from "./components/BookmarksBar";
 import { Terminal } from "./components/Terminal";
-import { canonicalizeCwd, ptyKill, ptyKillAll, ptySpawn } from "./lib/pty";
+import { canonicalizeCwd, projectKeyOf, ptyKill, ptyKillAll, ptySpawn } from "./lib/pty";
 import * as repo from "./lib/repo";
 import type { Bookmark, Tab } from "./types";
 import { PALETTE } from "./types";
@@ -95,12 +95,16 @@ export default function App() {
   }, [refreshBlockerCounts, refreshDecisionCounts]);
 
   const openTab = useCallback(async (opts?: { name?: string; cwd?: string; color?: string }) => {
-    // Canonicalize before the tab record exists — tab.cwd is the project key
-    // every panel queries by, and it must match the cwd hooks report.
-    const cwd = await canonicalizeCwd(opts?.cwd ?? "~").catch(() => opts?.cwd ?? "~");
-    const ptyId = await ptySpawn(cwd, 80, 24);
+    const spawnCwd = await canonicalizeCwd(opts?.cwd ?? "~").catch(() => opts?.cwd ?? "~");
+    // tab.cwd is the project key every panel queries by, so it is the repo
+    // root, not the spawn dir — otherwise a tab opened in src-tauri files
+    // against a different project than one opened at the repo root.
+    const cwd = await projectKeyOf(spawnCwd).catch(() => spawnCwd);
+    // The tether must exist before the PTY does: hooks inherit it from the env.
+    const id = `tab-${++tabCounter}`;
+    const ptyId = await ptySpawn(spawnCwd, 80, 24, id);
     const tab: Tab = {
-      id: `tab-${++tabCounter}`,
+      id,
       ptyId,
       title: opts?.name ?? "Terminal",
       cwd,
@@ -192,8 +196,11 @@ export default function App() {
         .addEvent(p.session_id, `hook:${p.hook_event_name}`, JSON.stringify(p))
         .catch(() => undefined); // fail open: panel data loss must not break terminals
 
-      if (typeof p.cwd === "string") {
-        sessionCwd.set(p.session_id, p.cwd.replace(/\/$/, ""));
+      // project_key (repo root, derived server-side) is the panel key; p.cwd is
+      // the agent's literal dir and may be a subdir of it.
+      const projectKey = p.project_key ?? p.cwd?.replace(/\/$/, "");
+      if (projectKey) {
+        sessionCwd.set(p.session_id, projectKey);
       }
       if (p.hook_event_name === "Stop") {
         decisions.onStop(p.session_id, sessionCwd.get(p.session_id), refreshDecisionCounts);
@@ -212,20 +219,18 @@ export default function App() {
       }
 
       let tabId = bindings.get(p.session_id);
-      if (!tabId && typeof p.cwd === "string") {
-        const cwd = p.cwd.replace(/\/$/, "");
-        const bound = new Set(bindings.values());
-        // cwd match first; else the active tab — the user `cd`ed away from the
-        // tab's spawn cwd before running claude, and they're typing in it now.
-        const active = tabsRef.current.find(
-          (t) => t.id === activeIdRef.current && t.status === "live" && !bound.has(t.id)
+      if (!tabId) {
+        const match = bindSession(
+          p,
+          tabsRef.current.map((t) => ({ ...t, cwd: expand(t.cwd) })),
+          {
+            boundTabIds: new Set(bindings.values()),
+            activeTabId: activeIdRef.current,
+            projectKey,
+          }
         );
-        const match =
-          tabsRef.current.find((t) => expand(t.cwd) === cwd && !bound.has(t.id)) ??
-          tabsRef.current.find((t) => expand(t.cwd) === cwd) ??
-          active;
         if (match) {
-          tabId = match.id;
+          tabId = match;
           bindings.set(p.session_id, tabId);
         }
       }
@@ -237,8 +242,9 @@ export default function App() {
       setTabs((prev) =>
         prev.map((t) => {
           if (t.id !== tabId) return t;
-          // keep tab.cwd synced to the agent's real cwd so panels/badges
-          // query the right project even after an in-shell `cd`
+          // keep tab.cwd synced to the agent's project key so panels/badges
+          // query the right project even after an in-shell `cd`. A `cd` within
+          // the same repo is now a no-op here — that's the fix.
           const next = cwd && expand(t.cwd) !== cwd ? { ...t, cwd } : t;
           return state ? { ...next, sessionId: p.session_id, agentState: state } : next;
         })

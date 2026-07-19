@@ -28,6 +28,46 @@ export function onTranscriptLine(
   return listen<{ session_id: string; line: string }>("ingest://transcript", (e) => cb(e.payload));
 }
 
+/** The subset of a tab this module needs to bind a session to it. */
+export interface BindCandidate {
+  id: string;
+  cwd: string; // already the expanded project key
+  status: string;
+  agentState?: AgentState;
+}
+
+/**
+ * Session→tab binding. This is the ONE place binding is decided.
+ *
+ * Tether first: the PTY carries `LOGIC_LOOP_TAB_ID`, hooks echo it back, so the
+ * answer is exact — including two tabs open on the same repo, which cwd
+ * matching always got wrong. cwd matching survives as a fallback because
+ * sessions started in an outside terminal carry no tether.
+ */
+export function bindSession(
+  p: HookPayload,
+  tabs: BindCandidate[],
+  opts: { boundTabIds: Set<string>; activeTabId: string | null; projectKey?: string }
+): string | null {
+  if (typeof p.tab_id === "string") {
+    const tethered = tabs.find((t) => t.id === p.tab_id);
+    if (tethered) return tethered.id;
+    // Tethered to a tab that's since closed: do not fall through to cwd, or the
+    // dead tab's events land on whatever unbound tab happens to match.
+    return null;
+  }
+  const { boundTabIds, activeTabId, projectKey } = opts;
+  if (!projectKey) return null;
+  return (
+    tabs.find((t) => t.cwd === projectKey && !boundTabIds.has(t.id))?.id ??
+    tabs.find((t) => t.cwd === projectKey)?.id ??
+    // else the active tab — the user `cd`ed away from the tab's spawn cwd
+    // before running claude, and they're typing in it now.
+    tabs.find((t) => t.id === activeTabId && t.status === "live" && !boundTabIds.has(t.id))?.id ??
+    null
+  );
+}
+
 // Epoch guard: sessions whose last turn ended with Stop. Late-arriving events
 // from that turn (out-of-order curl delivery, background subagents, the idle
 // reminder Notification) must not revive the tab out of idle — only a new

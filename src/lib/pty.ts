@@ -1,13 +1,23 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-export function ptySpawn(cwd: string | null, cols: number, rows: number): Promise<number> {
-  return invoke<number>("pty_spawn", { cwd, cols, rows });
+export function ptySpawn(
+  cwd: string | null,
+  cols: number,
+  rows: number,
+  tabId?: string
+): Promise<number> {
+  return invoke<number>("pty_spawn", { cwd, cols, rows, tabId });
 }
 
-/** Resolve `~` and case/symlinks to the real path — the project key panels use. */
+/** Resolve `~` and case/symlinks to the real path. */
 export function canonicalizeCwd(path: string): Promise<string> {
   return invoke<string>("canonicalize_cwd", { path });
+}
+
+/** Nearest enclosing git repo root — the project key panels query by. */
+export function projectKeyOf(path: string): Promise<string> {
+  return invoke<string>("project_key_of", { path });
 }
 
 export function ptyWrite(id: number, data: string): Promise<void> {

@@ -343,6 +343,39 @@ rd (⌃⇧⌘4), ⌘V in a terminal running claude → a
 - [failed] Drag a tab onto another → order changes. Drag a bookmark onto another →
       order changes and survives app restart.
 
+## 15. Phase 5 — Hardening (project identity / tab tether / hook contract)
+
+**Do this first:** the hook command changed (it now sends the tether and
+contract-version headers). Toggle hooks **off then on** in ⚙ Settings, or every
+check below silently tests the old contract.
+
+### Project identity
+- [ ] Open a tab at a repo root, run `claude`, let it produce a blocker or
+      decision. Open a second tab, `cd` into a subdir of the same repo
+      (e.g. `src-tauri`), run `claude` there. Both tabs' side panels show the
+      **same** rows — the project no longer splits by subdir.
+- [ ] With the app open, check the DB has no new split keys:
+      `sqlite3 "$HOME/Library/Application Support/com.vandershark.context-terminal/context-terminal.db" "SELECT DISTINCT cwd FROM blockers;"`
+      → no `…/context_terminal/src-tauri` alongside `…/context_terminal`.
+- [ ] Open a tab in a non-repo dir (e.g. `~/Desktop/inbox`) → panels key on that
+      dir itself, not on `~`, and not on some parent repo.
+
+### Tab tether
+- [ ] Two tabs, **same repo**, agent running in each. Blockers, decisions, and
+      the state dot land on the correct tab. This is the case cwd matching
+      always got wrong.
+- [ ] Run `claude` in an **outside** terminal (Terminal.app/iTerm) in a repo you
+      have a tab open for → still binds to that tab (untethered cwd fallback).
+- [ ] Close a tab while its agent is mid-turn → its late events bind to nothing;
+      no other tab's dot flickers.
+
+### Hook contract
+- [ ] Back up `~/.claude/settings.json`. Toggle hooks off → on → off. `diff`
+      against the backup: **byte-identical**, and your pre-existing non-Logic-Loop
+      hooks survive untouched.
+- [ ] With hooks on, the installed command contains both `X-Logic-Loop-Tab` and
+      `X-Logic-Loop-Hook: 1`.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-07-12 for Phase 4)*
@@ -350,3 +383,5 @@ rd (⌃⇧⌘4), ⌘V in a terminal running claude → a
 - [x] `cargo test` passes (settings.json hook editing round-trip). *(3/3)*
 - [x] `npm run golden` — 12/12 (claude). *(rerun 2026-07-12; decision prompt unchanged)*
 - [x] `npm run landing:check` — landing-draft parser assertions pass. *(new, Phase 4)*
+- [x] `npm run epoch:check` — hook→state epoch guard assertions pass.
+- [x] `npm run bind:check` — session→tab binding assertions pass. *(new, Phase 5)*

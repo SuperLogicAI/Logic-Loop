@@ -144,6 +144,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             pty::pty_spawn,
             pty::canonicalize_cwd,
+            pty::project_key_of,
             pty::pty_write,
             pty::pty_resize,
             pty::pty_kill,
