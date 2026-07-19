@@ -41,6 +41,16 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, onBlock
   const [context, setContext] = useState<Decision | null>(null);
   const [draft, setDraft] = useState("");
   const [residueDraft, setResidueDraft] = useState("");
+  const [showAllTools, setShowAllTools] = useState(false);
+  const [expandedBlockers, setExpandedBlockers] = useState<Set<number>>(new Set());
+
+  const toggleBlocker = (id: number) =>
+    setExpandedBlockers((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const reload = useCallback(async () => {
     const [te, bl, gl, dc, ln] = await Promise.all([
@@ -210,6 +220,9 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, onBlock
                   ⤳ delegate
                 </button>
                 <span className="ml-auto text-zinc-600">{ago(d.ts)}</span>
+                <button className="text-zinc-600 hover:text-zinc-100" title="Dismiss — not a real decision" onClick={() => void setStatus(d, "dismissed")}>
+                  ✕
+                </button>
               </div>
             </li>
           ))}
@@ -218,7 +231,7 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, onBlock
           <ul className="mt-2 flex flex-col gap-1 border-t border-zinc-800 pt-2 text-zinc-600">
             {closedDecisions.map((d) => (
               <li key={d.id} className="truncate" title={`${d.question}${d.user_answer ? ` → ${d.user_answer}` : ""}`}>
-                {d.status === "delegated" ? "⤳" : "✓"} {d.question}
+                {d.status === "delegated" ? "⤳" : d.status === "dismissed" ? "✕" : "✓"} {d.question}
               </li>
             ))}
           </ul>
@@ -239,15 +252,40 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, onBlock
           />
         </div>
         {open.length === 0 && <p className="text-zinc-600">None open.</p>}
-        <ul className="flex flex-col gap-1">
+        <ul className="flex flex-col gap-1.5">
           {open.map((b) => (
             <li key={b.id} className="flex items-start gap-2">
               <input type="checkbox" checked={false} onChange={() => void resolve(b)} className="mt-0.5" />
-              <span className="min-w-0 flex-1 break-words">
-                {b.text}
-                <span className="ml-1 text-zinc-600">
-                  {b.source !== "manual" && `· ${b.source} `}· {ago(b.ts)}
-                </span>
+              <span className="min-w-0 flex-1">
+                {b.source !== "manual" ? (
+                  // Detector blockers: human label leads, raw match line below,
+                  // clamped to two lines with a ＋ to expand.
+                  <>
+                    <span className="break-words text-zinc-200">
+                      {b.source}
+                      <span className="ml-1 text-zinc-600">· {ago(b.ts)}</span>
+                      <button
+                        className="ml-1 text-zinc-600 hover:text-zinc-200"
+                        title={expandedBlockers.has(b.id) ? "Collapse" : "Expand"}
+                        onClick={() => toggleBlocker(b.id)}
+                      >
+                        {expandedBlockers.has(b.id) ? "−" : "＋"}
+                      </button>
+                    </span>
+                    <p
+                      className={`break-all font-mono text-[10px] text-zinc-500 ${
+                        expandedBlockers.has(b.id) ? "" : "line-clamp-2"
+                      }`}
+                    >
+                      {b.text}
+                    </p>
+                  </>
+                ) : (
+                  <span className="break-words">
+                    {b.text}
+                    <span className="ml-1 text-zinc-600">· {ago(b.ts)}</span>
+                  </span>
+                )}
               </span>
               <button className="shrink-0 text-zinc-600 hover:text-zinc-200" title="Delete" onClick={() => void remove(b)}>
                 ✕
@@ -273,17 +311,31 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, onBlock
       <section>
         <h2 className="mb-1.5 font-semibold tracking-wide text-emerald-400 uppercase">Accomplished</h2>
         {toolEvents.length === 0 && <p className="text-zinc-600">No tool activity recorded.</p>}
-        <ul className="flex flex-col gap-1">
-          {toolEvents.map((e) => (
+        <ul className="flex flex-col gap-1.5">
+          {(showAllTools ? toolEvents : toolEvents.slice(0, 10)).map((e) => (
             <li key={e.id} className="flex gap-2">
               <span className="w-8 shrink-0 text-right text-zinc-600">{ago(e.ts)}</span>
-              <span className="min-w-0 flex-1 truncate" title={e.detail}>
-                <span className="text-zinc-100">{e.tool}</span>
-                {e.detail && <span className="text-zinc-500"> {e.detail}</span>}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-zinc-200" title={e.plain}>
+                  {e.plain}
+                </span>
+                {e.detail && (
+                  <span className="block truncate font-mono text-[10px] text-zinc-600" title={e.detail}>
+                    {e.tool} {e.detail}
+                  </span>
+                )}
               </span>
             </li>
           ))}
         </ul>
+        {toolEvents.length > 10 && (
+          <button
+            className="mt-1.5 text-zinc-500 hover:text-zinc-200"
+            onClick={() => setShowAllTools((s) => !s)}
+          >
+            {showAllTools ? "− show less" : `＋ ${toolEvents.length - 10} more`}
+          </button>
+        )}
       </section>
 
       <section>
@@ -341,7 +393,8 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, onBlock
       )}
 
       {context && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/60" onClick={() => setContext(null)}>
+        // top-7 keeps the titlebar drag region reachable under the overlay
+        <div className="fixed inset-x-0 top-7 bottom-0 z-30 flex items-center justify-center bg-black/60" onClick={() => setContext(null)}>
           <div
             className="max-h-[70vh] w-[36rem] max-w-[90vw] overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-4"
             onClick={(e) => e.stopPropagation()}

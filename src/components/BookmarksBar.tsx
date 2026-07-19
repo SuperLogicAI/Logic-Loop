@@ -11,6 +11,7 @@ interface Props {
   onAdd: (name: string, cwd: string, color: string) => void;
   onUpdate: (b: Bookmark) => void;
   onDelete: (id: number) => void;
+  onReorder: (srcId: number, dstId: number) => void;
 }
 
 interface FormState {
@@ -20,8 +21,9 @@ interface FormState {
   color: string;
 }
 
-export function BookmarksBar({ bookmarks, onOpen, onAdd, onUpdate, onDelete }: Props) {
+export function BookmarksBar({ bookmarks, onOpen, onAdd, onUpdate, onDelete, onReorder }: Props) {
   const [form, setForm] = useState<FormState | null>(null);
+  const [dragId, setDragId] = useState<number | null>(null);
   const [menu, setMenu] = useState<{ id: number; x: number; y: number } | null>(null);
   const [hooksOn, setHooksOn] = useState<boolean | null>(null);
   const [extractor, setExtractor] = useState<ExtractorSettings | null>(null);
@@ -64,7 +66,13 @@ export function BookmarksBar({ bookmarks, onOpen, onAdd, onUpdate, onDelete }: P
   };
 
   return (
-    <div className="relative flex items-center gap-1.5 border-b border-zinc-800 bg-zinc-900 px-2 py-1">
+    // data-tauri-drag-region: empty bar space moves the window
+    <div
+      data-tauri-drag-region
+      onPointerUp={() => setDragId(null)}
+      onPointerLeave={() => setDragId(null)}
+      className="relative flex select-none items-center gap-1.5 border-b border-zinc-800 bg-zinc-900 px-2 py-1"
+    >
       {bookmarks.map((b) => (
         <button
           key={b.id}
@@ -73,7 +81,16 @@ export function BookmarksBar({ bookmarks, onOpen, onAdd, onUpdate, onDelete }: P
             e.preventDefault();
             setMenu({ id: b.id, x: e.clientX, y: e.clientY });
           }}
-          className="flex items-center gap-1.5 rounded-full bg-zinc-800 px-3 py-0.5 text-xs text-zinc-300 hover:bg-zinc-700"
+          // ponytail: pointer events, not HTML5 drag — see TabBar.tsx; the
+          // webview's native drag-drop handler eats DOM drop events.
+          onPointerDown={() => setDragId(b.id)}
+          onPointerEnter={() => {
+            if (dragId !== null && dragId !== b.id) onReorder(dragId, b.id);
+          }}
+          onPointerUp={() => setDragId(null)}
+          className={`flex items-center gap-1.5 rounded-full bg-zinc-800 px-3 py-0.5 text-xs text-zinc-300 transition-[background-color,opacity] hover:bg-zinc-700 ${
+            dragId === b.id ? "opacity-60 ring-1 ring-zinc-500" : ""
+          }`}
           title={b.cwd}
         >
           <span className="h-2 w-2 rounded-full" style={{ backgroundColor: b.color }} />

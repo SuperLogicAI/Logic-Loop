@@ -1,3 +1,4 @@
+mod clipboard;
 mod extractor;
 mod ingest;
 mod pty;
@@ -142,6 +143,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             pty::pty_spawn,
+            pty::canonicalize_cwd,
             pty::pty_write,
             pty::pty_resize,
             pty::pty_kill,
@@ -151,7 +153,9 @@ pub fn run() {
             ingest::hooks_setup,
             ingest::hooks_remove,
             ingest::hooks_status,
-            extractor::run_extractor
+            extractor::run_extractor,
+            clipboard::clipboard_text,
+            clipboard::clipboard_image_path
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {

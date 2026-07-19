@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
@@ -35,13 +36,21 @@ export function Terminal({ tab, visible, onExit, onRestart }: Props) {
     // always applies bracketed wrapping when the app enabled mode 2004.
     term.attachCustomKeyEventHandler((e) => {
       if (e.type === "keydown" && e.metaKey && !e.altKey && !e.ctrlKey && e.key.toLowerCase() === "v") {
-        void navigator.clipboard
-          .readText()
-          .then((t) => {
+        // pbpaste via Rust, not navigator.clipboard \u2014 the webview's clipboard
+        // read pops the macOS "Paste" permission pill on every \u2318V.
+        void invoke<string>("clipboard_text")
+          .then(async (t) => {
             // Notes/TextEdit put U+2028/U+2029 (and sometimes bare \r) on the
             // clipboard; xterm only converts \n, so normalize first or the
             // breaks vanish inside TUIs.
-            if (t) term.paste(t.replace(/\r\n|\r|\u2028|\u2029/g, "\n"));
+            if (t) {
+              term.paste(t.replace(/\r\n|\r|\u2028|\u2029/g, "\n"));
+              return;
+            }
+            // No text \u2014 an image? Save it to a file and paste the path, so
+            // screenshots land in agents like claude.
+            const path = await invoke<string | null>("clipboard_image_path");
+            if (path) term.paste(path + " ");
           })
           .catch(() => undefined); // fall through to default paste path
         return false;

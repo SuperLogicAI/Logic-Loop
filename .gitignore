@@ -27,6 +27,11 @@ dist-ssr
 
 # Private strategy / internal notes — not for the public repo
 docs/context-terminal-concept-and-build-plan.md
+/context-terminal-concept-and-build-plan*.md
 docs/HANDOFF.md
 CLAUDE.md
 PLAN.md
+
+# Scratch dropped at repo root
+/Screenshot*.png
+/files.zip
