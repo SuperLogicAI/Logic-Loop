@@ -75,22 +75,52 @@ pub fn start(app: AppHandle) {
                 let _ = request.respond(tiny_http::Response::empty(401));
                 continue;
             }
+            // Headers must be read before `as_reader` borrows the request.
+            let tab_id = header_value(&request, "X-Logic-Loop-Tab");
+            let hook_version = header_value(&request, "X-Logic-Loop-Hook");
             let mut body = String::new();
             if request.as_reader().take(1_000_000).read_to_string(&mut body).is_err() {
                 let _ = request.respond(tiny_http::Response::empty(400));
                 continue;
             }
-            if let Ok(payload) = serde_json::from_str::<serde_json::Value>(&body) {
+            if let Ok(mut payload) = serde_json::from_str::<serde_json::Value>(&body) {
                 if let Some(path) = payload.get("transcript_path").and_then(|v| v.as_str()) {
                     if let Some(sid) = payload.get("session_id").and_then(|v| v.as_str()) {
                         ensure_tailer(&app, sid.to_string(), path.to_string());
                     }
+                }
+                // The one place a project key is derived from a hook cwd. Two
+                // independent call sites is how the project split comes back.
+                if let Some(obj) = payload.as_object_mut() {
+                    if let Some(cwd) = obj.get("cwd").and_then(|v| v.as_str()) {
+                        let key = crate::pty::project_key(cwd);
+                        obj.insert("project_key".into(), key.into());
+                    }
+                    // Absent tether (session started outside the app) stays
+                    // absent — the frontend falls back to cwd matching.
+                    if let Some(tab) = tab_id.filter(|t| !t.is_empty()) {
+                        obj.insert("tab_id".into(), tab.into());
+                    }
+                    // Missing header = version 0, today's shape. Recorded only;
+                    // nothing branches on it yet.
+                    obj.insert(
+                        "hook_version".into(),
+                        hook_version.and_then(|v| v.parse::<u64>().ok()).unwrap_or(0).into(),
+                    );
                 }
                 let _ = app.emit("ingest://hook", payload);
             }
             let _ = request.respond(tiny_http::Response::empty(204));
         }
     });
+}
+
+fn header_value(request: &tiny_http::Request, name: &'static str) -> Option<String> {
+    request
+        .headers()
+        .iter()
+        .find(|h| h.field.equiv(name))
+        .map(|h| h.value.as_str().to_string())
 }
 
 /// Tail a session's JSONL transcript from its current end, emitting new lines.
@@ -144,9 +174,17 @@ fn ensure_tailer(app: &AppHandle, session_id: String, path: String) {
     });
 }
 
+/// Payload shape version. Bump when the emitted payload changes in a way a
+/// reader must know about; `apply_setup` rewrites installed entries in place.
+const HOOK_VERSION: u32 = 1;
+
+/// Headers, not JSON: this is a one-line `sh -c` piping Claude Code's stdin
+/// straight to curl, and assembling JSON in sh is how quoting bugs happen.
+/// `$LOGIC_LOOP_TAB_ID` comes from the PTY env (see `pty_spawn`) and is empty
+/// for sessions started outside the app — the frontend then falls back to cwd.
 fn hook_command() -> String {
     format!(
-        "sh -c '. \"$HOME/.{MARKER}\" 2>/dev/null && curl -sf -m 2 -H \"Authorization: Bearer $CT_TOKEN\" --data-binary @- \"http://127.0.0.1:$CT_PORT/event\" >/dev/null 2>&1; exit 0'"
+        "sh -c '. \"$HOME/.{MARKER}\" 2>/dev/null && curl -sf -m 2 -H \"Authorization: Bearer $CT_TOKEN\" -H \"X-Logic-Loop-Tab: $LOGIC_LOOP_TAB_ID\" -H \"X-Logic-Loop-Hook: {HOOK_VERSION}\" --data-binary @- \"http://127.0.0.1:$CT_PORT/event\" >/dev/null 2>&1; exit 0'"
     )
 }
 
@@ -252,6 +290,13 @@ mod tests {
                 "SessionStart": [{ "hooks": [{ "type": "command", "command": "caveman-mode" }] }]
             }
         })
+    }
+
+    #[test]
+    fn hook_command_carries_the_contract_version_and_tether() {
+        let cmd = hook_command();
+        assert!(cmd.contains(&format!("X-Logic-Loop-Hook: {HOOK_VERSION}")), "{cmd}");
+        assert!(cmd.contains("X-Logic-Loop-Tab: $LOGIC_LOOP_TAB_ID"), "{cmd}");
     }
 
     #[test]

@@ -10,7 +10,8 @@
     "tauri": "tauri",
     "golden": "tsx scripts/golden.ts",
     "landing:check": "tsx scripts/landing-check.ts",
-    "epoch:check": "tsx scripts/epoch-check.ts"
+    "epoch:check": "tsx scripts/epoch-check.ts",
+    "bind:check": "tsx scripts/bind-check.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

@@ -75,6 +75,12 @@ export interface HookPayload {
   session_id: string;
   cwd?: string;
   transcript_path?: string;
+  /** Repo root for `cwd`, derived server-side. The key every panel queries by. */
+  project_key?: string;
+  /** Tab tether. Absent for sessions started outside the app. */
+  tab_id?: string;
+  /** Payload shape version; 0 = pre-versioning. Recorded, not branched on yet. */
+  hook_version?: number;
   [key: string]: unknown;
 }
 

@@ -65,6 +65,36 @@ pub fn canonicalize_cwd(path: String) -> String {
     canon(&path)
 }
 
+/// Stable project key: the nearest enclosing git repo root, else the dir itself.
+/// `cd src-tauri && claude` must file against the same project as `claude` from
+/// the repo root — keyed on raw cwd they are two projects, and every panel then
+/// shows a partial view. `.git` is checked with `exists` so worktrees and
+/// submodules (where `.git` is a file, not a dir) resolve too.
+/// The walk stops at `$HOME`: a dotfiles repo there would otherwise make every
+/// non-repo directory collapse into one giant "project" — silent and total.
+pub fn project_key(cwd: &str) -> String {
+    let resolved = canon(cwd);
+    let home = std::env::var("HOME").map(|h| canon(&h)).unwrap_or_default();
+    let mut dir = std::path::Path::new(&resolved);
+    loop {
+        if !home.is_empty() && dir.as_os_str() == home.as_str() {
+            return resolved;
+        }
+        if dir.join(".git").exists() {
+            return dir.to_string_lossy().into_owned();
+        }
+        match dir.parent() {
+            Some(parent) => dir = parent,
+            None => return resolved, // not in a repo: the dir is its own project
+        }
+    }
+}
+
+#[tauri::command]
+pub fn project_key_of(path: String) -> String {
+    project_key(&path)
+}
+
 #[tauri::command]
 pub fn pty_spawn(
     app: AppHandle,
@@ -72,6 +102,7 @@ pub fn pty_spawn(
     cwd: Option<String>,
     cols: Option<u16>,
     rows: Option<u16>,
+    tab_id: Option<String>,
 ) -> Result<u32, String> {
     let pty_system = native_pty_system();
     let pair = pty_system
@@ -87,6 +118,11 @@ pub fn pty_spawn(
     let mut cmd = CommandBuilder::new(&shell);
     cmd.arg("-l");
     cmd.env("TERM", "xterm-256color");
+    // Tab tether: hooks inherit this and echo it back, so session→tab binding
+    // is exact instead of guessed from cwd (two tabs on one repo bound wrong).
+    if let Some(tab_id) = tab_id {
+        cmd.env("LOGIC_LOOP_TAB_ID", tab_id);
+    }
     let cwd = cwd.map(|c| canon(&c));
     if let Some(cwd) = cwd.filter(|c| std::path::Path::new(c).is_dir()) {
         cmd.cwd(cwd);
@@ -213,7 +249,7 @@ pub fn git_log(cwd: String, limit: Option<u32>) -> Vec<Commit> {
 
 #[cfg(test)]
 mod tests {
-    use super::canon;
+    use super::{canon, project_key};
 
     #[test]
     fn canon_resolves_case_and_tilde_to_one_key() {
@@ -225,5 +261,45 @@ mod tests {
         assert_eq!(canon(&format!("{home}/Library")), canon(&format!("{home}/library")));
         // Nonexistent paths fall through expanded, never panic.
         assert_eq!(canon("~/definitely-not-a-real-dir-xyz"), format!("{home}/definitely-not-a-real-dir-xyz"));
+    }
+
+    #[test]
+    fn project_key_collapses_subdirs_to_the_repo_root() {
+        let tmp = std::env::temp_dir().join(format!("ll-pk-{}", std::process::id()));
+        let sub = tmp.join("src-tauri/src");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::create_dir_all(tmp.join(".git")).unwrap();
+
+        let root = canon(tmp.to_str().unwrap());
+        // The whole point: repo root and any depth of subdir are ONE key.
+        assert_eq!(project_key(tmp.to_str().unwrap()), root);
+        assert_eq!(project_key(sub.to_str().unwrap()), root);
+
+        // A worktree/submodule `.git` is a file, not a dir — still a repo root.
+        let wt = tmp.join("wt");
+        std::fs::create_dir_all(wt.join("inner")).unwrap();
+        std::fs::write(wt.join(".git"), "gitdir: /elsewhere\n").unwrap();
+        assert_eq!(
+            project_key(wt.join("inner").to_str().unwrap()),
+            canon(wt.to_str().unwrap())
+        );
+
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
+    fn project_key_outside_a_repo_is_the_dir_itself() {
+        let home = std::env::var("HOME").unwrap();
+        // No `.git` anywhere up to `/` → the dir is its own project, no panic
+        // and no walk off the end of the tree.
+        let key = project_key("/tmp");
+        assert!(!key.is_empty());
+        // Nonexistent paths fall through canon and still resolve. This also
+        // covers the $HOME boundary: the walk stops there rather than adopting
+        // a dotfiles repo as the key for everything under home.
+        assert_eq!(
+            project_key("~/definitely-not-a-real-dir-xyz"),
+            format!("{home}/definitely-not-a-real-dir-xyz")
+        );
     }
 }

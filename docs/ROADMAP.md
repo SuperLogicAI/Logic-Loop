@@ -9,13 +9,13 @@ codebase; concepts only, re-derived against our architecture invariants.
 
 | Item | Slot | Size | Depends on |
 |---|---|---|---|
-| Event epoch guard | Now (spine correctness bugfix) | 0.5d | — |
-| Project identity | Phase 5 (do early — data correctness) | 0.5d | — |
-| Tab tether | Phase 5 | 0.5d | — |
-| Re-entry | Phase 5 | 1d | Tab tether |
-| Unclaimed results | Phase 5 | 1d | — |
-| Nudges | Phase 5 | 0.5d | Unclaimed results |
-| Versioned hook contract | Phase 5 (hardening) | 1h | — |
+| Event epoch guard | DONE | 0.5d | — |
+| Project identity | DONE (Phase 5) | 0.5d | — |
+| Tab tether | DONE (Phase 5) | 0.5d | — |
+| Versioned hook contract | DONE (Phase 5) | 1h | — |
+| Re-entry | Phase 6 | 1d | Tab tether |
+| Unclaimed results | Phase 6 | 1d | — |
+| Nudges | Phase 6 | 0.5d | Unclaimed results |
 | Isolated loops (worktrees) | v1.1 | — | Tab tether |
 | Adapters (non-Claude agents) | v2 | — | Versioned hook contract |
 
@@ -46,7 +46,7 @@ Two causes, one fixed:
    `Desktop/Dev/x` and `Desktop/dev/x` open the same folder, are different SQL
    keys. `pty::canon()` now canonicalizes at tab open + bookmark add, so tab
    cwds agree with the cwd hooks report. Unit test in `pty.rs`.
-2. **Subdirectory splitting** (OPEN — this item). `cd src-tauri && claude`
+2. **Subdirectory splitting** (FIXED 2026-07-19, Phase 5). `cd src-tauri && claude`
    files against a different project than running claude from the repo root.
    Observed live: `context_terminal` (5 blockers / 11 decisions),
    `context_terminal/src-tauri` (2 / 1), and `dev/context_terminal/src-tauri`
@@ -64,7 +64,12 @@ returns. This redefines "project" app-wide, hence a phase item, not a patch.
   mostly Phase 1–4 test noise, blockers/decisions self-obsolete, and a
   case-only merge wouldn't have touched the dominant subdir split anyway.
 - Also seen: one `notes` row keyed `~ /Desktop/superlogicai_IO` — literal
-  unexpanded tilde-space, so some write path bypasses `expand()`. Find it.
+  unexpanded tilde-space. RESOLVED 2026-07-19: `notes.id=6`, written
+  2026-07-15, three days before `canon()` landed. Root cause was a bookmark
+  cwd typed with a space after the `~`, which `expand()` passed through raw
+  because it only matches a literal `~/` prefix. Closed by canon running at
+  tab open — no live write path produces it. Row left orphaned per the
+  no-migration decision above.
 - Test: run claude from a repo root and from a subdir → both file against the
   same project; panel counts don't split.
 
