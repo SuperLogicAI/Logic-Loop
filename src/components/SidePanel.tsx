@@ -191,11 +191,26 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, blindPa
           says so rather than looking like a quiet day. */}
       {blindPaths.length > 0 && (
         <p
-          className="shrink-0 border-b border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[10px] text-red-300"
+          className="flex shrink-0 items-start gap-1 border-b border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[10px] text-red-300"
           title={blindPaths.join("\n")}
         >
-          ⚠ no transcript for {blindPaths.length} session{blindPaths.length > 1 ? "s" : ""} — decisions
-          incomplete
+          <span>
+            ⚠ no transcript for {blindPaths.length} session{blindPaths.length > 1 ? "s" : ""} — decisions
+            incomplete
+          </span>
+          {/* Not every blind session is a failure: Claude Desktop cowork sessions
+              share ~/.claude/settings.json (so they send hooks) but never write a
+              flat <id>.jsonl, so they warn forever. Detecting them is Phase 6;
+              until then, say so here rather than let the strip cry wolf. */}
+          <span
+            className="ml-auto cursor-help text-red-300/60"
+            title={
+              "Expected for Claude Desktop cowork sessions: they send hooks but never write a transcript file, so this warning will not clear.\n\n" +
+              "For a Claude Code session it means decisions are genuinely being missed."
+            }
+          >
+            ⓘ
+          </span>
         </p>
       )}
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3">
