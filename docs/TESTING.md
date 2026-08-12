@@ -371,24 +371,30 @@ check below silently tests the old contract.
       dir itself, not on `~`, and not on some parent repo.
 
 ### Tab tether
-- [ ] Two tabs, **same repo**, agent running in each. Blockers, decisions, and
-      the state dot land on the correct tab. This is the case cwd matching
-      always got wrong.
-- [ ] Run `claude` in an **outside** terminal (Terminal.app/iTerm) in a repo you
+- [x] Two tabs, **same repo**, agent running in each. The **state dot** on each
+      tab reflects that tab's own session (tether governs dot/session
+      ownership only). Blockers and Decisions cards are project-scoped by
+      design (`WHERE cwd = $1`, invariant #3) and correctly show identical
+      rows in both tabs — that is not a tether concern, doc previously implied
+      otherwise. Verified 2026-08-11: no code bug, `bindSession` in
+      `src/lib/ingest.ts` binds tether-first correctly.
+- [x] Run `claude` in an **outside** terminal (Terminal.app/iTerm) in a repo you
       have a tab open for → still binds to that tab (untethered cwd fallback).
-- [ ] Close a tab while its agent is mid-turn → its late events bind to nothing;
+      *(verified 2026-08-11: landed on `context_terminal` tab, state dot updated)*
+- [x] Close a tab while its agent is mid-turn → its late events bind to nothing;
       no other tab's dot flickers.
 
 ### Ingestion failure is visible
-- [ ] **Missing transcript warns.** Run `claude` in a tab, send one prompt, then
+- [x] **Missing transcript warns.** Run `claude` in a tab, send one prompt, then
       delete that session's JSONL while it is still live:
       `rm ~/.claude/projects/<slug>/<session-id>.jsonl` (the path is in the
       `transcript_path` of its hook rows). Send another prompt → within ~5s the
       side panel shows a red strip: `⚠ no transcript for 1 session — decisions
       incomplete`, and hovering it lists the missing path. Deleting a transcript
       is safe: Claude Code recreates it, which also verifies recovery — the
-      strip clears on its own once lines flow again.
-- [ ] **The app never ingests its own extractor.** With the decision extractor
+      strip clears on its own once lines flow again. *(verified 2026-08-11:
+      strip appeared on next prompt, cleared on its own once JSONL recreated)*
+- [x] **The app never ingests its own extractor.** With the decision extractor
       set to `claude` (⚙ Settings), use the app until a decision is extracted,
       then check no session keyed on `/` was ingested:
       `sqlite3 context-terminal.db "SELECT COUNT(*) FROM events WHERE json_extract(payload_json,'\$.project_key')='/';"`
@@ -398,11 +404,13 @@ check below silently tests the old contract.
       tab — a blank one is this bug's first visible symptom.
 
 ### Hook contract
-- [ ] Back up `~/.claude/settings.json`. Toggle hooks off → on → off. `diff`
+- [x] Back up `~/.claude/settings.json`. Toggle hooks off → on → off. `diff`
       against the backup: **byte-identical**, and your pre-existing non-Logic-Loop
-      hooks survive untouched.
-- [ ] With hooks on, the installed command contains both `X-Logic-Loop-Tab` and
-      `X-Logic-Loop-Hook: 1`.
+      hooks survive untouched. *(verified 2026-08-11: only `hooks` key changes;
+      no pre-existing non-Logic-Loop hooks present, so `{}` is correct off-state;
+      round-trip confirmed byte-identical after even toggle count)*
+- [x] With hooks on, the installed command contains both `X-Logic-Loop-Tab` and
+      `X-Logic-Loop-Hook: 1`. *(verified 2026-08-11)*
 
 ## Quality gates (machine-run, not manual)
 

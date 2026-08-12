@@ -3,7 +3,7 @@ use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize}
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
 
 pub struct PtySession {
@@ -12,16 +12,21 @@ pub struct PtySession {
     writer: Box<dyn Write + Send>,
 }
 
+// Per-session lock, not one map-wide lock: pty_write can block on the writer
+// syscall when a child stalls reading its input (busy TUI render, backed-up
+// PTY buffer). A single global mutex meant that block froze pty_resize/write/
+// kill for every OTHER tab too — felt as mouse-pinwheel on tab switch since
+// resize-on-fit needs the same lock. Found 2026-08-11 chasing a UI-freeze report.
 #[derive(Default)]
 pub struct PtyManager {
-    sessions: Mutex<HashMap<u32, PtySession>>,
+    sessions: Mutex<HashMap<u32, Arc<Mutex<PtySession>>>>,
     next_id: AtomicU32,
 }
 
 /// child.kill() alone can leave the shell alive (observed orphan zsh after
 /// tab close) — SIGKILL the whole process group so the shell and anything it
 /// spawned die together.
-fn kill_session(mut s: PtySession) {
+fn kill_session(s: &mut PtySession) {
     if let Some(pid) = s.child.process_id() {
         unsafe {
             libc::killpg(pid as i32, libc::SIGKILL);
@@ -36,9 +41,13 @@ impl PtyManager {
     }
 
     pub fn kill_all(&self) {
-        if let Ok(mut sessions) = self.sessions.lock() {
-            for (_, s) in sessions.drain() {
-                kill_session(s);
+        let drained: Vec<_> = match self.sessions.lock() {
+            Ok(mut sessions) => sessions.drain().map(|(_, s)| s).collect(),
+            Err(_) => return,
+        };
+        for s in drained {
+            if let Ok(mut session) = s.lock() {
+                kill_session(&mut session);
             }
         }
     }
@@ -135,18 +144,14 @@ pub fn pty_spawn(
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
 
     let id = state.next_id.fetch_add(1, Ordering::SeqCst);
-    state
-        .sessions
-        .lock()
-        .map_err(|e| e.to_string())?
-        .insert(
-            id,
-            PtySession {
-                master: pair.master,
-                child,
-                writer,
-            },
-        );
+    state.sessions.lock().map_err(|e| e.to_string())?.insert(
+        id,
+        Arc::new(Mutex::new(PtySession {
+            master: pair.master,
+            child,
+            writer,
+        })),
+    );
 
     // Reader thread: stream output as base64 chunks; on EOF emit exit event.
     std::thread::spawn(move || {
@@ -166,20 +171,30 @@ pub fn pty_spawn(
     Ok(id)
 }
 
+/// Clone the session's Arc under the map lock, then drop it immediately —
+/// I/O (write/resize/kill) happens against the per-session lock only, so one
+/// stalled tab's blocking syscall can't freeze every other tab's commands.
+fn get_session(state: &State<'_, PtyManager>, id: u32) -> Result<Arc<Mutex<PtySession>>, String> {
+    state
+        .sessions
+        .lock()
+        .map_err(|e| e.to_string())?
+        .get(&id)
+        .cloned()
+        .ok_or_else(|| "no such session".to_string())
+}
+
 #[tauri::command]
 pub fn pty_write(state: State<'_, PtyManager>, id: u32, data: String) -> Result<(), String> {
-    let mut sessions = state.sessions.lock().map_err(|e| e.to_string())?;
-    let session = sessions.get_mut(&id).ok_or("no such session")?;
-    session
-        .writer
-        .write_all(data.as_bytes())
-        .map_err(|e| e.to_string())
+    let session = get_session(&state, id)?;
+    let mut session = session.lock().map_err(|e| e.to_string())?;
+    session.writer.write_all(data.as_bytes()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn pty_resize(state: State<'_, PtyManager>, id: u32, cols: u16, rows: u16) -> Result<(), String> {
-    let sessions = state.sessions.lock().map_err(|e| e.to_string())?;
-    let session = sessions.get(&id).ok_or("no such session")?;
+    let session = get_session(&state, id)?;
+    let session = session.lock().map_err(|e| e.to_string())?;
     session
         .master
         .resize(PtySize {
@@ -193,9 +208,11 @@ pub fn pty_resize(state: State<'_, PtyManager>, id: u32, cols: u16, rows: u16) -
 
 #[tauri::command]
 pub fn pty_kill(state: State<'_, PtyManager>, id: u32) -> Result<(), String> {
-    let mut sessions = state.sessions.lock().map_err(|e| e.to_string())?;
-    if let Some(session) = sessions.remove(&id) {
-        kill_session(session);
+    let removed = state.sessions.lock().map_err(|e| e.to_string())?.remove(&id);
+    if let Some(session) = removed {
+        if let Ok(mut session) = session.lock() {
+            kill_session(&mut session);
+        }
     }
     Ok(())
 }

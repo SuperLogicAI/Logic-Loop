@@ -180,7 +180,16 @@ fn tail(app: &AppHandle, session_id: &str, path: &str) {
     let mut offset = file.seek(SeekFrom::End(0)).unwrap_or(0);
     loop {
         std::thread::sleep(std::time::Duration::from_millis(500));
-        let Ok(meta) = fs::metadata(path) else { return };
+        // An already-open fd survives unlink on Unix, but `metadata`/`seek`
+        // still fail once the path is gone — that's a live-delete, not just
+        // a not-yet-created transcript, and must warn the same way.
+        let Ok(meta) = fs::metadata(path) else {
+            let _ = app.emit(
+                "ingest://tailer-failed",
+                serde_json::json!({ "session_id": session_id, "path": path }),
+            );
+            return;
+        };
         if meta.len() < offset {
             offset = 0; // truncated/rotated
         }
@@ -188,6 +197,10 @@ fn tail(app: &AppHandle, session_id: &str, path: &str) {
             continue;
         }
         if file.seek(SeekFrom::Start(offset)).is_err() {
+            let _ = app.emit(
+                "ingest://tailer-failed",
+                serde_json::json!({ "session_id": session_id, "path": path }),
+            );
             return;
         }
         let mut reader = BufReader::new(&mut file);

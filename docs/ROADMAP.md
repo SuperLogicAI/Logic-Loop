@@ -16,6 +16,7 @@ codebase; concepts only, re-derived against our architecture invariants.
 | Re-entry | Phase 6 | 1d | Tab tether |
 | Unclaimed results | Phase 6 | 1d | — |
 | Nudges | Phase 6 | 0.5d | Unclaimed results |
+| Recursive fan-out spawn (RAH) | Phase 7 candidate | 2d | Tab tether, Versioned hook contract |
 | Isolated loops (worktrees) | v1.1 | — | Tab tether |
 | Adapters (non-Claude agents) | v2 | — | Versioned hook contract |
 
@@ -135,6 +136,72 @@ Cheap: path convention + panel query, no new ingestion. Their
 "superseded, never edited" decision-log rule also maps cleanly onto our
 append-only decisions table — surfacing supersedes-links in the decisions
 panel is a related idea.
+
+## Recursive fan-out spawn (RAH) — Phase 7 candidate
+
+Source: Lumer et al., "Recursive Agent Harnesses" (arXiv:2606.13643).
+Pattern named *harness recursion*: a parent agent writes ordinary code that
+spawns N full subagent harnesses (own context, filesystem, tools) over a
+partitioned workload, instead of cramming everything into one context.
+Model-agnostic by construction — the paper's gain comes from the harness
+shape, backbone swapped between GPT-5 and Claude Sonnet 4.5 with the pattern
+unaffected. Fits Logic Loop because we already treat the coding agent as an
+opaque PTY + hook-emitting child (invariant #1); a fan-out child is just
+another PTY the ingest pipeline already knows how to bind.
+
+**Mechanism.**
+- New human-triggered tab action, "Fan out": user (or the agent, via a
+  script it writes and the human runs — invariant #4 stays intact, nothing
+  autonomous) partitions a workload and launches N child tabs, each spawning
+  its own PTY with `LOGIC_LOOP_TAB_ID=<child uuid>` per existing tether
+  mechanism.
+- Agent CLI per child is configurable, not hardcoded to `claude -p` — the
+  whole point of "model-agnostic." Same launch-command abstraction v2
+  adapters will need (OpenCode, Antigravity, Codex), so this item should
+  land after or alongside early adapter work, not before.
+- **Opposite polarity from the extractor tether.** The self-ingest landmine
+  (CLAUDE.md) exempts the extractor's `claude -p` child from ingestion via a
+  reserved tether value (`ingest::EXTRACTOR_TETHER`). Fan-out children are the
+  reverse case — we *want* them observed and bound like any other tab. Reuse
+  the stamp-and-check mechanism, but do not reuse the exemption: a fan-out
+  child gets a real per-tab uuid, not the extractor sentinel. Get this
+  distinction into the PLAN.md explicitly before build; conflating the two
+  is exactly the class of bug that produced the original incident.
+- Schema: new `spawn_group_id` (nullable) on tabs/sessions linking children to
+  the originating tab, so panels can roll results up instead of scattering N
+  tabs with no relation.
+- New panel surface (parent tab shows aggregate child progress) — unlike
+  Phase 5's "no new panels" constraint, this phase's whole value is that
+  rollup view. Still a dumb SQL view per invariant #3; aggregation is a
+  query, not new intelligence.
+
+**Not decided yet, needs a PLAN.md pass:** how a workload gets partitioned
+(agent-authored script vs. a built-in splitter), what "done" looks like for
+the parent tab when children finish at different times, and whether children
+can themselves fan out (recursion depth limit).
+
+## RHI thread — deferred, revisit after Adapters (v2)
+
+Source: Lee et al. (Sakana AI), "Recursive Harness Self-Improvement"
+(arXiv:2607.15524). Different mechanism from RAH above: represents the
+*harness itself* as a versioned prompt-level spec and iteratively refines it
+using pairwise feedback over its own revision history. Also model-agnostic —
+tested across sonnet/opus backbones with the harness as the thing being
+optimized, not the model.
+
+**Why this isn't a phase yet.** RHI needs infra Logic Loop doesn't have:
+a versioned store for "the harness" (extraction prompts, session config) as
+data rather than static files, an LLM-judge step, and a place to log
+pairwise-comparison outcomes. That's new schema plus a new judging loop, not
+an incremental add.
+
+**Breadcrumb for later:** our nearest existing artifact to "the harness" is
+the extraction prompt set (`docs/golden/`, gated by `npm run golden`
+12/12 — CLAUDE.md Phase 3). If RHI gets picked up, start there: version the
+golden-set prompts as rows, not just files, before attempting any pairwise
+revision loop. Natural sequencing slot is after Adapters (v2) — RHI's value
+compounds once there's more than one harness shape (per-agent-CLI) to
+compare against itself.
 
 ## Isolated loops — v1.1 (unchanged from spec non-goals)
 
