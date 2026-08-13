@@ -11,11 +11,16 @@
     "golden": "tsx scripts/golden.ts",
     "landing:check": "tsx scripts/landing-check.ts",
     "epoch:check": "tsx scripts/epoch-check.ts",
-    "bind:check": "tsx scripts/bind-check.ts"
+    "bind:check": "tsx scripts/bind-check.ts",
+    "dedupe:check": "tsx scripts/dedupe-check.ts",
+    "reentry:check": "tsx scripts/reentry-check.ts",
+    "unclaimed:check": "tsx scripts/unclaimed-check.ts",
+    "notify:check": "tsx scripts/notify-check.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2.7.1",
+    "@tauri-apps/plugin-notification": "^2.3.3",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-sql": "^2.4.0",
     "@xterm/addon-fit": "^0.11.0",

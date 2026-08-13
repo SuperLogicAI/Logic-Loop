@@ -104,6 +104,15 @@ pub fn project_key_of(path: String) -> String {
     project_key(&path)
 }
 
+/// A resume session id reaches a shell `-c` argument as a raw string
+/// (`claude --resume <sid>; exec <shell> -l`) — anything outside this set
+/// could break out into arbitrary shell execution. Session ids are UUIDs we
+/// stored ourselves, so a reject here means something is wrong upstream, not
+/// a hostile id to sanitize around.
+fn valid_resume_id(sid: &str) -> bool {
+    !sid.is_empty() && sid.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+}
+
 #[tauri::command]
 pub fn pty_spawn(
     app: AppHandle,
@@ -112,6 +121,7 @@ pub fn pty_spawn(
     cols: Option<u16>,
     rows: Option<u16>,
     tab_id: Option<String>,
+    resume_session: Option<String>,
 ) -> Result<u32, String> {
     let pty_system = native_pty_system();
     let pair = pty_system
@@ -126,6 +136,14 @@ pub fn pty_spawn(
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
     let mut cmd = CommandBuilder::new(&shell);
     cmd.arg("-l");
+    // Fail open (invariant #2): an invalid id is silently dropped rather than
+    // failing the whole spawn — same UX shape as today's blank restart. A
+    // `claude` that isn't on PATH, or a session that can't resume, still
+    // falls through to an interactive shell via the trailing `exec`.
+    if let Some(sid) = resume_session.filter(|s| valid_resume_id(s)) {
+        cmd.arg("-c");
+        cmd.arg(format!("claude --resume {sid}; exec {shell} -l"));
+    }
     cmd.env("TERM", "xterm-256color");
     // Tab tether: hooks inherit this and echo it back, so session→tab binding
     // is exact instead of guessed from cwd (two tabs on one repo bound wrong).
@@ -266,7 +284,18 @@ pub fn git_log(cwd: String, limit: Option<u32>) -> Vec<Commit> {
 
 #[cfg(test)]
 mod tests {
-    use super::{canon, project_key};
+    use super::{canon, project_key, valid_resume_id};
+
+    #[test]
+    fn resume_id_rejects_shell_metacharacters() {
+        // Real ids: a bare UUID.
+        assert!(valid_resume_id("0089eaaf-19fa-41d2-8238-13269b9b3ca0"));
+        assert!(valid_resume_id("abc123"));
+        // Anything that could break out of the `-c` string.
+        for bad in [";", "`", "$(", " ", "a;b", "a`b`", "a$(b)", "a b", "a\nb", ""] {
+            assert!(!valid_resume_id(bad), "{bad:?} should be rejected");
+        }
+    }
 
     #[test]
     fn canon_resolves_case_and_tilde_to_one_key() {

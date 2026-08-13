@@ -13,6 +13,7 @@ codebase; concepts only, re-derived against our architecture invariants.
 | Project identity | DONE (Phase 5) | 0.5d | — |
 | Tab tether | DONE (Phase 5) | 0.5d | — |
 | Versioned hook contract | DONE (Phase 5) | 1h | — |
+| Events dedupe key | DONE | ~2h | — |
 | Re-entry | Phase 6 | 1d | Tab tether |
 | Unclaimed results | Phase 6 | 1d | — |
 | Nudges | Phase 6 | 0.5d | Unclaimed results |
@@ -34,6 +35,75 @@ open a new epoch. Completion events from an older epoch are still appended to
 
 - Tests: event-sequence unit tests (`Stop → SubagentStop` stays IDLE; dup
   events don't double-transition). Gates: cargo test, golden 12/12.
+
+## Events dedupe key — DONE
+
+Landed as migration 6 (`dedupe_key` column + UNIQUE index, `src-tauri/src/lib.rs`).
+Key: `tool_use_id` alone where the payload carries one (PostToolUse — a real
+Anthropic API id, unique per real call, immune to concurrent subagents
+sharing one `session_id` — confirmed real gap, see below); session + agent_id
++ full payload + a 500ms time bucket for types without one (Stop,
+Notification, UserPromptSubmit, transcript lines). `dedupeKey`/`addEvent` in
+`src/lib/repo.ts`; `INSERT OR IGNORE` keeps the call fail-open. Tests in
+`scripts/dedupe-check.ts` (`npm run dedupe:check`).
+
+Mechanism research (external, Claude Code CLI docs + GitHub issues, no code
+copied): no documented case of Claude Code firing the *same* hook twice for
+one event, and no formal delivery guarantee either way. The one confirmed
+real gap: subagents spawned via the Task tool share the parent's
+`session_id` with no other disambiguator in the payload but `agent_id`
+(already relied on by the epoch guard's subagent handling in
+`src/lib/ingest.ts`) — concurrent subagents finishing in the same instant
+could produce two genuinely distinct Stop-shaped events with identical
+content otherwise. `agent_id` in the fallback key closes that.
+
+<details><summary>Original problem statement</summary>
+
+Named landmine (CLAUDE.md): "Events table has no dedupe constraint yet;
+treat duplicate-event bugs as data-corruption severity (Phase 3 decision
+tracking depends on clean rows)." Surfaced 2026-08-12 reviewing pingdotgg/
+t3code (external code, concept only — no code copied): their event store
+hardened the same gap with a `command_id UNIQUE` constraint, insert-or-return-
+prior on conflict. Same shape fits us: SQLite native, no new machinery,
+invariant #3 stays intact (still a dumb table).
+
+**Do not copy the naive version.** A unique index on raw content
+(`session_id, type, payload_json`) is wrong here, not just imprecise: several
+of our hook types carry no per-turn distinguishing field. A `Stop` payload
+today is `hook_event_name` + `session_id` + `cwd` + `transcript_path` +
+`project_key` + `tab_id` — none of which change turn to turn — so every
+`Stop` in a session after the first would serialize byte-identical and
+silently collapse into one row under content-only dedup. That's worse than
+the bug it's fixing.
+
+**Before picking a key, confirm the actual duplication mechanism** — it's
+not obviously reproducible today:
+- The hook shell command (`ingest.rs` `hook_command`) calls `curl -sf -m 2`
+  with no `--retry`; no client-side retry duplication there.
+- StrictMode double-mount is already guarded in `App.tsx`'s ingestion effect
+  (the `cancelled`/`track` pattern CLAUDE.md's code conventions require) —
+  so that's not the open hole either, unless the guard has a gap.
+- Check whether Claude Code itself can double-fire a hook for one logical
+  event (tool-call retry on error, concurrent subagents, etc.) — that's the
+  more likely real source and would point at a different key than the
+  StrictMode case would.
+
+Once the mechanism is known, pick between: (a) a natural per-type id where
+one exists (`PostToolUse` carries `tool_use_id`) with a content-hash fallback
+for types that don't, or (b) content key plus a coarse time bucket (wide
+enough that two real `Stop`s in the same session — always well over a second
+apart — never collide, tight enough to catch a genuine duplicate delivery).
+Don't ship a key that can't explain why it's safe for `Stop`.
+
+Scope like the epoch guard above: a direct bugfix landed with its own tests,
+not a phase. Sequence before Phase 6 (Phase 6 migration numbering assumes
+this lands first as migration 6).
+
+- Tests: a forced double-insert of the same logical event is caught; a
+  realistic same-session double-`Stop` (identical content, several seconds
+  apart) is NOT deduped.
+
+</details>
 
 ## Project identity — Phase 5, do early
 
@@ -210,6 +280,13 @@ New-tab flow: "isolate this loop" → `git worktree add` under
 (user names the loop — no generated names), tab bound to worktree path.
 Tab close prompts for cleanup; never auto-deletes.
 
+Pick up two things from pingdotgg/t3code's worktree picker (concept only, no
+code copied) when this phase gets its own PLAN.md: offer an **existing**
+local branch, not just new-branch creation — right-click a branch, "open in
+worktree," cwd becomes that worktree. And sanitize branch names used as
+directory components (`feature/foo` → `feature-foo`) rather than assuming
+branch names are filesystem-safe as-is.
+
 ## Split-pane tabs — v1.x UI
 
 Chrome-style side-by-side panes inside one tab, so two agent CLIs are
@@ -225,6 +302,13 @@ OpenAI's codex-plugin-cc runs inside any Claude Code session in a tab
 (adversarial review, delegation). Building our own cross-agent orchestration
 would duplicate that and violate invariant #4. The differentiated product is
 one pane of glass over a mixed agent fleet.
+
+Litmus test per provider (sharpened after reviewing pingdotgg/t3code, concept
+only): before writing a bespoke adapter, check whether the CLI already speaks
+a structured protocol — Agent Client Protocol or equivalent — instead of
+hand-rolling a hooks-equivalent. Several providers are converging on ACP;
+where one's available it's a straight win over reverse-engineering a log
+format.
 
 Adapter order:
 1. **OpenCode** first — real plugin/event API, client-server architecture,

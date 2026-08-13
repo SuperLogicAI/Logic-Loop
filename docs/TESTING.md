@@ -412,12 +412,86 @@ check below silently tests the old contract.
 - [x] With hooks on, the installed command contains both `X-Logic-Loop-Tab` and
       `X-Logic-Loop-Hook: 1`. *(verified 2026-08-11)*
 
+## 16. Phase 6 — Re-entry / unclaimed results / nudges
+
+**Do this first:** toggle hooks **off then on** in ⚙ Settings — this phase
+adds `SessionStart` to the registered hook set, and a stale install won't
+send it.
+
+### Re-entry
+- [ ] Mid-run process death: with an agent running in a tab (known
+      `sessionId`), kill its shell out from under it (e.g. `kill` the PTY's
+      shell PID from another terminal). The dead-tab overlay reads
+      **"Re-enter"**, not "Restart". Click it → resumes with the prior
+      conversation's context intact (ask it something only visible earlier in
+      that conversation).
+- [ ] Full relaunch: open 3 tabs, run an agent in each, quit through the
+      confirm dialog, relaunch → 3 ghost ("Re-enter") tabs appear, one per
+      session, each resuming its own context correctly.
+- [ ] Before quitting in the check above, explicitly close one of the 3 tabs
+      (✕, not quit) → relaunch shows only the other 2 ghost tabs; the closed
+      one does not come back.
+- [ ] A tab opened fresh (no `sessionId` yet) still shows the old plain
+      "Restart" wording on death — unchanged path.
+
+### Unclaimed results
+- [ ] Two tabs, both running agents. While tab A is active, let tab B's agent
+      finish (`Stop`) → tab B's dot gets the emerald glow; tab A's does not.
+- [ ] Switch to tab B → glow clears on B only; any other still-flagged tab is
+      unaffected.
+- [ ] Background the whole app (⌘-Tab away) while a foregrounded tab's agent
+      finishes → its tab still flags (app-level backgrounding, not just
+      cross-tab), and refocusing the app (window `focus`) while that tab is
+      still the active one claims it.
+- [ ] Trigger an unclaimed result, then quit and relaunch before claiming it
+      (re-entry from the section above) → the Accomplished panel still
+      headlines "Agent finished, unclaimed" for that project — the event
+      survived the restart.
+- [ ] **Claim it after that relaunch** — the other half of the check above, and
+      the one that was broken. Let an agent finish on a *background* tab, quit
+      **without** ever switching to it, relaunch, then switch to that tab with
+      the window focused → the emerald glow clears **and** the Accomplished
+      panel's "Agent finished, unclaimed" row disappears. It must not come back
+      on a later relaunch.
+
+      Why it gets its own step: until the 2026-08-12 fix, `claimTab` gated on
+      an in-memory flag set that a restart left empty, so a surviving result
+      could be *displayed* but never *claimed* — the row pinned forever. The
+      check above passes even when this one fails, so persistence alone was
+      never proof the feature worked. See docs/AUDIT-2026-08-12.md finding 1.
+
+      Also confirm ordering while here: the **first** ghost tab (auto-activated
+      at startup) claims correctly too — seeding runs before activation, and
+      getting that backwards strands exactly that one tab.
+
+### Nudges
+- [ ] Background a tab (switch away or background the app), let its agent hit
+      a `Notification` (permission prompt / waiting-for-input) → one OS
+      notification appears ("Waiting for input"). Let it sit — a repeated
+      idle-reminder `Notification` for the same still-waiting session must
+      **not** produce a second OS notification (edge-triggered, not level).
+- [ ] Background a tab, let its agent finish (`Stop`) → one OS notification
+      ("Finished").
+- [ ] Click "notify" in the side panel's pinned header to mute the active
+      project → repeat either scenario above for that project → no OS
+      notification, panel still shows "muted". Click again to unmute →
+      notifications resume.
+- [ ] First launch after granting/denying the OS permission prompt: denying it
+      must not affect anything else in the app (terminals, panels) — nudges
+      just silently never fire.
+
 ## Quality gates (machine-run, not manual)
 
-- [x] `npx tsc --noEmit` clean. *(rerun 2026-07-12 for Phase 4)*
+- [x] `npx tsc --noEmit` clean. *(rerun 2026-08-12 after the audit fixes)*
 - [x] `cargo clippy --all-targets -- -D warnings` clean (in `src-tauri/`).
-- [x] `cargo test` passes (settings.json hook editing round-trip). *(3/3)*
-- [x] `npm run golden` — 12/12 (claude). *(rerun 2026-07-12; decision prompt unchanged)*
+      *(rerun 2026-08-12)*
+- [x] `cargo test` passes — 8/8, incl. `resume_id_rejects_shell_metacharacters`
+      (Phase 6) and the `SessionStart` hook-set assertions. *(rerun 2026-08-12)*
+- [x] `npm run golden` — 12/12 (claude). *(rerun 2026-08-12; no extraction-prompt changes)*
+- [x] All seven check scripts pass: `npm run` `dedupe:check`, `reentry:check`,
+      `unclaimed:check`, `notify:check`, `bind:check`, `epoch:check`,
+      `landing:check`. *(rerun 2026-08-12; `unclaimed:check` gained three
+      assertions covering the restart-seeding fix)*
 - [x] `EXTRACTOR=lmstudio LMSTUDIO_MODEL=<id> npm run golden` — local backend.
       Measured 2026-07-19; **use `qwen3.6-35b-a3b`** for ⚙ Sidebar LM:
 
@@ -437,3 +511,7 @@ check below silently tests the old contract.
 - [x] `npm run landing:check` — landing-draft parser assertions pass. *(new, Phase 4)*
 - [x] `npm run epoch:check` — hook→state epoch guard assertions pass.
 - [x] `npm run bind:check` — session→tab binding assertions pass. *(new, Phase 5)*
+- [x] `npm run dedupe:check` — events dedupe key assertions pass. *(bugfix, pre-Phase 6)*
+- [x] `npm run reentry:check` — one row per tether, latest wins on resume. *(new, Phase 6)*
+- [x] `npm run unclaimed:check` — flag/claim predicate assertions pass. *(new, Phase 6)*
+- [x] `npm run notify:check` — nudge fire predicate assertions pass. *(new, Phase 6)*

@@ -84,11 +84,41 @@ pub fn run() {
               );
               CREATE INDEX IF NOT EXISTS idx_notes_cwd ON notes(cwd, kind, status);",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 6,
+        description: "events dedupe key",
+        // dedupe_key is computed and supplied by repo.ts's addEvent (see
+        // dedupeKey there for the natural-id-with-time-bucket-fallback logic
+        // and why). NULL for pre-migration rows; SQLite allows unlimited
+        // NULLs in a UNIQUE index, so history is untouched. INSERT OR IGNORE
+        // at the call site makes a caught duplicate a silent no-op — no
+        // catch/error-handling change needed to stay fail-open.
+        sql: "ALTER TABLE events ADD COLUMN dedupe_key TEXT;
+              CREATE UNIQUE INDEX IF NOT EXISTS idx_events_dedupe ON events(dedupe_key);",
+        kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 7,
+        description: "session bindings for re-entry",
+        sql: "CREATE TABLE IF NOT EXISTS session_bindings (
+                session_id TEXT PRIMARY KEY,
+                tab_tether TEXT NOT NULL,
+                project_key TEXT NOT NULL,
+                cwd TEXT NOT NULL,
+                transcript_path TEXT NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1,
+                updated_at INTEGER NOT NULL
+              );
+              CREATE INDEX IF NOT EXISTS idx_session_bindings_tether
+                ON session_bindings(tab_tether, active, updated_at);",
+        kind: MigrationKind::Up,
     }];
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:context-terminal.db", migrations)

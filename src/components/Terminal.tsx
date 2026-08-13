@@ -10,7 +10,7 @@ interface Props {
   tab: Tab;
   visible: boolean;
   onExit: (tabId: string) => void;
-  onRestart: (tabId: string) => void;
+  onRestart: (tabId: string, resumeSessionId?: string) => void;
 }
 
 export function Terminal({ tab, visible, onExit, onRestart }: Props) {
@@ -133,10 +133,10 @@ export function Terminal({ tab, visible, onExit, onRestart }: Props) {
               className="rounded bg-zinc-600 px-4 py-1.5 text-sm hover:bg-zinc-500"
               onClick={() => {
                 termRef.current?.reset();
-                onRestart(tab.id);
+                onRestart(tab.id, tab.sessionId);
               }}
             >
-              Restart
+              {tab.sessionId ? "Re-enter" : "Restart"}
             </button>
           </div>
         </div>

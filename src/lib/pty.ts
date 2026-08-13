@@ -5,9 +5,10 @@ export function ptySpawn(
   cwd: string | null,
   cols: number,
   rows: number,
-  tabId?: string
+  tabId?: string,
+  resumeSession?: string
 ): Promise<number> {
-  return invoke<number>("pty_spawn", { cwd, cols, rows, tabId });
+  return invoke<number>("pty_spawn", { cwd, cols, rows, tabId, resumeSession });
 }
 
 /** Resolve `~` and case/symlinks to the real path. */
