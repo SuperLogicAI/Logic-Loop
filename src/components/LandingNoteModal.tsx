@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { draftLandingNote } from "../lib/landing";
+import { HUES, RainbowText, cycle } from "./RainbowText";
 
 interface Props {
   projectName: string;
@@ -16,10 +17,6 @@ const C = 2 * Math.PI * R;
 // 62% lightness keeps yellow and green legible on the dark card.
 const roygbv = (t: number) => `hsl(${t * 270} 85% 62%)`;
 
-// Discrete ROYGBV for the old-school per-letter cycle: first letter red, one
-// hue per letter, wrapping back to red after violet.
-const HUES = [0, 32, 55, 130, 215, 280];
-const cycle = (i: number, alpha = 0.85) => `hsl(${HUES[i % HUES.length]} 85% 62% / ${alpha})`;
 const RAINBOW_GRADIENT = `linear-gradient(135deg, ${HUES.map((_, i) => cycle(i, 0.6)).join(", ")})`;
 
 /** Leaving a tab with recent agent activity → capture the next physical action.
@@ -97,16 +94,7 @@ export function LandingNoteModal({ projectName, sessionId, onSave, onSkip }: Pro
         <div className="mb-2 flex items-center gap-3">
           <div className="min-w-0 flex-1">
             <h3 className="font-semibold">
-              {(() => {
-                // Whitespace doesn't consume a hue — otherwise the cycle looks
-                // like it skips a color across every gap.
-                let slot = 0;
-                return [...`Landing note — ${projectName}`].map((ch, i) => (
-                  <span key={i} style={{ color: cycle(ch === " " ? slot : slot++) }}>
-                    {ch}
-                  </span>
-                ));
-              })()}
+              <RainbowText text={`Landing note — ${projectName}`} />
             </h3>
             <p className="text-xs text-white/85">
               What's the next physical action here when you come back?

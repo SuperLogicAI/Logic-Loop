@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import * as repo from "../lib/repo";
 import { burst } from "../lib/confetti";
+import { RainbowText } from "./RainbowText";
 import type { AgentState, Blocker, Commit, Decision, Note, ToolEvent } from "../types";
 
 interface Props {
@@ -456,8 +457,8 @@ export function SidePanel({
 
       {prevCwd && prevCwd !== cwd && (
         <section className="border-t border-zinc-800 pt-3">
-          <h2 className="mb-1.5 flex items-center gap-1.5 font-semibold tracking-wide text-zinc-400 uppercase">
-            Left behind
+          <h2 className="mb-1.5 flex items-center gap-1.5 font-semibold tracking-wide uppercase">
+            <RainbowText text="Left behind" />
             {prevState && <span className={`h-2 w-2 rounded-full ${STATE_DOT[prevState]}`} title={prevState} />}
             <span className="ml-auto truncate font-normal text-[10px] normal-case text-zinc-600" title={prevCwd}>
               {prevCwd.split("/").filter(Boolean).pop() ?? prevCwd}
