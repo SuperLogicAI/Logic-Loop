@@ -14,6 +14,7 @@ interface Props {
   onBlockersChanged: () => void;
   onDecisionsChanged: () => void;
   onAnswerNow: (d: Decision) => void; // prefill terminal — user still hits Enter
+  onMuteChanged: () => void; // App's notify-hot-path mute cache needs a refresh
 }
 
 const STATE_DOT: Record<AgentState, string> = {
@@ -36,8 +37,21 @@ function ago(ts: number): string {
   return `${Math.floor(s / 86400)}d`;
 }
 
-export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, blindPaths, onBlockersChanged, onDecisionsChanged, onAnswerNow }: Props) {
+export function SidePanel({
+  cwd,
+  accent,
+  refreshKey,
+  prevCwd,
+  prevState,
+  blindPaths,
+  onBlockersChanged,
+  onDecisionsChanged,
+  onAnswerNow,
+  onMuteChanged,
+}: Props) {
   const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
+  const [muted, setMuted] = useState(false);
+  const [unclaimed, setUnclaimed] = useState<{ session_id: string; ts: number }[]>([]);
   const [commits, setCommits] = useState<Commit[]>([]);
   const [blockers, setBlockers] = useState<Blocker[]>([]);
   const [decisions, setDecisions] = useState<Decision[]>([]);
@@ -60,18 +74,20 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, blindPa
     });
 
   const reload = useCallback(async () => {
-    const [te, bl, gl, dc, ln] = await Promise.all([
+    const [te, bl, gl, dc, ln, uc] = await Promise.all([
       repo.listToolEvents(cwd).catch(() => []),
       repo.listBlockers(cwd).catch(() => []),
       invoke<Commit[]>("git_log", { cwd, limit: 15 }).catch(() => []),
       repo.listDecisions(cwd).catch(() => []),
       repo.latestLandingNote(cwd).catch(() => null),
+      repo.unclaimedResults(cwd).catch(() => []),
     ]);
     setToolEvents(te);
     setBlockers(bl);
     setCommits(gl);
     setDecisions(dc);
     setLanding(ln);
+    setUnclaimed(uc);
   }, [cwd]);
 
   const reloadResidue = useCallback(async () => {
@@ -95,6 +111,17 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, blindPa
   useEffect(() => {
     void reloadResidue();
   }, [reloadResidue, refreshKey]);
+
+  useEffect(() => {
+    void repo.isProjectMuted(cwd).then(setMuted).catch(() => undefined);
+  }, [cwd]);
+
+  const toggleMute = async () => {
+    const next = !muted;
+    setMuted(next); // optimistic — matches the rest of the panel's local-first pattern
+    await repo.setProjectMuted(cwd, next).catch(() => undefined);
+    onMuteChanged();
+  };
 
   const addResidue = async () => {
     const text = residueDraft.trim();
@@ -179,13 +206,22 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, blindPa
     <div className="flex h-full w-72 shrink-0 flex-col border-r border-zinc-800 bg-zinc-900 text-xs text-zinc-300">
       {/* Pinned header: never scrolls away. Text takes the project's bookmark
           color when one exists; plain grey otherwise. */}
-      <p
-        className="shrink-0 truncate border-b border-zinc-800 px-3 pt-3 pb-1.5 font-mono text-[10px] text-zinc-500"
-        style={accent ? { color: accent } : undefined}
-        title={cwd}
-      >
-        project: {cwd.split("/").filter(Boolean).pop() ?? cwd}
-      </p>
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-zinc-800 px-3 pt-3 pb-1.5">
+        <p
+          className="min-w-0 flex-1 truncate font-mono text-[10px] text-zinc-500"
+          style={accent ? { color: accent } : undefined}
+          title={cwd}
+        >
+          project: {cwd.split("/").filter(Boolean).pop() ?? cwd}
+        </p>
+        <button
+          className={`shrink-0 rounded px-1 leading-none ${muted ? "text-zinc-600 hover:text-zinc-400" : "text-zinc-400 hover:text-zinc-200"}`}
+          title={muted ? "Notifications muted for this project — click to unmute" : "Mute notifications for this project"}
+          onClick={() => void toggleMute()}
+        >
+          {muted ? "muted" : "notify"}
+        </button>
+      </div>
       {/* Blind sessions: hooks arrive but the transcript file will not open, so
           decisions and every transcript-fed panel are silently incomplete. This
           says so rather than looking like a quiet day. */}
@@ -354,7 +390,20 @@ export function SidePanel({ cwd, accent, refreshKey, prevCwd, prevState, blindPa
 
       <section>
         <h2 className="mb-1.5 font-semibold tracking-wide text-emerald-400 uppercase">Accomplished</h2>
-        {toolEvents.length === 0 && <p className="text-zinc-600">No tool activity recorded.</p>}
+        {unclaimed.length > 0 && (
+          <ul className="mb-1.5 flex flex-col gap-1 border-b border-emerald-800/40 pb-1.5">
+            {unclaimed.map((u) => (
+              <li key={u.session_id} className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_6px_2px_rgba(16,185,129,0.6)]" />
+                <span className="flex-1 text-emerald-200">Agent finished, unclaimed</span>
+                <span className="text-zinc-600">{ago(u.ts)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {toolEvents.length === 0 && unclaimed.length === 0 && (
+          <p className="text-zinc-600">No tool activity recorded.</p>
+        )}
         <ul className="flex flex-col gap-1.5">
           {(showAllTools ? toolEvents : toolEvents.slice(0, ROW_CAP)).map((e) => (
             <li key={e.id} className="flex gap-2">

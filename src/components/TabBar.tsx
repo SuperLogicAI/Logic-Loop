@@ -27,9 +27,21 @@ interface Props {
   onReorder: (srcId: string, dstId: string) => void;
   blockerCount: (tab: Tab) => number;
   decisionCount: (tab: Tab) => number;
+  /** An agent finished on this tab and it hasn't been switched to since. */
+  unclaimed: (tab: Tab) => boolean;
 }
 
-export function TabBar({ tabs, activeId, onSelect, onClose, onNew, onReorder, blockerCount, decisionCount }: Props) {
+export function TabBar({
+  tabs,
+  activeId,
+  onSelect,
+  onClose,
+  onNew,
+  onReorder,
+  blockerCount,
+  decisionCount,
+  unclaimed,
+}: Props) {
   const [dragId, setDragId] = useState<string | null>(null);
   return (
     // data-tauri-drag-region: empty strip space moves the window, Chrome-style
@@ -67,7 +79,11 @@ export function TabBar({ tabs, activeId, onSelect, onClose, onNew, onReorder, bl
           } ${dragId === tab.id ? "opacity-60 ring-1 ring-zinc-500" : ""}`}
           style={{ borderTopColor: tab.color }}
         >
-          <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass(tab)}`} />
+          <span
+            className={`h-2 w-2 shrink-0 rounded-full ${dotClass(tab)} ${
+              unclaimed(tab) ? "shadow-[0_0_6px_2px_rgba(16,185,129,0.6)]" : ""
+            }`}
+          />
           <span className="truncate">{tab.title}</span>
           {blockerCount(tab) > 0 && (
             <span className="shrink-0 rounded-full bg-red-500/20 px-1.5 text-[10px] font-semibold text-red-400">

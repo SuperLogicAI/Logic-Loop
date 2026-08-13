@@ -93,6 +93,41 @@ export function resetEpochGuard(): void {
   stoppedSessions.clear();
 }
 
+/** Whether a finished session should flag its tab as an unclaimed result:
+ * either a different tab is active (background tab, app focused), or the
+ * whole app is backgrounded. Claiming (App.tsx's `claimTab`) is the inverse —
+ * a tab is claimed by becoming both the active tab and the window focused. */
+export function shouldFlagUnclaimed(
+  tabId: string,
+  activeTabId: string | null,
+  windowFocused: boolean
+): boolean {
+  return tabId !== activeTabId || !windowFocused;
+}
+
+/** Startup seed for the in-memory unclaimed flags: which restored tabs carry a
+ * result that landed before the last quit and was never claimed. Must be
+ * applied before a tab is activated — the claim path reads the flag set. */
+export function seedUnclaimedTabs(
+  tabs: { id: string; sessionId?: string }[],
+  unclaimedSessions: Set<string>
+): Set<string> {
+  return new Set(
+    tabs.filter((t) => t.sessionId && unclaimedSessions.has(t.sessionId)).map((t) => t.id)
+  );
+}
+
+/** Whether a nudge (OS notification) should fire: same rule as
+ * `shouldFlagUnclaimed`, plus the project's mute setting. */
+export function shouldNotify(
+  tabId: string,
+  activeTabId: string | null,
+  windowFocused: boolean,
+  muted: boolean
+): boolean {
+  return !muted && shouldFlagUnclaimed(tabId, activeTabId, windowFocused);
+}
+
 /** Map a hook event to the tab's agent state; null = no state change. */
 export function stateForHook(p: HookPayload): AgentState | null {
   // Subagent events carry agent_id; they never drive tab state.

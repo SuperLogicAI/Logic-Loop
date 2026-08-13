@@ -70,6 +70,16 @@ export interface ExtractorSettings {
   lmstudioModel: string;
 }
 
+/** A tab-tether-keyed re-entry candidate: the latest session bound to a tab
+ * that was still active when the app last quit (see `repo.reentryCandidates`). */
+export interface ReentryCandidate {
+  session_id: string;
+  tab_tether: string;
+  project_key: string;
+  cwd: string;
+  transcript_path: string;
+}
+
 export interface HookPayload {
   hook_event_name: string;
   session_id: string;

@@ -236,7 +236,8 @@ fn hook_command() -> String {
     )
 }
 
-const HOOK_EVENTS: [&str; 4] = ["Notification", "Stop", "PostToolUse", "UserPromptSubmit"];
+const HOOK_EVENTS: [&str; 5] =
+    ["Notification", "Stop", "PostToolUse", "UserPromptSubmit", "SessionStart"];
 
 fn is_ours(entry: &serde_json::Value) -> bool {
     entry["hooks"]
@@ -363,6 +364,7 @@ mod tests {
             assert!(s["hooks"][ev].as_array().unwrap().iter().any(is_ours), "{ev} missing");
         }
         assert_eq!(s["hooks"]["Stop"].as_array().unwrap().len(), 2);
+        assert_eq!(s["hooks"]["SessionStart"].as_array().unwrap().len(), 2);
     }
 
     #[test]

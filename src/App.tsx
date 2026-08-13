@@ -4,9 +4,19 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { homeDir } from "@tauri-apps/api/path";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { bindSession, onHookEvent, onTailerFailed, onTranscriptLine, stateForHook } from "./lib/ingest";
+import {
+  bindSession,
+  onHookEvent,
+  onTailerFailed,
+  onTranscriptLine,
+  seedUnclaimedTabs,
+  shouldFlagUnclaimed,
+  shouldNotify,
+  stateForHook,
+} from "./lib/ingest";
 import { detectBlockers } from "./lib/detectors";
 import * as decisions from "./lib/decisions";
+import { initNotifications, notify } from "./lib/notify";
 import { SidePanel } from "./components/SidePanel";
 import { LandingNoteModal } from "./components/LandingNoteModal";
 import type { AgentState, Decision } from "./types";
@@ -35,9 +45,21 @@ export default function App() {
   const [panelRefresh, setPanelRefresh] = useState(0);
   const [blockerCountsByCwd, setBlockerCountsByCwd] = useState<Record<string, number>>({});
   const [unseenStops, setUnseenStops] = useState<Set<string>>(new Set());
+  const unseenStopsRef = useRef(unseenStops);
+  unseenStopsRef.current = unseenStops;
   // Sessions whose transcript file could not be opened — they emit hooks but no
   // transcript, so decisions never extract for them. Silent until surfaced.
   const [blindSessions, setBlindSessions] = useState<Record<string, string>>({});
+
+  // Nudges (Phase 6): muted project keys, cached so the hot ingestion path
+  // never blocks on a DB read before deciding whether to notify.
+  const mutedProjectsRef = useRef(new Set<string>());
+  const refreshMutedProjects = useCallback(() => {
+    void repo
+      .mutedProjects()
+      .then((s) => (mutedProjectsRef.current = s))
+      .catch(() => undefined);
+  }, []);
 
   // Landing-note ritual: agent activity per tab, and when we last prompted it.
   const tabActivityRef = useRef(new Map<string, number>()); // tab id -> last agent-activity ts
@@ -95,7 +117,9 @@ export default function App() {
     void homeDir().then((h) => setHome(h.replace(/\/$/, "")));
     refreshBlockerCounts();
     refreshDecisionCounts();
-  }, [refreshBlockerCounts, refreshDecisionCounts]);
+    void initNotifications();
+    refreshMutedProjects();
+  }, [refreshBlockerCounts, refreshDecisionCounts, refreshMutedProjects]);
 
   const openTab = useCallback(async (opts?: { name?: string; cwd?: string; color?: string }) => {
     const spawnCwd = await canonicalizeCwd(opts?.cwd ?? "~").catch(() => opts?.cwd ?? "~");
@@ -122,6 +146,9 @@ export default function App() {
     // Side effects outside the updater — StrictMode double-invokes updaters.
     const tab = tabsRef.current.find((t) => t.id === tabId);
     if (tab && tab.status === "live") void ptyKill(tab.ptyId);
+    // An explicitly closed tab must not ghost back next launch — a tab that
+    // died with the app (quit, crash) should.
+    void repo.deactivateSessionBinding(tabId).catch(() => undefined);
     // PTY dies now; the landing modal collects the note after the fact,
     // reading the (already-persisted) transcript for its draft.
     if (tab) maybePromptLanding(tab);
@@ -142,10 +169,12 @@ export default function App() {
     setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, status: "dead" as const } : t)));
   }, []);
 
-  const restartTab = useCallback(async (tabId: string) => {
+  const restartTab = useCallback(async (tabId: string, resumeSessionId?: string) => {
     const tab = tabsRef.current.find((t) => t.id === tabId);
     if (!tab) return;
-    const ptyId = await ptySpawn(tab.cwd === "~" ? null : tab.cwd, 80, 24);
+    // Same tether openTab already passes — without it a restarted tab respawns
+    // untethered and its next session binds by cwd fallback instead of tether.
+    const ptyId = await ptySpawn(tab.cwd === "~" ? null : tab.cwd, 80, 24, tab.id, resumeSessionId);
     setTabs((prev) =>
       prev.map((t) => (t.id === tabId ? { ...t, ptyId, status: "live" as const } : t))
     );
@@ -160,8 +189,53 @@ export default function App() {
     didInit.current = true;
     void refreshBookmarks();
     // reap PTYs orphaned by a webview crash/reload, then start fresh
-    void ptyKillAll().then(() => openTab());
+    void ptyKillAll().then(async () => {
+      // Ghost tabs: sessions still active when the app last quit. Never
+      // spawned (ptyId: -1) — the dead-tab overlay offers "Re-enter", which
+      // is what actually opens the PTY, via the same resume path a mid-run
+      // process death uses.
+      const candidates = await repo.reentryCandidates().catch(() => []);
+      if (candidates.length === 0) {
+        void openTab();
+        return;
+      }
+      const ghosts: Tab[] = candidates.map((c) => ({
+        id: c.tab_tether,
+        ptyId: -1,
+        title: c.project_key.split("/").filter(Boolean).pop() ?? c.project_key,
+        cwd: c.project_key,
+        color: PALETTE[7],
+        status: "dead",
+        sessionId: c.session_id,
+      }));
+      // Seed the unclaimed flags before activating a tab: claimTab reads the
+      // in-memory set, so a result that outlived the last quit is unclaimable
+      // unless it is flagged before the activeId effect runs its claim. All
+      // three setState calls batch into one commit, so the effect sees them.
+      const unclaimed = await repo.unclaimedSessions().catch(() => new Set<string>());
+      setUnseenStops(seedUnclaimedTabs(ghosts, unclaimed));
+      setTabs(ghosts);
+      setActiveId(ghosts[0].id);
+    });
   }, [openTab, refreshBookmarks]);
+
+  // Unclaimed results (Phase 6): a tab is claimed by becoming both the active
+  // tab and the window having focus. Persisted so the Accomplished panel can
+  // headline it and it survives a restart (unlike `unseenStops`, the in-memory
+  // read model for the dock badge / TabBar glow).
+  const claimTab = useCallback((tabId: string) => {
+    if (!unseenStopsRef.current.has(tabId)) return; // nothing to claim — no event to persist
+    const tab = tabsRef.current.find((t) => t.id === tabId);
+    if (tab?.sessionId) {
+      void repo.addEvent(tab.sessionId, "result_claimed", "{}").catch(() => undefined);
+    }
+    setUnseenStops((s) => {
+      if (!s.has(tabId)) return s;
+      const next = new Set(s);
+      next.delete(tabId);
+      return next;
+    });
+  }, []);
 
   // Ingestion: bind hook events to tabs by cwd, persist to events table,
   // drive the per-tab agent state machine.
@@ -205,6 +279,13 @@ export default function App() {
       if (projectKey) {
         sessionCwd.set(p.session_id, projectKey);
       }
+      // Re-entry write path: only tethered sessions (started by this app) are
+      // ours to resume — an outside terminal's SessionStart carries no tab_id.
+      if (p.hook_event_name === "SessionStart" && p.tab_id && projectKey && p.cwd && p.transcript_path) {
+        void repo
+          .upsertSessionBinding(p.session_id, p.tab_id, projectKey, p.cwd, p.transcript_path)
+          .catch(() => undefined); // fail open, same as addEvent above
+      }
       if (p.hook_event_name === "Stop") {
         decisions.onStop(p.session_id, sessionCwd.get(p.session_id), refreshDecisionCounts);
       }
@@ -240,6 +321,7 @@ export default function App() {
       if (!tabId) return; // session from an outside terminal
       tabActivityRef.current.set(tabId, Date.now()); // for the landing-note ritual
 
+      const prevAgentState = tabsRef.current.find((t) => t.id === tabId)?.agentState;
       const state = stateForHook(p);
       const cwd = sessionCwd.get(p.session_id);
       setTabs((prev) =>
@@ -252,10 +334,31 @@ export default function App() {
           return state ? { ...next, sessionId: p.session_id, agentState: state } : next;
         })
       );
-      // agent finished while the app is in the background → badge until refocus
-      if (isStop && !document.hasFocus()) {
+
+      const muted = cwd ? mutedProjectsRef.current.has(cwd) : false;
+      const nudgeLabel = cwd ? (cwd.split("/").filter(Boolean).pop() ?? cwd) : "Logic Loop";
+      const canNotify = () => shouldNotify(tabId, activeIdRef.current, document.hasFocus(), muted);
+
+      // Waiting-edge only — a hook can re-fire (e.g. an idle reminder) while
+      // already waiting, and that must not re-notify every time.
+      if (state === "waiting" && prevAgentState !== "waiting" && canNotify()) {
+        notify("Waiting for input", nudgeLabel);
+      }
+
+      // agent finished on a tab the human isn't looking at right now — either
+      // a background tab (app focused, different tab active) or the whole app
+      // backgrounded. Flagged until claimTab (tab switch / window focus).
+      if (isStop && shouldFlagUnclaimed(tabId, activeIdRef.current, document.hasFocus())) {
         const id = tabId;
         setUnseenStops((s) => new Set(s).add(id));
+        // Without a cwd the row can never match unclaimedResults' cwd filter —
+        // skip the write rather than persist an event nothing can read.
+        if (cwd) {
+          void repo
+            .addEvent(p.session_id, "result_landed", JSON.stringify({ cwd }))
+            .catch(() => undefined);
+        }
+        if (canNotify()) notify("Finished", nudgeLabel);
       }
     }).then(track);
 
@@ -333,13 +436,17 @@ export default function App() {
     [bookmarks, refreshBookmarks]
   );
 
-  // Dock badge = agents waiting on the user + agents that finished while the
-  // app was in the background (cleared on refocus).
+  // Dock badge = agents waiting on the user + agents that finished unseen.
+  // Refocusing the window claims only the active tab, not every flagged one —
+  // a background tab's result stays flagged until the human switches to it.
   useEffect(() => {
-    const clear = () => setUnseenStops((s) => (s.size ? new Set<string>() : s));
-    window.addEventListener("focus", clear);
-    return () => window.removeEventListener("focus", clear);
-  }, []);
+    const claim = () => {
+      const id = activeIdRef.current;
+      if (id) claimTab(id);
+    };
+    window.addEventListener("focus", claim);
+    return () => window.removeEventListener("focus", claim);
+  }, [claimTab]);
   const waitingCount = tabs.filter(
     (t) => t.status === "live" && (t.agentState === "waiting" || unseenStops.has(t.id))
   ).length;
@@ -424,17 +531,24 @@ export default function App() {
     return () => window.removeEventListener("keydown", handler);
   }, [openTab, closeTab]);
 
-  // On tab switch: snapshot the tab we left (residue panel) and offer its
-  // landing prompt. A closed tab is gone here — closeTab already handled it.
+  // On tab switch: snapshot the tab we left (residue panel), offer its
+  // landing prompt, and claim the tab switched to. A closed tab is gone here
+  // — closeTab already handled it.
   useEffect(() => {
     const prevId = prevActiveRef.current;
     prevActiveRef.current = activeId;
-    if (!prevId || prevId === activeId) return;
-    const prevTab = tabsRef.current.find((t) => t.id === prevId);
-    if (!prevTab) return;
-    setPrevSnap({ cwd: expand(prevTab.cwd), state: prevTab.agentState });
-    maybePromptLanding(prevTab);
-  }, [activeId, expand, maybePromptLanding]);
+    if (prevId && prevId !== activeId) {
+      const prevTab = tabsRef.current.find((t) => t.id === prevId);
+      if (prevTab) {
+        setPrevSnap({ cwd: expand(prevTab.cwd), state: prevTab.agentState });
+        maybePromptLanding(prevTab);
+      }
+    }
+    // Switching to a flagged tab while the window isn't focused (e.g. via a
+    // background automation) must not silently claim it — same rule the
+    // focus-listener follows.
+    if (activeId && document.hasFocus()) claimTab(activeId);
+  }, [activeId, expand, maybePromptLanding, claimTab]);
 
   const activeTab = tabs.find((t) => t.id === activeId) ?? null;
 
@@ -473,6 +587,7 @@ export default function App() {
         onReorder={reorderTabs}
         blockerCount={(t) => blockerCountsByCwd[expand(t.cwd)] ?? 0}
         decisionCount={(t) => decisionCountsByCwd[expand(t.cwd)] ?? 0}
+        unclaimed={(t) => unseenStops.has(t.id)}
       />
       <BookmarksBar
         bookmarks={bookmarks}
@@ -499,6 +614,7 @@ export default function App() {
             onBlockersChanged={refreshBlockerCounts}
             onDecisionsChanged={refreshDecisionCounts}
             onAnswerNow={answerNow}
+            onMuteChanged={refreshMutedProjects}
           />
         )}
         <div className="min-h-0 min-w-0 flex-1">
@@ -508,7 +624,7 @@ export default function App() {
               tab={tab}
               visible={tab.id === activeId}
               onExit={markDead}
-              onRestart={(id) => void restartTab(id)}
+              onRestart={(id, sid) => void restartTab(id, sid)}
             />
           ))}
         </div>
