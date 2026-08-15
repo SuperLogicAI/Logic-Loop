@@ -419,35 +419,35 @@ adds `SessionStart` to the registered hook set, and a stale install won't
 send it.
 
 ### Re-entry
-- [ ] Mid-run process death: with an agent running in a tab (known
+- [x] Mid-run process death: with an agent running in a tab (known
       `sessionId`), kill its shell out from under it (e.g. `kill` the PTY's
       shell PID from another terminal). The dead-tab overlay reads
       **"Re-enter"**, not "Restart". Click it → resumes with the prior
       conversation's context intact (ask it something only visible earlier in
       that conversation).
-- [ ] Full relaunch: open 3 tabs, run an agent in each, quit through the
+- [x] Full relaunch: open 3 tabs, run an agent in each, quit through the
       confirm dialog, relaunch → 3 ghost ("Re-enter") tabs appear, one per
       session, each resuming its own context correctly.
-- [ ] Before quitting in the check above, explicitly close one of the 3 tabs
+- [x] Before quitting in the check above, explicitly close one of the 3 tabs
       (✕, not quit) → relaunch shows only the other 2 ghost tabs; the closed
       one does not come back.
-- [ ] A tab opened fresh (no `sessionId` yet) still shows the old plain
+- [x] A tab opened fresh (no `sessionId` yet) still shows the old plain
       "Restart" wording on death — unchanged path.
 
 ### Unclaimed results
-- [ ] Two tabs, both running agents. While tab A is active, let tab B's agent
+- [x] Two tabs, both running agents. While tab A is active, let tab B's agent
       finish (`Stop`) → tab B's dot gets the emerald glow; tab A's does not.
-- [ ] Switch to tab B → glow clears on B only; any other still-flagged tab is
+- [x] Switch to tab B → glow clears on B only; any other still-flagged tab is
       unaffected.
-- [ ] Background the whole app (⌘-Tab away) while a foregrounded tab's agent
+- [x] Background the whole app (⌘-Tab away) while a foregrounded tab's agent
       finishes → its tab still flags (app-level backgrounding, not just
       cross-tab), and refocusing the app (window `focus`) while that tab is
       still the active one claims it.
-- [ ] Trigger an unclaimed result, then quit and relaunch before claiming it
+- [x] Trigger an unclaimed result, then quit and relaunch before claiming it
       (re-entry from the section above) → the Accomplished panel still
       headlines "Agent finished, unclaimed" for that project — the event
       survived the restart.
-- [ ] **Claim it after that relaunch** — the other half of the check above, and
+- [x] **Claim it after that relaunch** — the other half of the check above, and
       the one that was broken. Let an agent finish on a *background* tab, quit
       **without** ever switching to it, relaunch, then switch to that tab with
       the window focused → the emerald glow clears **and** the Accomplished
@@ -465,14 +465,14 @@ send it.
       getting that backwards strands exactly that one tab.
 
 ### Nudges
-- [ ] Background a tab (switch away or background the app), let its agent hit
+- [x] Background a tab (switch away or background the app), let its agent hit
       a `Notification` (permission prompt / waiting-for-input) → one OS
       notification appears ("Waiting for input"). Let it sit — a repeated
       idle-reminder `Notification` for the same still-waiting session must
       **not** produce a second OS notification (edge-triggered, not level).
-- [ ] Background a tab, let its agent finish (`Stop`) → one OS notification
+- [x] Background a tab, let its agent finish (`Stop`) → one OS notification
       ("Finished").
-- [ ] Click "notify" in the side panel's pinned header to mute the active
+- [x] Click "notify" in the side panel's pinned header to mute the active
       project → repeat either scenario above for that project → no OS
       notification, panel still shows "muted". Click again to unmute →
       notifications resume.
