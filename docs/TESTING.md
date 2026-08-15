@@ -476,7 +476,7 @@ send it.
       project → repeat either scenario above for that project → no OS
       notification, panel still shows "muted". Click again to unmute →
       notifications resume.
-- [ ] First launch after granting/denying the OS permission prompt: denying it
+- [x] First launch after granting/denying the OS permission prompt: denying it
       must not affect anything else in the app (terminals, panels) — nudges
       just silently never fire.
 
