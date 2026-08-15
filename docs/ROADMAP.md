@@ -20,6 +20,7 @@ codebase; concepts only, re-derived against our architecture invariants.
 | Recursive fan-out spawn (RAH) | Phase 7 candidate | 2d | Tab tether, Versioned hook contract |
 | Isolated loops (worktrees) | v1.1 | — | Tab tether |
 | Adapters (non-Claude agents) | v2 | — | Versioned hook contract |
+| Model traffic panel (Safe Router) | Phase 8 candidate | 1d | External: Safe Router v0 log |
 
 Phase boundaries still hard stops. Phase 5 items enter PLAN.md for approval
 before build, per process rules.
@@ -206,6 +207,71 @@ Cheap: path convention + panel query, no new ingestion. Their
 "superseded, never edited" decision-log rule also maps cleanly onto our
 append-only decisions table — surfacing supersedes-links in the decisions
 panel is a related idea.
+
+## Model traffic panel (Safe Router) — Phase 8 candidate
+
+Source: a separate project, Safe Router — a headless single-user model router
+that all local agent traffic can be pointed at. It writes an append-only SQLite
+metadata log (`~/.safe-router/log.db`, table `requests`): timestamp, client key
+id, model requested, model actually served, backend, token usage, latency,
+disposition, and `client_tag`.
+
+**Why this is a read, not a merge.** Safe Router is deliberately a separate
+process and stays that way. Its invariant #1 is *fail closed*; ours is #2,
+*fail open*. It is in-path infrastructure; we are an observer (invariant #4,
+and the 2026-07-19 positioning decision: Logic Loop observes, it does not
+orchestrate). It is a headless Rust daemon with no WebView and no npm tree by
+design. Folding it in would import an opposite failure philosophy and a
+security-critical trust domain into a Tauri app. We read its log; we never
+write its policy, and we never proxy inference ourselves.
+
+**Why the coupling is nearly free.** The router records its generic
+`X-Safe-Router-Tag` header verbatim as `client_tag` (max 128 bytes, no control
+characters). We emit that header ourselves, carrying the `LOGIC_LOOP_TAB_ID`
+we already stamp on every PTY — identical work, and the mapping knowledge
+lives on our side, where it belongs: the reader owns the join, not the writer.
+So the join to tabs and projects exists with no new ingestion, no new hook,
+and no schema change here. The panel is a dumb SQL view over someone else's
+append-only table, which is invariant #3 holding at a project boundary rather
+than inside one.
+
+- Attach the router DB read-only (`ATTACH DATABASE ... ` or a second
+  tauri-plugin-sql connection). **Read-only, enforced at the connection.** A
+  write from here to that file is a bug of the same severity as writing to the
+  events spine from a panel.
+- Fail open (invariant #2): router DB absent, locked, or schema-mismatched →
+  the panel hides itself. Terminals and every existing panel are unaffected.
+  Never block ingestion on the presence of an external database.
+- `client_tag` is untrusted, client-controlled data on that side. Join on it;
+  do not derive authority from it, and **escape it on render** — the router
+  bounds it but does not sanitize for HTML contexts. Rows whose `client_tag`
+  matches no known tab are displayed under the project only, never guessed
+  into a tab.
+- Our extractor-exemption sentinel may appear in `client_tag` (we put it
+  there). It means nothing on the router side — do not conflate the two tether
+  semantics (cf. the RAH note on opposite polarity).
+
+**Not yet grounded in §2 — this is the gate.** Every panel we ship maps to a
+named cognitive failure mode; "interesting data is available" is not the bar.
+The candidate failure mode is a variant of *progress blindness*: with five
+agents running you cannot tell which one is burning frontier budget on work
+that didn't need it, and you find out at the invoice rather than at the
+moment. If that argument holds up, the panel is a per-tab/per-project cost and
+tier-distribution view with an unclaimed-result-style flag on tier anomalies.
+**If it doesn't, don't build it** — the data being there is not a reason.
+
+**Second, weaker motivation, worth recording:** once heterogeneous agents
+(v2 Adapters) route through one endpoint, model identity, token usage, and
+cost arrive *uniformly across all of them* with zero per-agent adapter work.
+That doesn't justify the panel on its own, but it does mean this item gets
+cheaper exactly as Adapters gets more expensive.
+
+- Depends on: Safe Router v0 shipping and being pointed at by at least the
+  clients whose tabs live here. Nothing in Logic Loop blocks on it.
+- Test: router DB missing → panel absent, all gates still green. Router DB
+  present with rows carrying known tab tethers → rows land under the correct
+  tab and project. Rows with an unknown tether → project-level only, no
+  misattribution.
 
 ## Recursive fan-out spawn (RAH) — Phase 7 candidate
 
