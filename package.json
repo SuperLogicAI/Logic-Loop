@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "reinstall": "npm run tauri build && rm -rf \"/Applications/Logic Loop.app\" && cp -R \"src-tauri/target/release/bundle/macos/Logic Loop.app\" /Applications/",
     "golden": "tsx scripts/golden.ts",
     "landing:check": "tsx scripts/landing-check.ts",
     "epoch:check": "tsx scripts/epoch-check.ts",
@@ -15,7 +16,8 @@
     "dedupe:check": "tsx scripts/dedupe-check.ts",
     "reentry:check": "tsx scripts/reentry-check.ts",
     "unclaimed:check": "tsx scripts/unclaimed-check.ts",
-    "notify:check": "tsx scripts/notify-check.ts"
+    "notify:check": "tsx scripts/notify-check.ts",
+    "spawn:check": "tsx scripts/spawn-check.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

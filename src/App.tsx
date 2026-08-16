@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -19,6 +19,7 @@ import * as decisions from "./lib/decisions";
 import { initNotifications, notify } from "./lib/notify";
 import { SidePanel } from "./components/SidePanel";
 import { LandingNoteModal } from "./components/LandingNoteModal";
+import { FanOutModal } from "./components/FanOutModal";
 import type { AgentState, Decision } from "./types";
 import { ptyWrite } from "./lib/pty";
 import { TabBar } from "./components/TabBar";
@@ -26,7 +27,7 @@ import { BookmarksBar } from "./components/BookmarksBar";
 import { Terminal } from "./components/Terminal";
 import { canonicalizeCwd, projectKeyOf, ptyKill, ptyKillAll, ptySpawn } from "./lib/pty";
 import * as repo from "./lib/repo";
-import type { Bookmark, Tab } from "./types";
+import type { Bookmark, FanOutRollup, SpawnGroup, SpawnGroupMember, Tab } from "./types";
 import { PALETTE } from "./types";
 
 let tabCounter = 0;
@@ -121,7 +122,7 @@ export default function App() {
     refreshMutedProjects();
   }, [refreshBlockerCounts, refreshDecisionCounts, refreshMutedProjects]);
 
-  const openTab = useCallback(async (opts?: { name?: string; cwd?: string; color?: string }) => {
+  const openTab = useCallback(async (opts?: { name?: string; cwd?: string; color?: string; cmd?: string }) => {
     const spawnCwd = await canonicalizeCwd(opts?.cwd ?? "~").catch(() => opts?.cwd ?? "~");
     // tab.cwd is the project key every panel queries by, so it is the repo
     // root, not the spawn dir — otherwise a tab opened in src-tauri files
@@ -129,7 +130,7 @@ export default function App() {
     const cwd = await projectKeyOf(spawnCwd).catch(() => spawnCwd);
     // The tether must exist before the PTY does: hooks inherit it from the env.
     const id = `tab-${++tabCounter}`;
-    const ptyId = await ptySpawn(spawnCwd, 80, 24, id);
+    const ptyId = await ptySpawn(spawnCwd, 80, 24, id, undefined, opts?.cmd);
     const tab: Tab = {
       id,
       ptyId,
@@ -140,6 +141,124 @@ export default function App() {
     };
     setTabs((t) => [...t, tab]);
     setActiveId(tab.id);
+    return tab.id;
+  }, []);
+
+  /** Fan out (Phase 7): spawn N child tabs under a new group, each via the
+   * ordinary `openTab` path (invariant #4 — no second spawn code path, no
+   * carve-out tether class). One bad item (unspawnable cwd/cmd) must not
+   * block its siblings or leave the group half-formed silently — caught and
+   * skipped per invariant #2. */
+  const fanOut = useCallback(
+    async (
+      parentTabId: string,
+      items: { name?: string; cwd: string; cmd?: string }[],
+      label?: string
+    ) => {
+      const groupId = crypto.randomUUID();
+      await repo.createSpawnGroup(groupId, parentTabId, label ?? null);
+      for (const item of items) {
+        try {
+          const childId = await openTab({
+            name: item.name,
+            cwd: item.cwd,
+            color: PALETTE[7],
+            cmd: item.cmd,
+          });
+          await repo.addSpawnMember(groupId, childId, item.cmd ?? null);
+        } catch {
+          // fail open — this child never got a tab; siblings still spawn.
+        }
+      }
+    },
+    [openTab]
+  );
+  const [fanOutModalOpen, setFanOutModalOpen] = useState(false);
+
+  // Fan-out rollup (Phase 7): DB-backed group/membership for the active tab,
+  // refreshed on tab switch — same pattern as SidePanel's own cwd-keyed
+  // reload, not a continuous live subscription. "landed" is the only piece
+  // that needs a DB round-trip (invariant #3: dumb SQL view); PTY liveness
+  // and the unclaimed flag are read straight from live state below, so they
+  // never go stale between switches.
+  const [fanOutGroup, setFanOutGroup] = useState<{
+    group: SpawnGroup;
+    members: (SpawnGroupMember & { landed: boolean })[];
+  } | null>(null);
+
+  useEffect(() => {
+    if (!activeId) {
+      setFanOutGroup(null);
+      return;
+    }
+    let cancelled = false;
+    void repo
+      .groupForTab(activeId)
+      .then(async (group) => {
+        if (!group) {
+          if (!cancelled) setFanOutGroup(null);
+          return;
+        }
+        const members = await repo.groupMembers(group.id);
+        const withLanded = await Promise.all(
+          members.map(async (m) => {
+            const tab = tabsRef.current.find((t) => t.id === m.child_tab_id);
+            const landed = tab?.sessionId
+              ? await repo.hasLandedResult(tab.sessionId).catch(() => false)
+              : false;
+            return { ...m, landed };
+          })
+        );
+        if (!cancelled) setFanOutGroup({ group, members: withLanded });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeId]);
+
+  const fanOutRollup: FanOutRollup | null = useMemo(() => {
+    if (!fanOutGroup) return null;
+    const { group, members } = fanOutGroup;
+    const parentTab = tabs.find((t) => t.id === group.parent_tab_id);
+    return {
+      groupId: group.id,
+      label: group.label,
+      isParent: group.parent_tab_id === activeId,
+      parentTabId: group.parent_tab_id,
+      parentTitle: parentTab?.title ?? group.parent_tab_id,
+      members: members.map((m) => {
+        const tab = tabs.find((t) => t.id === m.child_tab_id);
+        const status: FanOutRollup["members"][number]["status"] = !tab
+          ? "gone"
+          : tab.status === "dead"
+            ? "dead"
+            : unseenStops.has(tab.id)
+              ? "flag"
+              : m.landed
+                ? "done"
+                : "running";
+        return { childTabId: m.child_tab_id, title: tab?.title ?? m.child_tab_id, cmd: m.cmd, status };
+      }),
+    };
+  }, [fanOutGroup, tabs, unseenStops, activeId]);
+
+  // Unclaimed results (Phase 6): a tab is claimed by becoming both the active
+  // tab and the window having focus. Persisted so the Accomplished panel can
+  // headline it and it survives a restart (unlike `unseenStops`, the in-memory
+  // read model for the dock badge / TabBar glow).
+  const claimTab = useCallback((tabId: string) => {
+    if (!unseenStopsRef.current.has(tabId)) return; // nothing to claim — no event to persist
+    const tab = tabsRef.current.find((t) => t.id === tabId);
+    if (tab?.sessionId) {
+      void repo.addEvent(tab.sessionId, "result_claimed", "{}").catch(() => undefined);
+    }
+    setUnseenStops((s) => {
+      if (!s.has(tabId)) return s;
+      const next = new Set(s);
+      next.delete(tabId);
+      return next;
+    });
   }, []);
 
   const closeTab = useCallback((tabId: string) => {
@@ -152,6 +271,10 @@ export default function App() {
     // PTY dies now; the landing modal collects the note after the fact,
     // reading the (already-persisted) transcript for its draft.
     if (tab) maybePromptLanding(tab);
+    // Closing counts as claiming — otherwise an unclaimed result on a tab
+    // that's never switched to just stays flagged in the DB forever, since
+    // nothing else ever calls claimTab for a tab that no longer exists.
+    claimTab(tabId);
     tabActivityRef.current.delete(tabId);
     tabPromptRef.current.delete(tabId);
     setTabs((prev) => {
@@ -163,7 +286,7 @@ export default function App() {
       });
       return next;
     });
-  }, [maybePromptLanding]);
+  }, [maybePromptLanding, claimTab]);
 
   const markDead = useCallback((tabId: string) => {
     setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, status: "dead" as const } : t)));
@@ -219,23 +342,6 @@ export default function App() {
     });
   }, [openTab, refreshBookmarks]);
 
-  // Unclaimed results (Phase 6): a tab is claimed by becoming both the active
-  // tab and the window having focus. Persisted so the Accomplished panel can
-  // headline it and it survives a restart (unlike `unseenStops`, the in-memory
-  // read model for the dock badge / TabBar glow).
-  const claimTab = useCallback((tabId: string) => {
-    if (!unseenStopsRef.current.has(tabId)) return; // nothing to claim — no event to persist
-    const tab = tabsRef.current.find((t) => t.id === tabId);
-    if (tab?.sessionId) {
-      void repo.addEvent(tab.sessionId, "result_claimed", "{}").catch(() => undefined);
-    }
-    setUnseenStops((s) => {
-      if (!s.has(tabId)) return s;
-      const next = new Set(s);
-      next.delete(tabId);
-      return next;
-    });
-  }, []);
 
   // Ingestion: bind hook events to tabs by cwd, persist to events table,
   // drive the per-tab agent state machine.
@@ -584,6 +690,7 @@ export default function App() {
         onSelect={setActiveId}
         onClose={closeTab}
         onNew={() => void openTab()}
+        onFanOut={() => activeTab && setFanOutModalOpen(true)}
         onReorder={reorderTabs}
         blockerCount={(t) => blockerCountsByCwd[expand(t.cwd)] ?? 0}
         decisionCount={(t) => decisionCountsByCwd[expand(t.cwd)] ?? 0}
@@ -611,6 +718,8 @@ export default function App() {
             prevCwd={prevSnap?.cwd ?? null}
             prevState={prevSnap?.state}
             blindPaths={Object.values(blindSessions)}
+            fanOut={fanOutRollup}
+            onSelectTab={setActiveId}
             onBlockersChanged={refreshBlockerCounts}
             onDecisionsChanged={refreshDecisionCounts}
             onAnswerNow={answerNow}
@@ -647,6 +756,16 @@ export default function App() {
               .catch(() => undefined);
             setLandingPrompt(null);
           }}
+        />
+      )}
+      {fanOutModalOpen && activeTab && (
+        <FanOutModal
+          parentCwd={expand(activeTab.cwd)}
+          onLaunch={(items, label) => {
+            setFanOutModalOpen(false);
+            void fanOut(activeTab.id, items, label);
+          }}
+          onCancel={() => setFanOutModalOpen(false)}
         />
       )}
     </div>

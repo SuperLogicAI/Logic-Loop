@@ -24,6 +24,7 @@ interface Props {
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
   onNew: () => void;
+  onFanOut: () => void;
   onReorder: (srcId: string, dstId: string) => void;
   blockerCount: (tab: Tab) => number;
   decisionCount: (tab: Tab) => number;
@@ -37,6 +38,7 @@ export function TabBar({
   onSelect,
   onClose,
   onNew,
+  onFanOut,
   onReorder,
   blockerCount,
   decisionCount,
@@ -113,6 +115,13 @@ export function TabBar({
         title="New tab (⌘T)"
       >
         +
+      </button>
+      <button
+        className="mb-0.5 shrink-0 rounded px-2 py-1 text-xs leading-none text-zinc-400 hover:bg-zinc-700"
+        onClick={onFanOut}
+        title="Fan out the active tab into N child tabs"
+      >
+        Fan out…
       </button>
     </div>
   );

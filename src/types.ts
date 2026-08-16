@@ -80,6 +80,40 @@ export interface ReentryCandidate {
   transcript_path: string;
 }
 
+/** A fan-out group (Phase 7): one parent tab, N child tabs it spawned. */
+export interface SpawnGroup {
+  id: string;
+  parent_tab_id: string;
+  label: string | null;
+  created_at: number;
+}
+
+/** One child of a spawn group. `cmd` is the launch command it was spawned
+ * with (display only — the child's own PTY already carries it). */
+export interface SpawnGroupMember {
+  group_id: string;
+  child_tab_id: string;
+  cmd: string | null;
+  created_at: number;
+}
+
+/** Rollup view of a spawn group for the currently active tab — computed in
+ * App.tsx from `SpawnGroup`/`SpawnGroupMember` (DB) plus live `tabs` and
+ * `unseenStops` (in-memory), and handed to SidePanel purely for display. */
+export interface FanOutRollup {
+  groupId: string;
+  label: string | null;
+  isParent: boolean; // true when the active tab owns this group
+  parentTabId: string;
+  parentTitle: string;
+  members: {
+    childTabId: string;
+    title: string;
+    cmd: string | null;
+    status: "running" | "flag" | "done" | "dead" | "gone";
+  }[];
+}
+
 export interface HookPayload {
   hook_event_name: string;
   session_id: string;

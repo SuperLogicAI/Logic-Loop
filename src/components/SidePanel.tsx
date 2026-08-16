@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import * as repo from "../lib/repo";
 import { burst } from "../lib/confetti";
 import { RainbowText } from "./RainbowText";
-import type { AgentState, Blocker, Commit, Decision, Note, ToolEvent } from "../types";
+import type { AgentState, Blocker, Commit, Decision, FanOutRollup, Note, ToolEvent } from "../types";
 
 interface Props {
   cwd: string; // expanded absolute project dir of the active tab
@@ -12,6 +12,8 @@ interface Props {
   prevCwd: string | null; // project of the tab we switched away from (residue)
   prevState?: AgentState; // that tab's last agent state
   blindPaths: string[]; // transcripts that failed to open — panels are incomplete
+  fanOut: FanOutRollup | null; // fan-out group the active tab belongs to, if any
+  onSelectTab: (id: string) => void; // jump to a fan-out child/parent tab
   onBlockersChanged: () => void;
   onDecisionsChanged: () => void;
   onAnswerNow: (d: Decision) => void; // prefill terminal — user still hits Enter
@@ -45,6 +47,8 @@ export function SidePanel({
   prevCwd,
   prevState,
   blindPaths,
+  fanOut,
+  onSelectTab,
   onBlockersChanged,
   onDecisionsChanged,
   onAnswerNow,
@@ -65,12 +69,26 @@ export function SidePanel({
   const [showAllTools, setShowAllTools] = useState(false);
   const [showAllCommits, setShowAllCommits] = useState(false);
   const [expandedBlockers, setExpandedBlockers] = useState<Set<number>>(new Set());
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const toggleBlocker = (id: number) =>
     setExpandedBlockers((s) => {
       const next = new Set(s);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      return next;
+    });
+
+  const dismissUnclaimed = async (sessionId: string) => {
+    await repo.addEvent(sessionId, "result_claimed", "{}");
+    await reload();
+  };
+
+  const toggleSection = (key: string) =>
+    setCollapsed((s) => {
+      const next = new Set(s);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
 
@@ -204,7 +222,7 @@ export function SidePanel({
   const closedDecisions = decisions.filter((d) => d.status !== "open").slice(0, 10);
 
   return (
-    <div className="flex h-full w-72 shrink-0 flex-col border-r border-zinc-800 bg-zinc-900 text-xs text-zinc-300">
+    <div className="flex h-full w-72 min-w-[12rem] max-w-[32rem] shrink-0 resize-x flex-col overflow-hidden border-r border-zinc-800 bg-zinc-900 text-xs text-zinc-300">
       {/* Pinned header: never scrolls away. Text takes the project's bookmark
           color when one exists; plain grey otherwise. */}
       <div className="flex shrink-0 items-center gap-1.5 border-b border-zinc-800 px-3 pt-3 pb-1.5">
@@ -269,213 +287,18 @@ export function SidePanel({
           </span>
         </p>
       )}
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3">
-      {momentum && (
-        <section className="rounded-lg border border-yellow-500/30 bg-yellow-400/5 p-3">
-          <h2 className="mb-1 flex items-center gap-1.5 font-semibold tracking-wide text-yellow-300 uppercase">
-            ▸ Next
-            <span className="ml-auto font-normal text-[10px] normal-case text-zinc-500">{momentum.label}</span>
-          </h2>
-          <p className="mb-2 break-words text-zinc-200">{momentum.text}</p>
-          <button
-            ref={doneRef}
-            className="ml-auto block rounded bg-yellow-400 px-2.5 py-1 font-medium text-zinc-950 hover:bg-yellow-300"
-            onClick={() => void finishMomentum()}
-          >
-            ✓ Done
-          </button>
-        </section>
+      {fanOut && !fanOut.isParent && (
+        <p
+          className="flex shrink-0 cursor-pointer items-center gap-1 border-b border-purple-500/20 bg-purple-400/5 px-3 py-1.5 text-[10px] text-purple-300 hover:bg-purple-400/10"
+          onClick={() => onSelectTab(fanOut.parentTabId)}
+          title="Jump to the parent tab"
+        >
+          part of {fanOut.label ?? "a fan-out"} ({fanOut.parentTitle} ↗)
+        </p>
       )}
-
-      <section>
-        <h2 className="mb-1.5 font-semibold tracking-wide text-orange-400 uppercase">
-          Decisions {openDecisions.length > 0 && `(${openDecisions.length})`}
-        </h2>
-        {openDecisions.length === 0 && <p className="text-zinc-600">Nothing waiting on you.</p>}
-        <ul className="flex flex-col gap-2">
-          {openDecisions.map((d) => (
-            <li key={d.id} className="relative rounded border border-yellow-800/60 bg-yellow-950/20 p-2">
-              <button
-                className="absolute top-1 right-1 leading-none text-yellow-800 hover:text-yellow-500"
-                title="Dismiss — not a real decision"
-                onClick={() => void setStatus(d, "dismissed")}
-              >
-                ✕
-              </button>
-              <p className="break-words pr-5 text-orange-300">{d.question}</p>
-              {d.assumption && (
-                <p className="mt-1 text-zinc-400">agent assumed: {d.assumption}</p>
-              )}
-              <div className="mt-1.5 flex gap-2 text-zinc-400">
-                <button className="text-red-400 hover:text-red-300" title="Prefill answer in terminal" onClick={() => onAnswerNow(d)}>
-                  ✎ answer
-                </button>
-                <button className="text-yellow-400 hover:text-yellow-300" title="Show surrounding conversation" onClick={() => setContext(d)}>
-                  ⌕ context
-                </button>
-                <button className="text-green-400 hover:text-green-300" title="Fine — agent's call" onClick={() => void setStatus(d, "delegated")}>
-                  ⤳ delegate
-                </button>
-                <span className="ml-auto text-zinc-600">{ago(d.ts)}</span>
-              </div>
-            </li>
-          ))}
-        </ul>
-        {closedDecisions.length > 0 && (
-          <ul className="mt-2 flex flex-col gap-1 border-t border-zinc-800 pt-2 text-zinc-600">
-            {closedDecisions.map((d) => (
-              <li key={d.id} className="truncate" title={`${d.question}${d.user_answer ? ` → ${d.user_answer}` : ""}`}>
-                {d.status === "delegated" ? "⤳" : d.status === "dismissed" ? "✕" : "✓"} {d.question}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section>
-        <h2 className="mb-1.5 font-semibold tracking-wide text-red-400 uppercase">
-          Blockers {open.length > 0 && `(${open.length})`}
-        </h2>
-        <div className="mb-2 flex gap-1">
-          <input
-            className="min-w-0 flex-1 rounded bg-zinc-800 px-2 py-1 text-zinc-200 outline-none placeholder:text-zinc-600"
-            placeholder="Add blocker…"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && void addManual()}
-          />
-        </div>
-        {open.length === 0 && <p className="text-zinc-600">None open.</p>}
-        <ul className="flex flex-col gap-2">
-          {open.map((b) => (
-            <li key={b.id} className="relative flex items-start gap-2 rounded border border-red-800/60 bg-red-950/20 p-2 pr-5">
-              <button
-                className="absolute top-1 right-1 leading-none text-red-800 hover:text-red-500"
-                title="Delete"
-                onClick={() => void remove(b)}
-              >
-                ✕
-              </button>
-              <input
-                type="checkbox"
-                checked={false}
-                onChange={() => void resolve(b)}
-                className="mt-0.5 accent-red-500"
-              />
-              <span className="min-w-0 flex-1">
-                {b.source !== "manual" ? (
-                  // Detector blockers: human label leads, raw match line below,
-                  // clamped to two lines with a ＋ to expand.
-                  <>
-                    <span className="break-words text-red-300">
-                      {b.source}
-                      <button
-                        className="ml-1 text-zinc-100 hover:text-white"
-                        title={expandedBlockers.has(b.id) ? "Collapse" : "Expand"}
-                        onClick={() => toggleBlocker(b.id)}
-                      >
-                        {expandedBlockers.has(b.id) ? "−" : "＋"}
-                      </button>
-                    </span>
-                    <p
-                      className={`break-all font-mono text-[10px] text-zinc-500 ${
-                        expandedBlockers.has(b.id) ? "" : "line-clamp-2"
-                      }`}
-                    >
-                      {b.text}
-                    </p>
-                  </>
-                ) : (
-                  <span className="break-words text-red-300">{b.text}</span>
-                )}
-                <span className="mt-1.5 block text-right text-zinc-600">{ago(b.ts)}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-        {done.length > 0 && (
-          <ul className="mt-2 flex flex-col gap-1 border-t border-zinc-800 pt-2">
-            {done.map((b) => (
-              <li key={b.id} className="flex items-start gap-2 text-zinc-600 line-through">
-                <input type="checkbox" checked onChange={() => void resolve(b)} className="mt-0.5" />
-                <span className="min-w-0 flex-1 break-words">{b.text}</span>
-                <button className="shrink-0 text-zinc-700 hover:text-zinc-200" title="Delete" onClick={() => void remove(b)}>
-                  ✕
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section>
-        <h2 className="mb-1.5 font-semibold tracking-wide text-emerald-400 uppercase">Accomplished</h2>
-        {unclaimed.length > 0 && (
-          <ul className="mb-1.5 flex flex-col gap-1 border-b border-emerald-800/40 pb-1.5">
-            {unclaimed.map((u) => (
-              <li key={u.session_id} className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_6px_2px_rgba(16,185,129,0.6)]" />
-                <span className="flex-1 text-emerald-200">Agent finished, unclaimed</span>
-                <span className="text-zinc-600">{ago(u.ts)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {toolEvents.length === 0 && unclaimed.length === 0 && (
-          <p className="text-zinc-600">No tool activity recorded.</p>
-        )}
-        <ul className="flex flex-col gap-1.5">
-          {(showAllTools ? toolEvents : toolEvents.slice(0, ROW_CAP)).map((e) => (
-            <li key={e.id} className="flex gap-2">
-              <span className="w-8 shrink-0 text-right text-zinc-600">{ago(e.ts)}</span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-emerald-300" title={e.plain}>
-                  {e.plain}
-                </span>
-                {e.detail && (
-                  <span className="block truncate font-mono text-[10px] text-zinc-600" title={e.detail}>
-                    {e.tool} {e.detail}
-                  </span>
-                )}
-              </span>
-            </li>
-          ))}
-        </ul>
-        {toolEvents.length > ROW_CAP && (
-          <button
-            className={EXPAND_BTN}
-            onClick={() => setShowAllTools((s) => !s)}
-          >
-            {showAllTools ? "−" : `＋ ${toolEvents.length - ROW_CAP}`}
-          </button>
-        )}
-      </section>
-
-      <section>
-        <h2 className="mb-1.5 font-semibold tracking-wide text-sky-400 uppercase">Git log</h2>
-        {commits.length === 0 && <p className="text-zinc-600">Not a git repo.</p>}
-        <ul className="flex flex-col gap-1">
-          {(showAllCommits ? commits : commits.slice(0, ROW_CAP)).map((c) => (
-            <li key={c.hash} className="flex gap-2">
-              <span className="w-8 shrink-0 text-right text-zinc-600">{ago(c.ts * 1000)}</span>
-              <span className="min-w-0 flex-1 truncate text-sky-300" title={c.subject}>
-                <span className="font-mono text-zinc-500">{c.hash}</span> {c.subject}
-              </span>
-            </li>
-          ))}
-        </ul>
-        {commits.length > ROW_CAP && (
-          <button
-            className={EXPAND_BTN}
-            onClick={() => setShowAllCommits((s) => !s)}
-          >
-            {showAllCommits ? "−" : `＋ ${commits.length - ROW_CAP}`}
-          </button>
-        )}
-      </section>
-
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3">
       {prevCwd && prevCwd !== cwd && (
-        <section className="border-t border-zinc-800 pt-3">
+        <section className="border-b border-zinc-800 pb-3">
           <h2 className="mb-1.5 flex items-center gap-1.5 font-semibold tracking-wide uppercase">
             <RainbowText text="Left behind" />
             {prevState && <span className={`h-2 w-2 rounded-full ${STATE_DOT[prevState]}`} title={prevState} />}
@@ -512,6 +335,292 @@ export function SidePanel({
           </ul>
         </section>
       )}
+      {fanOut && fanOut.isParent && (
+        <section className="rounded-lg border border-purple-500/30 bg-purple-400/5 p-3">
+          <h2 className="mb-1.5 flex items-center gap-1.5 font-semibold tracking-wide text-purple-300 uppercase">
+            ▸ Fan-out
+            {fanOut.label && (
+              <span className="ml-auto font-normal text-[10px] normal-case text-zinc-500">{fanOut.label}</span>
+            )}
+          </h2>
+          <p className="mb-2 text-zinc-500">
+            {fanOut.members.filter((m) => m.status === "done").length}/{fanOut.members.length} done
+          </p>
+          <ul className="flex flex-col gap-1">
+            {fanOut.members.map((m) => (
+              <li
+                key={m.childTabId}
+                className={`flex items-center gap-2 rounded px-1.5 py-1 ${
+                  m.status !== "gone" ? "cursor-pointer hover:bg-purple-500/10" : ""
+                }`}
+                onClick={() => m.status !== "gone" && onSelectTab(m.childTabId)}
+              >
+                <span
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                    m.status === "flag"
+                      ? "bg-emerald-400 shadow-[0_0_6px_2px_rgba(16,185,129,0.6)]"
+                      : m.status === "done"
+                        ? "bg-emerald-700"
+                        : m.status === "dead"
+                          ? "bg-red-500"
+                          : m.status === "gone"
+                            ? "bg-zinc-700"
+                            : "bg-blue-400"
+                  }`}
+                />
+                <span className="min-w-0 flex-1 truncate text-zinc-300">{m.title}</span>
+                <span className="shrink-0 text-zinc-600">{m.status}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {momentum && (
+        <section className="rounded-lg border border-yellow-500/30 bg-yellow-400/5 p-3">
+          <h2 className="mb-1 flex items-center gap-1.5 font-semibold tracking-wide text-yellow-300 uppercase">
+            ▸ Next
+            <span className="ml-auto font-normal text-[10px] normal-case text-zinc-500">{momentum.label}</span>
+          </h2>
+          <p className="mb-2 break-words text-zinc-200">{momentum.text}</p>
+          <button
+            ref={doneRef}
+            className="ml-auto block rounded bg-yellow-400 px-2.5 py-1 font-medium text-zinc-950 hover:bg-yellow-300"
+            onClick={() => void finishMomentum()}
+          >
+            ✓ Done
+          </button>
+        </section>
+      )}
+
+      <section>
+        <h2
+          className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-orange-400 uppercase select-none"
+          onClick={() => toggleSection("decisions")}
+        >
+          <span className="text-[9px] text-zinc-600">{collapsed.has("decisions") ? "▸" : "▾"}</span>
+          Decisions {openDecisions.length > 0 && `(${openDecisions.length})`}
+        </h2>
+        {!collapsed.has("decisions") && (
+          <>
+            {openDecisions.length === 0 && <p className="text-zinc-600">Nothing waiting on you.</p>}
+            <ul className="flex flex-col gap-2">
+              {openDecisions.map((d) => (
+                <li key={d.id} className="relative rounded border border-yellow-800/60 bg-yellow-950/20 p-2">
+                  <button
+                    className="absolute top-1 right-1 leading-none text-yellow-800 hover:text-yellow-500"
+                    title="Dismiss — not a real decision"
+                    onClick={() => void setStatus(d, "dismissed")}
+                  >
+                    ✕
+                  </button>
+                  <p className="break-words pr-5 text-orange-300">{d.question}</p>
+                  {d.assumption && (
+                    <p className="mt-1 text-zinc-400">agent assumed: {d.assumption}</p>
+                  )}
+                  <div className="mt-1.5 flex gap-2 text-zinc-400">
+                    <button className="text-red-400 hover:text-red-300" title="Prefill answer in terminal" onClick={() => onAnswerNow(d)}>
+                      ✎ answer
+                    </button>
+                    <button className="text-yellow-400 hover:text-yellow-300" title="Show surrounding conversation" onClick={() => setContext(d)}>
+                      ⌕ context
+                    </button>
+                    <button className="text-green-400 hover:text-green-300" title="Fine — agent's call" onClick={() => void setStatus(d, "delegated")}>
+                      ⤳ delegate
+                    </button>
+                    <span className="ml-auto text-zinc-600">{ago(d.ts)}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {closedDecisions.length > 0 && (
+              <ul className="mt-2 flex flex-col gap-1 border-t border-zinc-800 pt-2 text-zinc-600">
+                {closedDecisions.map((d) => (
+                  <li key={d.id} className="truncate" title={`${d.question}${d.user_answer ? ` → ${d.user_answer}` : ""}`}>
+                    {d.status === "delegated" ? "⤳" : d.status === "dismissed" ? "✕" : "✓"} {d.question}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+      </section>
+
+      <section>
+        <h2
+          className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-red-400 uppercase select-none"
+          onClick={() => toggleSection("blockers")}
+        >
+          <span className="text-[9px] text-zinc-600">{collapsed.has("blockers") ? "▸" : "▾"}</span>
+          Blockers {open.length > 0 && `(${open.length})`}
+        </h2>
+        {!collapsed.has("blockers") && (
+          <>
+            <div className="mb-2 flex gap-1">
+              <input
+                className="min-w-0 flex-1 rounded bg-zinc-800 px-2 py-1 text-zinc-200 outline-none placeholder:text-zinc-600"
+                placeholder="Add blocker…"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && void addManual()}
+              />
+            </div>
+            {open.length === 0 && <p className="text-zinc-600">None open.</p>}
+            <ul className="flex flex-col gap-2">
+              {open.map((b) => (
+                <li key={b.id} className="relative flex items-start gap-2 rounded border border-red-800/60 bg-red-950/20 p-2 pr-5">
+                  <button
+                    className="absolute top-1 right-1 leading-none text-red-800 hover:text-red-500"
+                    title="Delete"
+                    onClick={() => void remove(b)}
+                  >
+                    ✕
+                  </button>
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    onChange={() => void resolve(b)}
+                    className="mt-0.5 accent-red-500"
+                  />
+                  <span className="min-w-0 flex-1">
+                    {b.source !== "manual" ? (
+                      // Detector blockers: human label leads, raw match line below,
+                      // clamped to two lines with a ＋ to expand.
+                      <>
+                        <span className="break-words text-red-300">
+                          {b.source}
+                          <button
+                            className="ml-1 text-zinc-100 hover:text-white"
+                            title={expandedBlockers.has(b.id) ? "Collapse" : "Expand"}
+                            onClick={() => toggleBlocker(b.id)}
+                          >
+                            {expandedBlockers.has(b.id) ? "−" : "＋"}
+                          </button>
+                        </span>
+                        <p
+                          className={`break-all font-mono text-[10px] text-zinc-500 ${
+                            expandedBlockers.has(b.id) ? "" : "line-clamp-2"
+                          }`}
+                        >
+                          {b.text}
+                        </p>
+                      </>
+                    ) : (
+                      <span className="break-words text-red-300">{b.text}</span>
+                    )}
+                    <span className="mt-1.5 block text-right text-zinc-600">{ago(b.ts)}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {done.length > 0 && (
+              <ul className="mt-2 flex flex-col gap-1 border-t border-zinc-800 pt-2">
+                {done.map((b) => (
+                  <li key={b.id} className="flex items-start gap-2 text-zinc-600 line-through">
+                    <input type="checkbox" checked onChange={() => void resolve(b)} className="mt-0.5" />
+                    <span className="min-w-0 flex-1 break-words">{b.text}</span>
+                    <button className="shrink-0 text-zinc-700 hover:text-zinc-200" title="Delete" onClick={() => void remove(b)}>
+                      ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+      </section>
+
+      <section>
+        <h2
+          className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-emerald-400 uppercase select-none"
+          onClick={() => toggleSection("accomplished")}
+        >
+          <span className="text-[9px] text-zinc-600">{collapsed.has("accomplished") ? "▸" : "▾"}</span>
+          Accomplished
+        </h2>
+        {!collapsed.has("accomplished") && (
+          <>
+            {unclaimed.length > 0 && (
+              <ul className="mb-1.5 flex flex-col gap-1 border-b border-emerald-800/40 pb-1.5">
+                {unclaimed.map((u) => (
+                  <li key={u.session_id} className="flex items-center gap-2">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_6px_2px_rgba(16,185,129,0.6)]" />
+                    <span className="flex-1 text-emerald-200">Agent finished, unclaimed</span>
+                    <span className="text-zinc-600">{ago(u.ts)}</span>
+                    <button
+                      className="shrink-0 text-zinc-600 hover:text-zinc-200"
+                      title="Dismiss"
+                      onClick={() => void dismissUnclaimed(u.session_id)}
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {toolEvents.length === 0 && unclaimed.length === 0 && (
+              <p className="text-zinc-600">No tool activity recorded.</p>
+            )}
+            <ul className="flex flex-col gap-1.5">
+              {(showAllTools ? toolEvents : toolEvents.slice(0, ROW_CAP)).map((e) => (
+                <li key={e.id} className="flex gap-2">
+                  <span className="w-8 shrink-0 text-right text-zinc-600">{ago(e.ts)}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-emerald-300" title={e.plain}>
+                      {e.plain}
+                    </span>
+                    {e.detail && (
+                      <span className="block truncate font-mono text-[10px] text-zinc-600" title={e.detail}>
+                        {e.tool} {e.detail}
+                      </span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {toolEvents.length > ROW_CAP && (
+              <button
+                className={EXPAND_BTN}
+                onClick={() => setShowAllTools((s) => !s)}
+              >
+                {showAllTools ? "−" : `＋ ${toolEvents.length - ROW_CAP}`}
+              </button>
+            )}
+          </>
+        )}
+      </section>
+
+      <section>
+        <h2
+          className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-sky-400 uppercase select-none"
+          onClick={() => toggleSection("gitlog")}
+        >
+          <span className="text-[9px] text-zinc-600">{collapsed.has("gitlog") ? "▸" : "▾"}</span>
+          Git log
+        </h2>
+        {!collapsed.has("gitlog") && (
+          <>
+            {commits.length === 0 && <p className="text-zinc-600">Not a git repo.</p>}
+            <ul className="flex flex-col gap-1">
+              {(showAllCommits ? commits : commits.slice(0, ROW_CAP)).map((c) => (
+                <li key={c.hash} className="flex gap-2">
+                  <span className="w-8 shrink-0 text-right text-zinc-600">{ago(c.ts * 1000)}</span>
+                  <span className="min-w-0 flex-1 truncate text-sky-300" title={c.subject}>
+                    <span className="font-mono text-zinc-500">{c.hash}</span> {c.subject}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {commits.length > ROW_CAP && (
+              <button
+                className={EXPAND_BTN}
+                onClick={() => setShowAllCommits((s) => !s)}
+              >
+                {showAllCommits ? "−" : `＋ ${commits.length - ROW_CAP}`}
+              </button>
+            )}
+          </>
+        )}
+      </section>
 
       {context && (
         // top-7 keeps the titlebar drag region reachable under the overlay
