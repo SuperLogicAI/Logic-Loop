@@ -17,7 +17,7 @@ codebase; concepts only, re-derived against our architecture invariants.
 | Re-entry | Phase 6 | 1d | Tab tether |
 | Unclaimed results | Phase 6 | 1d | — |
 | Nudges | Phase 6 | 0.5d | Unclaimed results |
-| Recursive fan-out spawn (RAH) | Phase 7 candidate | 2d | Tab tether, Versioned hook contract |
+| Recursive fan-out spawn (RAH) | Phase 7, in progress | 2d | Tab tether, Versioned hook contract |
 | Isolated loops (worktrees) | v1.1 | — | Tab tether |
 | Adapters (non-Claude agents) | v2 | — | Versioned hook contract |
 | Model traffic panel (Safe Router) | Phase 8 candidate | 1d | External: Safe Router v0 log |
@@ -273,7 +273,7 @@ cheaper exactly as Adapters gets more expensive.
   tab and project. Rows with an unknown tether → project-level only, no
   misattribution.
 
-## Recursive fan-out spawn (RAH) — Phase 7 candidate
+## Recursive fan-out spawn (RAH) — Phase 7, in progress
 
 Source: Lumer et al., "Recursive Agent Harnesses" (arXiv:2606.13643).
 Pattern named *harness recursion*: a parent agent writes ordinary code that
@@ -303,18 +303,24 @@ another PTY the ingest pipeline already knows how to bind.
   child gets a real per-tab uuid, not the extractor sentinel. Get this
   distinction into the PLAN.md explicitly before build; conflating the two
   is exactly the class of bug that produced the original incident.
-- Schema: new `spawn_group_id` (nullable) on tabs/sessions linking children to
-  the originating tab, so panels can roll results up instead of scattering N
-  tabs with no relation.
+- Schema (migration 8, as built): two tables — `spawn_groups` (id,
+  parent_tab_id, label) and `spawn_group_members` (group_id, child_tab_id,
+  cmd) — not a nullable `spawn_group_id` column, since tabs aren't persisted
+  rows today (Phase 6 stores `session_bindings`, not tabs).
 - New panel surface (parent tab shows aggregate child progress) — unlike
   Phase 5's "no new panels" constraint, this phase's whole value is that
   rollup view. Still a dumb SQL view per invariant #3; aggregation is a
   query, not new intelligence.
 
-**Not decided yet, needs a PLAN.md pass:** how a workload gets partitioned
-(agent-authored script vs. a built-in splitter), what "done" looks like for
-the parent tab when children finish at different times, and whether children
-can themselves fan out (recursion depth limit).
+**Resolved in PLAN.md (see there for the full reasoning):**
+- Partitioning: agent-authored script only, no built-in splitter (YAGNI —
+  revisit if a pattern emerges).
+- Parent "done": no synthesized group-level event. The rollup shows
+  per-child status and a count; "done" is when the human has claimed every
+  child, via the existing per-tab unclaimed-result machinery.
+- Recursion depth: 1 for this phase. A child is an ordinary tab and could
+  fan out again, but `spawn_group_id` is single-level — no ancestor link for
+  a grandchild's group. Depth-N ancestry is a later migration if ever needed.
 
 ## RHI thread — deferred, revisit after Adapters (v2)
 

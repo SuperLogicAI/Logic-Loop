@@ -113,6 +113,11 @@ fn valid_resume_id(sid: &str) -> bool {
     !sid.is_empty() && sid.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
 }
 
+// Each param is a flat named field on the JS `invoke("pty_spawn", {...})`
+// call site (Tauri's command convention) — bundling them into a struct would
+// mean every caller nests its args under one key, an unrelated-to-this-phase
+// rewrite of every existing pty_spawn call site.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn pty_spawn(
     app: AppHandle,
@@ -122,6 +127,7 @@ pub fn pty_spawn(
     rows: Option<u16>,
     tab_id: Option<String>,
     resume_session: Option<String>,
+    launch_cmd: Option<String>,
 ) -> Result<u32, String> {
     let pty_system = native_pty_system();
     let pair = pty_system
@@ -159,7 +165,18 @@ pub fn pty_spawn(
     drop(pair.slave);
 
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
-    let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+    let mut writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+
+    // Fan-out launch command (invariant #4, reworded 2026-08-15): written
+    // once here, before the session is stored or the id is returned to JS —
+    // spawn-time process configuration, not a write into an already-running
+    // PTY. No Tauri command exists to repeat this after the fact, and none
+    // should be added; that structural gap is the enforcement, not this
+    // being called carefully. Fail open: a bad command just errors inside
+    // the shell like a mistyped one would.
+    if let Some(c) = launch_cmd.filter(|c| !c.is_empty()) {
+        let _ = writer.write_all(format!("{c}\n").as_bytes());
+    }
 
     let id = state.next_id.fetch_add(1, Ordering::SeqCst);
     state.sessions.lock().map_err(|e| e.to_string())?.insert(

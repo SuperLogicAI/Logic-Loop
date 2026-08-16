@@ -6,9 +6,10 @@ export function ptySpawn(
   cols: number,
   rows: number,
   tabId?: string,
-  resumeSession?: string
+  resumeSession?: string,
+  launchCmd?: string
 ): Promise<number> {
-  return invoke<number>("pty_spawn", { cwd, cols, rows, tabId, resumeSession });
+  return invoke<number>("pty_spawn", { cwd, cols, rows, tabId, resumeSession, launchCmd });
 }
 
 /** Resolve `~` and case/symlinks to the real path. */

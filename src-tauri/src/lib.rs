@@ -113,6 +113,28 @@ pub fn run() {
               CREATE INDEX IF NOT EXISTS idx_session_bindings_tether
                 ON session_bindings(tab_tether, active, updated_at);",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 8,
+        description: "fan-out spawn groups",
+        sql: "CREATE TABLE IF NOT EXISTS spawn_groups (
+                id TEXT PRIMARY KEY,
+                parent_tab_id TEXT NOT NULL,
+                label TEXT,
+                created_at INTEGER NOT NULL
+              );
+              CREATE TABLE IF NOT EXISTS spawn_group_members (
+                group_id TEXT NOT NULL REFERENCES spawn_groups(id),
+                child_tab_id TEXT NOT NULL,
+                cmd TEXT,
+                created_at INTEGER NOT NULL,
+                PRIMARY KEY (group_id, child_tab_id)
+              );
+              CREATE INDEX IF NOT EXISTS idx_spawn_members_child
+                ON spawn_group_members(child_tab_id);
+              CREATE INDEX IF NOT EXISTS idx_spawn_groups_parent
+                ON spawn_groups(parent_tab_id);",
+        kind: MigrationKind::Up,
     }];
 
     tauri::Builder::default()

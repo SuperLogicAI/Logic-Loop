@@ -1,5 +1,15 @@
 import Database from "@tauri-apps/plugin-sql";
-import type { Blocker, Bookmark, Decision, ExtractorSettings, Note, ReentryCandidate, ToolEvent } from "../types";
+import type {
+  Blocker,
+  Bookmark,
+  Decision,
+  ExtractorSettings,
+  Note,
+  ReentryCandidate,
+  SpawnGroup,
+  SpawnGroupMember,
+  ToolEvent,
+} from "../types";
 import type { ExtractedDecision } from "./extractor";
 
 let db: Database | null = null;
@@ -417,4 +427,78 @@ export async function blockerCounts(): Promise<Record<string, number>> {
     "SELECT cwd, count(*) AS n FROM blockers WHERE resolved = 0 GROUP BY cwd"
   );
   return Object.fromEntries(rows.map((r) => [r.cwd, r.n]));
+}
+
+// --- Fan-out spawn groups (Phase 7): rollup is a dumb SQL view over these two
+// tables plus the existing events table — no new intelligence, no new event
+// types (invariant #3). ---
+
+export async function createSpawnGroup(
+  id: string,
+  parentTabId: string,
+  label: string | null
+): Promise<void> {
+  const d = await getDb();
+  await d.execute(
+    "INSERT INTO spawn_groups (id, parent_tab_id, label, created_at) VALUES ($1, $2, $3, $4)",
+    [id, parentTabId, label, Date.now()]
+  );
+}
+
+export async function addSpawnMember(
+  groupId: string,
+  childTabId: string,
+  cmd: string | null
+): Promise<void> {
+  const d = await getDb();
+  await d.execute(
+    "INSERT INTO spawn_group_members (group_id, child_tab_id, cmd, created_at) VALUES ($1, $2, $3, $4)",
+    [groupId, childTabId, cmd, Date.now()]
+  );
+}
+
+/** Pure lookup, split out from `groupForTab` the same way `latestPerTether`
+ * is split from `reentryCandidates` — so the round-trip logic is testable
+ * without a live DB. A tab matches as parent (owns the group) or as a member
+ * (child_tab_id in spawn_group_members). */
+export function findGroupForTab(
+  tabId: string,
+  groups: SpawnGroup[],
+  members: SpawnGroupMember[]
+): SpawnGroup | null {
+  const asParent = groups.find((g) => g.parent_tab_id === tabId);
+  if (asParent) return asParent;
+  const membership = members.find((m) => m.child_tab_id === tabId);
+  if (!membership) return null;
+  return groups.find((g) => g.id === membership.group_id) ?? null;
+}
+
+/** The group a tab belongs to, as parent or child — null if it's in neither role. */
+export async function groupForTab(tabId: string): Promise<SpawnGroup | null> {
+  const d = await getDb();
+  const groups = await d.select<SpawnGroup[]>("SELECT * FROM spawn_groups");
+  const members = await d.select<SpawnGroupMember[]>("SELECT * FROM spawn_group_members");
+  return findGroupForTab(tabId, groups, members);
+}
+
+export async function groupMembers(groupId: string): Promise<SpawnGroupMember[]> {
+  const d = await getDb();
+  return d.select<SpawnGroupMember[]>(
+    "SELECT * FROM spawn_group_members WHERE group_id = $1 ORDER BY created_at",
+    [groupId]
+  );
+}
+
+/** Whether this session has ever landed a result, claimed or not — the
+ * rollup's "done" status needs this (not just `unclaimedResults`) to tell
+ * "finished and claimed" apart from "still running", and it must survive a
+ * restart, so it reads the persisted events table rather than in-memory
+ * `unseenStops`. */
+export async function hasLandedResult(sessionId: string): Promise<boolean> {
+  const d = await getDb();
+  const rows = await d.select<{ n: number }[]>(
+    "SELECT count(*) AS n FROM events WHERE type = 'result_landed' AND session_id = $1",
+    [sessionId]
+  );
+  return (rows[0]?.n ?? 0) > 0;
 }

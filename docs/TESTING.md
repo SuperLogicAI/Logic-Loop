@@ -480,18 +480,62 @@ send it.
       must not affect anything else in the app (terminals, panels) — nudges
       just silently never fire.
 
+## 17. Phase 7 — Fan-out spawn (RAH)
+
+- [ ] Fan out 3 children from a parent tab (mixed cwds, one row with a
+      `claude` command, one plain shell). All 3 spawn, each tethered (hook
+      events bind by tether, not the cwd fallback — check they land in the
+      right tab even if two share a cwd). Parent tab's side panel shows a
+      "Fan-out" section, 0/3 done.
+- [ ] Finish one child's agent run → switch to the parent tab → its rollup
+      row for that child shows the flag dot (unclaimed). Claim it by
+      activating the child tab, then switch back to the parent → the row
+      flips to done and the aggregate count increments.
+- [ ] Kill one child's shell process externally (e.g. `kill` its PTY shell
+      PID from another terminal) → that child's dead-tab overlay appears;
+      its rollup row shows dead; siblings and the parent are unaffected
+      (fail open).
+- [ ] Relaunch the app → group membership survives (persisted tables); the
+      rollup rebuilds against the restored re-entry bindings. The Phase 6
+      §16 "claim it after that relaunch" behavior still holds for a fan-out
+      child, not just an ordinary tab.
+- [ ] Inspect `session_bindings` after a fan-out — no child ever carries the
+      extractor sentinel tether (`ingest::EXTRACTOR_TETHER`), and extractor
+      runs still don't get ingested. This is the 2026-07-19 self-ingest
+      failure mode; fan-out children are tethered the *opposite* way from
+      the extractor's exemption, and conflating the two reproduces it.
+- [ ] A child tab shows the "part of `<label>` (`<parent title>` ↗)" strip
+      pinned under its side-panel header; clicking it jumps to the parent
+      tab.
+- [ ] Paste a JSON array (e.g. `[{"cwd": "...", "cmd": "claude"}, {"cwd":
+      "..."}]`) into the Fan out modal's paste box, click "Load into rows
+      above" → the form's rows populate for review/edit; nothing spawns
+      until Launch is clicked (paste never auto-launches).
+- [ ] Fan out with one row's cwd deliberately invalid/unspawnable → that
+      child fails silently (fail open, invariant #2); the other rows still
+      spawn and the group still forms.
+
 ## Quality gates (machine-run, not manual)
 
-- [x] `npx tsc --noEmit` clean. *(rerun 2026-08-12 after the audit fixes)*
+- [x] `npx tsc --noEmit` clean. *(rerun 2026-08-15, Phase 7)*
 - [x] `cargo clippy --all-targets -- -D warnings` clean (in `src-tauri/`).
-      *(rerun 2026-08-12)*
+      *(rerun 2026-08-15, Phase 7 — `pty_spawn` needed
+      `#[allow(clippy::too_many_arguments)]` once `launch_cmd` pushed it to 8
+      params; Tauri commands map args 1:1 to the JS call site, so bundling
+      them into a struct would mean rewriting every existing `pty_spawn`
+      caller for an unrelated phase)*
 - [x] `cargo test` passes — 8/8, incl. `resume_id_rejects_shell_metacharacters`
-      (Phase 6) and the `SessionStart` hook-set assertions. *(rerun 2026-08-12)*
-- [x] `npm run golden` — 12/12 (claude). *(rerun 2026-08-12; no extraction-prompt changes)*
-- [x] All seven check scripts pass: `npm run` `dedupe:check`, `reentry:check`,
+      (Phase 6) and the `SessionStart` hook-set assertions. *(rerun 2026-08-15,
+      Phase 7; no new Rust unit tests added — the `launch_cmd` PTY write is
+      covered by TESTING.md §17, not a unit test)*
+- [x] `npm run golden` — 12/12 (claude). *(rerun 2026-08-15, Phase 7; no
+      extraction-prompt changes)*
+- [x] All eight check scripts pass: `npm run` `dedupe:check`, `reentry:check`,
       `unclaimed:check`, `notify:check`, `bind:check`, `epoch:check`,
-      `landing:check`. *(rerun 2026-08-12; `unclaimed:check` gained three
-      assertions covering the restart-seeding fix)*
+      `landing:check`, `spawn:check`. *(rerun 2026-08-15, Phase 7;
+      `spawn:check` is new — covers `findGroupForTab`'s parent/child/
+      unrelated-tab/two-groups round trip, the pure half of `groupForTab`,
+      same split as `latestPerTether`/`reentryCandidates`)*
 - [x] `EXTRACTOR=lmstudio LMSTUDIO_MODEL=<id> npm run golden` — local backend.
       Measured 2026-07-19; **use `qwen3.6-35b-a3b`** for ⚙ Sidebar LM:
 

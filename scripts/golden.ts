@@ -18,11 +18,23 @@ interface Fixture {
   };
 }
 
+// Same tether the app's own extractor.rs stamps on its `claude -p` child
+// (crate::ingest::EXTRACTOR_TETHER) — the ingest server drops any request
+// carrying it. Without this, running `npm run golden` from inside a Logic
+// Loop terminal tab inherits that tab's real LOGIC_LOOP_TAB_ID from the
+// shell env, so each fixture becomes a real observed session bound to that
+// tab, and its transcript gets fed to the live decision extractor — fixture
+// questions ("drop temp_users?") show up as real decisions on the project.
+// Found 2026-08-15 via a polluted Decisions panel; same bug class as the
+// 2026-07-19 self-ingest incident, different spawn site.
+const EXTRACTOR_TETHER = "__logic_loop_extractor__";
+
 function runClaude(prompt: string): string {
   return execFileSync("claude", ["-p", "--output-format", "text", "--model", "sonnet"], {
     input: prompt,
     encoding: "utf8",
     timeout: 120_000,
+    env: { ...process.env, LOGIC_LOOP_TAB_ID: EXTRACTOR_TETHER },
   });
 }
 
