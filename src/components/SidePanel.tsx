@@ -7,13 +7,15 @@ import type { AgentState, Blocker, Commit, Decision, FanOutRollup, Note, ToolEve
 
 interface Props {
   cwd: string; // expanded absolute project dir of the active tab
+  sessionId: string | null; // session currently bound to the active tab, for scoping decisions/tool events away from sibling tabs on the same cwd
   accent: string | null; // matching bookmark's color, if the project is bookmarked
   refreshKey: number; // bump to force reload (new events / blocker changes)
   prevCwd: string | null; // project of the tab we switched away from (residue)
   prevState?: AgentState; // that tab's last agent state
   blindPaths: string[]; // transcripts that failed to open — panels are incomplete
-  fanOut: FanOutRollup | null; // fan-out group the active tab belongs to, if any
+  fanOut: FanOutRollup[]; // every fan-out group the active tab belongs to (as parent, possibly several; as child, at most one), oldest first
   onSelectTab: (id: string) => void; // jump to a fan-out child/parent tab
+  onDismissMember: (groupId: string, childTabId: string) => void; // drop a lingering row from the fan-out rollup
   onBlockersChanged: () => void;
   onDecisionsChanged: () => void;
   onAnswerNow: (d: Decision) => void; // prefill terminal — user still hits Enter
@@ -32,6 +34,26 @@ const ROW_CAP = 5;
 const EXPAND_BTN =
   "mt-1.5 w-full rounded border border-zinc-800 py-0.5 text-center text-zinc-500 hover:border-zinc-700 hover:bg-zinc-800/50 hover:text-zinc-200";
 
+// Unicode ▾/▸ render as an unstyled fallback glyph (tofu dot) at 9px in the
+// webview font — SVG avoids relying on font glyph coverage.
+function Chevron({ collapsed, className }: { collapsed: boolean; className?: string }) {
+  return (
+    <svg
+      width="8"
+      height="8"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`shrink-0 transition-transform ${collapsed ? "-rotate-90" : ""} ${className ?? ""}`}
+    >
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
 function ago(ts: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
   if (s < 60) return `${s}s`;
@@ -42,6 +64,7 @@ function ago(ts: number): string {
 
 export function SidePanel({
   cwd,
+  sessionId,
   accent,
   refreshKey,
   prevCwd,
@@ -49,6 +72,7 @@ export function SidePanel({
   blindPaths,
   fanOut,
   onSelectTab,
+  onDismissMember,
   onBlockersChanged,
   onDecisionsChanged,
   onAnswerNow,
@@ -68,6 +92,7 @@ export function SidePanel({
   const [residueDraft, setResidueDraft] = useState("");
   const [showAllTools, setShowAllTools] = useState(false);
   const [showAllCommits, setShowAllCommits] = useState(false);
+  const [showAllFanOut, setShowAllFanOut] = useState(false);
   const [expandedBlockers, setExpandedBlockers] = useState<Set<number>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -101,13 +126,13 @@ export function SidePanel({
       repo.latestLandingNote(cwd).catch(() => null),
       repo.unclaimedResults(cwd).catch(() => []),
     ]);
-    setToolEvents(te);
+    setToolEvents(repo.scopeBySession(te, sessionId));
     setBlockers(bl);
     setCommits(gl);
-    setDecisions(dc);
+    setDecisions(repo.scopeBySession(dc, sessionId));
     setLanding(ln);
     setUnclaimed(uc);
-  }, [cwd]);
+  }, [cwd, sessionId]);
 
   const reloadResidue = useCallback(async () => {
     if (!prevCwd || prevCwd === cwd) {
@@ -221,6 +246,15 @@ export function SidePanel({
   const openDecisions = decisions.filter((d) => d.status === "open");
   const closedDecisions = decisions.filter((d) => d.status !== "open").slice(0, 10);
 
+  // A tab is a member of at most one group (a child is only ever created by a
+  // single launch), but can *parent* several — fan out again from a tab
+  // before clearing the last group, and both exist. Oldest first, so the
+  // original fan-out stays put and a newer one queues behind it rather than
+  // silently replacing it in the lookup (the bug this replaced).
+  const childStrip = fanOut.find((f) => !f.isParent) ?? null;
+  const parentGroups = fanOut.filter((f) => f.isParent);
+  const visibleParentGroups = showAllFanOut ? parentGroups : parentGroups.slice(0, 1);
+
   return (
     <div className="flex h-full w-72 min-w-[12rem] max-w-[32rem] shrink-0 resize-x flex-col overflow-hidden border-r border-zinc-800 bg-zinc-900 text-xs text-zinc-300">
       {/* Pinned header: never scrolls away. Text takes the project's bookmark
@@ -287,13 +321,13 @@ export function SidePanel({
           </span>
         </p>
       )}
-      {fanOut && !fanOut.isParent && (
+      {childStrip && (
         <p
           className="flex shrink-0 cursor-pointer items-center gap-1 border-b border-purple-500/20 bg-purple-400/5 px-3 py-1.5 text-[10px] text-purple-300 hover:bg-purple-400/10"
-          onClick={() => onSelectTab(fanOut.parentTabId)}
+          onClick={() => onSelectTab(childStrip.parentTabId)}
           title="Jump to the parent tab"
         >
-          part of {fanOut.label ?? "a fan-out"} ({fanOut.parentTitle} ↗)
+          part of {childStrip.label ?? "a fan-out"} ({childStrip.parentTitle} ↗)
         </p>
       )}
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3">
@@ -335,19 +369,27 @@ export function SidePanel({
           </ul>
         </section>
       )}
-      {fanOut && fanOut.isParent && (
-        <section className="rounded-lg border border-purple-500/30 bg-purple-400/5 p-3">
-          <h2 className="mb-1.5 flex items-center gap-1.5 font-semibold tracking-wide text-purple-300 uppercase">
-            ▸ Fan-out
-            {fanOut.label && (
-              <span className="ml-auto font-normal text-[10px] normal-case text-zinc-500">{fanOut.label}</span>
+      {parentGroups.length > 0 && (
+      <div className="flex flex-col gap-1.5">
+      {visibleParentGroups.map((f) => (
+        <section key={f.groupId} className="rounded-lg border border-purple-500/30 bg-purple-400/5 p-3">
+          <h2
+            className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-purple-300 uppercase select-none"
+            onClick={() => toggleSection(`fanout-${f.groupId}`)}
+          >
+            <Chevron collapsed={collapsed.has(`fanout-${f.groupId}`)} className="text-purple-300/85" />
+            Fan-out
+            {f.label && (
+              <span className="ml-auto font-normal text-[10px] normal-case text-zinc-500">{f.label}</span>
             )}
           </h2>
+          {!collapsed.has(`fanout-${f.groupId}`) && (
+            <>
           <p className="mb-2 text-zinc-500">
-            {fanOut.members.filter((m) => m.status === "done").length}/{fanOut.members.length} done
+            {f.members.filter((m) => m.status === "done").length}/{f.members.length} done
           </p>
           <ul className="flex flex-col gap-1">
-            {fanOut.members.map((m) => (
+            {f.members.map((m) => (
               <li
                 key={m.childTabId}
                 className={`flex items-center gap-2 rounded px-1.5 py-1 ${
@@ -370,10 +412,32 @@ export function SidePanel({
                 />
                 <span className="min-w-0 flex-1 truncate text-zinc-300">{m.title}</span>
                 <span className="shrink-0 text-zinc-600">{m.status}</span>
+                <button
+                  className="shrink-0 leading-none text-zinc-600 hover:text-red-400"
+                  title="Remove from group"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDismissMember(f.groupId, m.childTabId);
+                  }}
+                >
+                  ✕
+                </button>
               </li>
             ))}
           </ul>
+            </>
+          )}
         </section>
+      ))}
+      {parentGroups.length > 1 && (
+        <button
+          className="w-full rounded border border-purple-500/10 bg-purple-400/[0.015] py-0.5 text-center text-zinc-500 hover:border-purple-500/27 hover:bg-purple-400/[0.09] hover:text-purple-300/90"
+          onClick={() => setShowAllFanOut((v) => !v)}
+        >
+          {showAllFanOut ? "− hide newer fan-outs" : `+ ${parentGroups.length - 1} more fan-out${parentGroups.length - 1 === 1 ? "" : "s"}`}
+        </button>
+      )}
+      </div>
       )}
       {momentum && (
         <section className="rounded-lg border border-yellow-500/30 bg-yellow-400/5 p-3">
@@ -397,7 +461,7 @@ export function SidePanel({
           className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-orange-400 uppercase select-none"
           onClick={() => toggleSection("decisions")}
         >
-          <span className="text-[9px] text-zinc-600">{collapsed.has("decisions") ? "▸" : "▾"}</span>
+          <Chevron collapsed={collapsed.has("decisions")} className="text-orange-400/85" />
           Decisions {openDecisions.length > 0 && `(${openDecisions.length})`}
         </h2>
         {!collapsed.has("decisions") && (
@@ -450,7 +514,7 @@ export function SidePanel({
           className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-red-400 uppercase select-none"
           onClick={() => toggleSection("blockers")}
         >
-          <span className="text-[9px] text-zinc-600">{collapsed.has("blockers") ? "▸" : "▾"}</span>
+          <Chevron collapsed={collapsed.has("blockers")} className="text-red-400/85" />
           Blockers {open.length > 0 && `(${open.length})`}
         </h2>
         {!collapsed.has("blockers") && (
@@ -534,7 +598,7 @@ export function SidePanel({
           className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-emerald-400 uppercase select-none"
           onClick={() => toggleSection("accomplished")}
         >
-          <span className="text-[9px] text-zinc-600">{collapsed.has("accomplished") ? "▸" : "▾"}</span>
+          <Chevron collapsed={collapsed.has("accomplished")} className="text-emerald-400/85" />
           Accomplished
         </h2>
         {!collapsed.has("accomplished") && (
@@ -594,7 +658,7 @@ export function SidePanel({
           className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-sky-400 uppercase select-none"
           onClick={() => toggleSection("gitlog")}
         >
-          <span className="text-[9px] text-zinc-600">{collapsed.has("gitlog") ? "▸" : "▾"}</span>
+          <Chevron collapsed={collapsed.has("gitlog")} className="text-sky-400/85" />
           Git log
         </h2>
         {!collapsed.has("gitlog") && (

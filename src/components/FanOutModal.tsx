@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { RainbowText } from "./RainbowText";
 
 interface Row {
   cwd: string;
@@ -62,12 +61,10 @@ export function FanOutModal({ parentCwd, onLaunch, onCancel }: Props) {
   return (
     <div className="fixed inset-x-0 top-7 bottom-0 z-40 flex items-center justify-center bg-black/60" onClick={onCancel}>
       <div
-        className="max-h-[85vh] w-[36rem] max-w-[90vw] overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-4 shadow-xl"
+        className="max-h-[85vh] w-[36rem] max-w-[90vw] overflow-y-auto rounded-lg border border-purple-500/30 bg-zinc-900 p-4 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="mb-3 font-semibold">
-          <RainbowText text="Fan out" />
-        </h3>
+        <h3 className="mb-3 font-semibold text-purple-300">Fan out</h3>
         <input
           className="mb-3 w-full rounded bg-zinc-800 px-2 py-1 text-sm text-zinc-200 outline-none placeholder:text-zinc-600"
           placeholder="Label (optional)"
@@ -132,7 +129,7 @@ export function FanOutModal({ parentCwd, onLaunch, onCancel }: Props) {
             Cancel
           </button>
           <button
-            className="rounded bg-purple-500 px-3 py-1 font-medium text-white hover:bg-purple-400"
+            className="rounded bg-purple-500 px-3 py-1 font-medium text-black hover:bg-purple-400"
             onClick={launch}
           >
             Launch

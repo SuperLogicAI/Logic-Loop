@@ -96,8 +96,8 @@ export async function addEvent(sessionId: string, type: string, payloadJson: str
 /** Accomplished panel: recent tool uses for a project, straight off the events table. */
 export async function listToolEvents(cwd: string, limit = 50): Promise<ToolEvent[]> {
   const d = await getDb();
-  const rows = await d.select<{ id: number; ts: number; payload_json: string }[]>(
-    `SELECT id, ts, payload_json FROM events
+  const rows = await d.select<{ id: number; ts: number; session_id: string; payload_json: string }[]>(
+    `SELECT id, ts, session_id, payload_json FROM events
      WHERE type = 'hook:PostToolUse' AND json_extract(payload_json, '$.cwd') = $1
      ORDER BY ts DESC LIMIT $2`,
     [cwd, limit]
@@ -132,8 +132,24 @@ export async function listToolEvents(cwd: string, limit = 50): Promise<ToolEvent
     } catch {
       // keep defaults
     }
-    return { id: r.id, ts: r.ts, tool, detail, plain };
+    return { id: r.id, ts: r.ts, session_id: r.session_id, tool, detail, plain };
   });
+}
+
+/** Scope cwd-wide rows down to one tab's own session. Fan-out siblings (and
+ * any two tabs open on the same project) share a cwd, so the project-wide
+ * queries above return every session's rows — this is the filter that keeps
+ * a tab's panel from showing a sibling's decisions/tool activity.
+ * `sessionId` null (no hook has bound a session to this tab yet — a plain
+ * shell with no agent, or a tab that hasn't reported in) falls back to the
+ * unfiltered cwd-wide list, matching the existing untethered-session
+ * fallback used elsewhere in the app. */
+export function scopeBySession<T extends { session_id: string }>(
+  rows: T[],
+  sessionId: string | null
+): T[] {
+  if (!sessionId) return rows;
+  return rows.filter((r) => r.session_id === sessionId);
 }
 
 /** Accomplished panel headline: results that finished on this project but
@@ -457,28 +473,56 @@ export async function addSpawnMember(
   );
 }
 
-/** Pure lookup, split out from `groupForTab` the same way `latestPerTether`
+/** Pure lookup, split out from `groupsForTab` the same way `latestPerTether`
  * is split from `reentryCandidates` — so the round-trip logic is testable
- * without a live DB. A tab matches as parent (owns the group) or as a member
- * (child_tab_id in spawn_group_members). */
-export function findGroupForTab(
+ * without a live DB. A tab matches as parent (owns the group — possibly more
+ * than one, if you fan out again from the same tab before clearing the last
+ * one) or as a member (child_tab_id in spawn_group_members, at most one group
+ * — a child tab is only ever created by a single launch). Parent groups sort
+ * oldest-first: the original fan-out stays the one you land on, newer ones
+ * push down rather than silently replacing it (the bug this fixes — a second
+ * fan-out from the same tab used to be invisible until the first was fully
+ * dismissed, since the old lookup returned only a single first-match). */
+export function findGroupsForTab(
   tabId: string,
   groups: SpawnGroup[],
   members: SpawnGroupMember[]
-): SpawnGroup | null {
-  const asParent = groups.find((g) => g.parent_tab_id === tabId);
-  if (asParent) return asParent;
+): SpawnGroup[] {
+  const asParent = groups
+    .filter((g) => g.parent_tab_id === tabId)
+    .sort((a, b) => a.created_at - b.created_at);
+  if (asParent.length > 0) return asParent;
   const membership = members.find((m) => m.child_tab_id === tabId);
-  if (!membership) return null;
-  return groups.find((g) => g.id === membership.group_id) ?? null;
+  if (!membership) return [];
+  const group = groups.find((g) => g.id === membership.group_id);
+  return group ? [group] : [];
 }
 
-/** The group a tab belongs to, as parent or child — null if it's in neither role. */
-export async function groupForTab(tabId: string): Promise<SpawnGroup | null> {
+/** Every group a tab belongs to, as parent or child — empty if it's in neither role. */
+export async function groupsForTab(tabId: string): Promise<SpawnGroup[]> {
   const d = await getDb();
   const groups = await d.select<SpawnGroup[]>("SELECT * FROM spawn_groups");
   const members = await d.select<SpawnGroupMember[]>("SELECT * FROM spawn_group_members");
-  return findGroupForTab(tabId, groups, members);
+  return findGroupsForTab(tabId, groups, members);
+}
+
+/** Drop one child from its group (dismiss a lingering row from the rollup).
+ * If that was the last member, the group itself is deleted too — an empty
+ * group has nothing left to roll up and would otherwise sit orphaned in
+ * `spawn_groups` forever with no card to show it on. */
+export async function removeSpawnMember(groupId: string, childTabId: string): Promise<void> {
+  const d = await getDb();
+  await d.execute("DELETE FROM spawn_group_members WHERE group_id = $1 AND child_tab_id = $2", [
+    groupId,
+    childTabId,
+  ]);
+  const remaining = await d.select<{ n: number }[]>(
+    "SELECT count(*) AS n FROM spawn_group_members WHERE group_id = $1",
+    [groupId]
+  );
+  if ((remaining[0]?.n ?? 0) === 0) {
+    await d.execute("DELETE FROM spawn_groups WHERE id = $1", [groupId]);
+  }
 }
 
 export async function groupMembers(groupId: string): Promise<SpawnGroupMember[]> {

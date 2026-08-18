@@ -31,6 +31,7 @@ export interface Blocker {
 export interface ToolEvent {
   id: number;
   ts: number;
+  session_id: string;
   tool: string;
   detail: string;
   plain: string; // human-readable headline derived in the repo layer
