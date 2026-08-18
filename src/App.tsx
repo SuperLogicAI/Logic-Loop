@@ -30,8 +30,6 @@ import * as repo from "./lib/repo";
 import type { Bookmark, FanOutRollup, SpawnGroup, SpawnGroupMember, Tab } from "./types";
 import { PALETTE } from "./types";
 
-let tabCounter = 0;
-
 export default function App() {
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -129,7 +127,12 @@ export default function App() {
     // against a different project than one opened at the repo root.
     const cwd = await projectKeyOf(spawnCwd).catch(() => spawnCwd);
     // The tether must exist before the PTY does: hooks inherit it from the env.
-    const id = `tab-${++tabCounter}`;
+    // Must be globally unique for the app's lifetime, not just this process —
+    // session_bindings.tab_tether persists across relaunches, and a
+    // per-process counter reset to 0 on every launch collided with itself:
+    // "tab-6" alone had 12 different sessions bound to it over two days,
+    // silently burying all but the most-recently-updated one in re-entry.
+    const id = crypto.randomUUID();
     const ptyId = await ptySpawn(spawnCwd, 80, 24, id, undefined, opts?.cmd);
     const tab: Tab = {
       id,
@@ -160,7 +163,11 @@ export default function App() {
       for (const item of items) {
         try {
           const childId = await openTab({
-            name: item.name,
+            // No name field in the Fan-out modal's row form/paste JSON — every
+            // child defaulted to the generic "Terminal" title, making rollup
+            // rows indistinguishable. Same fallback ghost-tab titles already
+            // use: last path segment of the cwd.
+            name: item.name ?? item.cwd.split("/").filter(Boolean).pop() ?? item.cwd,
             cwd: item.cwd,
             color: PALETTE[7],
             cmd: item.cmd,
@@ -174,6 +181,11 @@ export default function App() {
     [openTab]
   );
   const [fanOutModalOpen, setFanOutModalOpen] = useState(false);
+  const [fanOutRefresh, setFanOutRefresh] = useState(0);
+  const dismissSpawnMember = useCallback(async (groupId: string, childTabId: string) => {
+    await repo.removeSpawnMember(groupId, childTabId).catch(() => undefined);
+    setFanOutRefresh((n) => n + 1);
+  }, []);
 
   // Fan-out rollup (Phase 7): DB-backed group/membership for the active tab,
   // refreshed on tab switch — same pattern as SidePanel's own cwd-keyed
@@ -181,45 +193,44 @@ export default function App() {
   // that needs a DB round-trip (invariant #3: dumb SQL view); PTY liveness
   // and the unclaimed flag are read straight from live state below, so they
   // never go stale between switches.
-  const [fanOutGroup, setFanOutGroup] = useState<{
-    group: SpawnGroup;
-    members: (SpawnGroupMember & { landed: boolean })[];
-  } | null>(null);
+  const [fanOutGroups, setFanOutGroups] = useState<
+    { group: SpawnGroup; members: (SpawnGroupMember & { landed: boolean })[] }[]
+  >([]);
 
   useEffect(() => {
     if (!activeId) {
-      setFanOutGroup(null);
+      setFanOutGroups([]);
       return;
     }
     let cancelled = false;
     void repo
-      .groupForTab(activeId)
-      .then(async (group) => {
-        if (!group) {
-          if (!cancelled) setFanOutGroup(null);
-          return;
-        }
-        const members = await repo.groupMembers(group.id);
-        const withLanded = await Promise.all(
-          members.map(async (m) => {
-            const tab = tabsRef.current.find((t) => t.id === m.child_tab_id);
-            const landed = tab?.sessionId
-              ? await repo.hasLandedResult(tab.sessionId).catch(() => false)
-              : false;
-            return { ...m, landed };
+      .groupsForTab(activeId)
+      .then(async (groups) => {
+        const withMembers = await Promise.all(
+          groups.map(async (group) => {
+            const members = await repo.groupMembers(group.id);
+            const withLanded = await Promise.all(
+              members.map(async (m) => {
+                const tab = tabsRef.current.find((t) => t.id === m.child_tab_id);
+                const landed = tab?.sessionId
+                  ? await repo.hasLandedResult(tab.sessionId).catch(() => false)
+                  : false;
+                return { ...m, landed };
+              })
+            );
+            return { group, members: withLanded };
           })
         );
-        if (!cancelled) setFanOutGroup({ group, members: withLanded });
+        if (!cancelled) setFanOutGroups(withMembers);
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [activeId]);
+  }, [activeId, fanOutRefresh]);
 
-  const fanOutRollup: FanOutRollup | null = useMemo(() => {
-    if (!fanOutGroup) return null;
-    const { group, members } = fanOutGroup;
+  const fanOutRollups: FanOutRollup[] = useMemo(() => {
+    return fanOutGroups.map(({ group, members }) => {
     const parentTab = tabs.find((t) => t.id === group.parent_tab_id);
     return {
       groupId: group.id,
@@ -229,19 +240,28 @@ export default function App() {
       parentTitle: parentTab?.title ?? group.parent_tab_id,
       members: members.map((m) => {
         const tab = tabs.find((t) => t.id === m.child_tab_id);
+        // "done" needs its own signal, not `m.landed` alone: `result_landed`
+        // only gets written when the Stop fires on a tab you're NOT watching
+        // (Phase 6's unclaimed-result flag) — a child finished while its tab
+        // was active never gets one. Live agentState covers that case (it's
+        // set on every state-bearing hook regardless of focus); `m.landed`
+        // stays as a fallback for a just-re-entered tab whose first hook
+        // since resume hasn't landed yet.
+        const done = !!tab && (tab.agentState === "idle" || m.landed);
         const status: FanOutRollup["members"][number]["status"] = !tab
           ? "gone"
           : tab.status === "dead"
             ? "dead"
             : unseenStops.has(tab.id)
               ? "flag"
-              : m.landed
+              : done
                 ? "done"
                 : "running";
         return { childTabId: m.child_tab_id, title: tab?.title ?? m.child_tab_id, cmd: m.cmd, status };
       }),
     };
-  }, [fanOutGroup, tabs, unseenStops, activeId]);
+    });
+  }, [fanOutGroups, tabs, unseenStops, activeId]);
 
   // Unclaimed results (Phase 6): a tab is claimed by becoming both the active
   // tab and the window having focus. Persisted so the Accomplished panel can
@@ -440,6 +460,10 @@ export default function App() {
           return state ? { ...next, sessionId: p.session_id, agentState: state } : next;
         })
       );
+      // Fan-out rollup's "done"/"running" depends on live agentState, so it
+      // needs a nudge on every state-bearing hook — not just tab switches —
+      // or a card sitting on the parent tab never notices a child finish.
+      if (state) setFanOutRefresh((n) => n + 1);
 
       const muted = cwd ? mutedProjectsRef.current.has(cwd) : false;
       const nudgeLabel = cwd ? (cwd.split("/").filter(Boolean).pop() ?? cwd) : "Logic Loop";
@@ -713,13 +737,15 @@ export default function App() {
         {railOpen && activeTab && (
           <SidePanel
             cwd={expand(activeTab.cwd)}
+            sessionId={activeTab.sessionId ?? null}
             accent={activeTab.color === PALETTE[7] ? null : activeTab.color}
             refreshKey={panelRefresh}
             prevCwd={prevSnap?.cwd ?? null}
             prevState={prevSnap?.state}
             blindPaths={Object.values(blindSessions)}
-            fanOut={fanOutRollup}
+            fanOut={fanOutRollups}
             onSelectTab={setActiveId}
+            onDismissMember={dismissSpawnMember}
             onBlockersChanged={refreshBlockerCounts}
             onDecisionsChanged={refreshDecisionCounts}
             onAnswerNow={answerNow}

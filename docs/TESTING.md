@@ -482,36 +482,36 @@ send it.
 
 ## 17. Phase 7 — Fan-out spawn (RAH)
 
-- [ ] Fan out 3 children from a parent tab (mixed cwds, one row with a
+- [x] Fan out 3 children from a parent tab (mixed cwds, one row with a
       `claude` command, one plain shell). All 3 spawn, each tethered (hook
       events bind by tether, not the cwd fallback — check they land in the
       right tab even if two share a cwd). Parent tab's side panel shows a
       "Fan-out" section, 0/3 done.
-- [ ] Finish one child's agent run → switch to the parent tab → its rollup
+- [x] Finish one child's agent run → switch to the parent tab → its rollup
       row for that child shows the flag dot (unclaimed). Claim it by
       activating the child tab, then switch back to the parent → the row
       flips to done and the aggregate count increments.
-- [ ] Kill one child's shell process externally (e.g. `kill` its PTY shell
+- [x] Kill one child's shell process externally (e.g. `kill` its PTY shell
       PID from another terminal) → that child's dead-tab overlay appears;
       its rollup row shows dead; siblings and the parent are unaffected
       (fail open).
-- [ ] Relaunch the app → group membership survives (persisted tables); the
+- [x] Relaunch the app → group membership survives (persisted tables); the
       rollup rebuilds against the restored re-entry bindings. The Phase 6
       §16 "claim it after that relaunch" behavior still holds for a fan-out
       child, not just an ordinary tab.
-- [ ] Inspect `session_bindings` after a fan-out — no child ever carries the
+- [x] Inspect `session_bindings` after a fan-out — no child ever carries the
       extractor sentinel tether (`ingest::EXTRACTOR_TETHER`), and extractor
       runs still don't get ingested. This is the 2026-07-19 self-ingest
       failure mode; fan-out children are tethered the *opposite* way from
       the extractor's exemption, and conflating the two reproduces it.
-- [ ] A child tab shows the "part of `<label>` (`<parent title>` ↗)" strip
+- [x] A child tab shows the "part of `<label>` (`<parent title>` ↗)" strip
       pinned under its side-panel header; clicking it jumps to the parent
       tab.
-- [ ] Paste a JSON array (e.g. `[{"cwd": "...", "cmd": "claude"}, {"cwd":
+- [x] Paste a JSON array (e.g. `[{"cwd": "...", "cmd": "claude"}, {"cwd":
       "..."}]`) into the Fan out modal's paste box, click "Load into rows
       above" → the form's rows populate for review/edit; nothing spawns
       until Launch is clicked (paste never auto-launches).
-- [ ] Fan out with one row's cwd deliberately invalid/unspawnable → that
+- [x] Fan out with one row's cwd deliberately invalid/unspawnable → that
       child fails silently (fail open, invariant #2); the other rows still
       spawn and the group still forms.
 

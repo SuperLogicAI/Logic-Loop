@@ -6,6 +6,11 @@ use std::process::Command;
 #[tauri::command]
 pub fn clipboard_text() -> String {
     Command::new("pbpaste")
+        // GUI-launched app inherits no LANG/LC_ALL; without one pbpaste
+        // guesses an encoding and mangles curly quotes/emoji into invalid
+        // UTF-8, which from_utf8_lossy below turns into U+FFFD.
+        .env("LANG", "en_US.UTF-8")
+        .env("LC_ALL", "en_US.UTF-8")
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
         .unwrap_or_default()
