@@ -17,10 +17,11 @@ codebase; concepts only, re-derived against our architecture invariants.
 | Re-entry | Phase 6 | 1d | Tab tether |
 | Unclaimed results | Phase 6 | 1d | — |
 | Nudges | Phase 6 | 0.5d | Unclaimed results |
-| Recursive fan-out spawn (RAH) | Phase 7, in progress | 2d | Tab tether, Versioned hook contract |
-| Isolated loops (worktrees) | v1.1 | — | Tab tether |
-| Adapters (non-Claude agents) | v2 | — | Versioned hook contract |
-| Model traffic panel (Safe Router) | Phase 8 candidate | 1d | External: Safe Router v0 log |
+| Recursive fan-out spawn (RAH) | DONE (Phase 7) | 2d | Tab tether, Versioned hook contract |
+| OpenCode adapter | Phase 8 | — | Versioned hook contract |
+| Isolated loops (worktrees) | Phase 9 candidate (was v1.1) | — | Tab tether |
+| Model traffic panel (Safe Router) | Phase 9 candidate | 1d | External: Safe Router v0 log |
+| Remaining Adapters (Antigravity, Codex, Gemini, Copilot) | v2 | — | OpenCode adapter |
 
 Phase boundaries still hard stops. Phase 5 items enter PLAN.md for approval
 before build, per process rules.
@@ -321,6 +322,64 @@ another PTY the ingest pipeline already knows how to bind.
 - Recursion depth: 1 for this phase. A child is an ordinary tab and could
   fan out again, but `spawn_group_id` is single-level — no ancestor link for
   a grandchild's group. Depth-N ancestry is a later migration if ever needed.
+
+## Open finding: non-Claude fan-out children never leave "running", show the whole project's decisions (surfaced 2026-08-17/18)
+
+Smoke-tested Phase 7 fan-out with three non-Claude launch commands (`codex`,
+`agy`/Antigravity, `opencode`) to check the "arbitrary agent CLI" claim RAH
+makes. Mechanism holds — PTY spawns, tether is attempted, tabs don't break,
+fail-open intact. Two display gaps found, both explained and neither is the
+`bindSession` cwd-fallback hijack first suspected (that theory is **wrong**,
+retracted — see below).
+
+**Confirmed mechanism (verified against the live sqlite DB, 2/3 CLIs,
+agy + opencode reproduced identically):**
+- A child's `tab.agentState`/`tab.sessionId` (`src/App.tsx:460`) only ever
+  get set inside the hook-payload handler. None of the three CLIs emit
+  Claude Code hooks, so neither field is ever set for a child tab — no
+  `session_bindings` row, no real event rows tethered to it (checked
+  directly in sqlite). Fan-out rollup status
+  (`App.tsx:250`, `done = tab.agentState === "idle" || m.landed`) has no
+  other input, so it's permanently stuck on "running" — this is *correct*
+  degraded behavior for a CLI with no adapter (invariant #1), not a bug.
+- `listDecisions`/`listBlockers` (`src/lib/repo.ts:191,247`) are cwd-scoped
+  only, no session filter in the SQL — project-wide by design, predates
+  fan-out entirely. `SidePanel`'s `scopeBySession(dc, sessionId)` on top is a
+  no-op when `sessionId` is null (nothing ever bound), so a hookless child
+  legitimately shows the *whole project's* decisions/blockers feed,
+  including its own parent tab's. Only `listToolEvents` got real per-session
+  scoping in Phase 7's bugfix commit; decisions/blockers never did.
+
+**Retracted:** first read of the codex run looked like `bindSession`'s cwd
+fallback (`src/lib/ingest.ts:56`) binding an unrelated outside Claude Code
+session onto the child (its panel showed that session's decisions, rollup
+said "done"). Traced against the DB: the "outside" session was actually a
+real, legitimately-tethered tab (this authoring session, tethered to its own
+tab, not fallback-matched) — `bindSession`'s tether branch always wins for
+real tethers and never reaches the fallback for it. The stale-decisions part
+is fully explained by the cwd-wide-by-design point above with no hijack
+needed. The rollup showing "done" for that one codex run is still
+unexplained — its group was dismissed before it could be inspected, and
+agy + opencode both reproduced "stuck running" cleanly (2/3, consistent with
+the confirmed mechanism). Treating it as unreproduced noise unless it recurs.
+
+**Fixed (2026-08-18):** `SidePanel` now treats a fan-out child with no bound
+session (`sessionId` null AND it's a fan-out child per its own `fanOut` prop)
+as isolated-to-empty for decisions and tool events, instead of falling
+through `scopeBySession`'s cwd-wide fallback. A plain tab or genuinely
+external terminal in the same state still gets the fallback — only
+spawn-launched children, which have a definite identity and no "cd away,
+typed claude by hand" justification, are excluded. `scopeBySession` itself
+is untouched (still correct for its original callers); the exclusion lives
+in `SidePanel.tsx`'s `isUnboundFanOutChild`.
+
+**Not fixed, scope explicitly excluded:** `blockers` has no `session_id`
+column at all (checked schema directly) — it's never been session-scoped for
+anyone, Claude fan-out included, not just non-Claude agents. Whether
+blockers should be project-wide by design (a blocker is a property of the
+project, not the session that found it) or need the same isolation is an
+open product question, not a bug this patch touches. Would need a migration
+if the answer is "isolate."
 
 ## RHI thread — deferred, revisit after Adapters (v2)
 

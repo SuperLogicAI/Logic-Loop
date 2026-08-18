@@ -117,6 +117,15 @@ export function SidePanel({
       return next;
     });
 
+  // A fan-out child never picked up its own tether (its CLI fires no Claude
+  // Code hooks, so `sessionId` stays null forever) is not the same "no
+  // session yet" as a plain tab or a genuinely external terminal — those get
+  // scopeBySession's cwd-wide fallback because there's no better signal. A
+  // spawn-launched child already has a definite identity (it's this specific
+  // fan-out row); showing it the whole project's decisions/tool-events
+  // instead is wrong, not a fallback. Isolate it to empty instead.
+  const isUnboundFanOutChild = !sessionId && fanOut.some((f) => !f.isParent);
+
   const reload = useCallback(async () => {
     const [te, bl, gl, dc, ln, uc] = await Promise.all([
       repo.listToolEvents(cwd).catch(() => []),
@@ -126,13 +135,13 @@ export function SidePanel({
       repo.latestLandingNote(cwd).catch(() => null),
       repo.unclaimedResults(cwd).catch(() => []),
     ]);
-    setToolEvents(repo.scopeBySession(te, sessionId));
+    setToolEvents(isUnboundFanOutChild ? [] : repo.scopeBySession(te, sessionId));
     setBlockers(bl);
     setCommits(gl);
-    setDecisions(repo.scopeBySession(dc, sessionId));
+    setDecisions(isUnboundFanOutChild ? [] : repo.scopeBySession(dc, sessionId));
     setLanding(ln);
     setUnclaimed(uc);
-  }, [cwd, sessionId]);
+  }, [cwd, sessionId, isUnboundFanOutChild]);
 
   const reloadResidue = useCallback(async () => {
     if (!prevCwd || prevCwd === cwd) {
