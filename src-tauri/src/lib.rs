@@ -1,6 +1,7 @@
 mod clipboard;
 mod extractor;
 mod ingest;
+mod opencode;
 mod pty;
 
 use pty::PtyManager;
@@ -206,6 +207,10 @@ pub fn run() {
             ingest::hooks_setup,
             ingest::hooks_remove,
             ingest::hooks_status,
+            opencode::opencode_detect,
+            opencode::opencode_hooks_setup,
+            opencode::opencode_hooks_remove,
+            opencode::opencode_hooks_status,
             extractor::run_extractor,
             clipboard::clipboard_text,
             clipboard::clipboard_image_path

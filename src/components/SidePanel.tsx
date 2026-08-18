@@ -268,7 +268,7 @@ export function SidePanel({
     <div className="flex h-full w-72 min-w-[12rem] max-w-[32rem] shrink-0 resize-x flex-col overflow-hidden border-r border-zinc-800 bg-zinc-900 text-xs text-zinc-300">
       {/* Pinned header: never scrolls away. Text takes the project's bookmark
           color when one exists; plain grey otherwise. */}
-      <div className="flex shrink-0 items-center gap-1.5 border-b border-zinc-800 px-3 pt-3 pb-1.5">
+      <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-zinc-800 px-3">
         <p
           className="min-w-0 flex-1 truncate font-mono text-[10px] text-zinc-500"
           style={accent ? { color: accent } : undefined}

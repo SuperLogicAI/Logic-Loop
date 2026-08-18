@@ -515,27 +515,92 @@ send it.
       child fails silently (fail open, invariant #2); the other rows still
       spawn and the group still forms.
 
+## 18. Phase 8 — OpenCode adapter
+
+- [x] Binary detection: with `opencode` on `$PATH`, the "opencode ?/on/off"
+      pill appears in the bookmarks bar next to "hooks on". *(2026-08-18:
+      first pass found a real gap, not a bug — `opencode` had only ever been
+      run via `npx`, no persistent binary on `$PATH` for detection to find.
+      `npm i -g opencode-ai` fixed it; pill appeared after a window reload —
+      `opencode_detect` is a live PATH check at mount, doesn't need a
+      rebuild, just a remount.)* Rename/remove `opencode` from `$PATH` (or
+      test on a machine without it) → pill is absent entirely, not just
+      disabled. *(not yet re-verified now that it's installed — low risk,
+      logic unchanged since the empty-PATH case above proved it works)*
+- [x] Click the pill off→on: `~/.config/opencode/opencode.json` gains a
+      `"plugin"` entry pointing at
+      `~/.context-terminal/logic-loop-opencode-plugin.mjs`; that file exists
+      and is non-empty. Any pre-existing unrelated content in
+      `opencode.json` (model, other plugins) is untouched. *(2026-08-18:
+      confirmed — file went from `{}` to the expected `"plugin"` array.)*
+- [x] Click on→off: our plugin entry is removed; unrelated content in
+      `opencode.json` is still untouched (byte-identical minus our entry).
+      *(2026-08-18: confirmed — file went to `{"$schema": "..."}`, an
+      unrelated key opencode itself had added; our entry gone, that key
+      untouched.)*
+- [x] With the pill on, open a tab and run `opencode`, send one message,
+      let it use a tool, let it go idle. Inspect the app's sqlite DB
+      (`events` table) directly — rows with `hook_event_name` in
+      `SessionStart`/`UserPromptSubmit`/`PostToolUse`/`Stop` appear, tagged
+      with the session id OpenCode reports and the tab's real tether (not
+      cwd-fallback). *(2026-08-18: confirmed directly in sqlite — real
+      `ses_...`-format session id, real tab-uuid tether (not cwd-fallback),
+      full `SessionStart → UserPromptSubmit → PostToolUse → Stop` sequence
+      across two turns. `PostToolUse` carried the real tool name
+      (`"read"`, lowercase — opencode's own naming, cosmetic difference
+      from Claude's `"Read"`) plus full args/output, so the Accomplished
+      panel gets real content, not just a state dot.)*
+- [x] Tab dot reflects real agent state (not stuck on "running" the way an
+      unadapted CLI does per the 2026-08-17/18 fan-out smoke test findings,
+      ROADMAP.md). *(2026-08-18: confirmed — blue on execution, green on
+      completion, matching the DB's PostToolUse/Stop rows.)*
+- [x] Fan out with `opencode` as a child's launch command (§17's scenario,
+      re-run): the child's rollup status advances past "running" off a real
+      `session.idle` signal; the child's own decisions/tool-events panel is
+      no longer forced into `isUnboundFanOutChild`'s empty state (a real
+      session is bound) — confirm it shows *its own* activity, not the
+      parent's. *(2026-08-18: confirmed both visually — blue on execution,
+      green on completion, matching Phase 7's own state colors — and in
+      sqlite: real `ses_...` session id tethered to the child tab uuid
+      specifically (not `tab-23`/the parent, not cwd-fallback), clean
+      `SessionStart → UserPromptSubmit → Stop` sequence. Also incidentally
+      confirmed the landing-note popup fix from the same session — no
+      spurious prompt fired during this fan-out launch.)*
+- [x] Kill the ingest server (or point `ingest.env` at a dead port) while
+      opencode is mid-session → opencode's own session is completely
+      unaffected (responds normally, no hang, no visible delay) — the
+      fire-and-forget requirement (PLAN.md Phase 8 Mechanism §2) holds even
+      when every POST fails. *(2026-08-18: confirmed — `CT_PORT` pointed at
+      port 1, fresh `opencode` session responded to a message completely
+      normally. Tab dot correctly stayed grey/no-transition the whole time —
+      expected, not a failure: no event could possibly land against a dead
+      port, so no state change is the correct outcome, not evidence of a
+      hang.)*
+- [x] Uninstall/quit without removing the plugin, relaunch app, click pill
+      off then on again → still idempotent, no duplicate `"plugin"` entries.
+      *(2026-08-18: confirmed — off/on/off/on across a relaunch left exactly
+      one `logic-loop-opencode-plugin` entry, `$schema` untouched.)*
+
 ## Quality gates (machine-run, not manual)
 
-- [x] `npx tsc --noEmit` clean. *(rerun 2026-08-15, Phase 7)*
+- [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 8)*
 - [x] `cargo clippy --all-targets -- -D warnings` clean (in `src-tauri/`).
-      *(rerun 2026-08-15, Phase 7 — `pty_spawn` needed
-      `#[allow(clippy::too_many_arguments)]` once `launch_cmd` pushed it to 8
-      params; Tauri commands map args 1:1 to the JS call site, so bundling
-      them into a struct would mean rewriting every existing `pty_spawn`
-      caller for an unrelated phase)*
-- [x] `cargo test` passes — 8/8, incl. `resume_id_rejects_shell_metacharacters`
-      (Phase 6) and the `SessionStart` hook-set assertions. *(rerun 2026-08-15,
-      Phase 7; no new Rust unit tests added — the `launch_cmd` PTY write is
-      covered by TESTING.md §17, not a unit test)*
-- [x] `npm run golden` — 12/12 (claude). *(rerun 2026-08-15, Phase 7; no
-      extraction-prompt changes)*
-- [x] All eight check scripts pass: `npm run` `dedupe:check`, `reentry:check`,
+      *(rerun 2026-08-18, Phase 8 — new `opencode.rs` module clean, no new
+      lint carve-outs needed)*
+- [x] `cargo test` passes — 13/13, incl. `resume_id_rejects_shell_metacharacters`
+      (Phase 6), the `SessionStart` hook-set assertions, and 5 new
+      `opencode::tests` (setup/remove idempotency + byte-identical restore
+      of foreign `"plugin"` entries, plugin-source contract assertions).
+      *(rerun 2026-08-18, Phase 8)*
+- [x] `npm run golden` — 12/12 (claude). *(rerun 2026-08-18, Phase 8; no
+      extraction-prompt changes — decision extraction stays Claude-only this
+      phase, see PLAN.md Phase 8 non-goals)*
+- [x] All nine check scripts pass: `npm run` `dedupe:check`, `reentry:check`,
       `unclaimed:check`, `notify:check`, `bind:check`, `epoch:check`,
-      `landing:check`, `spawn:check`. *(rerun 2026-08-15, Phase 7;
-      `spawn:check` is new — covers `findGroupForTab`'s parent/child/
-      unrelated-tab/two-groups round trip, the pure half of `groupForTab`,
-      same split as `latestPerTether`/`reentryCandidates`)*
+      `landing:check`, `spawn:check`, `scope:check`. *(rerun 2026-08-18,
+      Phase 8; no changes to any of these — Phase 8 introduced no new
+      frontend branching, confirming the pipeline was already agent-agnostic
+      per PLAN.md's mechanism §5)*
 - [x] `EXTRACTOR=lmstudio LMSTUDIO_MODEL=<id> npm run golden` — local backend.
       Measured 2026-07-19; **use `qwen3.6-35b-a3b`** for ⚙ Sidebar LM:
 
