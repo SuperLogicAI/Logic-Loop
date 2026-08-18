@@ -23,6 +23,7 @@ import { FanOutModal } from "./components/FanOutModal";
 import type { AgentState, Decision } from "./types";
 import { ptyWrite } from "./lib/pty";
 import { TabBar } from "./components/TabBar";
+import { AgentStatusBar } from "./components/AgentStatusBar";
 import { BookmarksBar } from "./components/BookmarksBar";
 import { Terminal } from "./components/Terminal";
 import { canonicalizeCwd, projectKeyOf, ptyKill, ptyKillAll, ptySpawn } from "./lib/pty";
@@ -70,6 +71,13 @@ export default function App() {
   } | null>(null);
   const landingPromptRef = useRef(landingPrompt);
   landingPromptRef.current = landingPrompt;
+  // Fan-out spawns N children through the ordinary openTab path, which sets
+  // activeId each time — the tab-switch effect below reads that as N rapid
+  // human switches and offers a landing prompt for whatever was active before
+  // the fan-out started (usually the parent, which had real activity). Not a
+  // real "leaving this tab" moment; suppressed only for the duration of the
+  // spawn loop, not for a genuine switch away from a fan-out child afterward.
+  const suppressLandingRef = useRef(false);
   // Attention residue: snapshot of the tab we most recently switched away from.
   const [prevSnap, setPrevSnap] = useState<{ cwd: string; state?: AgentState } | null>(null);
   const prevActiveRef = useRef<string | null>(null);
@@ -160,22 +168,27 @@ export default function App() {
     ) => {
       const groupId = crypto.randomUUID();
       await repo.createSpawnGroup(groupId, parentTabId, label ?? null);
-      for (const item of items) {
-        try {
-          const childId = await openTab({
-            // No name field in the Fan-out modal's row form/paste JSON — every
-            // child defaulted to the generic "Terminal" title, making rollup
-            // rows indistinguishable. Same fallback ghost-tab titles already
-            // use: last path segment of the cwd.
-            name: item.name ?? item.cwd.split("/").filter(Boolean).pop() ?? item.cwd,
-            cwd: item.cwd,
-            color: PALETTE[7],
-            cmd: item.cmd,
-          });
-          await repo.addSpawnMember(groupId, childId, item.cmd ?? null);
-        } catch {
-          // fail open — this child never got a tab; siblings still spawn.
+      suppressLandingRef.current = true;
+      try {
+        for (const item of items) {
+          try {
+            const childId = await openTab({
+              // No name field in the Fan-out modal's row form/paste JSON — every
+              // child defaulted to the generic "Terminal" title, making rollup
+              // rows indistinguishable. Same fallback ghost-tab titles already
+              // use: last path segment of the cwd.
+              name: item.name ?? item.cwd.split("/").filter(Boolean).pop() ?? item.cwd,
+              cwd: item.cwd,
+              color: PALETTE[7],
+              cmd: item.cmd,
+            });
+            await repo.addSpawnMember(groupId, childId, item.cmd ?? null);
+          } catch {
+            // fail open — this child never got a tab; siblings still spawn.
+          }
         }
+      } finally {
+        suppressLandingRef.current = false;
       }
     },
     [openTab]
@@ -671,7 +684,7 @@ export default function App() {
       const prevTab = tabsRef.current.find((t) => t.id === prevId);
       if (prevTab) {
         setPrevSnap({ cwd: expand(prevTab.cwd), state: prevTab.agentState });
-        maybePromptLanding(prevTab);
+        if (!suppressLandingRef.current) maybePromptLanding(prevTab);
       }
     }
     // Switching to a flagged tab while the window isn't focused (e.g. via a
@@ -752,16 +765,19 @@ export default function App() {
             onMuteChanged={refreshMutedProjects}
           />
         )}
-        <div className="min-h-0 min-w-0 flex-1">
-          {tabs.map((tab) => (
-            <Terminal
-              key={tab.id}
-              tab={tab}
-              visible={tab.id === activeId}
-              onExit={markDead}
-              onRestart={(id, sid) => void restartTab(id, sid)}
-            />
-          ))}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <AgentStatusBar />
+          <div className="min-h-0 flex-1">
+            {tabs.map((tab) => (
+              <Terminal
+                key={tab.id}
+                tab={tab}
+                visible={tab.id === activeId}
+                onExit={markDead}
+                onRestart={(id, sid) => void restartTab(id, sid)}
+              />
+            ))}
+          </div>
         </div>
       </div>
       {landingPrompt && (

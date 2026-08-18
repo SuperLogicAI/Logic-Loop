@@ -14,6 +14,22 @@ export function hooksStatus(): Promise<boolean> {
   return invoke<boolean>("hooks_status");
 }
 
+export function opencodeDetect(): Promise<boolean> {
+  return invoke<boolean>("opencode_detect");
+}
+
+export function opencodeHooksSetup(): Promise<void> {
+  return invoke("opencode_hooks_setup");
+}
+
+export function opencodeHooksRemove(): Promise<void> {
+  return invoke("opencode_hooks_remove");
+}
+
+export function opencodeHooksStatus(): Promise<boolean> {
+  return invoke<boolean>("opencode_hooks_status");
+}
+
 export function onHookEvent(cb: (p: HookPayload) => void): Promise<UnlistenFn> {
   return listen<HookPayload>("ingest://hook", (e) => {
     if (typeof e.payload?.hook_event_name === "string" && typeof e.payload?.session_id === "string") {
