@@ -2,8 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import * as repo from "../lib/repo";
 import { burst } from "../lib/confetti";
-import { RainbowText } from "./RainbowText";
+import { HUES, RainbowText, cycle } from "./RainbowText";
 import type { AgentState, Blocker, Commit, Decision, FanOutRollup, Note, ToolEvent } from "../types";
+
+// Horizontal rainbow for the "Left behind" section's bottom divider —
+// same hue table as the heading text, applied via border-image so a
+// single-pixel border-bottom can carry a gradient (background can't).
+const RAINBOW_DIVIDER = `linear-gradient(90deg, ${HUES.map((_, i) => cycle(i, 0.6)).join(", ")})`;
 
 interface Props {
   cwd: string; // expanded absolute project dir of the active tab
@@ -341,7 +346,7 @@ export function SidePanel({
       )}
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3">
       {prevCwd && prevCwd !== cwd && (
-        <section className="border-b border-zinc-800 pb-3">
+        <section className="border-b pb-3" style={{ borderImage: `${RAINBOW_DIVIDER} 1` }}>
           <h2 className="mb-1.5 flex items-center gap-1.5 font-semibold tracking-wide uppercase">
             <RainbowText text="Left behind" />
             {prevState && <span className={`h-2 w-2 rounded-full ${STATE_DOT[prevState]}`} title={prevState} />}
