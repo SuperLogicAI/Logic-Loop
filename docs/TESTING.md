@@ -581,26 +581,128 @@ send it.
       *(2026-08-18: confirmed — off/on/off/on across a relaunch left exactly
       one `logic-loop-opencode-plugin` entry, `$schema` untouched.)*
 
+## 19. Phase 9 — Isolate loop (git worktrees) + Commit & Push footer
+
+1. [x] "Isolate loop…" on a repo tab, new branch "try-x" → worktree appears
+       under `~/.context-terminal/worktrees/<project>/try-x`, new tab opens
+       there, branch is `loop/try-x` checked out from the source tab's HEAD.
+       *(2026-08-18: confirmed.)*
+2. [x] Same flow, "Existing branch" tab, pick a branch with a `/` in its
+       name (e.g. `feature/foo`) → directory is sanitized (`feature-foo`),
+       branch checked out unchanged (`feature/foo`). *(2026-08-18: confirmed
+       — dir `feature-foo`, `git branch --show-current` inside it reports
+       `feature/foo`.)*
+3. [x] Confirm project identity isolation: the worktree tab's side panel
+       shows its own decisions/blockers, not the source repo tab's.
+       *(2026-08-18: confirmed on the try-x tab.)*
+4. [x] Close the worktree tab → `ask()` prompt appears; **Keep** → tab
+       closes, worktree + branch survive on disk (`git worktree list` still
+       shows it). *(2026-08-18: confirmed on try-x via `git worktree list`.)*
+5. [x] Reopen a tab isolate loop, close with **Remove worktree** → directory
+       gone, `git worktree list` no longer shows it, branch still exists
+       (`git branch --list` shows `loop/<slug>`). *(2026-08-18: confirmed on
+       try-y — dir gone from `git worktree list`, `loop/try-y` still in
+       `git branch --list`.)*
+6. [x] Make an uncommitted change in a worktree tab, close, choose **Remove
+       worktree** → second confirm names the dirty state explicitly;
+       declining leaves the worktree intact; confirming force-removes it.
+       *(2026-08-18: confirmed both halves — declined on try-z, `git status
+       --short` still showed the dirty `README.md`; confirmed force-remove
+       on a fresh try-w, dir gone from `git worktree list`, `loop/try-w`
+       branch survived. try-z's worktree was left dirty on disk afterward —
+       harmless leftover, not cleaned up as part of this test.)*
+7. [x] Quit and relaunch the app with a worktree tab open → re-entry
+       restores it as an ordinary ghost tab (Phase 6 behavior, unchanged);
+       closing it post-relaunch still offers the cleanup prompt
+       (`worktree_tabs` survived the restart, not just in-memory state).
+       *(2026-08-18: confirmed on try-b, with a real `claude` session
+       running in it before quitting — ghost-tab restore is keyed off
+       `session_bindings`, populated only by an agent's `SessionStart` hook,
+       so a worktree tab with no agent run in it (try-v, tried first) does
+       not ghost back; that's Phase 6 behavior, not a Phase 9 gap. After
+       relaunch, closing the restored try-b tab still fired the cleanup
+       prompt and Remove worked — `git worktree list` lost the entry, DB
+       row deleted, `loop/try-b` branch survived.)*
+8. [x] Attempt "Isolate loop" with a slug that collides with an existing
+       worktree dir/branch → the git error surfaces visibly in the modal,
+       no tab is created, no crash. *(2026-08-18: confirmed incidentally —
+       tried to reopen `loop/try-z` via "Existing branch" while its
+       worktree was still checked out; git's "already used by worktree at
+       ...” error rendered inline in red in the modal, Launch/Cancel still
+       responsive, no crash.)*
+9. [x] Commit & Push footer on a branch that already has an upstream → one
+       click commits + pushes, no `-u` retry needed. *(2026-08-20: confirmed
+       on `loop/footer-test` — two separate commit+push+PR clicks (`a7afe53`,
+       then `369a968`), both landed on the first plain `git push`, both
+       confirmed on `origin/loop/footer-test` via `git ls-remote`, no error
+       either time.)*
+10. [ ] Commit & Push footer on `main` → the "commit + push → main" button
+        triggers the `ask()` confirm; declining leaves everything
+        uncommitted.
+11. [ ] Clicking the left button while on `main` creates and pushes a real
+        `wip/<timestamp>` branch — `main` itself untouched locally and on
+        the remote.
+12. [ ] With nothing dirty, the footer shows "no changes" and no buttons.
+13. [ ] The cached commit message survives a second click without a second
+        LLM call (no observable delay/spinner), and differs (triggers one
+        generation) after the diff actually changes.
+
+**Bugs found and fixed during 1-8 (not in the original plan):**
+- Launching "Isolate loop" left the source tab's landing-note popup firing
+  spuriously on switch (same class of bug as the 2026-08-18 fan-out fix,
+  `suppressLandingRef` in `App.tsx`) — `isolateLoop` never set the
+  suppression flag at all. First fix (mirroring `fanOut`'s exact shape, an
+  extra await before clearing) reduced but did not eliminate it — the
+  underlying issue is that clearing the flag from the spawn call site races
+  the tab-switch effect's own scheduling, and `fanOut` only avoided it by
+  incidental extra-await timing, not by design. Real fix: the switch effect
+  (`App.tsx`, activeId-watch effect) now consumes the flag itself
+  (check-and-clear in one place) instead of the caller clearing it on a
+  timer; `isolateLoop`/`fanOut` only reset it early on an error path where
+  no switch ever happens to consume it. Confirmed no longer firing on
+  isolate-loop launch after the fix.
+- Isolate loop border styling adjusted per request: grey border with a
+  subtle purple (fan-out) / blue (isolate loop) inset tint at rest,
+  full-color border on hover (`TabBar.tsx`).
+
+**Bugs found and fixed during 9 (not in the original plan):**
+- `git_pr_create` spawned `gh` by bare name — worked from a terminal but
+  ENOENTed (`No such file or directory (os error 2)`) when Logic Loop is
+  launched as a GUI app, since a GUI process doesn't inherit the shell's
+  PATH and `gh` lives under Homebrew (`/opt/homebrew/bin` or
+  `/usr/local/bin`), not the default system PATH. Fixed with `gh_binary()`
+  in `pty.rs`, checking both Homebrew locations before falling back to bare
+  `"gh"`. Confirmed fixed: PR step no longer errors after rebuild.
+- Footer state (`footerError`/`prUrl`/`footerOpen`) was never reset on
+  `cwd` change — switching tabs left a previous tab's error or PR link
+  showing under the new tab's (unrelated) branch pill, reading as if it
+  just happened on the current branch. Found when a `footer-test` worktree
+  PR failure appeared to follow the user back to the `main` tab. Fixed:
+  `SidePanel.tsx` now clears all three on every `cwd` change; `commitAndPush`
+  still owns setting/clearing them during an action.
+
 ## Quality gates (machine-run, not manual)
 
-- [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 8)*
+- [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*
 - [x] `cargo clippy --all-targets -- -D warnings` clean (in `src-tauri/`).
-      *(rerun 2026-08-18, Phase 8 — new `opencode.rs` module clean, no new
-      lint carve-outs needed)*
-- [x] `cargo test` passes — 13/13, incl. `resume_id_rejects_shell_metacharacters`
-      (Phase 6), the `SessionStart` hook-set assertions, and 5 new
-      `opencode::tests` (setup/remove idempotency + byte-identical restore
-      of foreign `"plugin"` entries, plugin-source contract assertions).
-      *(rerun 2026-08-18, Phase 8)*
-- [x] `npm run golden` — 12/12 (claude). *(rerun 2026-08-18, Phase 8; no
-      extraction-prompt changes — decision extraction stays Claude-only this
-      phase, see PLAN.md Phase 8 non-goals)*
+      *(rerun 2026-08-18, Phase 9 — 10 new `pty.rs` git commands
+      (`git_branches`, `git_worktree_add/remove`, `git_current_branch`,
+      `git_has_changes`, `git_add_u`, `git_diff_cached`, `git_commit`,
+      `git_create_branch`, `git_push`) clean, no new lint carve-outs needed)*
+- [x] `cargo test` passes — 13/13, unchanged from Phase 8. *(rerun
+      2026-08-18, Phase 9 — no new Rust unit tests this phase: the new git
+      commands are thin subprocess wrappers in `git_log`'s own style, and
+      the new pure JS logic (`sanitizeSlug`) has no natural Rust-side
+      counterpart to test)*
+- [x] `npm run golden` — 12/12 (claude). *(rerun 2026-08-18, Phase 9; no
+      extraction-prompt changes — the Commit & Push footer reuses
+      `run_extractor` via a new, separate prompt in `commitMessage.ts`, not
+      `extractor.ts`)*
 - [x] All nine check scripts pass: `npm run` `dedupe:check`, `reentry:check`,
       `unclaimed:check`, `notify:check`, `bind:check`, `epoch:check`,
       `landing:check`, `spawn:check`, `scope:check`. *(rerun 2026-08-18,
-      Phase 8; no changes to any of these — Phase 8 introduced no new
-      frontend branching, confirming the pipeline was already agent-agnostic
-      per PLAN.md's mechanism §5)*
+      Phase 9; no changes to any of these — Phase 9 touched no ingestion/
+      binding/dedupe logic)*
 - [x] `EXTRACTOR=lmstudio LMSTUDIO_MODEL=<id> npm run golden` — local backend.
       Measured 2026-07-19; **use `qwen3.6-35b-a3b`** for ⚙ Sidebar LM:
 

@@ -3,14 +3,16 @@
   &nbsp;Logic Loop
 </h1>
 
-**Effortlessly switch between multiple concurrent Claude Code terminal sessions — a macOS app.**
+**Effortlessly switch between multiple concurrent AI coding agent terminal sessions — a macOS app.**
 
 ![Logic Loop](docs/assets/logic-loop-ui.png)
 
-Logic Loop is an open-source macOS app that aids the human's context-switching
-limits while running several Claude Code terminal sessions at once. Every
-competing tool tells you what your *agents* are doing. Logic Loop tells you what
-*you* need to do — and remembers everything you'd otherwise lose in the switch.
+Logic Loop is an open-source macOS app, built by [Super Logic AI](https://superlogicai.com),
+that aids the human's context-switching limits while running several AI coding
+agent terminal sessions at once — Claude Code and OpenCode today, more
+adapters planned. Every competing tool tells you what your *agents* are
+doing. Logic Loop tells you what *you* need to do — and remembers everything
+you'd otherwise lose in the switch.
 
 > Agent viewers manage the agents' context. Logic Loop manages yours.
 
@@ -38,23 +40,29 @@ switching:
 
 ## How it works
 
-Logic Loop never scrapes the terminal screen. Semantic events come from Claude
-Code's lifecycle **hooks** and its JSONL session **transcripts** — deterministic,
-structured, no ANSI parsing. Raw PTY bytes pass through untouched. Panels are
-plain SQL views over an append-only event log; the only place an LLM is used is
-the ambiguous 10% (did your reply address every question the agent asked?), and
-even that fails open — if extraction breaks, the terminals keep working.
+Logic Loop never scrapes the terminal screen. Semantic events come from
+structured agent protocols only — Claude Code's lifecycle **hooks** and its
+JSONL session **transcripts**, or an agent's own plugin/event API where one
+exists (OpenCode) — deterministic, structured, no ANSI parsing. Raw PTY bytes
+pass through untouched. Panels are plain SQL views over an append-only event
+log; the only place an LLM is used is the ambiguous 10% (did your reply
+address every question the agent asked?), and even that fails open — if
+extraction breaks, the terminals keep working.
 
 ## Status
 
-Early, private, actively built. Shipped and in progress:
+Early, actively built, dogfooded daily. Shipped:
 
 - ✅ Terminal shell — tabs, real PTYs, per-session state dots
 - ✅ Event spine — hook ingestion + transcript tailing
 - ✅ Accomplished + Blockers panels (deterministic)
 - ✅ Decision Tracker with fork detection
-- 🚧 Landing Note · Attention Residue · Momentum Builder
-- ⏳ Crash recovery, onboarding, public release
+- ✅ Landing Note · Attention Residue · Momentum Builder
+- ✅ Re-entry, unclaimed-result tracking, desktop nudges
+- ✅ Fan-out spawn groups — launch and track several agents from one session
+- ✅ OpenCode adapter — first non-Claude ingestion pipeline
+- 🚧 Isolated loops (git worktree–backed tabs)
+- ⏳ Crash recovery, onboarding, public release polish
 
 ## Stack
 
@@ -65,7 +73,7 @@ xterm.js · SQLite (tauri-plugin-sql) · localhost hook-ingest server.
 
 - macOS (Apple Silicon)
 - [Rust](https://rustup.rs) + Node 18+
-- [Claude Code](https://claude.com/claude-code) installed
+- [Claude Code](https://claude.com/claude-code) and/or [OpenCode](https://opencode.ai) installed
 
 ## Development
 
@@ -78,3 +86,8 @@ npm run build         # tsc + vite build
 ## License
 
 [GNU GPLv3](LICENSE).
+
+---
+
+Built and maintained by [Super Logic AI](https://superlogicai.com) — AI automation
+for small businesses.

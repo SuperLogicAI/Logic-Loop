@@ -9,6 +9,7 @@ import type {
   SpawnGroup,
   SpawnGroupMember,
   ToolEvent,
+  WorktreeTab,
 } from "../types";
 import type { ExtractedDecision } from "./extractor";
 
@@ -525,6 +526,17 @@ export async function removeSpawnMember(groupId: string, childTabId: string): Pr
   }
 }
 
+/** Every tab that is a fan-out child in any group, regardless of which tab is
+ * active — the tab-strip glow needs all of them at once, not just the
+ * active tab's own rollup. */
+export async function allFanOutChildTabIds(): Promise<string[]> {
+  const d = await getDb();
+  const rows = await d.select<{ child_tab_id: string }[]>(
+    "SELECT DISTINCT child_tab_id FROM spawn_group_members"
+  );
+  return rows.map((r) => r.child_tab_id);
+}
+
 export async function groupMembers(groupId: string): Promise<SpawnGroupMember[]> {
   const d = await getDb();
   return d.select<SpawnGroupMember[]>(
@@ -545,4 +557,40 @@ export async function hasLandedResult(sessionId: string): Promise<boolean> {
     [sessionId]
   );
   return (rows[0]?.n ?? 0) > 0;
+}
+
+// --- Worktree-bound tabs (Phase 9 "Isolate loop"): a lookup table, not a
+// state machine (invariant #3) — close-time cleanup and re-entry both need
+// to know a tab is worktree-bound even after a relaunch. ---
+
+export async function createWorktreeTab(
+  tabId: string,
+  repoCwd: string,
+  worktreePath: string,
+  branch: string
+): Promise<void> {
+  const d = await getDb();
+  await d.execute(
+    "INSERT INTO worktree_tabs (tab_id, repo_cwd, worktree_path, branch, created_at) VALUES ($1, $2, $3, $4, $5)",
+    [tabId, repoCwd, worktreePath, branch, Date.now()]
+  );
+}
+
+export async function worktreeForTab(tabId: string): Promise<WorktreeTab | null> {
+  const d = await getDb();
+  const rows = await d.select<WorktreeTab[]>("SELECT * FROM worktree_tabs WHERE tab_id = $1", [tabId]);
+  return rows[0] ?? null;
+}
+
+export async function deleteWorktreeTab(tabId: string): Promise<void> {
+  const d = await getDb();
+  await d.execute("DELETE FROM worktree_tabs WHERE tab_id = $1", [tabId]);
+}
+
+/** Every worktree-bound tab id — same "all of them, not just active" need
+ * as `allFanOutChildTabIds`, for the tab-strip glow. */
+export async function allWorktreeTabIds(): Promise<string[]> {
+  const d = await getDb();
+  const rows = await d.select<{ tab_id: string }[]>("SELECT tab_id FROM worktree_tabs");
+  return rows.map((r) => r.tab_id);
 }

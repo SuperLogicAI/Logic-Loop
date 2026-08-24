@@ -18,13 +18,24 @@ codebase; concepts only, re-derived against our architecture invariants.
 | Unclaimed results | Phase 6 | 1d | — |
 | Nudges | Phase 6 | 0.5d | Unclaimed results |
 | Recursive fan-out spawn (RAH) | DONE (Phase 7) | 2d | Tab tether, Versioned hook contract |
-| OpenCode adapter | Phase 8 | — | Versioned hook contract |
+| OpenCode adapter | DONE (Phase 8) | — | Versioned hook contract |
 | Isolated loops (worktrees) | Phase 9 candidate (was v1.1) | — | Tab tether |
 | Model traffic panel (Safe Router) | Phase 9 candidate | 1d | External: Safe Router v0 log |
-| Remaining Adapters (Antigravity, Codex, Gemini, Copilot) | v2 | — | OpenCode adapter |
+| Codex adapter | v2, next up | — | OpenCode adapter |
+| Remaining adapters (Antigravity, Gemini, Copilot) | v2, after Codex | — | Codex adapter |
 
 Phase boundaries still hard stops. Phase 5 items enter PLAN.md for approval
 before build, per process rules.
+
+**Adapter prep docs (2026-08-23):** `Coding Harness Docs/` (untracked,
+project root) holds `Open Code/` — 5 files, CLI/SDK/rules/ACP/formatters,
+already consumed for Phase 8 — and `Deepseek Harness/`, which turned out on
+inspection to be one unrelated academic PDF ("A Programming Paradigm for
+Spatiotemporal Composability"), not Deepseek CLI/hook material. No Deepseek
+adapter is planned; that folder is misfiled, not a roadmap item. No Codex
+prep docs exist yet — needed before that PLAN.md can be written (same bar
+OpenCode's docs cleared for Phase 8: hook/event API shape, not ANSI
+parsing, per invariant #1).
 
 ## Event epoch guard — bugfix, do now
 

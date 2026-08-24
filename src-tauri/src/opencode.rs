@@ -210,23 +210,33 @@ fn apply_setup(settings: &mut serde_json::Value) -> Result<(), String> {
     Ok(())
 }
 
+fn is_executable(candidate: &std::path::Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::metadata(candidate).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+    }
+    #[cfg(not(unix))]
+    {
+        candidate.is_file()
+    }
+}
+
 #[tauri::command]
 pub fn opencode_detect() -> bool {
-    let Ok(path_var) = std::env::var("PATH") else {
-        return false;
-    };
-    std::env::split_paths(&path_var).any(|dir| {
-        let candidate = dir.join("opencode");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::metadata(&candidate).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
-        }
-        #[cfg(not(unix))]
-        {
-            candidate.is_file()
-        }
-    })
+    // GUI apps launched from /Applications inherit macOS's minimal default
+    // PATH, not the user's shell PATH — so a $PATH-only scan misses installs
+    // like `~/.opencode/bin` (the official installer's default) that only a
+    // login shell's rc file adds to PATH.
+    let path_hit = std::env::var("PATH").is_ok_and(|path_var| {
+        std::env::split_paths(&path_var).any(|dir| is_executable(&dir.join("opencode")))
+    });
+    if path_hit {
+        return true;
+    }
+    [".opencode/bin", ".local/bin"]
+        .iter()
+        .any(|rel| is_executable(&PathBuf::from(home()).join(rel).join("opencode")))
 }
 
 #[tauri::command]

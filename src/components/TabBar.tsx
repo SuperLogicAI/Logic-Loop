@@ -25,12 +25,25 @@ interface Props {
   onClose: (id: string) => void;
   onNew: () => void;
   onFanOut: () => void;
+  onIsolateLoop: () => void;
   onReorder: (srcId: string, dstId: string) => void;
   blockerCount: (tab: Tab) => number;
   decisionCount: (tab: Tab) => number;
   /** An agent finished on this tab and it hasn't been switched to since. */
   unclaimed: (tab: Tab) => boolean;
+  /** Fan-out child (any group) — purple glow. */
+  isFanOutChild: (tab: Tab) => boolean;
+  /** Isolate-loop worktree tab — blue glow. */
+  isWorktreeBound: (tab: Tab) => boolean;
 }
+
+// Left/right/top only, no bottom — the tab visually joins the terminal pane
+// along its bottom edge, so a glow there would look like a seam, not a badge.
+function groupGlow(rgb: string): string {
+  return `0 -3px 8px -2px rgba(${rgb},0.55), -3px 0 8px -2px rgba(${rgb},0.55), 3px 0 8px -2px rgba(${rgb},0.55)`;
+}
+const FAN_OUT_GLOW = groupGlow("168,85,247"); // purple
+const ISOLATE_GLOW = groupGlow("59,130,246"); // blue
 
 export function TabBar({
   tabs,
@@ -39,10 +52,13 @@ export function TabBar({
   onClose,
   onNew,
   onFanOut,
+  onIsolateLoop,
   onReorder,
   blockerCount,
   decisionCount,
   unclaimed,
+  isFanOutChild,
+  isWorktreeBound,
 }: Props) {
   const [dragId, setDragId] = useState<string | null>(null);
   return (
@@ -54,9 +70,15 @@ export function TabBar({
       // release outside a tab cancels the drag instead of leaving it armed
       onPointerUp={() => setDragId(null)}
       onPointerLeave={() => setDragId(null)}
-      className="flex select-none items-end gap-1 bg-zinc-900 px-2 pt-2"
+      className="flex select-none items-end gap-1 bg-zinc-900"
     >
-      <div className="tab-strip flex min-w-0 items-end gap-1 overflow-x-auto">
+      {/* overflow-x-auto forces the y-axis to clip too, so the glow's
+          bleed needs its padding inside THIS box, not the outer wrapper —
+          the last tab's rightward bleed (and the first tab's leftward
+          bleed) hits this container's own clip edge, one level in from
+          where the old outer px-2 lived. Outer px-2 dropped in favor of
+          this to avoid double-padding the tab-strip/button gap. */}
+      <div className="tab-strip flex min-w-0 items-end gap-1 overflow-x-auto px-2 pt-2">
         {tabs.map((tab) => (
         <div
           key={tab.id}
@@ -74,12 +96,25 @@ export function TabBar({
             if (dragId && dragId !== tab.id) onReorder(dragId, tab.id);
           }}
           onPointerUp={() => setDragId(null)}
-          className={`group flex max-w-52 min-w-28 cursor-pointer items-center gap-2 rounded-t-md border-t-2 px-3 py-1.5 text-sm transition-[background-color,opacity] ${
+          className={`group relative flex max-w-52 min-w-28 cursor-pointer items-center gap-2 rounded-t-md border-t-2 px-3 py-1.5 text-sm transition-[background-color,opacity] ${
             tab.id === activeId
               ? "bg-zinc-700 text-zinc-100"
               : "bg-zinc-800/70 text-zinc-500 hover:bg-zinc-700/50 hover:text-zinc-300"
-          } ${dragId === tab.id ? "opacity-60 ring-1 ring-zinc-500" : ""}`}
-          style={{ borderTopColor: tab.color }}
+          } ${dragId === tab.id ? "opacity-60 ring-1 ring-zinc-500" : ""} ${
+            isFanOutChild(tab) || isWorktreeBound(tab) ? "z-10" : "z-0"
+          }`}
+          style={{
+            borderTopColor: tab.color,
+            // relative+z-10 above (plain flex siblings are static, so
+            // without it, a later-DOM-order neighbor paints over this
+            // shadow's bleed into their shared gap — the missing
+            // right-side glow on a middle tab).
+            boxShadow: isFanOutChild(tab)
+              ? FAN_OUT_GLOW
+              : isWorktreeBound(tab)
+                ? ISOLATE_GLOW
+                : undefined,
+          }}
         >
           <span
             className={`h-2 w-2 shrink-0 rounded-full ${dotClass(tab)} ${
@@ -117,11 +152,22 @@ export function TabBar({
         +
       </button>
       <button
-        className="mb-0.5 shrink-0 rounded px-2 py-1 text-xs leading-none text-zinc-400 hover:bg-zinc-700"
+        className="mb-0.5 flex shrink-0 items-center gap-1.5 rounded-full border border-zinc-700 px-2.5 py-1 text-sm leading-none text-zinc-400 hover:border-purple-500 hover:text-zinc-200"
+        style={{ boxShadow: "inset 0 0 0 1px rgba(168,85,247,0.4)" }}
         onClick={onFanOut}
         title="Fan out the active tab into N child tabs"
       >
-        Fan out…
+        Fan out
+        <img src="/fan.svg" alt="" className="h-4 w-4 shrink-0" />
+      </button>
+      <button
+        className="mr-2 mb-0.5 flex shrink-0 items-center gap-1.5 rounded-full border border-zinc-700 px-2.5 py-1 text-sm leading-none text-zinc-400 hover:border-blue-500 hover:text-zinc-200"
+        style={{ boxShadow: "inset 0 0 0 1px rgba(59,130,246,0.4)" }}
+        onClick={onIsolateLoop}
+        title="Spawn a tab bound to a fresh git worktree"
+      >
+        Isolate loop
+        <img src="/isolate.svg" alt="" className="h-4 w-4 shrink-0" />
       </button>
     </div>
   );

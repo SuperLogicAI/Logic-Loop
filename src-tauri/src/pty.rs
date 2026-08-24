@@ -299,6 +299,227 @@ pub fn git_log(cwd: String, limit: Option<u32>) -> Vec<Commit> {
         .collect()
 }
 
+/// Local branch names only — no remotes, no fetch (first-cut existing-branch
+/// picker, Phase 9). Empty vec if not a repo / no git, same fail-open shape
+/// as `git_log`.
+#[tauri::command]
+pub fn git_branches(cwd: String) -> Vec<String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&cwd)
+        .arg("branch")
+        .arg("--format=%(refname:short)")
+        .output();
+    let Ok(out) = out else { return vec![] };
+    if !out.status.success() {
+        return vec![];
+    }
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(|l| l.to_string())
+        .collect()
+}
+
+/// `new_branch: true` creates `branch` from the repo's current HEAD at
+/// `path`; `false` checks out an existing `branch` into the new worktree.
+/// This is a foreground, user-triggered action (invariant #2's carve-out) —
+/// failures surface git's real stderr rather than being swallowed.
+#[tauri::command]
+pub fn git_worktree_add(repo_cwd: String, path: String, branch: String, new_branch: bool) -> Result<(), String> {
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let mut cmd = std::process::Command::new("git");
+    cmd.arg("-C").arg(&repo_cwd).arg("worktree").arg("add");
+    if new_branch {
+        cmd.arg("-b").arg(&branch).arg(&path);
+    } else {
+        cmd.arg(&path).arg(&branch);
+    }
+    let out = cmd.output().map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
+}
+
+/// `force` only ever set by the caller after an explicit second confirm on a
+/// dirty worktree — never defaulted true silently.
+#[tauri::command]
+pub fn git_worktree_remove(repo_cwd: String, path: String, force: bool) -> Result<(), String> {
+    let mut cmd = std::process::Command::new("git");
+    cmd.arg("-C").arg(&repo_cwd).arg("worktree").arg("remove");
+    if force {
+        cmd.arg("--force");
+    }
+    cmd.arg(&path);
+    let out = cmd.output().map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
+}
+
+#[tauri::command]
+pub fn git_current_branch(cwd: String) -> Result<String, String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&cwd)
+        .arg("rev-parse")
+        .arg("--abbrev-ref")
+        .arg("HEAD")
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+/// Tracked-file dirty check (staged or modified), no untracked files —
+/// gates whether the Commit & Push footer is active at all.
+#[tauri::command]
+pub fn git_has_changes(cwd: String) -> bool {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&cwd)
+        .arg("status")
+        .arg("--porcelain")
+        .arg("--untracked-files=no")
+        .output();
+    match out {
+        Ok(o) if o.status.success() => !o.stdout.is_empty(),
+        _ => false,
+    }
+}
+
+#[tauri::command]
+pub fn git_add_u(cwd: String) -> Result<(), String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&cwd)
+        .arg("add")
+        .arg("-u")
+        .output()
+        .map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
+}
+
+#[tauri::command]
+pub fn git_diff_cached(cwd: String) -> String {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&cwd)
+        .arg("diff")
+        .arg("--cached")
+        .output();
+    match out {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        _ => String::new(),
+    }
+}
+
+/// Message reaches git as a real subprocess argument (`Command::arg`), never
+/// through a shell string — no injection surface even though the content is
+/// LLM-generated from repo data.
+#[tauri::command]
+pub fn git_commit(cwd: String, message: String) -> Result<(), String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&cwd)
+        .arg("commit")
+        .arg("-m")
+        .arg(&message)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
+}
+
+/// Distinct from `git_worktree_add`'s `-b` — same underlying git flag, kept
+/// as two commands so the two flows are never confused in review.
+#[tauri::command]
+pub fn git_create_branch(cwd: String, branch: String) -> Result<(), String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&cwd)
+        .arg("checkout")
+        .arg("-b")
+        .arg(&branch)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
+}
+
+/// Never a force-push — a rejected (diverged) push surfaces git's real error
+/// to the caller, no auto-rebase/auto-pull/silent retry-with-force.
+#[tauri::command]
+pub fn git_push(cwd: String, branch: String, set_upstream: bool) -> Result<(), String> {
+    let mut cmd = std::process::Command::new("git");
+    cmd.arg("-C").arg(&cwd).arg("push");
+    if set_upstream {
+        cmd.arg("-u").arg("origin").arg(&branch);
+    } else {
+        cmd.arg("origin").arg(&branch);
+    }
+    let out = cmd.output().map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
+}
+
+/// A GUI-launched app's PATH doesn't include Homebrew (`/opt/homebrew/bin`
+/// on Apple Silicon, `/usr/local/bin` on Intel) — `gh` resolves fine from a
+/// terminal but ENOENTs ("No such file or directory") when Logic Loop is
+/// launched from Finder/Dock. Check the common install locations before
+/// falling back to bare `"gh"` (still works if PATH happens to have it).
+fn gh_binary() -> String {
+    for candidate in ["/opt/homebrew/bin/gh", "/usr/local/bin/gh"] {
+        if std::path::Path::new(candidate).exists() {
+            return candidate.to_string();
+        }
+    }
+    "gh".to_string()
+}
+
+/// Best-effort on top of an already-succeeded push — gh has no `-C` flag
+/// (unlike git), so the repo is selected via cwd. Any failure (gh missing,
+/// unauthenticated, PR already exists) surfaces as an error string; the
+/// caller must not treat it as undoing the commit/push that already landed.
+#[tauri::command]
+pub fn git_pr_create(cwd: String, title: String, body: String) -> Result<String, String> {
+    let out = std::process::Command::new(gh_binary())
+        .current_dir(&cwd)
+        .arg("pr")
+        .arg("create")
+        .arg("--title")
+        .arg(&title)
+        .arg("--body")
+        .arg(&body)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{canon, project_key, valid_resume_id};

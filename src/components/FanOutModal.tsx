@@ -64,7 +64,11 @@ export function FanOutModal({ parentCwd, onLaunch, onCancel }: Props) {
         className="max-h-[85vh] w-[36rem] max-w-[90vw] overflow-y-auto rounded-lg border border-purple-500/30 bg-zinc-900 p-4 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="mb-3 font-semibold text-purple-300">Fan out</h3>
+        <h3 className="font-semibold text-purple-300">Fan out</h3>
+        <p className="mb-3 text-xs text-zinc-500">
+          Spawn several tabs at once, one per cwd/command row. Use it to kick off parallel
+          agent runs across repos or subfolders in a single click.
+        </p>
         <input
           className="mb-3 w-full rounded bg-zinc-800 px-2 py-1 text-sm text-zinc-200 outline-none placeholder:text-zinc-600"
           placeholder="Label (optional)"

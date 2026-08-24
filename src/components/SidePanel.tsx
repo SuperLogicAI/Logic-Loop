@@ -1,17 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { ask } from "@tauri-apps/plugin-dialog";
 import * as repo from "../lib/repo";
 import { burst } from "../lib/confetti";
+import { generateCommitMessage } from "../lib/commitMessage";
+import {
+  gitAddU,
+  gitCommit,
+  gitCreateBranch,
+  gitCurrentBranch,
+  gitDiffCached,
+  gitHasChanges,
+  gitPrCreate,
+  gitPush,
+} from "../lib/pty";
 import { RainbowText } from "./RainbowText";
-import type { AgentState, Blocker, Commit, Decision, FanOutRollup, Note, ToolEvent } from "../types";
+import type { Blocker, Commit, Decision, FanOutRollup, Note, ToolEvent } from "../types";
 
 interface Props {
   cwd: string; // expanded absolute project dir of the active tab
   sessionId: string | null; // session currently bound to the active tab, for scoping decisions/tool events away from sibling tabs on the same cwd
   accent: string | null; // matching bookmark's color, if the project is bookmarked
   refreshKey: number; // bump to force reload (new events / blocker changes)
-  prevCwd: string | null; // project of the tab we switched away from (residue)
-  prevState?: AgentState; // that tab's last agent state
   blindPaths: string[]; // transcripts that failed to open — panels are incomplete
   fanOut: FanOutRollup[]; // every fan-out group the active tab belongs to (as parent, possibly several; as child, at most one), oldest first
   onSelectTab: (id: string) => void; // jump to a fan-out child/parent tab
@@ -21,13 +31,6 @@ interface Props {
   onAnswerNow: (d: Decision) => void; // prefill terminal — user still hits Enter
   onMuteChanged: () => void; // App's notify-hot-path mute cache needs a refresh
 }
-
-const STATE_DOT: Record<AgentState, string> = {
-  working: "bg-sky-400",
-  waiting: "bg-amber-400",
-  idle: "bg-zinc-500",
-  error: "bg-red-400",
-};
 
 // Long lists collapse to this many rows behind a full-width ＋ toggle.
 const ROW_CAP = 5;
@@ -67,8 +70,6 @@ export function SidePanel({
   sessionId,
   accent,
   refreshKey,
-  prevCwd,
-  prevState,
   blindPaths,
   fanOut,
   onSelectTab,
@@ -85,16 +86,34 @@ export function SidePanel({
   const [blockers, setBlockers] = useState<Blocker[]>([]);
   const [decisions, setDecisions] = useState<Decision[]>([]);
   const [landing, setLanding] = useState<Note | null>(null); // active project, momentum
-  const [prevLanding, setPrevLanding] = useState<Note | null>(null); // previous project
-  const [residue, setResidue] = useState<Note[]>([]); // previous project, open residue
+  const [notes, setNotes] = useState<Note[]>([]); // active project, open notes & reminders
   const [context, setContext] = useState<Decision | null>(null);
   const [draft, setDraft] = useState("");
-  const [residueDraft, setResidueDraft] = useState("");
+  const [noteDraft, setNoteDraft] = useState("");
   const [showAllTools, setShowAllTools] = useState(false);
   const [showAllCommits, setShowAllCommits] = useState(false);
   const [showAllFanOut, setShowAllFanOut] = useState(false);
   const [expandedBlockers, setExpandedBlockers] = useState<Set<number>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  // Commit & Push footer (Phase 9): gitBranch "" means "not a repo / not
+  // loaded yet" — the footer hides rather than flashing "no changes".
+  const [gitBranch, setGitBranch] = useState("");
+  const [gitDirty, setGitDirty] = useState(false);
+  const [commitMsg, setCommitMsg] = useState("");
+  const [footerBusy, setFooterBusy] = useState<"generate" | "commit" | "pr" | null>(null);
+  const [footerError, setFooterError] = useState<string | null>(null);
+  const [footerOpen, setFooterOpen] = useState(false);
+  const [prUrl, setPrUrl] = useState<string | null>(null);
+  const [width, setWidth] = useState(288); // w-72
+  const resizeStart = useRef<{ x: number; width: number } | null>(null);
+  // cwd -> the diff a cached message was generated from, so a repeat click
+  // (or an unrelated panel refresh) never re-calls the LLM for the same diff.
+  const commitCacheRef = useRef(new Map<string, { diff: string; message: string }>());
+  // cwd currently generated/generating for — reset when the tree goes clean,
+  // so a genuinely new dirty state regenerates but a `refreshKey` tick while
+  // the same diff is still pending (or the user is mid-edit) does not.
+  const generatingForRef = useRef<string | null>(null);
 
   const toggleBlocker = (id: number) =>
     setExpandedBlockers((s) => {
@@ -127,47 +146,141 @@ export function SidePanel({
   const isUnboundFanOutChild = !sessionId && fanOut.some((f) => !f.isParent);
 
   const reload = useCallback(async () => {
-    const [te, bl, gl, dc, ln, uc] = await Promise.all([
+    const [te, bl, gl, dc, ln, nt, uc, branch, dirty] = await Promise.all([
       repo.listToolEvents(cwd).catch(() => []),
       repo.listBlockers(cwd).catch(() => []),
       invoke<Commit[]>("git_log", { cwd, limit: 15 }).catch(() => []),
       repo.listDecisions(cwd).catch(() => []),
       repo.latestLandingNote(cwd).catch(() => null),
+      repo.listNotes(cwd, "residue").catch(() => []),
       repo.unclaimedResults(cwd).catch(() => []),
+      gitCurrentBranch(cwd).catch(() => ""),
+      gitHasChanges(cwd).catch(() => false),
     ]);
     setToolEvents(isUnboundFanOutChild ? [] : repo.scopeBySession(te, sessionId));
     setBlockers(bl);
     setCommits(gl);
     setDecisions(isUnboundFanOutChild ? [] : repo.scopeBySession(dc, sessionId));
     setLanding(ln);
+    setNotes(nt.filter((n) => n.status === "open").slice(0, 3));
     setUnclaimed(uc);
+    setGitBranch(branch);
+    setGitDirty(dirty);
   }, [cwd, sessionId, isUnboundFanOutChild]);
-
-  const reloadResidue = useCallback(async () => {
-    if (!prevCwd || prevCwd === cwd) {
-      setPrevLanding(null);
-      setResidue([]);
-      return;
-    }
-    const [pl, rn] = await Promise.all([
-      repo.latestLandingNote(prevCwd).catch(() => null),
-      repo.listNotes(prevCwd, "residue").catch(() => []),
-    ]);
-    setPrevLanding(pl);
-    setResidue(rn.filter((n) => n.status === "open").slice(0, 3));
-  }, [prevCwd, cwd]);
 
   useEffect(() => {
     void reload();
   }, [reload, refreshKey]);
 
+  // Footer state (error/PR link/expanded) belongs to whichever cwd produced
+  // it — carrying it across a tab switch makes a stale error from tab A read
+  // as if it just happened on tab B's branch. Reset on cwd change only;
+  // commitAndPush already clears/sets these itself mid-action.
   useEffect(() => {
-    void reloadResidue();
-  }, [reloadResidue, refreshKey]);
+    setFooterError(null);
+    setPrUrl(null);
+    setFooterOpen(false);
+  }, [cwd]);
 
   useEffect(() => {
     void repo.isProjectMuted(cwd).then(setMuted).catch(() => undefined);
   }, [cwd]);
+
+  // Auto-generate the commit message once per genuinely-new dirty state, not
+  // on every `refreshKey` tick — that would stomp an in-progress manual edit
+  // and re-call the LLM for the same diff. Stages with `git add -u` first so
+  // the diff (and therefore the message) matches exactly what a commit click
+  // is about to commit.
+  useEffect(() => {
+    if (!gitDirty) {
+      generatingForRef.current = null;
+      setCommitMsg("");
+      return;
+    }
+    if (generatingForRef.current === cwd) return;
+    generatingForRef.current = cwd;
+    let cancelled = false;
+    setFooterBusy("generate");
+    void (async () => {
+      try {
+        await gitAddU(cwd);
+        const diff = await gitDiffCached(cwd);
+        if (cancelled) return;
+        const cached = commitCacheRef.current.get(cwd);
+        const message = cached && cached.diff === diff ? cached.message : await generateCommitMessage(diff);
+        if (cancelled) return;
+        commitCacheRef.current.set(cwd, { diff, message });
+        setCommitMsg(message);
+      } catch {
+        // fail open — footer still shows an empty, editable, committable field
+      } finally {
+        if (!cancelled) setFooterBusy(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [gitDirty, cwd]);
+
+  const commitAndPush = async (target: "branch" | "main") => {
+    if (target === "main") {
+      const ok = await ask("Push to origin/main?", {
+        title: "Push to main",
+        kind: "warning",
+        okLabel: "Push",
+        cancelLabel: "Cancel",
+      });
+      if (!ok) return;
+    }
+    setFooterError(null);
+    setPrUrl(null);
+    setFooterBusy("commit");
+    try {
+      let branch = gitBranch;
+      if (target === "branch" && gitBranch === "main") {
+        const stamp = new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14);
+        branch = `wip/${stamp}`;
+        await gitCreateBranch(cwd, branch);
+      }
+      await gitAddU(cwd);
+      const msg = commitMsg.trim();
+      if (!msg) throw new Error("commit message is empty");
+      await gitCommit(cwd, msg);
+      try {
+        await gitPush(cwd, branch, false);
+      } catch (e) {
+        // no upstream yet is a config gap, not a rejected push — safe to
+        // retry with -u; any other failure (e.g. diverged remote) surfaces.
+        if (/upstream/i.test(String(e))) {
+          await gitPush(cwd, branch, true);
+        } else {
+          throw e;
+        }
+      }
+      setGitBranch(branch);
+      setGitDirty(false);
+      generatingForRef.current = null;
+      commitCacheRef.current.delete(cwd);
+      setCommitMsg("");
+      // PR only makes sense off main — a push to main has nothing to PR
+      // against. Best-effort: the commit/push above already landed, so a
+      // failure here (no gh, unauthenticated, PR already open) surfaces
+      // separately and must not read as the commit having failed.
+      if (target === "branch") {
+        setFooterBusy("pr");
+        try {
+          const [title, ...rest] = msg.split("\n");
+          setPrUrl(await gitPrCreate(cwd, title, rest.join("\n").trim()));
+        } catch (e) {
+          setFooterError(`pushed — PR failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+    } catch (e) {
+      setFooterError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setFooterBusy(null);
+    }
+  };
 
   const toggleMute = async () => {
     const next = !muted;
@@ -176,17 +289,17 @@ export function SidePanel({
     onMuteChanged();
   };
 
-  const addResidue = async () => {
-    const text = residueDraft.trim();
-    if (!text || !prevCwd) return;
-    await repo.addNote(prevCwd, "residue", text, null);
-    setResidueDraft("");
-    await reloadResidue();
+  const addQuickNote = async () => {
+    const text = noteDraft.trim();
+    if (!text) return;
+    await repo.addNote(cwd, "residue", text, sessionId);
+    setNoteDraft("");
+    await reload();
   };
 
-  const dismissResidue = async (n: Note) => {
+  const dismissNote = async (n: Note) => {
     await repo.setNoteStatus(n.id, "done");
-    await reloadResidue();
+    await reload();
   };
 
   // Momentum: latest open landing note → oldest open decision → oldest open
@@ -260,12 +373,38 @@ export function SidePanel({
   // before clearing the last group, and both exist. Oldest first, so the
   // original fan-out stays put and a newer one queues behind it rather than
   // silently replacing it in the lookup (the bug this replaced).
+  // ponytail: pointer events, not native resize-x — resize-x's grip only
+  // lives in the bottom-right corner, unreachable on a full-height panel.
+  const onResizePointerDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    resizeStart.current = { x: e.clientX, width };
+    const onMove = (ev: PointerEvent) => {
+      if (!resizeStart.current) return;
+      const next = resizeStart.current.width + (ev.clientX - resizeStart.current.x);
+      setWidth(Math.min(512, Math.max(192, next)));
+    };
+    const onUp = () => {
+      resizeStart.current = null;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
   const childStrip = fanOut.find((f) => !f.isParent) ?? null;
   const parentGroups = fanOut.filter((f) => f.isParent);
   const visibleParentGroups = showAllFanOut ? parentGroups : parentGroups.slice(0, 1);
 
   return (
-    <div className="flex h-full w-72 min-w-[12rem] max-w-[32rem] shrink-0 resize-x flex-col overflow-hidden border-r border-zinc-800 bg-zinc-900 text-xs text-zinc-300">
+    <div
+      className="relative flex h-full shrink-0 flex-col overflow-hidden border-r border-zinc-800 bg-zinc-900 text-xs text-zinc-300"
+      style={{ width }}
+    >
+      <div
+        className="absolute right-0 top-0 z-10 h-full w-1.5 -mr-0.5 cursor-col-resize hover:bg-zinc-600/60 active:bg-zinc-500"
+        onPointerDown={onResizePointerDown}
+      />
       {/* Pinned header: never scrolls away. Text takes the project's bookmark
           color when one exists; plain grey otherwise. */}
       <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-zinc-800 px-3">
@@ -340,44 +479,32 @@ export function SidePanel({
         </p>
       )}
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3">
-      {prevCwd && prevCwd !== cwd && (
-        <section className="border-b border-zinc-800 pb-3">
-          <h2 className="mb-1.5 flex items-center gap-1.5 font-semibold tracking-wide uppercase">
-            <RainbowText text="Left behind" />
-            {prevState && <span className={`h-2 w-2 rounded-full ${STATE_DOT[prevState]}`} title={prevState} />}
-            <span className="ml-auto truncate font-normal text-[10px] normal-case text-zinc-600" title={prevCwd}>
-              {prevCwd.split("/").filter(Boolean).pop() ?? prevCwd}
-            </span>
-          </h2>
-          <p className="mb-2 text-zinc-500">
-            {prevLanding ? (
-              <>
-                <span className="text-zinc-600">landing: </span>
-                <span className="text-zinc-300">{prevLanding.body}</span>
-              </>
-            ) : (
-              "no landing note"
-            )}
-          </p>
-          <input
-            className="mb-2 w-full rounded bg-zinc-800 px-2 py-1 text-zinc-200 outline-none placeholder:text-zinc-600"
-            placeholder="Park a thought before it's gone…"
-            value={residueDraft}
-            onChange={(e) => setResidueDraft(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && void addResidue()}
-          />
+      <section className="border-b border-zinc-800 pb-3">
+        <h2 className="mb-1.5 font-semibold tracking-wide uppercase">
+          <RainbowText text="Notes and reminders" />
+        </h2>
+        <input
+          className="mb-2 w-full rounded bg-zinc-800 px-2 py-1 text-zinc-200 outline-none placeholder:text-zinc-600"
+          placeholder="Leave a note for this project…"
+          value={noteDraft}
+          onChange={(e) => setNoteDraft(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && void addQuickNote()}
+        />
+        {notes.length === 0 ? (
+          <p className="text-zinc-600">Nothing parked here.</p>
+        ) : (
           <ul className="flex flex-col gap-1">
-            {residue.map((n) => (
+            {notes.map((n) => (
               <li key={n.id} className="flex items-start gap-2">
                 <span className="min-w-0 flex-1 break-words text-zinc-400">{n.body}</span>
-                <button className="shrink-0 text-zinc-600 hover:text-zinc-200" title="Clear" onClick={() => void dismissResidue(n)}>
+                <button className="shrink-0 text-zinc-600 hover:text-zinc-200" title="Clear" onClick={() => void dismissNote(n)}>
                   ✕
                 </button>
               </li>
             ))}
           </ul>
-        </section>
-      )}
+        )}
+      </section>
       {parentGroups.length > 0 && (
       <div className="flex flex-col gap-1.5">
       {visibleParentGroups.map((f) => (
@@ -734,6 +861,71 @@ export function SidePanel({
         </div>
       )}
       </div>
+      {/* Pinned footer: never scrolls away. Hidden entirely when gitBranch is
+          unresolved (not a repo, or not loaded yet). Passive by default — a
+          branch pill, not a block — and discloses the commit UI only on
+          click, so a dirty repo doesn't permanently eat footer space. */}
+      {gitBranch !== "" && (
+        <div className="flex shrink-0 flex-col gap-1.5 border-t border-sky-800/40 p-2">
+          <button
+            className="flex items-center gap-1.5 self-start rounded px-1.5 py-0.5 font-mono text-sky-400/60 hover:bg-zinc-800 hover:text-sky-300 disabled:hover:bg-transparent"
+            disabled={!gitDirty}
+            onClick={() => setFooterOpen((o) => !o)}
+            title={gitDirty ? "commit + push + PR" : "no changes"}
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="shrink-0 text-zinc-500">
+              <path
+                fillRule="evenodd"
+                d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
+              />
+            </svg>
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${gitDirty ? "bg-amber-400" : "bg-zinc-700"}`} />
+            {gitBranch}
+            {gitDirty && <Chevron collapsed={!footerOpen} className="text-sky-400/60" />}
+          </button>
+          {prUrl && (
+            <p className="truncate text-sky-300" title={prUrl}>
+              PR opened: <span className="font-mono">{prUrl}</span>
+            </p>
+          )}
+          {gitDirty && footerOpen && (
+            <>
+              <textarea
+                className="h-14 w-full resize-none rounded bg-zinc-800 p-1.5 font-mono text-[10px] text-zinc-200 outline-none placeholder:text-zinc-600"
+                placeholder={footerBusy === "generate" ? "generating message…" : "commit message"}
+                value={commitMsg}
+                onChange={(e) => setCommitMsg(e.target.value)}
+              />
+              {footerError && <p className="text-red-400">{footerError}</p>}
+              <div className="flex gap-1.5">
+                <button
+                  className="flex-1 rounded bg-sky-900/40 px-2 py-1 font-medium text-sky-200 hover:bg-sky-900/70 disabled:opacity-40"
+                  disabled={!commitMsg.trim() || footerBusy !== null}
+                  onClick={() => void commitAndPush("branch")}
+                >
+                  {footerBusy === "commit" && "committing…"}
+                  {footerBusy === "pr" && "opening PR…"}
+                  {footerBusy === null &&
+                    (gitBranch === "main" ? "commit + push (new branch) + PR" : "commit + push + PR")}
+                </button>
+                {/* Direct-to-main is the one path with no PR step (nothing
+                    to PR against), kept as a distinct, confirm-gated,
+                    danger-styled action rather than folded into the button
+                    above. */}
+                {gitBranch === "main" && (
+                  <button
+                    className="rounded border border-red-900/60 bg-zinc-950 px-2 py-1 font-medium text-red-200 hover:bg-red-950 disabled:opacity-40"
+                    disabled={!commitMsg.trim() || footerBusy !== null}
+                    onClick={() => void commitAndPush("main")}
+                  >
+                    {footerBusy === "commit" ? "…" : "→ main"}
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

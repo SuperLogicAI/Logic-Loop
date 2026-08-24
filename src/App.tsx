@@ -20,13 +20,23 @@ import { initNotifications, notify } from "./lib/notify";
 import { SidePanel } from "./components/SidePanel";
 import { LandingNoteModal } from "./components/LandingNoteModal";
 import { FanOutModal } from "./components/FanOutModal";
-import type { AgentState, Decision } from "./types";
+import { IsolateLoopModal } from "./components/IsolateLoopModal";
+import type { Decision } from "./types";
 import { ptyWrite } from "./lib/pty";
 import { TabBar } from "./components/TabBar";
 import { AgentStatusBar } from "./components/AgentStatusBar";
 import { BookmarksBar } from "./components/BookmarksBar";
 import { Terminal } from "./components/Terminal";
-import { canonicalizeCwd, projectKeyOf, ptyKill, ptyKillAll, ptySpawn } from "./lib/pty";
+import {
+  canonicalizeCwd,
+  gitWorktreeAdd,
+  gitWorktreeRemove,
+  projectKeyOf,
+  ptyKill,
+  ptyKillAll,
+  ptySpawn,
+} from "./lib/pty";
+import { sanitizeSlug } from "./lib/worktree";
 import * as repo from "./lib/repo";
 import type { Bookmark, FanOutRollup, SpawnGroup, SpawnGroupMember, Tab } from "./types";
 import { PALETTE } from "./types";
@@ -78,8 +88,6 @@ export default function App() {
   // real "leaving this tab" moment; suppressed only for the duration of the
   // spawn loop, not for a genuine switch away from a fan-out child afterward.
   const suppressLandingRef = useRef(false);
-  // Attention residue: snapshot of the tab we most recently switched away from.
-  const [prevSnap, setPrevSnap] = useState<{ cwd: string; state?: AgentState } | null>(null);
   const prevActiveRef = useRef<string | null>(null);
 
   const expand = useCallback(
@@ -169,36 +177,82 @@ export default function App() {
       const groupId = crypto.randomUUID();
       await repo.createSpawnGroup(groupId, parentTabId, label ?? null);
       suppressLandingRef.current = true;
-      try {
-        for (const item of items) {
-          try {
-            const childId = await openTab({
-              // No name field in the Fan-out modal's row form/paste JSON — every
-              // child defaulted to the generic "Terminal" title, making rollup
-              // rows indistinguishable. Same fallback ghost-tab titles already
-              // use: last path segment of the cwd.
-              name: item.name ?? item.cwd.split("/").filter(Boolean).pop() ?? item.cwd,
-              cwd: item.cwd,
-              color: PALETTE[7],
-              cmd: item.cmd,
-            });
-            await repo.addSpawnMember(groupId, childId, item.cmd ?? null);
-          } catch {
-            // fail open — this child never got a tab; siblings still spawn.
-          }
+      let anyOpened = false;
+      for (const item of items) {
+        try {
+          const childId = await openTab({
+            // No name field in the Fan-out modal's row form/paste JSON — every
+            // child defaulted to the generic "Terminal" title, making rollup
+            // rows indistinguishable. Same fallback ghost-tab titles already
+            // use: last path segment of the cwd.
+            name: item.name ?? item.cwd.split("/").filter(Boolean).pop() ?? item.cwd,
+            cwd: item.cwd,
+            color: PALETTE[7],
+            cmd: item.cmd,
+          });
+          anyOpened = true;
+          await repo.addSpawnMember(groupId, childId, item.cmd ?? null);
+        } catch {
+          // fail open — this child never got a tab; siblings still spawn.
         }
-      } finally {
-        suppressLandingRef.current = false;
       }
+      // If at least one child opened, activeId changed at least once — the
+      // switch effect will consume the flag itself. If none did, no switch
+      // ever happened to consume it, so clear it here or it leaks forever.
+      if (!anyOpened) suppressLandingRef.current = false;
     },
     [openTab]
   );
+  /** Isolate loop (Phase 9): spawn a tab bound to a fresh `git worktree`
+   * instead of the current checkout — same "reuse openTab, no second spawn
+   * path" shape as fan-out (invariant #4). Throws on any git failure so the
+   * modal can show it inline and stay open; no tab is created on failure. */
+  const isolateLoop = useCallback(
+    async (fromTabId: string, opts: { branch: string; isNew: boolean }) => {
+      const tab = tabsRef.current.find((t) => t.id === fromTabId);
+      if (!tab) return;
+      const repoCwd = expand(tab.cwd);
+      const projectSlug = repoCwd.split("/").filter(Boolean).pop() ?? "project";
+      const dirSlug = sanitizeSlug(opts.branch);
+      if (!dirSlug) throw new Error("branch name sanitizes to an empty directory slug");
+      const branch = opts.isNew ? `loop/${dirSlug}` : opts.branch;
+      const worktreePath = `${home}/.context-terminal/worktrees/${projectSlug}/${dirSlug}`;
+      await gitWorktreeAdd(repoCwd, worktreePath, branch, opts.isNew);
+      suppressLandingRef.current = true;
+      try {
+        const childId = await openTab({ name: dirSlug, cwd: worktreePath });
+        await repo.createWorktreeTab(childId, repoCwd, worktreePath, branch);
+      } catch (e) {
+        // openTab never switched activeId (or the switch effect hasn't run
+        // yet) — nothing will consume the flag, so clear it ourselves.
+        suppressLandingRef.current = false;
+        throw e;
+      }
+    },
+    [openTab, expand, home]
+  );
+  const [isolateLoopModalOpen, setIsolateLoopModalOpen] = useState(false);
   const [fanOutModalOpen, setFanOutModalOpen] = useState(false);
   const [fanOutRefresh, setFanOutRefresh] = useState(0);
   const dismissSpawnMember = useCallback(async (groupId: string, childTabId: string) => {
     await repo.removeSpawnMember(groupId, childTabId).catch(() => undefined);
     setFanOutRefresh((n) => n + 1);
   }, []);
+
+  // Tab-strip glow (all tabs, not just the active one) — same membership
+  // data the rollup already tracks, just not scoped to `activeId`.
+  const [fanOutChildIds, setFanOutChildIds] = useState<Set<string>>(new Set());
+  const [worktreeTabIds, setWorktreeTabIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    void repo
+      .allFanOutChildTabIds()
+      .then((ids) => setFanOutChildIds(new Set(ids)))
+      .catch(() => undefined);
+    void repo
+      .allWorktreeTabIds()
+      .then((ids) => setWorktreeTabIds(new Set(ids)))
+      .catch(() => undefined);
+  }, [tabs.length, fanOutRefresh]);
 
   // Fan-out rollup (Phase 7): DB-backed group/membership for the active tab,
   // refreshed on tab switch — same pattern as SidePanel's own cwd-keyed
@@ -294,7 +348,7 @@ export default function App() {
     });
   }, []);
 
-  const closeTab = useCallback((tabId: string) => {
+  const finishCloseTab = useCallback((tabId: string) => {
     // Side effects outside the updater — StrictMode double-invokes updaters.
     const tab = tabsRef.current.find((t) => t.id === tabId);
     if (tab && tab.status === "live") void ptyKill(tab.ptyId);
@@ -320,6 +374,46 @@ export default function App() {
       return next;
     });
   }, [maybePromptLanding, claimTab]);
+
+  /** Worktree-bound tabs (Phase 9) get a cleanup prompt before the ordinary
+   * close path runs — native `ask()`, same dialog the quit guard already
+   * uses. Either answer still closes the tab; only whether the worktree
+   * directory is removed differs. A dirty tree needs an explicit second
+   * confirm before force-removing (never silently). A worktree already gone
+   * from disk (removed outside the app) fails open: treated as already
+   * clean, the DB row is still dropped. */
+  const closeTab = useCallback(
+    (tabId: string) => {
+      void repo
+        .worktreeForTab(tabId)
+        .then(async (wt) => {
+          if (wt) {
+            const remove = await ask(
+              `Remove worktree at ${wt.worktree_path}? Branch ${wt.branch} is kept either way.`,
+              { title: "Close worktree tab", kind: "info", okLabel: "Remove worktree", cancelLabel: "Keep" }
+            );
+            if (remove) {
+              try {
+                await gitWorktreeRemove(wt.repo_cwd, wt.worktree_path, false);
+              } catch (e) {
+                if (/dirty|modified or untracked|use --force/i.test(String(e))) {
+                  const force = await ask(
+                    `Worktree at ${wt.worktree_path} has uncommitted changes. Force remove? This discards them.`,
+                    { title: "Uncommitted changes", kind: "warning", okLabel: "Force remove", cancelLabel: "Keep" }
+                  );
+                  if (force) await gitWorktreeRemove(wt.repo_cwd, wt.worktree_path, true).catch(() => undefined);
+                }
+                // else: benign failure (path already gone, etc.) — fail open
+              }
+            }
+            await repo.deleteWorktreeTab(tabId).catch(() => undefined);
+          }
+          finishCloseTab(tabId);
+        })
+        .catch(() => finishCloseTab(tabId));
+    },
+    [finishCloseTab]
+  );
 
   const markDead = useCallback((tabId: string) => {
     setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, status: "dead" as const } : t)));
@@ -674,17 +768,26 @@ export default function App() {
     return () => window.removeEventListener("keydown", handler);
   }, [openTab, closeTab]);
 
-  // On tab switch: snapshot the tab we left (residue panel), offer its
-  // landing prompt, and claim the tab switched to. A closed tab is gone here
-  // — closeTab already handled it.
+  // On tab switch: offer the landing prompt for the tab we left, and claim
+  // the tab switched to. A closed tab is gone here — closeTab already
+  // handled it.
   useEffect(() => {
     const prevId = prevActiveRef.current;
     prevActiveRef.current = activeId;
     if (prevId && prevId !== activeId) {
       const prevTab = tabsRef.current.find((t) => t.id === prevId);
       if (prevTab) {
-        setPrevSnap({ cwd: expand(prevTab.cwd), state: prevTab.agentState });
-        if (!suppressLandingRef.current) maybePromptLanding(prevTab);
+        // Consumed here, not on a timer/await elsewhere — clearing the flag
+        // from the spawn call site raced this effect's async scheduling
+        // (only fanOut's extra post-openTab await happened to hide it; a
+        // single-await isolateLoop did not). The switch this flag was set
+        // for is exactly the one this effect is handling right now, so
+        // consuming it here is race-proof by construction.
+        if (suppressLandingRef.current) {
+          suppressLandingRef.current = false;
+        } else {
+          maybePromptLanding(prevTab);
+        }
       }
     }
     // Switching to a flagged tab while the window isn't focused (e.g. via a
@@ -728,10 +831,13 @@ export default function App() {
         onClose={closeTab}
         onNew={() => void openTab()}
         onFanOut={() => activeTab && setFanOutModalOpen(true)}
+        onIsolateLoop={() => activeTab && setIsolateLoopModalOpen(true)}
         onReorder={reorderTabs}
         blockerCount={(t) => blockerCountsByCwd[expand(t.cwd)] ?? 0}
         decisionCount={(t) => decisionCountsByCwd[expand(t.cwd)] ?? 0}
         unclaimed={(t) => unseenStops.has(t.id)}
+        isFanOutChild={(t) => fanOutChildIds.has(t.id)}
+        isWorktreeBound={(t) => worktreeTabIds.has(t.id)}
       />
       <BookmarksBar
         bookmarks={bookmarks}
@@ -753,8 +859,6 @@ export default function App() {
             sessionId={activeTab.sessionId ?? null}
             accent={activeTab.color === PALETTE[7] ? null : activeTab.color}
             refreshKey={panelRefresh}
-            prevCwd={prevSnap?.cwd ?? null}
-            prevState={prevSnap?.state}
             blindPaths={Object.values(blindSessions)}
             fanOut={fanOutRollups}
             onSelectTab={setActiveId}
@@ -808,6 +912,16 @@ export default function App() {
             void fanOut(activeTab.id, items, label);
           }}
           onCancel={() => setFanOutModalOpen(false)}
+        />
+      )}
+      {isolateLoopModalOpen && activeTab && (
+        <IsolateLoopModal
+          parentCwd={expand(activeTab.cwd)}
+          onLaunch={async (opts) => {
+            await isolateLoop(activeTab.id, opts);
+            setIsolateLoopModalOpen(false);
+          }}
+          onCancel={() => setIsolateLoopModalOpen(false)}
         />
       )}
     </div>

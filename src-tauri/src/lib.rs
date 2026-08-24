@@ -136,6 +136,18 @@ pub fn run() {
               CREATE INDEX IF NOT EXISTS idx_spawn_groups_parent
                 ON spawn_groups(parent_tab_id);",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 9,
+        description: "worktree-bound tabs",
+        sql: "CREATE TABLE IF NOT EXISTS worktree_tabs (
+                tab_id TEXT PRIMARY KEY,
+                repo_cwd TEXT NOT NULL,
+                worktree_path TEXT NOT NULL,
+                branch TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+              );",
+        kind: MigrationKind::Up,
     }];
 
     tauri::Builder::default()
@@ -204,6 +216,17 @@ pub fn run() {
             pty::pty_live_count,
             pty::pty_kill_all,
             pty::git_log,
+            pty::git_branches,
+            pty::git_worktree_add,
+            pty::git_worktree_remove,
+            pty::git_current_branch,
+            pty::git_has_changes,
+            pty::git_add_u,
+            pty::git_diff_cached,
+            pty::git_commit,
+            pty::git_create_branch,
+            pty::git_push,
+            pty::git_pr_create,
             ingest::hooks_setup,
             ingest::hooks_remove,
             ingest::hooks_status,

@@ -115,6 +115,17 @@ export interface FanOutRollup {
   }[];
 }
 
+/** A tab spawned into a git worktree (Phase 9 "Isolate loop"). `repo_cwd` is
+ * the main checkout it branches from; `branch` is kept on close, only the
+ * worktree directory is ever removed. */
+export interface WorktreeTab {
+  tab_id: string;
+  repo_cwd: string;
+  worktree_path: string;
+  branch: string;
+  created_at: number;
+}
+
 export interface HookPayload {
   hook_event_name: string;
   session_id: string;
