@@ -223,6 +223,8 @@ pub fn run() {
             pty::git_current_branch,
             pty::git_has_changes,
             pty::git_add_u,
+            pty::git_untracked_files,
+            pty::git_add_all,
             pty::git_diff_cached,
             pty::git_commit,
             pty::git_create_branch,

@@ -5,6 +5,7 @@ import * as repo from "../lib/repo";
 import { burst } from "../lib/confetti";
 import { generateCommitMessage } from "../lib/commitMessage";
 import {
+  gitAddAll,
   gitAddU,
   gitCommit,
   gitCreateBranch,
@@ -13,6 +14,7 @@ import {
   gitHasChanges,
   gitPrCreate,
   gitPush,
+  gitUntrackedFiles,
 } from "../lib/pty";
 import { RainbowText } from "./RainbowText";
 import type { Blocker, Commit, Decision, FanOutRollup, Note, ToolEvent } from "../types";
@@ -100,6 +102,11 @@ export function SidePanel({
   // loaded yet" — the footer hides rather than flashing "no changes".
   const [gitBranch, setGitBranch] = useState("");
   const [gitDirty, setGitDirty] = useState(false);
+  // Files `git add -u` never stages (new, not yet tracked) — surfaced as a
+  // warning rather than silently omitted from the commit. `includeUntracked`
+  // is the user's opt-in to stage them too; defaults off per commit/cwd.
+  const [untrackedFiles, setUntrackedFiles] = useState<string[]>([]);
+  const [includeUntracked, setIncludeUntracked] = useState(false);
   const [commitMsg, setCommitMsg] = useState("");
   const [footerBusy, setFooterBusy] = useState<"generate" | "commit" | "pr" | null>(null);
   const [footerError, setFooterError] = useState<string | null>(null);
@@ -145,8 +152,14 @@ export function SidePanel({
   // instead is wrong, not a fallback. Isolate it to empty instead.
   const isUnboundFanOutChild = !sessionId && fanOut.some((f) => !f.isParent);
 
+  // gitDirty alone misses untracked-only changes (git_has_changes excludes
+  // them on purpose — see git_add_u's landmine note in CLAUDE.md). The
+  // footer must still open in that case so the untracked-files warning is
+  // reachable, even though nothing is staged until the box is checked.
+  const hasStageable = gitDirty || untrackedFiles.length > 0;
+
   const reload = useCallback(async () => {
-    const [te, bl, gl, dc, ln, nt, uc, branch, dirty] = await Promise.all([
+    const [te, bl, gl, dc, ln, nt, uc, branch, dirty, untracked] = await Promise.all([
       repo.listToolEvents(cwd).catch(() => []),
       repo.listBlockers(cwd).catch(() => []),
       invoke<Commit[]>("git_log", { cwd, limit: 15 }).catch(() => []),
@@ -156,6 +169,7 @@ export function SidePanel({
       repo.unclaimedResults(cwd).catch(() => []),
       gitCurrentBranch(cwd).catch(() => ""),
       gitHasChanges(cwd).catch(() => false),
+      gitUntrackedFiles(cwd).catch(() => []),
     ]);
     setToolEvents(isUnboundFanOutChild ? [] : repo.scopeBySession(te, sessionId));
     setBlockers(bl);
@@ -166,6 +180,7 @@ export function SidePanel({
     setUnclaimed(uc);
     setGitBranch(branch);
     setGitDirty(dirty);
+    setUntrackedFiles(untracked);
   }, [cwd, sessionId, isUnboundFanOutChild]);
 
   useEffect(() => {
@@ -180,6 +195,7 @@ export function SidePanel({
     setFooterError(null);
     setPrUrl(null);
     setFooterOpen(false);
+    setIncludeUntracked(false);
   }, [cwd]);
 
   useEffect(() => {
@@ -192,24 +208,31 @@ export function SidePanel({
   // the diff (and therefore the message) matches exactly what a commit click
   // is about to commit.
   useEffect(() => {
-    if (!gitDirty) {
+    if (!hasStageable) {
       generatingForRef.current = null;
       setCommitMsg("");
       return;
     }
-    if (generatingForRef.current === cwd) return;
-    generatingForRef.current = cwd;
+    const genKey = `${cwd}:${includeUntracked}`;
+    if (generatingForRef.current === genKey) return;
+    generatingForRef.current = genKey;
     let cancelled = false;
     setFooterBusy("generate");
     void (async () => {
       try {
-        await gitAddU(cwd);
+        await (includeUntracked ? gitAddAll(cwd) : gitAddU(cwd));
         const diff = await gitDiffCached(cwd);
         if (cancelled) return;
-        const cached = commitCacheRef.current.get(cwd);
+        if (!diff.trim()) {
+          // Untracked-only change, box still unchecked — nothing staged yet,
+          // nothing to generate a message from.
+          setCommitMsg("");
+          return;
+        }
+        const cached = commitCacheRef.current.get(genKey);
         const message = cached && cached.diff === diff ? cached.message : await generateCommitMessage(diff);
         if (cancelled) return;
-        commitCacheRef.current.set(cwd, { diff, message });
+        commitCacheRef.current.set(genKey, { diff, message });
         setCommitMsg(message);
       } catch {
         // fail open — footer still shows an empty, editable, committable field
@@ -220,7 +243,7 @@ export function SidePanel({
     return () => {
       cancelled = true;
     };
-  }, [gitDirty, cwd]);
+  }, [hasStageable, cwd, includeUntracked]);
 
   const commitAndPush = async (target: "branch" | "main") => {
     if (target === "main") {
@@ -242,7 +265,7 @@ export function SidePanel({
         branch = `wip/${stamp}`;
         await gitCreateBranch(cwd, branch);
       }
-      await gitAddU(cwd);
+      await (includeUntracked ? gitAddAll(cwd) : gitAddU(cwd));
       const msg = commitMsg.trim();
       if (!msg) throw new Error("commit message is empty");
       await gitCommit(cwd, msg);
@@ -259,8 +282,9 @@ export function SidePanel({
       }
       setGitBranch(branch);
       setGitDirty(false);
+      setUntrackedFiles((prev) => (includeUntracked ? [] : prev));
       generatingForRef.current = null;
-      commitCacheRef.current.delete(cwd);
+      commitCacheRef.current.delete(`${cwd}:${includeUntracked}`);
       setCommitMsg("");
       // PR only makes sense off main — a push to main has nothing to PR
       // against. Best-effort: the commit/push above already landed, so a
@@ -869,9 +893,9 @@ export function SidePanel({
         <div className="flex shrink-0 flex-col gap-1.5 border-t border-sky-800/40 p-2">
           <button
             className="flex items-center gap-1.5 self-start rounded px-1.5 py-0.5 font-mono text-sky-400/60 hover:bg-zinc-800 hover:text-sky-300 disabled:hover:bg-transparent"
-            disabled={!gitDirty}
+            disabled={!hasStageable}
             onClick={() => setFooterOpen((o) => !o)}
-            title={gitDirty ? "commit + push + PR" : "no changes"}
+            title={hasStageable ? "commit + push + PR" : "no changes"}
           >
             <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="shrink-0 text-zinc-500">
               <path
@@ -879,16 +903,16 @@ export function SidePanel({
                 d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
               />
             </svg>
-            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${gitDirty ? "bg-amber-400" : "bg-zinc-700"}`} />
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${hasStageable ? "bg-amber-400" : "bg-zinc-700"}`} />
             {gitBranch}
-            {gitDirty && <Chevron collapsed={!footerOpen} className="text-sky-400/60" />}
+            {hasStageable && <Chevron collapsed={!footerOpen} className="text-sky-400/60" />}
           </button>
           {prUrl && (
             <p className="truncate text-sky-300" title={prUrl}>
               PR opened: <span className="font-mono">{prUrl}</span>
             </p>
           )}
-          {gitDirty && footerOpen && (
+          {hasStageable && footerOpen && (
             <>
               <textarea
                 className="h-14 w-full resize-none rounded bg-zinc-800 p-1.5 font-mono text-[10px] text-zinc-200 outline-none placeholder:text-zinc-600"
@@ -896,6 +920,24 @@ export function SidePanel({
                 value={commitMsg}
                 onChange={(e) => setCommitMsg(e.target.value)}
               />
+              {untrackedFiles.length > 0 && (
+                <label
+                  className="flex items-start gap-1.5 rounded border border-amber-900/50 bg-amber-950/30 p-1.5 text-amber-300"
+                  title={untrackedFiles.join("\n")}
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 shrink-0"
+                    checked={includeUntracked}
+                    onChange={(e) => setIncludeUntracked(e.target.checked)}
+                  />
+                  <span>
+                    {untrackedFiles.length} new file{untrackedFiles.length === 1 ? "" : "s"} not staged (
+                    <span className="font-mono">{untrackedFiles[0]}</span>
+                    {untrackedFiles.length > 1 && ` +${untrackedFiles.length - 1} more`}) — include in this commit?
+                  </span>
+                </label>
+              )}
               {footerError && <p className="text-red-400">{footerError}</p>}
               <div className="flex gap-1.5">
                 <button

@@ -411,6 +411,46 @@ pub fn git_add_u(cwd: String) -> Result<(), String> {
     }
 }
 
+/// New files `git add -u` never stages — the Commit & Push footer surfaces
+/// these so a commit doesn't silently ship a message describing a file it
+/// never actually included (see CLAUDE.md landmines, 2026-08-27).
+#[tauri::command]
+pub fn git_untracked_files(cwd: String) -> Vec<String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&cwd)
+        .arg("status")
+        .arg("--porcelain")
+        .arg("--untracked-files=all")
+        .output();
+    match out {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout)
+            .lines()
+            .filter_map(|l| l.strip_prefix("?? ").map(|s| s.trim().to_string()))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// Opt-in counterpart to `git_add_u` — stages untracked files too. Only
+/// called when the user has explicitly acknowledged the untracked-files
+/// warning in the footer.
+#[tauri::command]
+pub fn git_add_all(cwd: String) -> Result<(), String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&cwd)
+        .arg("add")
+        .arg("-A")
+        .output()
+        .map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
+}
+
 #[tauri::command]
 pub fn git_diff_cached(cwd: String) -> String {
     let out = std::process::Command::new("git")

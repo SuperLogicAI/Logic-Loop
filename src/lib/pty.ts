@@ -71,6 +71,14 @@ export function gitAddU(cwd: string): Promise<void> {
   return invoke("git_add_u", { cwd });
 }
 
+export function gitUntrackedFiles(cwd: string): Promise<string[]> {
+  return invoke<string[]>("git_untracked_files", { cwd });
+}
+
+export function gitAddAll(cwd: string): Promise<void> {
+  return invoke("git_add_all", { cwd });
+}
+
 export function gitDiffCached(cwd: string): Promise<string> {
   return invoke<string>("git_diff_cached", { cwd });
 }
