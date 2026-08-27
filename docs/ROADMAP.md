@@ -134,8 +134,8 @@ Two causes, one fixed:
    files against a different project than running claude from the repo root.
    Observed live: `context_terminal` (5 blockers / 11 decisions),
    `context_terminal/src-tauri` (2 / 1), and `dev/context_terminal/src-tauri`
-   (2 / 0) are three separate projects today. Same for `super_cowork` and
-   `NSSA_2026` with their subdirs.
+   (2 / 0) are three separate projects today. Same for other multi-project
+   dirs with their subdirs.
 
 Fix: derive a stable project key by walking up to the nearest `.git` (fall
 back to the cwd itself when not in a repo). Applies to tab cwd AND the hook
@@ -147,7 +147,7 @@ returns. This redefines "project" app-wide, hence a phase item, not a patch.
 - Decided 2026-07-18: pre-fix rows stay orphaned, no merge migration. They're
   mostly Phase 1–4 test noise, blockers/decisions self-obsolete, and a
   case-only merge wouldn't have touched the dominant subdir split anyway.
-- Also seen: one `notes` row keyed `~ /Desktop/superlogicai_IO` — literal
+- Also seen: one `notes` row keyed `~ /Desktop/some-project` — literal
   unexpanded tilde-space. RESOLVED 2026-07-19: `notes.id=6`, written
   2026-07-15, three days before `canon()` landed. Root cause was a bookmark
   cwd typed with a space after the `~`, which `expand()` passed through raw
