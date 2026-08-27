@@ -729,9 +729,26 @@ send it.
        then `369a968`), both landed on the first plain `git push`, both
        confirmed on `origin/loop/footer-test` via `git ls-remote`, no error
        either time.)*
-10. [ ] Commit & Push footer on `main` → the "commit + push → main" button
-        triggers the `ask()` confirm; declining leaves everything
-        uncommitted.
+10. [x] (accept path only) Commit & Push footer on `main` → the "commit +
+        push → main" button triggers the `ask()` confirm; accepting pushes
+        straight to `main`. *(2026-08-27: confirmed live — user clicked
+        through the confirm dialog on `main`, commit `fbd03a8` landed on
+        `origin/main` via a plain push. Decline path (leaves everything
+        uncommitted) not yet exercised.)*
+
+        **Bug found during this check (not in the original plan):** the
+        commit that landed added `mod codex;` and 4 `codex::*` command
+        registrations to `lib.rs` but never staged the new `codex.rs` file
+        itself — `git add -u` only stages tracked files, and `git_has_changes`
+        (the footer's dirty gate) queries with `--untracked-files=no`, so a
+        change consisting only of a new file is invisible to the footer at
+        both the gate and the staging step. `origin/main` failed `cargo check`
+        for a fresh clone as a result. Fixed same session (commit `fb79dea`):
+        `git_untracked_files`/`git_add_all` new Tauri commands, a
+        `hasStageable` footer gate that also counts untracked files, and an
+        amber warning box in the footer listing untracked files with an
+        opt-in checkbox — never silently included, never silently dropped.
+        See CLAUDE.md's Known landmines for the full note.
 11. [ ] Clicking the left button while on `main` creates and pushes a real
         `wip/<timestamp>` branch — `main` itself untouched locally and on
         the remote.
