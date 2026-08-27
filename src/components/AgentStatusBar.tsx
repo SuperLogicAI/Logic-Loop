@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
 import {
+  codexDetect,
+  codexHooksRemove,
+  codexHooksSetup,
+  codexHooksStatus,
   hooksRemove,
   hooksSetup,
   hooksStatus,
@@ -20,6 +24,8 @@ export function AgentStatusBar() {
   const [hooksOn, setHooksOn] = useState<boolean | null>(null);
   const [opencodeAvailable, setOpencodeAvailable] = useState(false);
   const [opencodeOn, setOpencodeOn] = useState<boolean | null>(null);
+  const [codexAvailable, setCodexAvailable] = useState(false);
+  const [codexOn, setCodexOn] = useState<boolean | null>(null);
   const [extractor, setExtractor] = useState<ExtractorSettings | null>(null);
   const [showSettings, setShowSettings] = useState(false);
 
@@ -32,6 +38,12 @@ export function AgentStatusBar() {
         if (available) void opencodeHooksStatus().then(setOpencodeOn).catch(() => setOpencodeOn(null));
       })
       .catch(() => setOpencodeAvailable(false));
+    void codexDetect()
+      .then((available) => {
+        setCodexAvailable(available);
+        if (available) void codexHooksStatus().then(setCodexOn).catch(() => setCodexOn(null));
+      })
+      .catch(() => setCodexAvailable(false));
   }, []);
 
   const saveExtractor = (s: ExtractorSettings) => {
@@ -67,6 +79,20 @@ export function AgentStatusBar() {
     }
   };
 
+  const toggleCodexHooks = async () => {
+    try {
+      if (codexOn) {
+        await codexHooksRemove();
+        setCodexOn(false);
+      } else {
+        await codexHooksSetup();
+        setCodexOn(true);
+      }
+    } catch (e) {
+      console.error("codex hooks toggle failed:", e);
+    }
+  };
+
   return (
     <div className="relative flex h-10 shrink-0 items-center justify-end gap-1.5 border-b border-zinc-800 px-3">
       <button
@@ -78,7 +104,7 @@ export function AgentStatusBar() {
         onClick={() => void toggleHooks()}
         title="Toggle Claude Code hook ingestion in ~/.claude/settings.json"
       >
-        {hooksOn === null ? "hooks ?" : hooksOn ? "hooks on" : "⚠ hooks off — panels & dots inactive"}
+        {hooksOn === null ? "claude ?" : hooksOn ? "claude on" : "⚠ claude off — panels & dots inactive"}
       </button>
       {opencodeAvailable && (
         <button
@@ -91,6 +117,19 @@ export function AgentStatusBar() {
           title="Toggle the OpenCode adapter plugin in ~/.config/opencode/opencode.json"
         >
           {opencodeOn === null ? "opencode ?" : opencodeOn ? "opencode on" : "opencode off"}
+        </button>
+      )}
+      {codexAvailable && (
+        <button
+          className={`rounded-full px-3 py-0.5 text-xs ${
+            codexOn
+              ? "bg-emerald-900 text-emerald-300 hover:bg-emerald-800"
+              : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+          }`}
+          onClick={() => void toggleCodexHooks()}
+          title="Toggle the Codex adapter hooks in ~/.codex/hooks.json — Codex will ask you to trust the hook once in its own TUI on first use"
+        >
+          {codexOn === null ? "codex ?" : codexOn ? "codex on" : "codex off"}
         </button>
       )}
       <button

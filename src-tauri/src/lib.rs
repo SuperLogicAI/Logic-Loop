@@ -1,5 +1,6 @@
 mod clipboard;
 mod extractor;
+mod codex;
 mod ingest;
 mod opencode;
 mod pty;
@@ -234,6 +235,10 @@ pub fn run() {
             opencode::opencode_hooks_setup,
             opencode::opencode_hooks_remove,
             opencode::opencode_hooks_status,
+            codex::codex_detect,
+            codex::codex_hooks_setup,
+            codex::codex_hooks_remove,
+            codex::codex_hooks_status,
             extractor::run_extractor,
             clipboard::clipboard_text,
             clipboard::clipboard_image_path

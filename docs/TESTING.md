@@ -581,6 +581,99 @@ send it.
       *(2026-08-18: confirmed — off/on/off/on across a relaunch left exactly
       one `logic-loop-opencode-plugin` entry, `$schema` untouched.)*
 
+## 20. Phase 10 — Codex adapter
+
+- [x] Toggle "codex on" with `codex` installed → `~/.codex/hooks.json`
+      contains exactly our 5 events (`SessionStart`, `Stop`, `PostToolUse`,
+      `UserPromptSubmit`, `PermissionRequest`), each `command` the same
+      curl one-liner already registered for Claude in
+      `~/.claude/settings.json`. A pre-existing unrelated `hooks.json` entry
+      (if any) survives untouched. *(2026-08-27: confirmed — fresh
+      `~/.codex/hooks.json`, exactly the 5 events, `PostToolUse` alone
+      carries `"matcher": "*"`, all 5 `command` values identical to the
+      shared `hook_command()` string. No pre-existing hooks.json on this
+      machine, so nothing to check for survival.)*
+- [x] Launch a real `codex` session in a Logic Loop tab, cwd inside a
+      tracked project → Codex's TUI shows the one-time hook-trust prompt;
+      approve it. *(2026-08-27: confirmed — "Hooks need review / 5 hooks
+      are new or changed", matching all 5 registered events; chose "Trust
+      all and continue".)*
+- [x] After trust is approved: side panel shows the tab transitioning
+      working → idle across a real turn, tether-bound (not cwd-fallback) —
+      verify via sqlite, same check style as Phase 8's §18. *(2026-08-27:
+      confirmed in sqlite — real `01a043fc-...`-format Codex session id
+      (uuid-v7 shape, distinct from Claude's v4), clean `SessionStart →
+      UserPromptSubmit → PostToolUse ×4 → Stop` sequence for one turn ("Read
+      this root folder and tell me what's here"), every row carrying the
+      same real tab uuid (`149d9bad-b47c-408a-904d-2834765e2612`) — not
+      cwd-fallback.*
+
+      **Found and fixed during this check:** the same hook payloads also
+      carry Codex's `transcript_path` (its own rollout-*.jsonl), and
+      `ensure_tailer` in `ingest.rs` is agent-agnostic — it was tailing and
+      persisting that file's raw content (encrypted reasoning blobs, full
+      shell output) into the `events` table as `type: 'transcript'`, one
+      turn alone writing 24 such rows. This directly contradicted PLAN.md's
+      stated non-goal ("No use of ... the rollout transcript as a live
+      ingestion source"). Decision extraction itself was unaffected —
+      `decisions.ts`'s strict `assistant`/`user` type check silently drops
+      Codex's `response_item`/`event_msg` shape — so this was a storage/
+      scope leak, not a cost or crash bug. Fixed same session:
+      `is_claude_transcript_path()` gates the tailer to `/.claude/projects/`
+      paths only; new test `ingest::tests::
+      only_claude_transcript_paths_are_tailed`. See PLAN.md's non-goals
+      section and CLAUDE.md's Phase 10 status entry for the full note.)*
+- [x] Trigger a tool call inside the Codex session → a `PostToolUse` row
+      lands with a real `tool_use_id`, dedupe key behaves (no duplicate row
+      on a second identical-content event). *(2026-08-27: confirmed post-fix
+      — a fresh Codex session, "Tell me what's in this folder", produced 4
+      distinct `PostToolUse` rows each with a real unique `tool_use_id`
+      (`call_BrUCpVkMPD2IFTJ8ai2U5DPx`, etc.), no collisions. Also
+      re-confirmed the transcript-tailer fix holds: zero `type='transcript'`
+      rows for this session, only `hook:*` rows.)*
+- [x] Trigger a permission-request moment (a sandboxed command needing
+      approval) → tab shows "waiting" state via the new `PermissionRequest`
+      case. *(2026-08-27: confirmed at the hook/plumbing level — asking
+      Codex to `curl -I https://superlogicai.com` (network access is
+      outside the default sandbox) produced a real `hook:PermissionRequest`
+      row, correct tool context and tab tether. `stateForHook`'s new case
+      maps this to `"waiting"` unless `Stop` already fired for that
+      session, which it hadn't at that point in the turn — logically the
+      dot should have pulsed amber, but the user didn't specifically watch
+      for it in the moment (was looking at a different tab), so the visual
+      itself is unconfirmed. DB-level confirmation is solid; re-verify
+      visually only if you want the belt-and-suspenders check.)*
+- [x] Toggle "codex off" → `hooks.json` either loses just our entries (if
+      the user had other hooks) or is removed/emptied entirely; re-toggle
+      on → idempotent, no duplicate entries. *(2026-08-27: confirmed —
+      off/on cycle left exactly one entry per event, no duplicates,
+      `PostToolUse` still the only one carrying `"matcher": "*"`.)*
+- [x] Fan-out and isolate-loop children running `codex` (not just `claude`)
+      still bind correctly — spot-check one fan-out child, confirm no
+      regression to `findGroupForTab`/`isUnboundFanOutChild`. *(2026-08-27:
+      confirmed — fan-out group `3c0bd698...` off parent tab `149d9bad...`,
+      two `Codex` children (`spawn_group_members.cmd`), each ran a turn.
+      sqlite: child session `01a044a7-2a82-...` bound tether
+      `1e7d1186-...`, child session `01a044a7-3658-...` bound tether
+      `24f43fdb-...` — each its own child tab, not the parent's
+      `149d9bad`, not collapsed onto one binding (no cwd-fallback).)*
+- [x] Dead-port test (ingest server unreachable) — confirm the reused
+      `hook_command()`'s existing 2s-timeout/fail-silent behavior holds for
+      Codex the same as it does for Claude. *(2026-08-27: confirmed —
+      `hook_command()`'s literal shell string run with `HOME` pointed at a
+      fake `ingest.env` (`CT_PORT=1`) and a real hook payload piped to stdin
+      returned in 0.013s, exit 0. Port 1 refuses instantly — didn't even
+      need the 2s `-m` timeout to kick in. Same conclusion as Phase 8's
+      dead-port check for opencode: no event lands, no hang, no exit-code
+      failure.)*
+- [ ] Quality gates (recorded 2026-08-27, pre-manual-test): `cargo test`
+      17/17 (4 new `codex::tests`), `cargo clippy --all-targets -- -D
+      warnings` clean, `tsc --noEmit` clean, `npm run golden` 12/12
+      (unchanged — no extraction-prompt work this phase), all 9 check
+      scripts pass (unchanged — no ingestion/binding/dedupe logic touched;
+      the one frontend change, `stateForHook`'s new `PermissionRequest`
+      case, has no dedicated check script per PLAN.md's non-goals).
+
 ## 19. Phase 9 — Isolate loop (git worktrees) + Commit & Push footer
 
 1. [x] "Isolate loop…" on a repo tab, new branch "try-x" → worktree appears

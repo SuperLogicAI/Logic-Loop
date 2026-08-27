@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter};
 
-const MARKER: &str = "context-terminal/ingest.env";
+pub(crate) const MARKER: &str = "context-terminal/ingest.env";
 
 /// Tether value stamped on the app's own `claude -p` extractor children. Those
 /// children inherit the user's hooks and post back here, so without this the app
@@ -98,8 +98,10 @@ pub fn start(app: AppHandle) {
             }
             if let Ok(mut payload) = serde_json::from_str::<serde_json::Value>(&body) {
                 if let Some(path) = payload.get("transcript_path").and_then(|v| v.as_str()) {
-                    if let Some(sid) = payload.get("session_id").and_then(|v| v.as_str()) {
-                        ensure_tailer(&app, sid.to_string(), path.to_string());
+                    if is_claude_transcript_path(path) {
+                        if let Some(sid) = payload.get("session_id").and_then(|v| v.as_str()) {
+                            ensure_tailer(&app, sid.to_string(), path.to_string());
+                        }
                     }
                 }
                 // The one place a project key is derived from a hook cwd. Two
@@ -126,6 +128,16 @@ pub fn start(app: AppHandle) {
             let _ = request.respond(tiny_http::Response::empty(204));
         }
     });
+}
+
+/// Claude's own transcripts always live under `~/.claude/projects/`; nothing
+/// else does. Codex's `SessionStart` carries a `transcript_path` too (its own
+/// rollout-*.jsonl) and this server is agent-agnostic — an ungated tailer
+/// call here would tail and persist Codex's raw transcript, which Phase 10
+/// explicitly ruled out (found live during the Phase 10 manual test,
+/// 2026-08-27).
+fn is_claude_transcript_path(path: &str) -> bool {
+    path.contains("/.claude/projects/")
 }
 
 fn header_value(request: &tiny_http::Request, name: &'static str) -> Option<String> {
@@ -230,7 +242,7 @@ const HOOK_VERSION: u32 = 1;
 /// straight to curl, and assembling JSON in sh is how quoting bugs happen.
 /// `$LOGIC_LOOP_TAB_ID` comes from the PTY env (see `pty_spawn`) and is empty
 /// for sessions started outside the app — the frontend then falls back to cwd.
-fn hook_command() -> String {
+pub(crate) fn hook_command() -> String {
     format!(
         "sh -c '. \"$HOME/.{MARKER}\" 2>/dev/null && curl -sf -m 2 -H \"Authorization: Bearer $CT_TOKEN\" -H \"X-Logic-Loop-Tab: $LOGIC_LOOP_TAB_ID\" -H \"X-Logic-Loop-Hook: {HOOK_VERSION}\" --data-binary @- \"http://127.0.0.1:$CT_PORT/event\" >/dev/null 2>&1; exit 0'"
     )
@@ -383,5 +395,16 @@ mod tests {
         assert!(s["hooks"]["PostToolUse"][0]["matcher"] == "*");
         strip_ours(&mut s);
         assert_eq!(s, serde_json::json!({ "hooks": {} }));
+    }
+
+    #[test]
+    fn only_claude_transcript_paths_are_tailed() {
+        assert!(is_claude_transcript_path(
+            "/Users/x/.claude/projects/-foo/abc-123.jsonl"
+        ));
+        assert!(!is_claude_transcript_path(
+            "/Users/x/.codex/sessions/2026/08/27/rollout-2026-08-27T06-10-13-abc.jsonl"
+        ));
+        assert!(!is_claude_transcript_path(""));
     }
 }

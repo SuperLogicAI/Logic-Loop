@@ -30,6 +30,22 @@ export function opencodeHooksStatus(): Promise<boolean> {
   return invoke<boolean>("opencode_hooks_status");
 }
 
+export function codexDetect(): Promise<boolean> {
+  return invoke<boolean>("codex_detect");
+}
+
+export function codexHooksSetup(): Promise<void> {
+  return invoke("codex_hooks_setup");
+}
+
+export function codexHooksRemove(): Promise<void> {
+  return invoke("codex_hooks_remove");
+}
+
+export function codexHooksStatus(): Promise<boolean> {
+  return invoke<boolean>("codex_hooks_status");
+}
+
 export function onHookEvent(cb: (p: HookPayload) => void): Promise<UnlistenFn> {
   return listen<HookPayload>("ingest://hook", (e) => {
     if (typeof e.payload?.hook_event_name === "string" && typeof e.payload?.session_id === "string") {
@@ -160,6 +176,7 @@ export function stateForHook(p: HookPayload): AgentState | null {
       return isError ? "error" : "working";
     }
     case "Notification":
+    case "PermissionRequest":
       return stoppedSessions.has(p.session_id) ? null : "waiting";
     case "Stop":
       stoppedSessions.add(p.session_id);
