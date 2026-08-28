@@ -729,33 +729,98 @@ send it.
        then `369a968`), both landed on the first plain `git push`, both
        confirmed on `origin/loop/footer-test` via `git ls-remote`, no error
        either time.)*
-10. [x] (accept path only) Commit & Push footer on `main` → the "commit +
-        push → main" button triggers the `ask()` confirm; accepting pushes
-        straight to `main`. *(2026-08-27: confirmed live — user clicked
-        through the confirm dialog on `main`, commit `fbd03a8` landed on
-        `origin/main` via a plain push. Decline path (leaves everything
-        uncommitted) not yet exercised.)*
+10. [x] Commit & Push footer on `main` → the "commit + push → main" button
+        triggers the `ask()` confirm. Accept path: pushes straight to `main`.
+        Decline path: no-op. *(2026-08-27, accept path: confirmed live — user
+        clicked through the confirm dialog on `main`, commit `fbd03a8` landed
+        on `origin/main` via a plain push. 2026-08-27, decline path: confirmed
+        — `git status`/`HEAD`/`origin/main` all verified byte-identical to a
+        pre-click baseline after Cancel.)*
 
-        **Bug found during this check (not in the original plan):** the
-        commit that landed added `mod codex;` and 4 `codex::*` command
-        registrations to `lib.rs` but never staged the new `codex.rs` file
-        itself — `git add -u` only stages tracked files, and `git_has_changes`
-        (the footer's dirty gate) queries with `--untracked-files=no`, so a
-        change consisting only of a new file is invisible to the footer at
-        both the gate and the staging step. `origin/main` failed `cargo check`
-        for a fresh clone as a result. Fixed same session (commit `fb79dea`):
-        `git_untracked_files`/`git_add_all` new Tauri commands, a
-        `hasStageable` footer gate that also counts untracked files, and an
-        amber warning box in the footer listing untracked files with an
-        opt-in checkbox — never silently included, never silently dropped.
-        See CLAUDE.md's Known landmines for the full note.
-11. [ ] Clicking the left button while on `main` creates and pushes a real
+        **Bug found during the accept-path check (not in the original
+        plan):** the commit that landed added `mod codex;` and 4 `codex::*`
+        command registrations to `lib.rs` but never staged the new `codex.rs`
+        file itself — `git add -u` only stages tracked files, and
+        `git_has_changes` (the footer's dirty gate) queries with
+        `--untracked-files=no`, so a change consisting only of a new file is
+        invisible to the footer at both the gate and the staging step.
+        `origin/main` failed `cargo check` for a fresh clone as a result.
+        Fixed same session (commit `fb79dea`): `git_untracked_files`/
+        `git_add_all` new Tauri commands, a `hasStageable` footer gate that
+        also counts untracked files, and an amber warning box in the footer
+        listing untracked files with an opt-in checkbox — never silently
+        included, never silently dropped. See CLAUDE.md's Known landmines
+        for the full note.
+11. [x] Clicking the left button while on `main` creates and pushes a real
         `wip/<timestamp>` branch — `main` itself untouched locally and on
-        the remote.
-12. [ ] With nothing dirty, the footer shows "no changes" and no buttons.
-13. [ ] The cached commit message survives a second click without a second
+        the remote. *(2026-08-27: confirmed on two separate runs —
+        `wip/20260828015619` (throwaway, PR #2, closed + branch deleted
+        after verification) and `wip/20260828022446` (real Phase 11 work,
+        PR #4, kept). Both times `main`'s local ref and `origin/main` stayed
+        at `efca58f` throughout, untracked-file opt-in checkbox correctly
+        defaulted off and was honored, not silently included or dropped.)*
+
+        **Bug found during the first run (not in the original plan):**
+        `commitAndPush`'s wip-branch path (`SidePanel.tsx`) does a real
+        `git checkout -b` in the tab's own live working directory (not a
+        worktree) to create the wip branch, commits, pushes — and never
+        checked back out to the original branch afterward. `main`'s ref and
+        remote were technically untouched (satisfying this item's literal
+        wording), but the tab's actual git checkout was silently left on the
+        new wip branch permanently, with only the footer's branch pill
+        (UI state, not real git state) suggesting anything had changed. This
+        surfaced as an apparent working-tree data-loss scare: a later
+        unrelated `git checkout main` (cleanup after the throwaway PR) then
+        correctly reverted tracked files to `main`'s committed content per
+        normal git semantics, since the real Phase 11 diff had by that point
+        been committed onto the abandoned wip branch, not lost — recovered
+        via `git fsck --dangling` since the commit object was still in the
+        odb. Fixed same session: new `git_checkout` Tauri command (plain
+        checkout of an *existing* branch, `pty.rs`) plus a `switchedFrom`
+        tracker in `commitAndPush` whose `finally` checks the tab back out
+        to its original branch on every exit path (success, push failure,
+        PR failure) — never strands a live terminal on a branch it didn't
+        ask to be on. Rebuilt/reinstalled and re-verified live on a second
+        run (`wip/20260828022446`): tab correctly landed back on `main`
+        after push+PR, `main` stayed clean throughout.
+
+        **Second bug found on the same second run (not in the original
+        plan, same class as item 10's):** PR #4 (the real Phase 11 work)
+        also left `antigravity.rs` untracked/unstaged — the opt-in checkbox
+        worked exactly as designed, but was left unchecked on real wanted
+        work rather than a throwaway, so the pushed PR branch didn't build.
+        Not an app bug (the checkbox is deliberately opt-in and was visible
+        the whole time) — a recurring human workflow trap worth being aware
+        of. Fixed by hand: checked out `wip/20260828022446`, staged
+        `antigravity.rs` + `docs/IDEAS.md`, committed (`db485a5`), pushed;
+        `cargo check` confirmed clean on the branch afterward.
+12. [x] With nothing dirty, the footer shows "no changes" and no buttons.
+        *(2026-08-27: confirmed via code + live screenshot on a clean
+        isolate-loop worktree tab — `hasStageable` false renders a disabled
+        button with a gray dot (not amber), no chevron, and the expandable
+        section doesn't render at all, so there is nothing to click into;
+        `"no changes"` is the button's hover title. `SidePanel.tsx:159,
+        896-937`.)*
+13. [x] The cached commit message survives a second click without a second
         LLM call (no observable delay/spinner), and differs (triggers one
-        generation) after the diff actually changes.
+        generation) after the diff actually changes. *(2026-08-27: confirmed
+        live on a throwaway isolate-loop worktree (`loop/try-item13`, PR #3,
+        closed + branch deleted after verification) — first dirty edit
+        generated "Add test1 line to README" once (spinner shown), reopening
+        the footer with no further edits reused it instantly with no spinner,
+        commit+push+PR cleared the footer to the item-12 empty state, a
+        second distinct edit regenerated a new, different message ("Add
+        test2 line to README") with the spinner reappearing once. Matches
+        the design intent in `SidePanel.tsx:205-246`'s comment: the message
+        regenerates once per dirty-state *onset* (`hasStageable` false→true),
+        not on every background poll tick while continuously dirty.)*
+
+**Quality gates rerun for item 11's `git_checkout` fix (2026-08-27):**
+`cargo test` 34/34 (unchanged — the fix is a thin subprocess wrapper in
+`git_create_branch`'s own style, no new unit tests needed), `cargo clippy
+--all-targets -- -D warnings` clean, `tsc --noEmit` clean. Rebuilt via
+`npm run reinstall` and reinstalled to `/Applications` before the live
+re-verification of item 11 above.
 
 **Bugs found and fixed during 1-8 (not in the original plan):**
 - Launching "Isolate loop" left the source tab's landing-note popup firing
