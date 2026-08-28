@@ -17,5 +17,3 @@ export const DETECTORS: Detector[] = [
 export function detectBlockers(text: string): Detector[] {
   return DETECTORS.filter((d) => d.re.test(text));
 }
-
-const __ciGateProbe: number = "not a number";
