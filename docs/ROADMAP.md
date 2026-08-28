@@ -5,6 +5,10 @@ feature below is grounded in the cognitive map (build plan §2), not in any
 competitor's implementation. No external code was used or referenced in this
 codebase; concepts only, re-derived against our architecture invariants.
 
+**Draft ideas (not key features, not sequenced):** `docs/IDEAS.md` — a parking
+lot of candidates surfaced in conversation, for later review, not in the
+table below until one gets its own PLAN.md.
+
 ## Sequencing
 
 | Item | Slot | Size | Depends on |
@@ -74,8 +78,8 @@ content otherwise. `agent_id` in the fallback key closes that.
 
 Named landmine (CLAUDE.md): "Events table has no dedupe constraint yet;
 treat duplicate-event bugs as data-corruption severity (Phase 3 decision
-tracking depends on clean rows)." Surfaced 2026-08-12 reviewing pingdotgg/
-t3code (external code, concept only — no code copied): their event store
+tracking depends on clean rows)." Surfaced 2026-08-12 reviewing an external
+open-source project's event store (concept only — no code copied): it
 hardened the same gap with a `command_id UNIQUE` constraint, insert-or-return-
 prior on conflict. Same shape fits us: SQLite native, no new machinery,
 invariant #3 stays intact (still a dumb table).
@@ -422,8 +426,8 @@ New-tab flow: "isolate this loop" → `git worktree add` under
 (user names the loop — no generated names), tab bound to worktree path.
 Tab close prompts for cleanup; never auto-deletes.
 
-Pick up two things from pingdotgg/t3code's worktree picker (concept only, no
-code copied) when this phase gets its own PLAN.md: offer an **existing**
+Pick up two things from an external project's worktree picker (concept only,
+no code copied) when this phase gets its own PLAN.md: offer an **existing**
 local branch, not just new-branch creation — right-click a branch, "open in
 worktree," cwd becomes that worktree. And sanitize branch names used as
 directory components (`feature/foo` → `feature-foo`) rather than assuming
@@ -445,9 +449,35 @@ OpenAI's codex-plugin-cc runs inside any Claude Code session in a tab
 would duplicate that and violate invariant #4. The differentiated product is
 one pane of glass over a mixed agent fleet.
 
-Litmus test per provider (sharpened after reviewing pingdotgg/t3code, concept
-only): before writing a bespoke adapter, check whether the CLI already speaks
-a structured protocol — Agent Client Protocol or equivalent — instead of
+**Reviewed an external open-source terminal-multiplexer-for-agents project
+(concept only, 2026-08-27)** as a second data point on this same fork, and
+it confirms rather than moves the line: it's a background-server terminal
+multiplexer (tmux-like: detach/reattach, survives client disconnect, remote
+over SSH) whose agent skill + socket API let an agent *inside* one pane
+autonomously split/spawn sibling panes, run commands in them, and wait on
+another agent going "blocked" — i.e. agent-initiated orchestration, not
+human-triggered. That's exactly what invariant #4 rules out here (our
+fan-out/isolate-loop spawns are human button-clicks; nothing autonomous
+writes into a pane). Not adopting the orchestration model — noting it as
+confirmation the line is drawn in the right place, same role the external
+project above played.
+
+The other half of that design is a real tradeoff worth naming: for agents
+with no lifecycle-hook system it falls back to matching the live terminal
+screen buffer against pattern rules ("screen manifest parsing") — exactly
+the ANSI/output parsing invariant #1 bans outright here. That fallback is
+why it covers far more agents than we do today — anything with a terminal
+UI at all, where we cover 4 (Claude, OpenCode, Codex, Antigravity).
+Invariant #1 stays — screen-scraping is fragile by construction and the
+fragility compounds with every agent added — but it's the honest reason our
+adapter list will always be shorter than a tool willing to parse screens.
+No action item; recorded so this tradeoff isn't re-litigated the next time
+an unsupported agent comes up.
+
+Litmus test per provider (sharpened after reviewing an external project's
+approach, concept only): before writing a bespoke adapter, check whether the
+CLI already speaks a structured protocol — Agent Client Protocol or
+equivalent — instead of
 hand-rolling a hooks-equivalent. Several providers are converging on ACP;
 where one's available it's a straight win over reverse-engineering a log
 format.
