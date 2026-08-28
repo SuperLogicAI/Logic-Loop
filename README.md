@@ -92,8 +92,8 @@ Early, actively built, dogfooded daily. Shipped:
 - ✅ Fan-out spawn groups — launch and track several agents from one session
 - ✅ OpenCode adapter — first non-Claude ingestion pipeline
 - ✅ Codex adapter
-- 🚧 Isolated loops (git worktree–backed tabs) — built, acceptance testing
-- 🚧 Antigravity (`agy`) adapter — built, acceptance testing
+- ✅ Isolated loops (git worktree–backed tabs)
+- ✅ Antigravity (`agy`) adapter
 - ⏳ Crash recovery, onboarding, public release polish
 
 ## Stack
