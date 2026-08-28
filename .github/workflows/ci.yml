@@ -1,0 +1,67 @@
+name: CI
+
+# Merge gates, mirroring what CLAUDE.md requires locally before "done":
+# tsc --noEmit, the check scripts, clippy -D warnings, cargo test.
+#
+# Deliberately NOT here: `npm run golden`. It shells out to the `claude` CLI,
+# which needs credentials and bills per run. It stays a local pre-merge gate.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  frontend:
+    name: frontend (tsc + checks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      # One step, one line each: the failing script's name is the failure.
+      - name: check scripts
+        run: |
+          npm run landing:check
+          npm run epoch:check
+          npm run bind:check
+          npm run dedupe:check
+          npm run reentry:check
+          npm run unclaimed:check
+          npm run notify:check
+          npm run spawn:check
+          npm run scope:check
+
+  rust:
+    name: rust (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      # tauri-build refuses to compile when frontendDist (../dist) is missing,
+      # and dist/ is gitignored. This leg tests Rust, not the bundle, so a
+      # placeholder is enough — no node install, no npm ci on either runner.
+      # windows-build.yml does the real frontend build.
+      - name: placeholder frontendDist
+        working-directory: .
+        shell: bash
+        run: mkdir -p dist && echo '<!doctype html><title>ci</title>' > dist/index.html
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test

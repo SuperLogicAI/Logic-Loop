@@ -27,6 +27,9 @@ pub struct PtyManager {
 /// tab close) — SIGKILL the whole process group so the shell and anything it
 /// spawned die together.
 fn kill_session(s: &mut PtySession) {
+    // Windows has no process groups to signal; child.kill() alone is what we
+    // get until the Windows port wires up a Job Object (Phase 13).
+    #[cfg(unix)]
     if let Some(pid) = s.child.process_id() {
         unsafe {
             libc::killpg(pid as i32, libc::SIGKILL);
@@ -596,6 +599,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)] // $HOME-dependent; Phase 13 re-enables against a home() helper
     fn canon_resolves_case_and_tilde_to_one_key() {
         let home = std::env::var("HOME").unwrap();
         // `~` expands, and a case-variant spelling of an existing dir resolves to
@@ -632,6 +636,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)] // $HOME-dependent; Phase 13 re-enables against a home() helper
     fn project_key_outside_a_repo_is_the_dir_itself() {
         let home = std::env::var("HOME").unwrap();
         // No `.git` anywhere up to `/` → the dir is its own project, no panic
