@@ -91,6 +91,10 @@ export function gitCreateBranch(cwd: string, branch: string): Promise<void> {
   return invoke("git_create_branch", { cwd, branch });
 }
 
+export function gitCheckout(cwd: string, branch: string): Promise<void> {
+  return invoke("git_checkout", { cwd, branch });
+}
+
 export function gitPush(cwd: string, branch: string, setUpstream: boolean): Promise<void> {
   return invoke("git_push", { cwd, branch, setUpstream });
 }

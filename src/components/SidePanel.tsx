@@ -9,6 +9,7 @@ import {
   gitAddU,
   gitCommit,
   gitCreateBranch,
+  gitCheckout,
   gitCurrentBranch,
   gitDiffCached,
   gitHasChanges,
@@ -258,11 +259,17 @@ export function SidePanel({
     setFooterError(null);
     setPrUrl(null);
     setFooterBusy("commit");
+    // `gitCreateBranch` below is a real `git checkout -b` in the tab's live
+    // working directory (not a worktree) — set only when we actually switch,
+    // so the `finally` can check the tab back out to where it started rather
+    // than stranding it on the new wip branch regardless of how this ends.
+    let switchedFrom: string | null = null;
     try {
       let branch = gitBranch;
       if (target === "branch" && gitBranch === "main") {
         const stamp = new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14);
         branch = `wip/${stamp}`;
+        switchedFrom = gitBranch;
         await gitCreateBranch(cwd, branch);
       }
       await (includeUntracked ? gitAddAll(cwd) : gitAddU(cwd));
@@ -302,6 +309,13 @@ export function SidePanel({
     } catch (e) {
       setFooterError(e instanceof Error ? e.message : String(e));
     } finally {
+      // Runs on every exit path (success, push failure, PR failure) — a
+      // half-finished wip flow must not leave a live terminal parked on a
+      // branch the user never asked to be on.
+      if (switchedFrom) {
+        await gitCheckout(cwd, switchedFrom).catch(() => undefined);
+        setGitBranch(switchedFrom);
+      }
       setFooterBusy(null);
     }
   };

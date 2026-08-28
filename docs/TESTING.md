@@ -791,6 +791,158 @@ send it.
   `SidePanel.tsx` now clears all three on every `cwd` change; `commitAndPush`
   still owns setting/clearing them during an action.
 
+## 21. Phase 11 — Antigravity (`agy`) adapter
+
+Third non-Claude ingestion pipeline. Unlike Codex (Phase 10, a near-literal
+clone of Claude's hook contract reused verbatim), Antigravity's real hook
+contract — read from the installed CLI's own bundled docs
+(`~/.gemini/antigravity-cli/builtin/skills/agy-customizations/docs/hooks.md`)
+during this phase's build, not from web sources alone — differs enough from
+both the web-sourced plan and from Claude/Codex's shape that PLAN.md was
+revised before writing code (see its "Build-time revision" section): a
+different `hooks.json` namespacing (one owned hook name, not a flat per-event
+object), grouped vs. flat array shapes per event. `PreToolUse` is the only
+event with a real `toolCall`-with-blocking-response contract, and it is
+deliberately never registered (its contract expects a blocking
+`{"decision": ...}` response; the doc's own "Current Limitations" confirms
+hooks run synchronously and can block the loop).
+
+**Corrected during manual testing (2026-08-27, item 2/3), superseding the
+doc's claims above:** the doc says `PostToolUse` "carries no toolCall" — a
+live payload captured mid-test had a fully populated one (`toolCall.name`/
+`toolCall.args`), so `translate()` was fixed to map `tool_name`/`tool_input`
+from it (was previously dropped entirely as a documented "gap" that turned
+out to be a bug — see `antigravity.rs`'s `translate()` doc comment and its
+`translate_post_tool_use_maps_tool_call_name_and_args` test). Separately, the
+doc's `error` example (`"exit status 1"`) does not reflect live behavior: a
+real shell command that genuinely exited 1 (confirmed by agy's own "Command
+exited with return code 1" reply) still produced `"error": ""` on
+`PostToolUse` — captured twice, before and after a full app rebuild/`agy`
+restart, so not a stale-process artifact.
+
+**Root-caused 2026-08-27 (superseding the "unresolved gap" this was first
+filed as).** Two things settled it: decoding `hooks.proto`'s embedded
+`FileDescriptorProto` out of the `agy` Mach-O, and capturing paired
+`PostToolUse` payloads for a failing and a succeeding command from a probe
+hook registered as the *sole* hook (see the merge caveat below).
+
+* The real `PostToolHookArgs` is `step_idx`, `tool_call`, `error`, and an
+  **undocumented fourth field `result`** (string).
+* Failing `ls /this_path_does_not_exist_xyz` and succeeding `echo hello_ok`
+  produced byte-identical `"error": ""`. `error` is not the failure signal.
+* `result` never arrives. Neither do `PostInvocationHookArgs.model_output`/
+  `.model_thinking` nor `StopHookArgs.final_model_output` — yet zero-valued
+  fields (`executionNum: 0`, `invocationNum: 0`) *are* emitted, which proves
+  those four are actively stripped by `jsonhook.dropUnsupportedFields`, not
+  merely empty. All four are free-text output fields, apparently reserved for
+  prompt-mode hooks (the doc lists prompt hooks as unimplemented).
+  `jsonhook.Caller.UseFullHookInterface` is an SDK-level setter, not a
+  `hooks.json` key, so a command hook cannot opt in.
+
+**Conclusion: a non-zero exit is not observable from an agy command hook.**
+This is an upstream contract limit, not a bug in `translate()` — there is no
+field to map. Locked in by
+`translate_real_failing_run_command_payload_carries_no_failure_signal`, which
+asserts the verbatim captured failing payload yields no `tool_response`; if a
+future agy release delivers `result` or populates `error`, that test fails and
+that is the cue to wire `is_error` up. Do **not** close this gap by inferring
+failure from `PostInvocation` model prose or the transcript — agent content is
+untrusted (invariant #5) and parsing it for meaning is exactly what invariant
+#1 forbids.
+
+**Two side findings from the same probe, both independent of the above:**
+
+* **Named hooks do not merge on `PostToolUse`**, contradicting the doc's
+  "multiple named hooks … are merged and executed sequentially". With both
+  `logic-loop` and a probe hook registered for `PostToolUse`, only
+  `logic-loop` fired — zero probe invocations across six tool calls, while
+  flat-shaped `PostInvocation`/`Stop` fired for both. So a user with any
+  pre-existing `PostToolUse` hook in `~/.gemini/config/hooks.json` may get
+  *no* Logic Loop tool events at all, silently. Same class as the
+  `~/.claude/settings.json` foreign-hook landmine, but worse: our
+  setup/remove is still correctly non-destructive (item 6 unaffected), the
+  loss is at dispatch time. Untested: which of the two wins, and whether
+  grouped-shape events merge when matchers differ.
+* **`workspacePaths` can be `[]`** on a projectless/headless agy session
+  (reproduced with `agy -p` outside any trusted workspace). `translate()`
+  then emits no `cwd`, which is correct — app-spawned tabs bind by tether
+  regardless — but an `agy` session started *outside* Logic Loop carries no
+  tether and cannot cwd-fallback either, so it will not bind. Covered by
+  `translate_empty_workspace_paths_omits_cwd`.
+
+1. [x] Toggle "antigravity on" with `agy` installed → `~/.gemini/config/
+       hooks.json` gains a `"logic-loop"` key containing exactly
+       `PostToolUse` (grouped, `"matcher": "*"`), `PostInvocation` (flat),
+       `Stop` (flat), each `command` pointing at this app's own binary path
+       with `--antigravity-hook <Event>`. *(2026-08-27: confirmed via `cat
+       ~/.gemini/config/hooks.json` — exact shape matches. No foreign hook
+       was present to test survival against.)*
+2. [x] Launch a real `agy` session in a Logic Loop tab, cwd inside a tracked
+       project → trigger a tool call → confirm via sqlite a `PostToolUse` row
+       lands with a correctly-translated `session_id`/`cwd` (from
+       `conversationId`/`workspacePaths[0]`), tether-bound (not
+       cwd-fallback) — same check style as Phase 8/10. *(2026-08-27: confirmed
+       live. Also surfaced that `agy` only reads `hooks.json` at process
+       startup — a session already running when hooks are toggled on won't
+       pick it up; must be a fresh `agy` process. Original item wording
+       expected no `tool_name`; superseded — see finding above, `tool_name`/
+       `tool_input` now populate correctly.)*
+3. [x] Trigger a tool failure (a command that exits non-zero) → the
+       translated `PostToolUse` row's `tool_response.is_error` is `true`,
+       tab state shows "error", not "working". **Cannot pass as originally
+       specified; closed as an upstream contract limit, not a gap in our
+       code — see the root-cause block above.** `tool_name`/`tool_input` do
+       correctly populate on the failing call's row; `tool_response` is
+       absent because agy sends no field that distinguishes a failed
+       `run_command` from a successful one. Re-verify only if agy's hook
+       contract changes — the unit test named above is the tripwire.
+4. [x] Trigger `Stop` (end the turn/session) → tab transitions to idle in
+       the side panel. *(2026-08-27: passed.)*
+5. [x] Confirm no stall: time a tool call with the ingest server killed
+       (dead-port test, same style as Phase 8/10's) — the agy session shows
+       no perceptible added latency beyond `hook_command()`'s existing 2s
+       timeout, and never surfaces an error/block to the user. *(2026-08-27:
+       passed.)*
+6. [x] Toggle "antigravity off" → `hooks.json` loses just the `"logic-loop"`
+       key; any foreign hook name survives; re-toggle on → idempotent, no
+       duplicate keys. *(2026-08-27: passed, after resolving a build-path /
+       `/Applications` drift — the installed bundle was stale relative to the
+       dev build, so the `command` string written by the toggle didn't match
+       the binary under test. Unrelated to the adapter; same class as the
+       "rebuild and reinstall before testing a hook-command change" step item
+       8 already notes. **Not covered:** foreign-hook survival was verified at
+       the file level only — no foreign `PostToolUse` hook was present, so
+       this did not exercise the non-merging dispatch bug documented above.)*
+7. [x] Fan-out children running `agy` get real tether binding (not "stuck
+       running") — same check style as Phase 7/10's fan-out retest.
+       *(2026-08-27: passed — two children produced two distinct
+       `session_id`s bound to two distinct `tab_id`s, each different from the
+       other and from the parent tab. Real tether binding, not a cwd-fallback
+       collapse onto one tab.)*
+8. [x] Quality gates (2026-08-27, pre-manual-test): `cargo test` 29/29 (11
+       new `antigravity::tests` — `apply_setup`/`strip_ours` idempotency
+       and foreign-hook preservation, the grouped/flat shape split, `error`→
+       `tool_response` mapping, missing-field omission, and the `sh -c`
+       single-quote escaping `command_for` relies on for paths with spaces),
+       `cargo clippy --all-targets -- -D warnings` clean, `tsc --noEmit`
+       clean, `npm run golden` 12/12 (unchanged — no extraction-prompt work
+       this phase), all 9 check scripts pass (unchanged — this phase's only
+       frontend change is the `AgentStatusBar.tsx` toggle and two new
+       `src/lib/ingest.ts` bindings; no ingestion/binding/dedupe logic
+       touched, and `dedupeKey`'s existing tool_use_id-presence branching
+       already handles a `PostToolUse` payload with no such field correctly,
+       confirmed by reading it rather than assumed). **Rerun 2026-08-27
+       post-fix** (item 2/3 findings above): `cargo test` 32/32 (3 more —
+       empty-error-string non-fabrication, `toolCall` name/args mapping,
+       non-`PostToolUse` events never map `toolCall`), clippy clean, app
+       rebuilt via `npm run reinstall` and reinstalled to `/Applications`
+       twice during this test pass to pick up both fixes. **Final rerun
+       2026-08-27** (item 3 root-cause writeup): `cargo test` 34/34 (2 more —
+       the verbatim captured failing-`run_command` payload asserting no
+       `tool_response`, and empty `workspacePaths` omitting `cwd`), clippy
+       clean, `tsc --noEmit` clean. No source behavior changed in that pass —
+       the two tests pin an upstream limit, so no reinstall was needed.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*

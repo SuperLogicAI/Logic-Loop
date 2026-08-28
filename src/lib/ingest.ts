@@ -46,6 +46,22 @@ export function codexHooksStatus(): Promise<boolean> {
   return invoke<boolean>("codex_hooks_status");
 }
 
+export function antigravityDetect(): Promise<boolean> {
+  return invoke<boolean>("antigravity_detect");
+}
+
+export function antigravityHooksSetup(): Promise<void> {
+  return invoke("antigravity_hooks_setup");
+}
+
+export function antigravityHooksRemove(): Promise<void> {
+  return invoke("antigravity_hooks_remove");
+}
+
+export function antigravityHooksStatus(): Promise<boolean> {
+  return invoke<boolean>("antigravity_hooks_status");
+}
+
 export function onHookEvent(cb: (p: HookPayload) => void): Promise<UnlistenFn> {
   return listen<HookPayload>("ingest://hook", (e) => {
     if (typeof e.payload?.hook_event_name === "string" && typeof e.payload?.session_id === "string") {
