@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
 import {
+  antigravityDetect,
+  antigravityHooksRemove,
+  antigravityHooksSetup,
+  antigravityHooksStatus,
   codexDetect,
   codexHooksRemove,
   codexHooksSetup,
@@ -26,6 +30,8 @@ export function AgentStatusBar() {
   const [opencodeOn, setOpencodeOn] = useState<boolean | null>(null);
   const [codexAvailable, setCodexAvailable] = useState(false);
   const [codexOn, setCodexOn] = useState<boolean | null>(null);
+  const [antigravityAvailable, setAntigravityAvailable] = useState(false);
+  const [antigravityOn, setAntigravityOn] = useState<boolean | null>(null);
   const [extractor, setExtractor] = useState<ExtractorSettings | null>(null);
   const [showSettings, setShowSettings] = useState(false);
 
@@ -44,6 +50,13 @@ export function AgentStatusBar() {
         if (available) void codexHooksStatus().then(setCodexOn).catch(() => setCodexOn(null));
       })
       .catch(() => setCodexAvailable(false));
+    void antigravityDetect()
+      .then((available) => {
+        setAntigravityAvailable(available);
+        if (available)
+          void antigravityHooksStatus().then(setAntigravityOn).catch(() => setAntigravityOn(null));
+      })
+      .catch(() => setAntigravityAvailable(false));
   }, []);
 
   const saveExtractor = (s: ExtractorSettings) => {
@@ -93,6 +106,20 @@ export function AgentStatusBar() {
     }
   };
 
+  const toggleAntigravityHooks = async () => {
+    try {
+      if (antigravityOn) {
+        await antigravityHooksRemove();
+        setAntigravityOn(false);
+      } else {
+        await antigravityHooksSetup();
+        setAntigravityOn(true);
+      }
+    } catch (e) {
+      console.error("antigravity hooks toggle failed:", e);
+    }
+  };
+
   return (
     <div className="relative flex h-10 shrink-0 items-center justify-end gap-1.5 border-b border-zinc-800 px-3">
       <button
@@ -130,6 +157,19 @@ export function AgentStatusBar() {
           title="Toggle the Codex adapter hooks in ~/.codex/hooks.json — Codex will ask you to trust the hook once in its own TUI on first use"
         >
           {codexOn === null ? "codex ?" : codexOn ? "codex on" : "codex off"}
+        </button>
+      )}
+      {antigravityAvailable && (
+        <button
+          className={`rounded-full px-3 py-0.5 text-xs ${
+            antigravityOn
+              ? "bg-emerald-900 text-emerald-300 hover:bg-emerald-800"
+              : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+          }`}
+          onClick={() => void toggleAntigravityHooks()}
+          title="Toggle the Antigravity (agy) adapter hooks in ~/.gemini/config/hooks.json — shallower than Claude/Codex: no session-start or waiting signal, and tool activity shows without a tool name"
+        >
+          {antigravityOn === null ? "antigravity ?" : antigravityOn ? "antigravity on" : "antigravity off"}
         </button>
       )}
       <button

@@ -4,6 +4,9 @@ mod codex;
 mod ingest;
 mod opencode;
 mod pty;
+// pub: main.rs calls antigravity::run_hook_mode directly, ahead of
+// app_lib::run(), to intercept `--antigravity-hook` before the GUI boots.
+pub mod antigravity;
 
 use pty::PtyManager;
 use tauri::menu::{MenuBuilder, MenuItem, SubmenuBuilder};
@@ -228,6 +231,7 @@ pub fn run() {
             pty::git_diff_cached,
             pty::git_commit,
             pty::git_create_branch,
+            pty::git_checkout,
             pty::git_push,
             pty::git_pr_create,
             ingest::hooks_setup,
@@ -241,6 +245,10 @@ pub fn run() {
             codex::codex_hooks_setup,
             codex::codex_hooks_remove,
             codex::codex_hooks_status,
+            antigravity::antigravity_detect,
+            antigravity::antigravity_hooks_setup,
+            antigravity::antigravity_hooks_remove,
+            antigravity::antigravity_hooks_status,
             extractor::run_extractor,
             clipboard::clipboard_text,
             clipboard::clipboard_image_path

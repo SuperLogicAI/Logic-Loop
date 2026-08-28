@@ -504,6 +504,26 @@ pub fn git_create_branch(cwd: String, branch: String) -> Result<(), String> {
     }
 }
 
+/// Checkout of an *existing* branch — the return half of the footer's
+/// wip-branch flow, which checks out `git_create_branch`'s new branch
+/// in-place in the tab's live working directory and must switch back
+/// afterward rather than stranding the tab on the wip branch.
+#[tauri::command]
+pub fn git_checkout(cwd: String, branch: String) -> Result<(), String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&cwd)
+        .arg("checkout")
+        .arg(&branch)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
+}
+
 /// Never a force-push — a rejected (diverged) push surfaces git's real error
 /// to the caller, no auto-rebase/auto-pull/silent retry-with-force.
 #[tauri::command]

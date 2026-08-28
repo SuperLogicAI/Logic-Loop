@@ -9,10 +9,10 @@
 
 Logic Loop is an open-source macOS app, built by [Super Logic AI](https://superlogicai.com),
 that aids the human's context-switching limits while running several AI coding
-agent terminal sessions at once — Claude Code and OpenCode today, more
-adapters planned. Every competing tool tells you what your *agents* are
-doing. Logic Loop tells you what *you* need to do — and remembers everything
-you'd otherwise lose in the switch.
+agent terminal sessions at once — Claude Code, OpenCode, Codex and Antigravity
+today, more adapters planned. Every competing tool tells you what your *agents*
+are doing. Logic Loop tells you what *you* need to do — and remembers
+everything you'd otherwise lose in the switch.
 
 > Agent viewers manage the agents' context. Logic Loop manages yours.
 
@@ -41,13 +41,43 @@ switching:
 ## How it works
 
 Logic Loop never scrapes the terminal screen. Semantic events come from
-structured agent protocols only — Claude Code's lifecycle **hooks** and its
-JSONL session **transcripts**, or an agent's own plugin/event API where one
-exists (OpenCode) — deterministic, structured, no ANSI parsing. Raw PTY bytes
-pass through untouched. Panels are plain SQL views over an append-only event
-log; the only place an LLM is used is the ambiguous 10% (did your reply
-address every question the agent asked?), and even that fails open — if
-extraction breaks, the terminals keep working.
+structured agent protocols only — an agent's lifecycle **hooks** (Claude Code,
+Codex, Antigravity), its JSONL session **transcripts**, or its own
+plugin/event API where one exists (OpenCode) — deterministic, structured, no
+ANSI parsing. Raw PTY bytes pass through untouched. Panels are plain SQL views
+over an append-only event log; the only place an LLM is used is the ambiguous
+10% (did your reply address every question the agent asked?), and even that
+fails open — if extraction breaks, the terminals keep working.
+
+Every adapter normalizes to one wire shape, so a tab running any of them gets
+the same state dots, rollups and fan-out tracking. Each installs itself into
+that agent's own global config via a toggle in the app, and removes itself
+byte-identically when switched off.
+
+## Supported agents
+
+| Agent | Activity, state & fan-out | Decision / blocker extraction | Notes |
+|---|---|---|---|
+| **Claude Code** | ✅ | ✅ | Hooks + JSONL transcript tailing. The reference adapter. |
+| **OpenCode** | ✅ | — | In-process plugin translating native events; no transcript file to tail. |
+| **Codex** | ✅ | — | Hook contract is near-identical to Claude's; registers into `~/.codex/hooks.json`. |
+| **[Antigravity](https://github.com/google-antigravity/antigravity-cli)** (`agy`) | ✅ | — | See caveats below. |
+
+Decision and blocker extraction is Claude-only by design — the other agents
+expose no transcript in a shape the extractor reads, and normalizing them is
+its own piece of work rather than a flag to flip.
+
+Two Antigravity-specific limits, both upstream in `agy` and neither fixable
+from this side (full derivation in [docs/TESTING.md](docs/TESTING.md) §21):
+
+- A tool call that exits non-zero is indistinguishable from one that
+  succeeded — `agy` strips the field carrying that status before the hook
+  sees it, so an `agy` tab shows "working" rather than "error" on a failed
+  command. Everything else still lands.
+- `agy` doesn't merge multiple named `PostToolUse` hooks despite documenting
+  that it does. If you already have your own `PostToolUse` hook in
+  `~/.gemini/config/hooks.json`, Logic Loop's may never fire — the toggle
+  will still read "on". Check for a foreign hook first if no rows appear.
 
 ## Status
 
@@ -61,7 +91,9 @@ Early, actively built, dogfooded daily. Shipped:
 - ✅ Re-entry, unclaimed-result tracking, desktop nudges
 - ✅ Fan-out spawn groups — launch and track several agents from one session
 - ✅ OpenCode adapter — first non-Claude ingestion pipeline
-- 🚧 Isolated loops (git worktree–backed tabs)
+- ✅ Codex adapter
+- ✅ Isolated loops (git worktree–backed tabs)
+- ✅ Antigravity (`agy`) adapter
 - ⏳ Crash recovery, onboarding, public release polish
 
 ## Stack
@@ -73,7 +105,11 @@ xterm.js · SQLite (tauri-plugin-sql) · localhost hook-ingest server.
 
 - macOS (Apple Silicon)
 - [Rust](https://rustup.rs) + Node 18+
-- [Claude Code](https://claude.com/claude-code) and/or [OpenCode](https://opencode.ai) installed
+- At least one supported agent CLI installed — [Claude Code](https://claude.com/claude-code),
+  [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex),
+  or [Antigravity](https://github.com/google-antigravity/antigravity-cli)
+  (`agy`). Each is detected independently — `PATH` plus the
+  usual install locations — and its toggle appears only once found.
 
 ## Development
 
