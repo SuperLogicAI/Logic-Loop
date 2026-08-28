@@ -494,3 +494,37 @@ Adapter order:
 Standing design constraint unchanged: keep `events.type` and payloads
 agent-agnostic — agent-specific knowledge stays inside ingestion; never
 screen parsing (invariant #1 survives).
+
+## Windows port — Phase 13 (gap list derived in Phase 12)
+
+Target is **native Windows** (ConPTY / PowerShell / `%USERPROFILE%`), not WSL.
+Phase 12 added CI with a Windows leg that compiles and runs the platform-
+neutral unit tests; it proves nothing about behavior. This list was derived
+once, against real line numbers, so the port phase doesn't re-survey.
+
+**Already handled in Phase 12 (compile gates only, no behavior claimed):**
+`kill_session`'s `killpg` is `#[cfg(unix)]` and Windows falls through to
+`child.kill()` alone — orphan-process cleanup there needs a Job Object.
+`libc` is a unix-only dependency. Two `$HOME`-dependent `pty.rs` tests are
+`#[cfg(unix)]`-gated pending a `home()` helper.
+
+**Runtime gaps to close:**
+
+| Site | Gap |
+|---|---|
+| `ingest.rs:18`, `codex.rs:11`, `opencode.rs:14`, `antigravity.rs:21`, `extractor.rs:7`, `clipboard.rs:23`, `pty.rs:63,86` | `$HOME` is unset on Windows — every adapter path silently resolves to `/tmp`. One `home()` helper (`HOME` → `USERPROFILE`), then every call site through it. |
+| `ingest.rs:247` `hook_command()` | Emits `sh -c '... curl ...'`. No `sh` on native Windows. Needs a Windows hook shape (PowerShell one-liner, or a generated `.cmd`), and `HOOK_VERSION` handling if the payload contract shifts. |
+| `pty.rs:142` `pty_spawn` | `$SHELL` + `-l` + `/bin/zsh` fallback. Windows: ConPTY (portable-pty already ships the backend) + PowerShell, and `-l` has no analog. The `claude --resume` `-c` line needs a Windows equivalent too. |
+| `pty.rs` `canon`/`project_key`/`expand` | `/`-separator and `~` logic; `expand("/")` root landmine has a `C:\` twin. |
+| `src/lib/ingest.ts:121` | `projectKey === "/"` root guard misses a Windows drive root. |
+| `src/lib/repo.ts:114` | Basename via `split("/")` — wrong for `C:\foo\bar`. |
+| `clipboard.rs` | Entirely `pbpaste`/`osascript`. Windows needs its own path (the WKWebView permission-pill reason for avoiding `navigator.clipboard` doesn't apply on WebView2 — re-evaluate rather than port the workaround). |
+| `opencode.rs:21` | `XDG_CONFIG_HOME` → `%APPDATA%` on Windows. |
+| `extractor.rs:7` | `~/.local/bin/claude` — different install path on Windows. |
+| `tauri.conf.json` | `titleBarStyle: "Overlay"` + `hiddenTitle` are macOS-only; the custom titlebar/drag-region CSS needs a look on Windows. |
+| runtime dep | WebView2 must be present on the target machine (bundled by the NSIS installer by default; verify). |
+
+**Also needed in Phase 13:** `docs/TESTING.md §22`, the Windows manual test —
+written when there's a machine to run it on. `scripts/reinstall.sh` is
+macOS-only (`lsregister`, `/Applications`); a Windows equivalent is optional,
+the installer covers it.

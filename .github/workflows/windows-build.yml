@@ -1,0 +1,34 @@
+name: Windows build
+
+# Produces an UNSIGNED NSIS installer for manual testing. Unsigned means
+# SmartScreen will warn on first run ("More info" -> "Run anyway").
+#
+# --bundles is passed on the command line on purpose: tauri.conf.json's
+# bundle.targets stays ["app"] (see the DMG landmine in CLAUDE.md), so this
+# workflow cannot affect local macOS builds.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - run: npm run tauri build -- --bundles nsis
+      - uses: actions/upload-artifact@v4
+        with:
+          name: logic-loop-windows-unsigned
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error

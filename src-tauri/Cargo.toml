@@ -29,6 +29,8 @@ tauri-plugin-sql = { version = "2.4.0", features = ["sqlite"] }
 tiny_http = "0.12.0"
 getrandom = "0.4.3"
 ureq = { version = "3.3.0", features = ["json"] }
-libc = "0.2.186"
 tauri-plugin-notification = "2.3.3"
 
+# Unix-only: kill_session's killpg. Not built on Windows at all.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.186"

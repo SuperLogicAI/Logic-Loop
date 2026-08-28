@@ -524,14 +524,20 @@ export default function App() {
       }
       const isStop = p.hook_event_name === "Stop";
       if (p.hook_event_name === "PostToolUse") {
-        const resp = p["tool_response"];
-        const text =
-          typeof resp === "string"
-            ? resp
-            : resp && typeof resp === "object"
-              ? Object.values(resp).filter((v): v is string => typeof v === "string").join("\n")
-              : "";
-        runDetectors(p.session_id, text);
+        // Scoped to Bash: Read/Grep/Glob tool_response is file/doc content, not
+        // command output — scanning it flags blockers on error strings quoted
+        // in comments or docs (e.g. this file's own landmine notes) rather than
+        // real failures.
+        if (p["tool_name"] === "Bash") {
+          const resp = p["tool_response"];
+          const text =
+            typeof resp === "string"
+              ? resp
+              : resp && typeof resp === "object"
+                ? Object.values(resp).filter((v): v is string => typeof v === "string").join("\n")
+                : "";
+          runDetectors(p.session_id, text);
+        }
         setPanelRefresh((n) => n + 1); // accomplished panel has a new row
       }
 
@@ -601,7 +607,9 @@ export default function App() {
 
     void onTranscriptLine((p) => {
       void repo.addEvent(p.session_id, "transcript", p.line).catch(() => undefined);
-      runDetectors(p.session_id, p.line);
+      // Blocker detection deliberately skips raw transcript lines (assistant/
+      // user prose, quoted doc content) — PostToolUse's Bash-scoped tool_response
+      // above is the only real-error channel now. See note there.
       decisions.onTranscript(p.session_id, sessionCwd.get(p.session_id), p.line, refreshDecisionCounts);
       // transcripts flowing again → clear any warning for this session
       setBlindSessions((s) => {
