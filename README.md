@@ -103,7 +103,9 @@ xterm.js · SQLite (tauri-plugin-sql) · localhost hook-ingest server.
 
 ## Requirements
 
-- macOS (Apple Silicon)
+- macOS (Apple Silicon). Primary supported target.
+- Windows: experimental. CI produces an unsigned NSIS installer for manual
+  testing (SmartScreen warns on first run), not yet officially supported.
 - [Rust](https://rustup.rs) + Node 18+
 - At least one supported agent CLI installed — [Claude Code](https://claude.com/claude-code),
   [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex),
