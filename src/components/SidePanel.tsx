@@ -982,6 +982,12 @@ export function SidePanel({
           )}
         </div>
       )}
+      {/* Attribution: always rendered, unlike the footer above, which hides
+          outside a git repo. ponytail: plain text — a clickable link would
+          mean wiring plugin-opener for one line of chrome. */}
+      <div className="shrink-0 border-t border-zinc-800/60 px-2 py-1 text-right text-[9px] text-zinc-600">
+        built by Super Logic AI
+      </div>
     </div>
   );
 }

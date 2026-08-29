@@ -119,6 +119,12 @@ npm run tauri dev     # run the app
 npm run build         # tsc + vite build
 ```
 
+## Contributing
+
+Bug reports, adapter requests and PRs welcome — see
+[CONTRIBUTING.md](CONTRIBUTING.md) for setup, the merge gates, and the
+architecture rules that aren't up for debate.
+
 ## License
 
 [GNU GPLv3](LICENSE).
