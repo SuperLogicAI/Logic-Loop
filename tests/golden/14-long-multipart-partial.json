@@ -1,0 +1,13 @@
+{
+  "assistant": "Before I wire up the deploy, four things:\n1. Deploy to staging first or straight to prod?\n2. Run migrations automatically or gate them behind a manual step?\n3. Keep the old v1 endpoints alive during rollout or cut them immediately?\n4. Should the health check block the release if it fails?",
+  "user": "Staging first. Gate the migrations behind a manual step. Cut v1 immediately.",
+  "expect": {
+    "count": 4,
+    "answered": [
+      true,
+      true,
+      true,
+      false
+    ]
+  }
+}
