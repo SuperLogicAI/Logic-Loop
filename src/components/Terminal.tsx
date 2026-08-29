@@ -1,7 +1,9 @@
 import { useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 import { onPtyExit, onPtyOutput, ptyResize, ptyWrite } from "../lib/pty";
 import type { Tab } from "../types";
@@ -30,6 +32,10 @@ export function Terminal({ tab, visible, onExit, onRestart }: Props) {
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
+    // A URL in agent output is inert text otherwise: xterm has no OS to hand a
+    // click to. Route through the opener plugin (system browser) rather than
+    // window.open, which would navigate the webview off the app itself.
+    term.loadAddon(new WebLinksAddon((_e, uri) => void openUrl(uri)));
     // ⌘V via the webview's native paste path can skip xterm's paste handler,
     // losing bracketed-paste wrapping (multi-line pastes then submit
     // line-by-line in TUIs like claude). Route it through term.paste(), which

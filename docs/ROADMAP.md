@@ -524,7 +524,7 @@ once, against real line numbers, so the port phase doesn't re-survey.
 | `tauri.conf.json` | `titleBarStyle: "Overlay"` + `hiddenTitle` are macOS-only; the custom titlebar/drag-region CSS needs a look on Windows. |
 | runtime dep | WebView2 must be present on the target machine (bundled by the NSIS installer by default; verify). |
 
-**Also needed in Phase 13:** `docs/TESTING.md §22`, the Windows manual test —
+**Also needed in Phase 13:** `docs/TESTING.md §23`, the Windows manual test —
 written when there's a machine to run it on. `scripts/reinstall.sh` is
 macOS-only (`lsregister`, `/Applications`); a Windows equivalent is optional,
 the installer covers it.
