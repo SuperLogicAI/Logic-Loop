@@ -24,18 +24,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx tsc --noEmit
-      # One step, one line each: the failing script's name is the failure.
+      # Aggregate; && short-circuits, so the failing script's own output names it.
       - name: check scripts
-        run: |
-          npm run landing:check
-          npm run epoch:check
-          npm run bind:check
-          npm run dedupe:check
-          npm run reentry:check
-          npm run unclaimed:check
-          npm run notify:check
-          npm run spawn:check
-          npm run scope:check
+        run: npm run check
 
   rust:
     name: rust (${{ matrix.os }})
