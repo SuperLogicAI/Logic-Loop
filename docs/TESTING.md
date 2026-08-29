@@ -1008,6 +1008,15 @@ untrusted (invariant #5) and parsing it for meaning is exactly what invariant
        clean, `tsc --noEmit` clean. No source behavior changed in that pass —
        the two tests pin an upstream limit, so no reinstall was needed.
 
+## 22. Clickable links in terminal output (2026-08-29)
+
+- [ ] Have an agent print a bare `https://` URL (or `cat` a file containing
+      one). Hovering underlines it; clicking opens the system default browser.
+- [ ] The Logic Loop window itself does **not** navigate — the webview must
+      still show the app, not the linked page.
+- [ ] Click a URL in a background tab's scrollback after switching to it;
+      still opens externally (addon is loaded per-terminal, not per-visible).
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*
