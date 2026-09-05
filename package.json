@@ -10,6 +10,7 @@
     "tauri": "tauri",
     "reinstall": "sh scripts/reinstall.sh",
     "golden": "tsx scripts/golden.ts",
+    "check": "npm run landing:check && npm run epoch:check && npm run bind:check && npm run dedupe:check && npm run reentry:check && npm run unclaimed:check && npm run notify:check && npm run spawn:check && npm run scope:check",
     "landing:check": "tsx scripts/landing-check.ts",
     "epoch:check": "tsx scripts/epoch-check.ts",
     "bind:check": "tsx scripts/bind-check.ts",
