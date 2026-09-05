@@ -18,7 +18,9 @@
     "unclaimed:check": "tsx scripts/unclaimed-check.ts",
     "notify:check": "tsx scripts/notify-check.ts",
     "spawn:check": "tsx scripts/spawn-check.ts",
-    "scope:check": "tsx scripts/scope-check.ts"
+    "scope:check": "tsx scripts/scope-check.ts",
+    "clock:check": "tsx scripts/clock-check.ts",
+    "delta:check": "tsx scripts/delta-check.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

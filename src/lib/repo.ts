@@ -377,6 +377,54 @@ export async function recentTranscript(sessionId: string, limit = 20): Promise<s
   return rows.map((r) => r.payload_json).reverse();
 }
 
+// --- Since-you-left delta (Phase 14a): a `tab_left` event marks the anchor;
+// everything after it is the digest. Keyed by tab tether (survives
+// `--resume` whether or not session_id changes), with a session_id fallback
+// for rows that never carry a tab_id (outside-terminal sessions bound by cwd
+// fallback, and every `transcript` row, whose JSON has no tab_id key). ---
+
+/** Most recent moment the human left this tab, or null if never (first visit
+ * — the landing note's job, not this one). */
+export async function lastLeft(tether: string): Promise<number | null> {
+  const d = await getDb();
+  const rows = await d.select<{ ts: number | null }[]>(
+    `SELECT MAX(ts) AS ts FROM events WHERE type = 'tab_left' AND json_extract(payload_json, '$.tab_id') = $1`,
+    [tether]
+  );
+  return rows[0]?.ts ?? null;
+}
+
+/** Every event on this tab's own session since `since`, oldest first —
+ * the raw material `summarizeDelta` reduces. */
+export async function eventsSince(
+  tether: string,
+  sessionId: string | null,
+  since: number
+): Promise<{ id: number; ts: number; type: string; payload_json: string }[]> {
+  const d = await getDb();
+  return d.select<{ id: number; ts: number; type: string; payload_json: string }[]>(
+    `SELECT id, ts, type, payload_json FROM events
+     WHERE ts > $1
+       AND (
+         json_extract(payload_json, '$.tab_id') = $2
+         OR (json_extract(payload_json, '$.tab_id') IS NULL AND session_id = $3)
+       )
+     ORDER BY ts ASC`,
+    [since, tether, sessionId ?? ""]
+  );
+}
+
+/** Decisions opened on this project since `since` — scope to the tab's own
+ * session with `scopeBySession` at the call site, same as every other
+ * cwd-wide read. */
+export async function decisionsOpenedSince(cwd: string, since: number): Promise<Decision[]> {
+  const d = await getDb();
+  return d.select<Decision[]>(
+    `SELECT * FROM decisions WHERE cwd = $1 AND status = 'open' AND ts > $2 ORDER BY ts DESC`,
+    [cwd, since]
+  );
+}
+
 // --- Re-entry (Phase 6): one row per Claude session, keyed by the tab's own
 // tether uuid so a resumed session (new session_id) is still found under the
 // same tab. ---

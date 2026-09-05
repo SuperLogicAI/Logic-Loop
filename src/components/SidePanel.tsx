@@ -4,6 +4,8 @@ import { ask } from "@tauri-apps/plugin-dialog";
 import * as repo from "../lib/repo";
 import { burst } from "../lib/confetti";
 import { generateCommitMessage } from "../lib/commitMessage";
+import { summarizeDelta, type Delta } from "../lib/delta";
+import { deriveClock, formatAge } from "../lib/ingest";
 import {
   gitAddAll,
   gitAddU,
@@ -18,11 +20,15 @@ import {
   gitUntrackedFiles,
 } from "../lib/pty";
 import { RainbowText } from "./RainbowText";
-import type { Blocker, Commit, Decision, FanOutRollup, Note, ToolEvent } from "../types";
+import type { AgentState, Blocker, Commit, Decision, FanOutRollup, Note, ToolEvent } from "../types";
 
 interface Props {
   cwd: string; // expanded absolute project dir of the active tab
   sessionId: string | null; // session currently bound to the active tab, for scoping decisions/tool events away from sibling tabs on the same cwd
+  tabTether: string; // active tab's own id — the since-you-left anchor key
+  agentState?: AgentState;
+  lastEventTs?: number; // Phase 14b clock
+  now: number; // Phase 14b tick
   accent: string | null; // matching bookmark's color, if the project is bookmarked
   refreshKey: number; // bump to force reload (new events / blocker changes)
   blindPaths: string[]; // transcripts that failed to open — panels are incomplete
@@ -71,6 +77,10 @@ function ago(ts: number): string {
 export function SidePanel({
   cwd,
   sessionId,
+  tabTether,
+  agentState,
+  lastEventTs,
+  now,
   accent,
   refreshKey,
   blindPaths,
@@ -88,6 +98,7 @@ export function SidePanel({
   const [commits, setCommits] = useState<Commit[]>([]);
   const [blockers, setBlockers] = useState<Blocker[]>([]);
   const [decisions, setDecisions] = useState<Decision[]>([]);
+  const [delta, setDelta] = useState<Delta | null>(null); // since-you-left digest (Phase 14a)
   const [landing, setLanding] = useState<Note | null>(null); // active project, momentum
   const [notes, setNotes] = useState<Note[]>([]); // active project, open notes & reminders
   const [context, setContext] = useState<Decision | null>(null);
@@ -182,7 +193,25 @@ export function SidePanel({
     setGitBranch(branch);
     setGitDirty(dirty);
     setUntrackedFiles(untracked);
-  }, [cwd, sessionId, isUnboundFanOutChild]);
+
+    // Since-you-left delta (Phase 14a): no anchor → no section (a tab never
+    // left has nothing to delta against — that's the landing note's job).
+    // Same fan-out isolation rule as toolEvents/decisions above.
+    if (isUnboundFanOutChild) {
+      setDelta(null);
+    } else {
+      const since = await repo.lastLeft(tabTether).catch(() => null);
+      if (since == null) {
+        setDelta(null);
+      } else {
+        const [rows, decisionsSince] = await Promise.all([
+          repo.eventsSince(tabTether, sessionId, since).catch(() => []),
+          repo.decisionsOpenedSince(cwd, since).catch(() => []),
+        ]);
+        setDelta(summarizeDelta(rows, repo.scopeBySession(decisionsSince, sessionId)));
+      }
+    }
+  }, [cwd, sessionId, isUnboundFanOutChild, tabTether]);
 
   useEffect(() => {
     void reload();
@@ -453,6 +482,13 @@ export function SidePanel({
         >
           project: {cwd.split("/").filter(Boolean).pop() ?? cwd}
         </p>
+        <p className="shrink-0 text-[10px] text-zinc-600" title="Phase 14b clock">
+          {agentState ?? "no session"}
+          {" · "}
+          {lastEventTs !== undefined
+            ? `${formatAge(deriveClock({ agentState, lastEventTs }, now).quietMs)} ago`
+            : "no events yet"}
+        </p>
         <button
           className={`flex shrink-0 items-center gap-1 rounded px-1 leading-none ${muted ? "text-zinc-600 hover:text-zinc-400" : "text-zinc-400 hover:text-zinc-200"}`}
           title={muted ? "Notifications muted for this project — click to unmute" : "Mute notifications for this project"}
@@ -517,6 +553,54 @@ export function SidePanel({
         </p>
       )}
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3">
+      {delta &&
+        (delta.files.length > 0 ||
+          delta.bashRuns > 0 ||
+          delta.turns > 0 ||
+          delta.stops > 0 ||
+          delta.decisions.length > 0 ||
+          delta.lastWords !== "") && (
+        <section className="rounded-lg border border-cyan-500/30 bg-cyan-400/5 p-3">
+          <h2
+            className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-cyan-300 uppercase select-none"
+            onClick={() => toggleSection("since-left")}
+          >
+            <Chevron collapsed={collapsed.has("since-left")} className="text-cyan-300/85" />
+            Since you left
+          </h2>
+          {!collapsed.has("since-left") && (
+            <div className="flex flex-col gap-1 text-zinc-300">
+              {delta.files.length > 0 && (
+                <p>
+                  {delta.files.length} file{delta.files.length === 1 ? "" : "s"} changed:{" "}
+                  <span className="text-zinc-400">
+                    {delta.files.map((f) => f.split("/").filter(Boolean).pop()).join(", ")}
+                  </span>
+                </p>
+              )}
+              {delta.bashRuns > 0 && (
+                <p>
+                  {delta.bashRuns} command{delta.bashRuns === 1 ? "" : "s"} run
+                  {delta.bashErrors > 0 && (
+                    <span className="text-red-400"> ({delta.bashErrors} failed)</span>
+                  )}
+                </p>
+              )}
+              <p className="text-zinc-500">
+                {delta.turns} turn{delta.turns === 1 ? "" : "s"} · {delta.stops} stop{delta.stops === 1 ? "" : "s"}
+              </p>
+              {delta.decisions.length > 0 && (
+                <p className="text-orange-300">
+                  {delta.decisions.length} new decision{delta.decisions.length === 1 ? "" : "s"} opened
+                </p>
+              )}
+              {delta.lastWords && (
+                <p className="mt-1 break-words rounded bg-black/20 p-1.5 text-zinc-400">{delta.lastWords}</p>
+              )}
+            </div>
+          )}
+        </section>
+      )}
       <section className="border-b border-zinc-800 pb-3">
         <h2 className="mb-1.5 font-semibold tracking-wide uppercase">
           <RainbowText text="Notes and reminders" />
