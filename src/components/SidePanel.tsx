@@ -569,35 +569,53 @@ export function SidePanel({
             Since you left
           </h2>
           {!collapsed.has("since-left") && (
-            <div className="flex flex-col gap-1 text-zinc-300">
-              {delta.files.length > 0 && (
-                <p>
-                  {delta.files.length} file{delta.files.length === 1 ? "" : "s"} changed:{" "}
-                  <span className="text-zinc-400">
-                    {delta.files.map((f) => f.split("/").filter(Boolean).pop()).join(", ")}
+            <>
+              <ul className="flex flex-col gap-1 text-zinc-300">
+                {delta.files.length > 0 && (
+                  <li className="flex gap-1.5">
+                    <span className="shrink-0 text-cyan-500/60">•</span>
+                    <span>
+                      {delta.files.length} file{delta.files.length === 1 ? "" : "s"} changed:{" "}
+                      <span className="text-zinc-400">
+                        {delta.files.map((f) => f.split("/").filter(Boolean).pop()).join(", ")}
+                      </span>
+                    </span>
+                  </li>
+                )}
+                {delta.bashRuns > 0 && (
+                  <li className="flex gap-1.5">
+                    <span className="shrink-0 text-cyan-500/60">•</span>
+                    <span>
+                      {delta.bashRuns} command{delta.bashRuns === 1 ? "" : "s"} run
+                      {delta.bashErrors > 0 && (
+                        <span className="text-red-400"> ({delta.bashErrors} failed)</span>
+                      )}
+                    </span>
+                  </li>
+                )}
+                <li className="flex gap-1.5 text-zinc-500">
+                  <span className="shrink-0 text-cyan-500/60">•</span>
+                  <span>
+                    {delta.turns} turn{delta.turns === 1 ? "" : "s"} · {delta.stops} stop
+                    {delta.stops === 1 ? "" : "s"}
                   </span>
-                </p>
-              )}
-              {delta.bashRuns > 0 && (
-                <p>
-                  {delta.bashRuns} command{delta.bashRuns === 1 ? "" : "s"} run
-                  {delta.bashErrors > 0 && (
-                    <span className="text-red-400"> ({delta.bashErrors} failed)</span>
-                  )}
-                </p>
-              )}
-              <p className="text-zinc-500">
-                {delta.turns} turn{delta.turns === 1 ? "" : "s"} · {delta.stops} stop{delta.stops === 1 ? "" : "s"}
-              </p>
-              {delta.decisions.length > 0 && (
-                <p className="text-orange-300">
-                  {delta.decisions.length} new decision{delta.decisions.length === 1 ? "" : "s"} opened
-                </p>
-              )}
+                </li>
+                {delta.decisions.length > 0 && (
+                  <li className="flex gap-1.5 text-orange-300">
+                    <span className="shrink-0 text-cyan-500/60">•</span>
+                    <span>
+                      {delta.decisions.length} new decision{delta.decisions.length === 1 ? "" : "s"} opened
+                    </span>
+                  </li>
+                )}
+              </ul>
               {delta.lastWords && (
-                <p className="mt-1 break-words rounded bg-black/20 p-1.5 text-zinc-400">{delta.lastWords}</p>
+                <p className="mt-1.5 break-words rounded bg-black/20 p-1.5 text-zinc-400">
+                  <span className="text-zinc-600">agent's last words: </span>
+                  {delta.lastWords}
+                </p>
               )}
-            </div>
+            </>
           )}
         </section>
       )}
