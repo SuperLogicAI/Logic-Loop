@@ -78,6 +78,28 @@ assert.equal(
   null,
   "a rootless session hijacked the active tab"
 );
+// Same hazard on Windows: a drive root is as rootless as `/`.
+for (const root of ["C:\\", "C:/", "C:", "\\", "d:\\"]) {
+  assert.equal(
+    bind(ev(), two, { active: "tab-1", projectKey: root }),
+    null,
+    `a rootless session (${root}) hijacked the active tab`
+  );
+}
+// ...but a real Windows project must still bind. Over-rejecting here would
+// silently stop every Windows session from binding — a worse bug, and a quieter
+// one, than the drive root this guard exists to catch.
+const win = "C:\\Users\\x\\dev\\proj";
+assert.equal(
+  bind(ev(), [tab("tab-1", win)], { projectKey: win }),
+  "tab-1",
+  "root guard over-rejected a real Windows project path"
+);
+assert.equal(
+  bind(ev(), [tab("tab-1", "C:/Users/x/dev/proj")], { projectKey: "C:/Users/x/dev/proj" }),
+  "tab-1",
+  "root guard over-rejected a forward-slashed Windows path"
+);
 // A dead tab is never a fallback target.
 assert.equal(
   bind(ev(), [{ id: "tab-1", cwd: "/Users/x/dev/other", status: "exited" }], { active: "tab-1" }),
