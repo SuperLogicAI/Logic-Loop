@@ -94,6 +94,13 @@ export async function addEvent(sessionId: string, type: string, payloadJson: str
   );
 }
 
+/** Last path segment, for either separator. Agent payloads carry native paths,
+ * so a Windows `file_path` arrives backslashed — splitting on `/` alone returned
+ * the whole path and the Accomplished panel printed it verbatim. */
+export function basename(p: string): string {
+  return p.split(/[\\/]/).filter(Boolean).pop() ?? p;
+}
+
 /** Accomplished panel: recent tool uses for a project, straight off the events table. */
 export async function listToolEvents(cwd: string, limit = 50): Promise<ToolEvent[]> {
   const d = await getDb();
@@ -111,7 +118,6 @@ export async function listToolEvents(cwd: string, limit = 50): Promise<ToolEvent
     Grep: "Searched",
     Glob: "Searched",
   };
-  const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
   return rows.map((r) => {
     let tool = "?";
     let detail = "";
@@ -128,7 +134,7 @@ export async function listToolEvents(cwd: string, limit = 50): Promise<ToolEvent
       // else verb + filename, else the tool name.
       plain =
         description ||
-        (filePath ? `${VERB[tool] ?? tool} ${base(filePath)}` : "") ||
+        (filePath ? `${VERB[tool] ?? tool} ${basename(filePath)}` : "") ||
         (command ? `Ran ${command.slice(0, 60)}` : tool);
     } catch {
       // keep defaults

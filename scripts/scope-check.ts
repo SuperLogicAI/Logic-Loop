@@ -1,6 +1,7 @@
-// Self-check for panel session scoping. Run: npm run scope:check
+// Self-check for panel row shaping: session scoping + the Accomplished
+// panel's filename. Run: npm run scope:check
 import { strict as assert } from "node:assert";
-import { scopeBySession } from "../src/lib/repo";
+import { basename, scopeBySession } from "../src/lib/repo";
 
 const row = (id: number, sessionId: string) => ({ id, session_id: sessionId });
 
@@ -24,5 +25,19 @@ assert.deepEqual(scopeBySession(rows, "s-unrelated"), [], "unrelated session mat
 // No bound session yet (plain shell, no agent has reported) — cwd-wide
 // fallback, same behavior as before this fix existed.
 assert.equal(scopeBySession(rows, null).length, 4, "null session id should fall back to the unfiltered list");
+
+// --- Accomplished panel filename, either separator. ---
+// The backslash case is the bug: splitting on `/` alone left the path whole and
+// the panel rendered "Edited C:\Users\x\dev\proj\main.rs".
+assert.equal(basename("C:\\Users\\x\\dev\\proj\\main.rs"), "main.rs", "backslash path not shortened");
+assert.equal(basename("/Users/x/dev/proj/main.rs"), "main.rs", "posix path not shortened");
+assert.equal(basename("C:/Users/x/dev/proj/main.rs"), "main.rs", "mixed-separator path not shortened");
+// Trailing separator: filter(Boolean) drops the empty tail, so a directory-ish
+// path still names its last real segment rather than returning "".
+assert.equal(basename("/Users/x/dev/proj/"), "proj");
+// Already bare, and the degenerate inputs — never return "" to the panel.
+assert.equal(basename("main.rs"), "main.rs");
+assert.equal(basename("/"), "/");
+assert.equal(basename(""), "");
 
 console.log("scope-check: all assertions passed");

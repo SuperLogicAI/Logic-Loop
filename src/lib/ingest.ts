@@ -115,10 +115,13 @@ export function bindSession(
   }
   const { boundTabIds, activeTabId, projectKey } = opts;
   if (!projectKey) return null;
-  // `/` is never a real project: it means the session was started somewhere with
-  // no meaningful cwd. Binding it would overwrite the tab's cwd with a key that
-  // matches nothing, blanking the panel. Untethered + rootless = not ours.
-  if (projectKey === "/") return null;
+  // A filesystem root is never a real project: it means the session was started
+  // somewhere with no meaningful cwd. Binding it would overwrite the tab's cwd
+  // with a key that matches nothing, blanking the panel. Untethered + rootless =
+  // not ours. A Windows drive root (`C:\`, `C:/`, bare `C:`) is the same hazard.
+  // Deliberately anchored and exact — a prefix test would reject `/Users/x` and
+  // `C:\dev\proj` too, which fails far more quietly than the bug it fixes.
+  if (/^(?:[/\\]|[A-Za-z]:[/\\]?)$/.test(projectKey)) return null;
   return (
     tabs.find((t) => t.cwd === projectKey && !boundTabIds.has(t.id))?.id ??
     tabs.find((t) => t.cwd === projectKey)?.id ??
