@@ -289,6 +289,37 @@ cheaper exactly as Adapters gets more expensive.
   tab and project. Rows with an unknown tether → project-level only, no
   misattribution.
 
+**Checked against Safe Router 2026-09-04** (verdict from an investigation
+run in that repo, not this one — no code touched here): the Compass-study
+detail from the ROADMAP re-validation above (rate-limit reset countdown,
+account hot-swap) is not covered on the Safe Router side today, but the
+gap sits entirely in *their* schema, not in anything this panel does.
+
+- **Rate-limit visibility does not exist yet.** `requests` (docs/SPEC.md
+  in that repo) has no remaining/reset column; `is_retryable_status`
+  (`src/proxy.rs:203-204` there) checks HTTP status only, never reads
+  `x-ratelimit-*` response headers. If this panel ever wants a countdown,
+  Safe Router has to start capturing and logging that first — nothing to
+  build here until it does.
+- **Multi-account failover is already structurally free on their side** —
+  two `[[provider]]` blocks, same `base_url`, different `id`/
+  `keychain_item`, chained with `on_error = "next"`, is today's existing
+  frontier-cheap chain pattern (their docs/SPEC.md:234-239), not a new
+  feature. Confirmed compatible with their invariant #3 (no runtime-
+  mutable policy) since the swap is a static, startup-time config fact,
+  not a toggle. Nothing for this panel to represent differently — a
+  same-provider chain hop looks like any other `chain_pos` advance in the
+  existing `requests` log, already covered by the join this section
+  describes.
+- **No prior discussion found** of either idea in that repo's git
+  history or PLAN.md before this check.
+
+Net: this panel's scope is unchanged. Reset-countdown display stays
+blocked on a Safe Router schema change (their move, not ours); if/when
+they add `x-ratelimit-remaining`/`reset` columns, this panel picks them
+up the same read-only way it picks up `tokens_in`/`tokens_out` today —
+no new join, no new ingestion.
+
 ## Recursive fan-out spawn (RAH) — Phase 7, in progress
 
 Source: Lumer et al., "Recursive Agent Harnesses" (arXiv:2606.13643).
