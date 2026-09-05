@@ -23,7 +23,7 @@ table below until one gets its own PLAN.md.
 | Nudges | Phase 6 | 0.5d | Unclaimed results |
 | Recursive fan-out spawn (RAH) | DONE (Phase 7) | 2d | Tab tether, Versioned hook contract |
 | OpenCode adapter | DONE (Phase 8) | — | Versioned hook contract |
-| Isolated loops (worktrees) | Phase 9 candidate (was v1.1) | — | Tab tether |
+| Isolated loops (worktrees) | Not started — Phase 9 shipped a different, narrower mechanism (branch-switch-in-place); this is still open | — | Tab tether |
 | Model traffic panel (Safe Router) | Phase 9 candidate | 1d | External: Safe Router v0 log |
 | Codex adapter | v2, next up | — | OpenCode adapter |
 | Remaining adapters (Antigravity, Gemini, Copilot) | v2, after Codex | — | Codex adapter |
@@ -432,6 +432,20 @@ local branch, not just new-branch creation — right-click a branch, "open in
 worktree," cwd becomes that worktree. And sanitize branch names used as
 directory components (`feature/foo` → `feature-foo`) rather than assuming
 branch names are filesystem-safe as-is.
+
+**Re-validated 2026-09-04** (competitive research, internal codename:
+Compass study — concept only, no code copied): a mature multi-agent
+orchestrator's flagship fan-out feature is exactly this — one prompt across
+N agents, each in its own `git worktree`, compare and merge the winner. Real
+evidence this is the right mechanism and not gold-plating: Phase 9 shipped
+the narrower branch-switch-in-place flow instead (`commitAndPush("branch")`
+in `SidePanel.tsx`, a real `git checkout -b` in the tab's own live working
+directory) and it produced exactly the failure class worktree isolation
+exists to prevent — see the wip-branch-checkout landmine in CLAUDE.md
+(committed and pushed correctly, but silently left the tab's live checkout
+parked on the new branch with no worktree boundary to contain it). This
+item should build actual `git worktree add` isolation, not extend the
+branch-switch approach further.
 
 ## Split-pane tabs — v1.x UI
 
