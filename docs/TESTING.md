@@ -1021,21 +1021,50 @@ All passed 2026-09-05.
 
 ## 23. Since-you-left delta + Clock on state (Phase 14)
 
-- [ ] Two tabs, agent edits 3 files on tab A while tab B is active → switch to
+Steps 1-3 passed 2026-09-05 (order shuffled by real usage — see notes).
+
+- [x] Two tabs, agent edits 3 files on tab A while tab B is active → switch to
       A: "Since you left" shows 3 files, correct turn/stop counts, agent's
       last message text. Accomplished below it unchanged.
-- [ ] Stay on A, agent edits one more file → section grows to 4 files.
-      Switch away and back → resets to the new delta only.
-- [ ] Cmd-Tab to another app while A is active, agent finishes → return:
+- [x] Stay on A, agent edits one more file → section grows to 4 files.
+      Switch away and back → resets to the new delta only. *(Confirmed the
+      reset half first, incidentally — checking step 1's result meant
+      leaving and returning to A, which itself wrote a fresh anchor and
+      correctly excluded the earlier edits. Grow-while-staying then
+      re-verified cleanly: two further writes with no tab switch in
+      between showed 1 file, then 2 — never reset.)*
+- [x] Cmd-Tab to another app while A is active, agent finishes → return:
       section present, `result_claimed` also written (existing behaviour).
-- [ ] Quit with A live, relaunch, Re-enter → run one turn → section shows
+      *(Triggered by an accidental Cmd-Tab mid-test — window blur reset the
+      anchor exactly like a tab switch does. `result_claimed`/`result_landed`
+      pair confirmed via sqlite.)*
+- [x] Quit with A live, relaunch, Re-enter → run one turn → section shows
       only post-relaunch activity; verify in sqlite whether the resumed
       `session_id` changed and that the tether path handled either case.
-- [ ] Tab with no bound session, and an unbound fan-out child: no section.
-- [ ] Start a `sleep 240` inside an agent turn on a background tab → after 3
+      *(Confirmed via natural usage across this test session, not a staged
+      run: `session_bindings` for tab_tether `1b9a1780-...` shows session_id
+      `137ff132-...` bound at one relaunch, then `8194fef1-...` at three
+      later ones — the tether stayed the stable key exactly as designed
+      while session_id changed underneath it. Also surfaced a real product
+      question along the way — an interrupted turn doesn't survive a quit at
+      all, distinct from the resume-changes-session-id question this step
+      is actually testing — logged separately in `docs/IDEAS.md`, not a
+      failure of this check.)*
+- [x] Tab with no bound session, and an unbound fan-out child: no section.
+      *(Both cases confirmed 2026-09-05: a fresh shell tab with no agent
+      run, and a fan-out child launched with a blank `cmd` row.)*
+- [x] Start a `sleep 240` inside an agent turn on a background tab → after 3
       min the dot shows the amber ring, tooltip reads `working · quiet 3m`,
-      one OS nudge fires (and does not re-fire), mute suppresses it. When
-      the command ends and PostToolUse lands, ring clears.
+      one OS nudge fires (and does not re-fire). When the command ends and
+      PostToolUse lands, ring clears. *(All confirmed 2026-09-05 — bare
+      `sleep` is blocked by a harness guardrail, substituted `caffeinate -t
+      240`. First pass was watched from the active tab, which correctly
+      suppressed the nudge per `shouldNotify` (`ingest.ts:171`) — not a
+      miss. Second pass, genuinely backgrounded: ring, tooltip, single
+      nudge (Notification Center: "Agent quiet 3m"), and clear-on-completion
+      all confirmed. "mute suppresses it" was NOT re-verified live this
+      pass — covered by `notify:check`'s `shouldNotify` assertions, not by
+      a manual muted run.)*
 - [ ] Leave an agent in `waiting` for 3 min → dot shows `3m` age text.
 - [ ] Terminals: throughout, typing latency and PTY output unaffected.
 

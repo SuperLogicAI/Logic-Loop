@@ -306,3 +306,40 @@ follow-ups remotely. Real differentiator if we ever want it, but native
 iOS/Android is a different order of scope than anything else in this file —
 long-horizon, not a cheap add. No action until something forces the
 question.
+
+---
+
+# Session persistence across app quit (2026-09-05)
+
+Surfaced during manual §23 (Phase 14) testing: quit Logic Loop mid-turn,
+relaunch, Re-enter — the interrupted turn doesn't finish or pick back up, it's
+just gone. Confirmed as expected given the current architecture, not a bug:
+PTY sessions are direct child processes of the app (`pty_spawn`, `pty.rs`),
+so Cmd-Q kills every live `claude` process with it. Re-entry's
+`claude --resume <session_id>` (`pty.rs:152-154`) restores the transcript —
+prior turns and replies — into a fresh process; it doesn't replay a turn that
+never completed. That's Claude Code's own `--resume` semantic, not something
+Logic Loop adds or could patch around without changing what Re-entry is.
+
+herdr (see `[[ref-herdrdev-herdr]]`) doesn't hit this: it's a persistent
+background daemon + thin client, tmux-style detach/reattach, so the agent
+process's lifetime is decoupled from any UI window closing. Logic Loop has no
+daemon — PTY lifetime is tied to app lifetime, full stop.
+
+**This is a distinct question from the one already decided in
+`docs/ROADMAP.md`'s "Adapters — v2."** That section dismisses herdr's
+*agent-initiated orchestration* (agents autonomously spawning/driving sibling
+panes) as out of scope per invariant #4. It says nothing about herdr's
+*persistence* model — a daemon that keeps a human-triggered session alive
+across client restarts doesn't touch invariant #4 at all. Don't let the
+existing "not adopting herdr's model" line get cited as already covering
+this; it doesn't.
+
+**Open question, not a decision:** is "sessions survive an app quit"
+important enough to justify a background-daemon architecture change, or does
+Re-entry's "resume the transcript, re-prompt if needed" already cover the
+real need? A daemon would be a genuine architecture shift (new process,
+new lifecycle, new failure modes to keep invariant #2 fail-open through) —
+not a cheap add like the rest of this file. Not key to the current version.
+Revisit if losing in-flight turns to a quit becomes a recurring complaint
+rather than a one-off during testing.
