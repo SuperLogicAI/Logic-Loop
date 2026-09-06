@@ -77,7 +77,8 @@ from this side (full derivation in [docs/TESTING.md](docs/TESTING.md) §21):
 - `agy` doesn't merge multiple named `PostToolUse` hooks despite documenting
   that it does. If you already have your own `PostToolUse` hook in
   `~/.gemini/config/hooks.json`, Logic Loop's may never fire — the toggle
-  will still read "on". Check for a foreign hook first if no rows appear.
+  will still read "on". Logic Loop detects that case and says so in the side
+  panel; it never edits the foreign hook — merging or removing it is yours.
 
 ## Status
 

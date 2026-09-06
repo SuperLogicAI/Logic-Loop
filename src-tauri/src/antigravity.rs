@@ -17,6 +17,13 @@ const HOOK_NAME: &str = "logic-loop";
 /// on a Post* event can only delay, never block or deny.
 const ANTIGRAVITY_HOOK_EVENTS: [&str; 3] = ["PostToolUse", "PostInvocation", "Stop"];
 
+/// Command-string fingerprint of a Logic Loop entry, the way `ingest::MARKER`
+/// fingerprints ours inside Claude's flat per-event arrays. `HOOK_NAME` is the
+/// primary identity; this exists so the shadow check below cannot mistake a
+/// Logic Loop registration filed under some *other* key (hand-copied, or a key
+/// the user renamed) for a stranger and warn about ourselves.
+const HOOK_FLAG: &str = "--antigravity-hook";
+
 fn home() -> String {
     std::env::var("HOME").unwrap_or_else(|_| "/tmp".into())
 }
@@ -56,7 +63,7 @@ fn shell_single_quote(s: &str) -> String {
 
 fn command_for(event: &str) -> Result<String, String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    Ok(format!("{} --antigravity-hook {event}", shell_single_quote(&exe.to_string_lossy())))
+    Ok(format!("{} {HOOK_FLAG} {event}", shell_single_quote(&exe.to_string_lossy())))
 }
 
 fn strip_ours(settings: &mut serde_json::Value) {
@@ -87,6 +94,48 @@ fn apply_setup(settings: &mut serde_json::Value) -> Result<(), String> {
 
 fn hooks_status_from(settings: &serde_json::Value) -> bool {
     settings.get(HOOK_NAME).is_some()
+}
+
+/// Does a hook *other* than ours claim `PostToolUse`?
+///
+/// `agy` dispatches a single named hook per event rather than merging them,
+/// despite its own docs promising a merge (README caveats, docs/TESTING.md
+/// §21). A pre-existing foreign `PostToolUse` registration can therefore win
+/// the dispatch outright: our entry is installed, `antigravity_hooks_status`
+/// reads true, the toggle reads "on", and not one row ever lands. Detection
+/// only — the foreign entry is never rewritten or dropped, because removal has
+/// to stay byte-identically reversible (`remove_restores_original`).
+///
+/// Both entry shapes are probed: grouped (`matcher` + `hooks` wrapper, what
+/// `apply_setup` writes for `PostToolUse`) and flat (a bare handler). A foreign
+/// hook may use either, and assuming the shape we happen to write would miss
+/// half the shadowing cases. Anything else — a non-object root, a
+/// `PostToolUse` that is not an array — reads as "nothing to say": this runs
+/// against arbitrary third-party config, so an unrecognized shape must stay
+/// silent rather than guess.
+fn shadowing_post_tool_use(settings: &serde_json::Value) -> bool {
+    fn handler_is_ours(handler: &serde_json::Value) -> bool {
+        handler
+            .get("command")
+            .and_then(|c| c.as_str())
+            .is_some_and(|c| c.contains(HOOK_FLAG) || c.contains(crate::ingest::MARKER))
+    }
+    fn entry_is_ours(entry: &serde_json::Value) -> bool {
+        handler_is_ours(entry)
+            || entry
+                .get("hooks")
+                .and_then(|h| h.as_array())
+                .is_some_and(|hs| hs.iter().any(handler_is_ours))
+    }
+    settings.as_object().is_some_and(|obj| {
+        obj.iter().any(|(name, hook)| {
+            name.as_str() != HOOK_NAME
+                && hook
+                    .get("PostToolUse")
+                    .and_then(|v| v.as_array())
+                    .is_some_and(|entries| entries.iter().any(|e| !entry_is_ours(e)))
+        })
+    })
 }
 
 fn is_executable(candidate: &std::path::Path) -> bool {
@@ -138,6 +187,20 @@ pub fn antigravity_hooks_remove() -> Result<(), String> {
 pub fn antigravity_hooks_status() -> Result<bool, String> {
     let settings = read_settings()?;
     Ok(hooks_status_from(&settings))
+}
+
+/// Whether our installed `PostToolUse` hook is being shadowed by a foreign
+/// one — the failure the side panel's warning strip exists for. Deliberately
+/// `bool`, not `Result`: a missing, unreadable or malformed `hooks.json` means
+/// "say nothing and carry on", not an error the caller has to render. Reports
+/// only while our hook is actually installed, so the warning cannot fire at a
+/// user who never turned the adapter on.
+#[tauri::command]
+pub fn antigravity_hooks_shadowed() -> bool {
+    let Ok(settings) = read_settings() else {
+        return false;
+    };
+    hooks_status_from(&settings) && shadowing_post_tool_use(&settings)
 }
 
 /// Remap Antigravity's native camelCase hook payload into the canonical
@@ -294,6 +357,81 @@ mod tests {
         assert!(hooks_status_from(&s));
         strip_ours(&mut s);
         assert_eq!(s, serde_json::json!({}));
+    }
+
+    #[test]
+    fn shadow_check_silent_when_there_is_no_hooks_file() {
+        // `read_settings` maps NotFound to `{}`, so this is the exact value the
+        // command sees for a user who has never configured agy at all.
+        assert!(!shadowing_post_tool_use(&serde_json::json!({})));
+    }
+
+    #[test]
+    fn shadow_check_silent_when_only_our_hook_is_installed() {
+        let mut s = serde_json::json!({});
+        apply_setup(&mut s).unwrap();
+        assert!(hooks_status_from(&s));
+        assert!(!shadowing_post_tool_use(&s), "our own entry must never read as foreign");
+    }
+
+    #[test]
+    fn shadow_check_sees_a_foreign_post_tool_use_hook() {
+        let s = foreign_settings();
+        assert!(shadowing_post_tool_use(&s));
+        // Nothing of ours to shadow yet — `antigravity_hooks_shadowed` gates on
+        // this before it ever asks, so an uninstalled adapter stays quiet.
+        assert!(!hooks_status_from(&s));
+    }
+
+    #[test]
+    fn shadow_check_fires_when_ours_and_a_foreign_hook_coexist() {
+        // The silent failure this whole check exists for: agy dispatches only
+        // lint-checker, the toggle still reads "on", zero rows ever land.
+        let mut s = foreign_settings();
+        apply_setup(&mut s).unwrap();
+        assert!(hooks_status_from(&s));
+        assert!(shadowing_post_tool_use(&s));
+    }
+
+    #[test]
+    fn shadow_check_ignores_foreign_hooks_on_other_events() {
+        // Only PostToolUse carries our tool rows; a stranger on Stop shadows
+        // less than the whole adapter and must not cry wolf.
+        let s = serde_json::json!({ "greeter": { "Stop": [{ "type": "command", "command": "say done" }] } });
+        assert!(!shadowing_post_tool_use(&s));
+    }
+
+    #[test]
+    fn shadow_check_sees_the_flat_foreign_entry_shape_too() {
+        // agy accepts a bare handler as well as the grouped matcher wrapper we
+        // write; a foreign hook in that shape shadows ours just as hard.
+        let s = serde_json::json!({ "linter": { "PostToolUse": [{ "type": "command", "command": "./lint.sh" }] } });
+        assert!(shadowing_post_tool_use(&s));
+    }
+
+    #[test]
+    fn shadow_check_does_not_warn_about_our_own_command_under_another_key() {
+        // A hand-copied or renamed Logic Loop block is still ours — warning
+        // about it would send the user hunting for a hook that isn't there.
+        let s = serde_json::json!({
+            "logic-loop-old": {
+                "PostToolUse": [{
+                    "matcher": "*",
+                    "hooks": [{ "type": "command", "command": "'/Applications/Logic Loop.app/x' --antigravity-hook PostToolUse" }]
+                }]
+            }
+        });
+        assert!(!shadowing_post_tool_use(&s));
+    }
+
+    #[test]
+    fn shadow_check_stays_silent_on_shapes_it_does_not_recognize() {
+        // hooks.json is arbitrary third-party content. A malformed root or a
+        // PostToolUse that isn't an array must read as "nothing to say" rather
+        // than as a warning nobody can act on.
+        assert!(!shadowing_post_tool_use(&serde_json::json!("nonsense")));
+        assert!(!shadowing_post_tool_use(&serde_json::json!({ "linter": { "PostToolUse": "./lint.sh" } })));
+        assert!(!shadowing_post_tool_use(&serde_json::json!({ "linter": 7 })));
     }
 
     #[test]

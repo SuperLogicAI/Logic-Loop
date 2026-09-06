@@ -71,6 +71,11 @@ export default function App() {
   // Sessions whose transcript file could not be opened — they emit hooks but no
   // transcript, so decisions never extract for them. Silent until surfaced.
   const [blindSessions, setBlindSessions] = useState<Record<string, string>>({});
+  // Same silence, one layer earlier: the agy adapter is installed but a foreign
+  // PostToolUse hook can win agy's single-hook dispatch, so no event ever
+  // arrives. Owned here because the toggle (AgentStatusBar) and the warning
+  // strip (SidePanel) are siblings.
+  const [antigravityShadowed, setAntigravityShadowed] = useState(false);
 
   // Nudges (Phase 6): muted project keys, cached so the hot ingestion path
   // never blocks on a DB read before deciding whether to notify.
@@ -949,6 +954,7 @@ export default function App() {
             accent={activeTab.color === PALETTE[7] ? null : activeTab.color}
             refreshKey={panelRefresh}
             blindPaths={Object.values(blindSessions)}
+            antigravityShadowed={antigravityShadowed}
             fanOut={fanOutRollups}
             onSelectTab={setActiveId}
             onDismissMember={dismissSpawnMember}
@@ -959,7 +965,7 @@ export default function App() {
           />
         )}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <AgentStatusBar />
+          <AgentStatusBar onAntigravityShadowed={setAntigravityShadowed} />
           <div className="min-h-0 flex-1">
             {tabs.map((tab) => (
               <Terminal

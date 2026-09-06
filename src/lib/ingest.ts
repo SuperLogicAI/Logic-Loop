@@ -62,6 +62,14 @@ export function antigravityHooksStatus(): Promise<boolean> {
   return invoke<boolean>("antigravity_hooks_status");
 }
 
+/** True when our hook is installed but a foreign `PostToolUse` hook in
+ *  ~/.gemini/config/hooks.json can shadow it — `agy` dispatches one named hook
+ *  per event instead of merging, so the adapter reads "on" and never fires.
+ *  Detection only, and false for any unreadable/malformed config. */
+export function antigravityHooksShadowed(): Promise<boolean> {
+  return invoke<boolean>("antigravity_hooks_shadowed");
+}
+
 export function onHookEvent(cb: (p: HookPayload) => void): Promise<UnlistenFn> {
   return listen<HookPayload>("ingest://hook", (e) => {
     if (typeof e.payload?.hook_event_name === "string" && typeof e.payload?.session_id === "string") {

@@ -37,6 +37,7 @@ interface Props {
   accent: string | null; // matching bookmark's color, if the project is bookmarked
   refreshKey: number; // bump to force reload (new events / blocker changes)
   blindPaths: string[]; // transcripts that failed to open — panels are incomplete
+  antigravityShadowed: boolean; // a foreign PostToolUse hook can swallow the agy adapter's events
   fanOut: FanOutRollup[]; // every fan-out group the active tab belongs to (as parent, possibly several; as child, at most one), oldest first
   onSelectTab: (id: string) => void; // jump to a fan-out child/parent tab
   onDismissMember: (groupId: string, childTabId: string) => void; // drop a lingering row from the fan-out rollup
@@ -89,6 +90,7 @@ export function SidePanel({
   accent,
   refreshKey,
   blindPaths,
+  antigravityShadowed,
   fanOut,
   onSelectTab,
   onDismissMember,
@@ -554,6 +556,23 @@ export function SidePanel({
           >
             ⓘ
           </span>
+        </p>
+      )}
+      {/* Same strip, same failure class: the adapter is installed and the
+          toggle reads "on", but `agy` dispatches a single named PostToolUse
+          hook instead of merging them, so a foreign hook can swallow every
+          event and the panels just look like a quiet day. Detection only —
+          the user's own hook is never touched. */}
+      {antigravityShadowed && (
+        <p
+          className="flex shrink-0 items-start gap-1 border-b border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[10px] text-red-300"
+          title={
+            "Another PostToolUse hook is registered in ~/.gemini/config/hooks.json.\n\n" +
+            "agy runs only one named hook per event despite documenting that it merges them, so Logic Loop's may never fire — agy tabs would show no tool activity at all.\n\n" +
+            "Logic Loop will not edit your hook. Remove or merge it by hand if agy rows stay empty."
+          }
+        >
+          <span>⚠ another PostToolUse hook may be shadowing the antigravity adapter</span>
         </p>
       )}
       {childStrip && (

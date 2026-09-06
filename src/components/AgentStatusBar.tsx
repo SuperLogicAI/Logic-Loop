@@ -3,6 +3,7 @@ import {
   antigravityDetect,
   antigravityHooksRemove,
   antigravityHooksSetup,
+  antigravityHooksShadowed,
   antigravityHooksStatus,
   codexDetect,
   codexHooksRemove,
@@ -19,12 +20,20 @@ import {
 import { getExtractorSettings, setExtractorSettings } from "../lib/repo";
 import type { ExtractorSettings } from "../types";
 
+interface Props {
+  /** Report whether a foreign PostToolUse hook can shadow the Antigravity
+   *  adapter. The check is driven from here rather than App because only this
+   *  component knows when the toggle flips — a startup-only check would stay
+   *  stale for the rest of the session the moment the user turns agy on. */
+  onAntigravityShadowed: (shadowed: boolean) => void;
+}
+
 /** Header row above the terminal pane, lined up with SidePanel's own
  * "project:/notify" header on the left. Was previously crammed into
  * BookmarksBar alongside bookmarks — grows with every adapter (Phase 8
  * added "opencode", more coming per ROADMAP.md v2 Adapters), and bookmarks
  * grow without bound too, so the two don't belong on the same row. */
-export function AgentStatusBar() {
+export function AgentStatusBar({ onAntigravityShadowed }: Props) {
   const [hooksOn, setHooksOn] = useState<boolean | null>(null);
   const [opencodeAvailable, setOpencodeAvailable] = useState(false);
   const [opencodeOn, setOpencodeOn] = useState<boolean | null>(null);
@@ -34,6 +43,18 @@ export function AgentStatusBar() {
   const [antigravityOn, setAntigravityOn] = useState<boolean | null>(null);
   const [extractor, setExtractor] = useState<ExtractorSettings | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+
+  // Fail open like every other ingestion-side check: an unreadable hooks.json
+  // clears the warning rather than surfacing an error.
+  const refreshShadowed = (installed: boolean | null) => {
+    if (!installed) {
+      onAntigravityShadowed(false);
+      return;
+    }
+    void antigravityHooksShadowed()
+      .then(onAntigravityShadowed)
+      .catch(() => onAntigravityShadowed(false));
+  };
 
   useEffect(() => {
     void hooksStatus().then(setHooksOn).catch(() => setHooksOn(null));
@@ -54,7 +75,12 @@ export function AgentStatusBar() {
       .then((available) => {
         setAntigravityAvailable(available);
         if (available)
-          void antigravityHooksStatus().then(setAntigravityOn).catch(() => setAntigravityOn(null));
+          void antigravityHooksStatus()
+            .then((on) => {
+              setAntigravityOn(on);
+              refreshShadowed(on);
+            })
+            .catch(() => setAntigravityOn(null));
       })
       .catch(() => setAntigravityAvailable(false));
   }, []);
@@ -111,9 +137,11 @@ export function AgentStatusBar() {
       if (antigravityOn) {
         await antigravityHooksRemove();
         setAntigravityOn(false);
+        refreshShadowed(false);
       } else {
         await antigravityHooksSetup();
         setAntigravityOn(true);
+        refreshShadowed(true);
       }
     } catch (e) {
       console.error("antigravity hooks toggle failed:", e);

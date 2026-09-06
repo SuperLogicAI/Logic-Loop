@@ -249,6 +249,7 @@ pub fn run() {
             antigravity::antigravity_hooks_setup,
             antigravity::antigravity_hooks_remove,
             antigravity::antigravity_hooks_status,
+            antigravity::antigravity_hooks_shadowed,
             extractor::run_extractor,
             clipboard::clipboard_text,
             clipboard::clipboard_image_path
