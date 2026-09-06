@@ -5,6 +5,7 @@ import * as repo from "../lib/repo";
 import { burst } from "../lib/confetti";
 import { generateCommitMessage } from "../lib/commitMessage";
 import { summarizeDelta, type Delta } from "../lib/delta";
+import { collapseNoopRuns, groupIterations, isLoopRun, type Iteration } from "../lib/loop";
 import { deriveClock, formatAge } from "../lib/ingest";
 import {
   gitAddAll,
@@ -103,6 +104,7 @@ export function SidePanel({
   const [blockers, setBlockers] = useState<Blocker[]>([]);
   const [decisions, setDecisions] = useState<Decision[]>([]);
   const [delta, setDelta] = useState<Delta | null>(null); // since-you-left digest (Phase 14a)
+  const [loopIterations, setLoopIterations] = useState<Iteration[] | null>(null); // loop digest (Phase 15), null = flat delta shape
   const [landing, setLanding] = useState<Note | null>(null); // active project, momentum
   const [notes, setNotes] = useState<Note[]>([]); // active project, open notes & reminders
   const [context, setContext] = useState<Decision | null>(null);
@@ -203,16 +205,23 @@ export function SidePanel({
     // Same fan-out isolation rule as toolEvents/decisions above.
     if (isUnboundFanOutChild) {
       setDelta(null);
+      setLoopIterations(null);
     } else {
       const since = await repo.lastLeft(tabTether).catch(() => null);
       if (since == null) {
         setDelta(null);
+        setLoopIterations(null);
       } else {
         const [rows, decisionsSince] = await Promise.all([
           repo.eventsSince(tabTether, sessionId, since).catch(() => []),
           repo.decisionsOpenedSince(cwd, since).catch(() => []),
         ]);
-        setDelta(summarizeDelta(rows, repo.scopeBySession(decisionsSince, sessionId)));
+        const decisionsScoped = repo.scopeBySession(decisionsSince, sessionId);
+        setDelta(summarizeDelta(rows, decisionsScoped));
+        // Loop digest (Phase 15) takes over the section when the window
+        // contains a qualifying run; otherwise the flat delta above renders.
+        const iters = groupIterations(rows, decisionsScoped);
+        setLoopIterations(isLoopRun(iters) ? iters : null);
       }
     }
   }, [cwd, sessionId, isUnboundFanOutChild, tabTether]);
@@ -572,55 +581,95 @@ export function SidePanel({
             <Chevron collapsed={collapsed.has("since-left")} className="text-teal-300/85" />
             Since you left
           </h2>
-          {!collapsed.has("since-left") && (
-            <>
+          {!collapsed.has("since-left") &&
+            (loopIterations ? (
               <ul className="flex flex-col gap-1 text-zinc-300">
-                {delta.files.length > 0 && (
-                  <li className="flex gap-1.5">
-                    <span className="shrink-0 text-teal-500/60">•</span>
-                    <span>
-                      {delta.files.length} file{delta.files.length === 1 ? "" : "s"} changed:{" "}
-                      <span className="text-zinc-400">
-                        {delta.files.map((f) => f.split("/").filter(Boolean).pop()).join(", ")}
-                      </span>
-                    </span>
-                  </li>
-                )}
-                {delta.bashRuns > 0 && (
-                  <li className="flex gap-1.5">
-                    <span className="shrink-0 text-teal-500/60">•</span>
-                    <span>
-                      {delta.bashRuns} command{delta.bashRuns === 1 ? "" : "s"} run
-                      {delta.bashErrors > 0 && (
-                        <span className="text-red-400"> ({delta.bashErrors} failed)</span>
-                      )}
-                    </span>
-                  </li>
-                )}
                 <li className="flex gap-1.5 text-zinc-500">
                   <span className="shrink-0 text-teal-500/60">•</span>
                   <span>
-                    {delta.turns} turn{delta.turns === 1 ? "" : "s"} · {delta.stops} stop
-                    {delta.stops === 1 ? "" : "s"}
+                    {loopIterations.length} iteration{loopIterations.length === 1 ? "" : "s"} while you were away
                   </span>
                 </li>
-                {delta.decisions.length > 0 && (
-                  <li className="flex gap-1.5 text-orange-300">
+                {loopIterations.flatMap((it) => it.decisions).map((d) => (
+                  <li key={d.id} className="flex gap-1.5 text-orange-300">
                     <span className="shrink-0 text-teal-500/60">•</span>
-                    <span>
-                      {delta.decisions.length} new decision{delta.decisions.length === 1 ? "" : "s"} opened
-                    </span>
+                    <span>decision opened: {d.question}</span>
                   </li>
+                ))}
+                {collapseNoopRuns(loopIterations).map((line, i) =>
+                  line.kind === "noop-run" ? (
+                    <li key={i} className="flex gap-1.5 text-zinc-600">
+                      <span className="shrink-0 text-teal-500/60">•</span>
+                      <span>
+                        ×{line.count} no change
+                      </span>
+                    </li>
+                  ) : (
+                    <li key={i} className="flex gap-1.5">
+                      <span className="shrink-0 text-teal-500/60">•</span>
+                      <span>
+                        {line.iteration.toolCount} tool{line.iteration.toolCount === 1 ? "" : "s"}
+                        {line.iteration.errorCount > 0 && (
+                          <span className="text-red-400"> ({line.iteration.errorCount} failed)</span>
+                        )}
+                        {line.iteration.endTs === null && <span className="text-zinc-500"> · running</span>}
+                        {line.iteration.firstAssistantText && (
+                          <span className="text-zinc-400"> — {line.iteration.firstAssistantText}</span>
+                        )}
+                      </span>
+                    </li>
+                  )
                 )}
               </ul>
-              {delta.lastWords && (
-                <p className="mt-1.5 break-words rounded bg-black/20 p-1.5 text-zinc-400">
-                  <span className="text-zinc-600">agent's last words: </span>
-                  {delta.lastWords}
-                </p>
-              )}
-            </>
-          )}
+            ) : (
+              <>
+                <ul className="flex flex-col gap-1 text-zinc-300">
+                  {delta.files.length > 0 && (
+                    <li className="flex gap-1.5">
+                      <span className="shrink-0 text-teal-500/60">•</span>
+                      <span>
+                        {delta.files.length} file{delta.files.length === 1 ? "" : "s"} changed:{" "}
+                        <span className="text-zinc-400">
+                          {delta.files.map((f) => f.split("/").filter(Boolean).pop()).join(", ")}
+                        </span>
+                      </span>
+                    </li>
+                  )}
+                  {delta.bashRuns > 0 && (
+                    <li className="flex gap-1.5">
+                      <span className="shrink-0 text-teal-500/60">•</span>
+                      <span>
+                        {delta.bashRuns} command{delta.bashRuns === 1 ? "" : "s"} run
+                        {delta.bashErrors > 0 && (
+                          <span className="text-red-400"> ({delta.bashErrors} failed)</span>
+                        )}
+                      </span>
+                    </li>
+                  )}
+                  <li className="flex gap-1.5 text-zinc-500">
+                    <span className="shrink-0 text-teal-500/60">•</span>
+                    <span>
+                      {delta.turns} turn{delta.turns === 1 ? "" : "s"} · {delta.stops} stop
+                      {delta.stops === 1 ? "" : "s"}
+                    </span>
+                  </li>
+                  {delta.decisions.length > 0 && (
+                    <li className="flex gap-1.5 text-orange-300">
+                      <span className="shrink-0 text-teal-500/60">•</span>
+                      <span>
+                        {delta.decisions.length} new decision{delta.decisions.length === 1 ? "" : "s"} opened
+                      </span>
+                    </li>
+                  )}
+                </ul>
+                {delta.lastWords && (
+                  <p className="mt-1.5 break-words rounded bg-black/20 p-1.5 text-zinc-400">
+                    <span className="text-zinc-600">agent's last words: </span>
+                    {delta.lastWords}
+                  </p>
+                )}
+              </>
+            ))}
         </section>
       )}
       <section className="border-b border-zinc-800 pb-3">

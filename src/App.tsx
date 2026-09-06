@@ -6,6 +6,7 @@ import { homeDir } from "@tauri-apps/api/path";
 import { ask } from "@tauri-apps/plugin-dialog";
 import {
   bindSession,
+  computeProvenance,
   deriveClock,
   onHookEvent,
   onTailerFailed,
@@ -30,6 +31,7 @@ import { BookmarksBar } from "./components/BookmarksBar";
 import { Terminal } from "./components/Terminal";
 import {
   canonicalizeCwd,
+  getLastInputTs,
   gitWorktreeAdd,
   gitWorktreeRemove,
   projectKeyOf,
@@ -525,8 +527,16 @@ export default function App() {
       else unlisteners.push(u);
     };
     void onHookEvent((p) => {
+      // Turn provenance (Phase 15): only UserPromptSubmit carries it, stamped
+      // onto a clone before the row is written — payload_json is append-only,
+      // this is the one chance to record it.
+      const isPromptSubmit = p.hook_event_name === "UserPromptSubmit";
+      const provenance = isPromptSubmit
+        ? computeProvenance(p.tab_id, p.tab_id ? getLastInputTs(p.tab_id) : undefined, Date.now())
+        : undefined;
+      const payload = provenance ? { ...p, provenance } : p;
       void repo
-        .addEvent(p.session_id, `hook:${p.hook_event_name}`, JSON.stringify(p))
+        .addEvent(p.session_id, `hook:${p.hook_event_name}`, JSON.stringify(payload))
         .catch(() => undefined); // fail open: panel data loss must not break terminals
 
       // project_key (repo root, derived server-side) is the panel key; p.cwd is
@@ -595,7 +605,14 @@ export default function App() {
           // query the right project even after an in-shell `cd`. A `cd` within
           // the same repo is now a no-op here — that's the fix.
           const next = cwd && expand(t.cwd) !== cwd ? { ...t, cwd } : t;
-          return state ? { ...next, sessionId: p.session_id, agentState: state, lastEventTs: Date.now() } : next;
+          if (!state) return next;
+          return {
+            ...next,
+            sessionId: p.session_id,
+            agentState: state,
+            lastEventTs: Date.now(),
+            lastTurnAuto: isPromptSubmit ? provenance === "auto" : next.lastTurnAuto,
+          };
         })
       );
       // Fan-out rollup's "done"/"running" depends on live agentState, so it

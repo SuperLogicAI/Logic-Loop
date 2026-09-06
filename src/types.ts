@@ -21,6 +21,10 @@ export interface Tab {
    * persisted — a relaunch has no agentState either, both come back on the
    * first hook. */
   lastEventTs?: number;
+  /** True if the tab's most recent `UserPromptSubmit` had no fresh human
+   * keystrokes behind it (Phase 15 turn provenance). Not persisted — same
+   * rule as `lastEventTs`. */
+  lastTurnAuto?: boolean;
 }
 
 export interface Blocker {

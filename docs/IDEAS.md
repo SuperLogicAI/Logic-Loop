@@ -43,6 +43,35 @@ do. The diff/file preview pop-out above gets ~90% of the value with none of
 the risk — build that instead unless a concrete case shows up that the
 read-only version doesn't cover.
 
+## Decisions cleanup — grouped by session, bulk-dismiss
+
+**Sequenced as Phase 16** (2026-09-05), ahead of Idea Board (now Phase 17) —
+user hit this live during Phase 15 §25 manual testing: 80 open decisions
+accumulated on this project alone, oldest ~2 months old, no way to work
+through them except one at a time in a flat list.
+
+**Why not a bug.** `decisions` is deliberately project-scoped, not
+session-scoped (`decisionCounts`/`listDecisions`, `repo.ts:254,268`) — the
+badge counts every unanswered question ever asked in the project, forever.
+Confirmed against the live DB: no duplicates, all 80 genuinely distinct,
+real backlog from real dogfooding, not a scoping leak.
+
+**Sketch — no migration needed.** `decisions.session_id` already exists
+(`lib.rs:62`). New repo queries only:
+- `decisionsBySession(cwd)` — `SELECT session_id, count(*), min(ts), max(ts)
+  FROM decisions WHERE cwd=$1 AND status='open' GROUP BY session_id`.
+- `dismissSession(sessionId)` — bulk `UPDATE decisions SET
+  status='answered' WHERE session_id=$1 AND status='open'`.
+
+SidePanel's decisions section groups into collapsible session clusters
+(most recent expanded, older collapsed) instead of one flat list. Each
+cluster: relative age + count ("~2 months ago · 12 decisions") since a raw
+session_id UUID means nothing to a human; "dismiss all" bulk button per
+cluster; individual decisions still dismissable one at a time underneath.
+
+Own PLAN.md when its turn comes — not a quick patch, real UI surface change
+to a panel every phase touches.
+
 ---
 
 # Fable 5.1 concepts (review of 2026-09-02)

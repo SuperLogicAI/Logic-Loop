@@ -1086,6 +1086,28 @@ All passed 2026-09-05.
 - [x] Click ✓ Done on the landing-note card → status still flips as before;
       the style change touched only borders and label text.
 
+## 25. Turn provenance + loop digest (Phase 15)
+
+- [ ] Type a prompt by hand, hit Enter immediately → tagged `human`, no `⟳`
+      on the tab, flat Since-you-left shape (unchanged from Phase 14a).
+- [ ] Run `/loop 30s /some-command` (or equivalent auto-resubmit) for 3+
+      wakeups with no manual input in between → each wakeup's
+      `UserPromptSubmit` tagged `auto`, TabBar shows `⟳`, Since-you-left
+      switches to loop-digest shape with correct iteration count.
+- [ ] Mixed session: one human turn, then 2 auto loop turns → digest shows
+      the 2 auto turns collapsed into the loop shape.
+- [ ] A loop iteration whose closing message is a no-op phrase ("no
+      change", "nothing to do", "still waiting", "all good") → collapses
+      into the `×N no change` line; a real-work iteration renders its own
+      line with tool/error counts and its first assistant line.
+- [ ] A decision opened mid-loop → shown pinned at the top of the digest,
+      not buried inside an iteration line.
+- [ ] Outside-terminal session (cwd-fallback, no tether) →
+      `UserPromptSubmit` always tagged `human`, never misclassified `auto`.
+- [ ] Human pastes a multi-line block via ⌘V into the prompt, submits
+      within 5s → tagged `human` (paste counts as input).
+- [ ] Terminals: throughout, typing latency and PTY output unaffected.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*

@@ -131,6 +131,14 @@ export function TabBar({
             }`}
             title={tab.agentState ? `${tab.agentState} · quiet ${formatAge(clock.quietMs)}` : undefined}
           />
+          {tab.lastTurnAuto && (
+            <span
+              className="shrink-0 text-base leading-none font-bold text-zinc-300"
+              title="last turn was auto (no human keystrokes)"
+            >
+              ⟳
+            </span>
+          )}
           {tab.agentState === "waiting" && clock.quietMs > 2 * 60 * 1000 && (
             <span className="shrink-0 text-[9px] text-amber-400/70">{formatAge(clock.quietMs)}</span>
           )}

@@ -182,6 +182,25 @@ export function shouldNotify(
 // ponytail: constant; settings-table knob if real use disagrees
 export const STALL_MS = 3 * 60 * 1000;
 
+// ponytail: constant; tune from dogfood if human turns get misclassified auto
+export const PROVENANCE_WINDOW_MS = 5000;
+
+/** Was a `UserPromptSubmit` typed by the human, or fired by a loop/resubmit
+ * with no fresh keystrokes behind it? `tabId` is the tether (same uuid as
+ * `LOGIC_LOOP_TAB_ID` and `Tab.id`); `lastInputTs` comes from `pty.ts`'s
+ * per-tab keystroke clock. No tether (outside-terminal session) or no
+ * recorded input yet (fresh tab, spawn-time launch command) both default to
+ * `human` — `auto` is only assigned when we positively know the PTY input
+ * path went quiet. */
+export function computeProvenance(
+  tabId: string | undefined,
+  lastInputTs: number | undefined,
+  now: number
+): "human" | "auto" {
+  if (!tabId || lastInputTs === undefined) return "human";
+  return now - lastInputTs < PROVENANCE_WINDOW_MS ? "human" : "auto";
+}
+
 /** Derived, not stored — keeps every adapter, stateForHook, fan-out rollup
  * and check script untouched. Only "working" stalls: "waiting" already has
  * its own pulse meaning ("needs you now"); a long-idle waiting tab just
