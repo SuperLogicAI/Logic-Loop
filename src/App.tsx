@@ -253,11 +253,16 @@ export default function App() {
   // Tab-strip glow (all tabs, not just the active one) — same membership
   // data the rollup already tracks, just not scoped to `activeId`.
   const [fanOutChildIds, setFanOutChildIds] = useState<Set<string>>(new Set());
+  const [fanOutParentIds, setFanOutParentIds] = useState<Set<string>>(new Set());
   const [worktreeTabIds, setWorktreeTabIds] = useState<Set<string>>(new Set());
   useEffect(() => {
     void repo
       .allFanOutChildTabIds()
       .then((ids) => setFanOutChildIds(new Set(ids)))
+      .catch(() => undefined);
+    void repo
+      .allFanOutParentTabIds()
+      .then((ids) => setFanOutParentIds(new Set(ids)))
       .catch(() => undefined);
     void repo
       .allWorktreeTabIds()
@@ -921,6 +926,7 @@ export default function App() {
         decisionCount={(t) => decisionCountsByCwd[expand(t.cwd)] ?? 0}
         unclaimed={(t) => unseenStops.has(t.id)}
         isFanOutChild={(t) => fanOutChildIds.has(t.id)}
+        isFanOutParent={(t) => fanOutParentIds.has(t.id)}
         isWorktreeBound={(t) => worktreeTabIds.has(t.id)}
         now={now}
       />

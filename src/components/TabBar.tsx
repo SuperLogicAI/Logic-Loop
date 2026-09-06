@@ -36,6 +36,9 @@ interface Props {
   unclaimed: (tab: Tab) => boolean;
   /** Fan-out child (any group) — purple glow. */
   isFanOutChild: (tab: Tab) => boolean;
+  /** Fan-out origin tab (any group) — purple text glow ties it back to its
+   * children after launch. */
+  isFanOutParent: (tab: Tab) => boolean;
   /** Isolate-loop worktree tab — blue glow. */
   isWorktreeBound: (tab: Tab) => boolean;
   /** Clock tick (Phase 14b) — drives stalled/age display, nothing else
@@ -64,6 +67,7 @@ export function TabBar({
   decisionCount,
   unclaimed,
   isFanOutChild,
+  isFanOutParent,
   isWorktreeBound,
   now,
 }: Props) {
@@ -142,7 +146,13 @@ export function TabBar({
           {tab.agentState === "waiting" && clock.quietMs > 2 * 60 * 1000 && (
             <span className="shrink-0 text-[9px] text-amber-400/70">{formatAge(clock.quietMs)}</span>
           )}
-          <span className="truncate">{tab.title}</span>
+          <span
+            className={`truncate ${isFanOutParent(tab) ? "text-purple-300" : ""}`}
+            style={isFanOutParent(tab) ? { textShadow: "0 0 6px rgba(168,85,247,0.85)" } : undefined}
+            title={isFanOutParent(tab) ? "fan-out origin tab" : undefined}
+          >
+            {tab.title}
+          </span>
           {blockerCount(tab) > 0 && (
             <span className="shrink-0 rounded-full bg-red-500/20 px-1.5 text-[10px] font-semibold text-red-400">
               {blockerCount(tab)}

@@ -591,6 +591,17 @@ export async function allFanOutChildTabIds(): Promise<string[]> {
   return rows.map((r) => r.child_tab_id);
 }
 
+/** Every tab that is a fan-out parent (origin) in any group — ties the glow
+ * back the other direction so the launching tab stays visually linked to its
+ * children after they spawn. */
+export async function allFanOutParentTabIds(): Promise<string[]> {
+  const d = await getDb();
+  const rows = await d.select<{ parent_tab_id: string }[]>(
+    "SELECT DISTINCT parent_tab_id FROM spawn_groups"
+  );
+  return rows.map((r) => r.parent_tab_id);
+}
+
 export async function groupMembers(groupId: string): Promise<SpawnGroupMember[]> {
   const d = await getDb();
   return d.select<SpawnGroupMember[]>(

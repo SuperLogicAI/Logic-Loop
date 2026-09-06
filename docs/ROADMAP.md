@@ -25,8 +25,10 @@ table below until one gets its own PLAN.md.
 | OpenCode adapter | DONE (Phase 8) | — | Versioned hook contract |
 | Isolated loops (worktrees) | Not started — Phase 9 shipped a different, narrower mechanism (branch-switch-in-place); this is still open | — | Tab tether |
 | Model traffic panel (Safe Router) | Phase 9 candidate | 1d | External: Safe Router v0 log |
-| Codex adapter | v2, next up | — | OpenCode adapter |
-| Remaining adapters (Antigravity, Gemini, Copilot) | v2, after Codex | — | Codex adapter |
+| Codex adapter | DONE (Phase 10) | — | OpenCode adapter |
+| Codex adapter follow-ups (identity marker, resume, Interrupt/SessionEnd) | Planned, unscheduled — see `plans/Codex_Implementation_Plans.md` | — | Codex adapter |
+| Antigravity adapter follow-ups (turn-epoch fix, tool-field normalization, SessionStart/resume, waiting signal) | Planned, unscheduled — see `plans/Antigravity_Implementation_Plans.md`; two plans gated on live `Pre*`-hook verification | — | Antigravity adapter, Codex adapter follow-ups (marker/resume infra) |
+| Remaining adapters (Gemini, Copilot) | v2 | — | Codex adapter |
 
 Phase boundaries still hard stops. Phase 5 items enter PLAN.md for approval
 before build, per process rules.
