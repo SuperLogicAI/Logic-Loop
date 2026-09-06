@@ -63,8 +63,8 @@ impl PtyManager {
 /// Falls back to the expanded string when the path doesn't exist (bookmarks may
 /// point at folders that are gone).
 pub fn canon(p: &str) -> String {
-    let expanded = match (p.strip_prefix("~"), std::env::var("HOME")) {
-        (Some(rest), Ok(home)) => format!("{home}{rest}"),
+    let expanded = match (p.strip_prefix("~"), crate::home::home()) {
+        (Some(rest), Some(home)) => format!("{home}{rest}"),
         _ => p.to_string(),
     };
     std::fs::canonicalize(&expanded)
@@ -86,7 +86,7 @@ pub fn canonicalize_cwd(path: String) -> String {
 /// non-repo directory collapse into one giant "project" — silent and total.
 pub fn project_key(cwd: &str) -> String {
     let resolved = canon(cwd);
-    let home = std::env::var("HOME").map(|h| canon(&h)).unwrap_or_default();
+    let home = crate::home::home().map(|h| canon(&h)).unwrap_or_default();
     let mut dir = std::path::Path::new(&resolved);
     loop {
         if !home.is_empty() && dir.as_os_str() == home.as_str() {
@@ -636,9 +636,13 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)] // $HOME-dependent; Phase 13 re-enables against a home() helper
+    // Still gated after the home() helper: the case-fold assertion needs
+    // `~/Library` to exist on a case-insensitive filesystem, and where it does
+    // not both spellings fall through canon unchanged and compare unequal.
+    #[cfg(unix)]
     fn canon_resolves_case_and_tilde_to_one_key() {
-        let home = std::env::var("HOME").unwrap();
+        let _guard = crate::home::ENV_LOCK.lock().unwrap();
+        let home = crate::home::home().unwrap();
         // `~` expands, and a case-variant spelling of an existing dir resolves to
         // the same string — that equality is what keeps a project from splitting
         // into several SQL keys.
@@ -673,9 +677,15 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)] // $HOME-dependent; Phase 13 re-enables against a home() helper
+    // Still gated after the home() helper: on Windows `canonicalize` returns a
+    // `\\?\` verbatim path for a home that exists but leaves the nonexistent
+    // `~/...` case unprefixed, so the $HOME boundary this asserts is never
+    // reached and the walk runs to the drive root instead. That is the path
+    // half of the Windows port, not the env-var half.
+    #[cfg(unix)]
     fn project_key_outside_a_repo_is_the_dir_itself() {
-        let home = std::env::var("HOME").unwrap();
+        let _guard = crate::home::ENV_LOCK.lock().unwrap();
+        let home = crate::home::home().unwrap();
         // No `.git` anywhere up to `/` → the dir is its own project, no panic
         // and no walk off the end of the tree.
         let key = project_key("/tmp");

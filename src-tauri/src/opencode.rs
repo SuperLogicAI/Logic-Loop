@@ -1,3 +1,4 @@
+use crate::home::home_or_tmp;
 use std::fs;
 use std::path::PathBuf;
 
@@ -10,17 +11,13 @@ const MARKER: &str = "logic-loop-opencode-plugin";
 /// must know about, same role as `ingest.rs`'s `HOOK_VERSION`.
 const OPENCODE_PLUGIN_VERSION: u32 = 1;
 
-fn home() -> String {
-    std::env::var("HOME").unwrap_or_else(|_| "/tmp".into())
-}
-
 /// OpenCode resolves its global config dir from `$XDG_CONFIG_HOME` or
 /// `~/.config` on every platform, including Windows — no per-OS branch.
 /// Matched here so we write to the same file OpenCode itself reads.
 fn config_dir() -> PathBuf {
     match std::env::var("XDG_CONFIG_HOME") {
         Ok(v) if !v.is_empty() => PathBuf::from(v).join("opencode"),
-        _ => PathBuf::from(home()).join(".config").join("opencode"),
+        _ => PathBuf::from(home_or_tmp()).join(".config").join("opencode"),
     }
 }
 
@@ -29,7 +26,7 @@ fn settings_path() -> PathBuf {
 }
 
 fn plugin_path() -> PathBuf {
-    PathBuf::from(home())
+    PathBuf::from(home_or_tmp())
         .join(".context-terminal")
         .join(format!("{MARKER}.mjs"))
 }
@@ -236,12 +233,12 @@ pub fn opencode_detect() -> bool {
     }
     [".opencode/bin", ".local/bin"]
         .iter()
-        .any(|rel| is_executable(&PathBuf::from(home()).join(rel).join("opencode")))
+        .any(|rel| is_executable(&PathBuf::from(home_or_tmp()).join(rel).join("opencode")))
 }
 
 #[tauri::command]
 pub fn opencode_hooks_setup() -> Result<(), String> {
-    let dir = PathBuf::from(home()).join(".context-terminal");
+    let dir = PathBuf::from(home_or_tmp()).join(".context-terminal");
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     fs::write(plugin_path(), plugin_source()).map_err(|e| e.to_string())?;
     let mut settings = read_settings()?;

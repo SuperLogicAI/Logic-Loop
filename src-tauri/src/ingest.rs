@@ -1,3 +1,4 @@
+use crate::home::home_or_tmp;
 use std::collections::HashSet;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
@@ -14,16 +15,12 @@ pub(crate) const MARKER: &str = "context-terminal/ingest.env";
 /// extractor again — a self-amplifying loop. Dropped at the door.
 pub const EXTRACTOR_TETHER: &str = "__logic_loop_extractor__";
 
-fn home() -> String {
-    std::env::var("HOME").unwrap_or_else(|_| "/tmp".into())
-}
-
 fn config_dir() -> PathBuf {
-    PathBuf::from(home()).join(".context-terminal")
+    PathBuf::from(home_or_tmp()).join(".context-terminal")
 }
 
 fn settings_path() -> PathBuf {
-    PathBuf::from(home()).join(".claude/settings.json")
+    PathBuf::from(home_or_tmp()).join(".claude/settings.json")
 }
 
 /// Sessions with an active transcript tailer.

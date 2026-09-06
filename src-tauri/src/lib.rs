@@ -1,6 +1,7 @@
 mod clipboard;
 mod extractor;
 mod codex;
+mod home;
 mod ingest;
 mod opencode;
 mod pty;

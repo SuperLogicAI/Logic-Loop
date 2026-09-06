@@ -1,3 +1,4 @@
+use crate::home::home_or_tmp;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -39,16 +40,12 @@ const HOOK_NAME: &str = "logic-loop";
 /// unsafe — see CLAUDE.md's Phase 16 entry for the full methodology.
 const ANTIGRAVITY_HOOK_EVENTS: [&str; 4] = ["PostToolUse", "PostInvocation", "PreInvocation", "Stop"];
 
-fn home() -> String {
-    std::env::var("HOME").unwrap_or_else(|_| "/tmp".into())
-}
-
 /// Global discovery location per the installed CLI's own docs (`~/.gemini/
 /// config/` — "Global Configuration (Machine-Local)"), not the per-project
 /// `.agents/hooks.json` (would need one register/strip per project) and not
 /// the legacy `~/.gemini/settings.json`.
 fn settings_path() -> PathBuf {
-    PathBuf::from(home()).join(".gemini").join("config").join("hooks.json")
+    PathBuf::from(home_or_tmp()).join(".gemini").join("config").join("hooks.json")
 }
 
 fn read_settings() -> Result<serde_json::Value, String> {
@@ -137,7 +134,7 @@ pub fn antigravity_detect() -> bool {
     }
     ["homebrew/bin", ".local/bin"]
         .iter()
-        .any(|rel| is_executable(&PathBuf::from(home()).join(rel).join("agy")))
+        .any(|rel| is_executable(&PathBuf::from(home_or_tmp()).join(rel).join("agy")))
         || is_executable(&PathBuf::from("/opt/homebrew/bin/agy"))
         || is_executable(&PathBuf::from("/usr/local/bin/agy"))
 }
