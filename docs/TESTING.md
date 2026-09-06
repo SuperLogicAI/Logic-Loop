@@ -1088,25 +1088,57 @@ All passed 2026-09-05.
 
 ## 25. Turn provenance + loop digest (Phase 15)
 
-- [ ] Type a prompt by hand, hit Enter immediately → tagged `human`, no `⟳`
+- [x] Type a prompt by hand, hit Enter immediately → tagged `human`, no `⟳`
       on the tab, flat Since-you-left shape (unchanged from Phase 14a).
-- [ ] Run `/loop 30s /some-command` (or equivalent auto-resubmit) for 3+
+- [x] Run `/loop 30s /some-command` (or equivalent auto-resubmit) for 3+
       wakeups with no manual input in between → each wakeup's
       `UserPromptSubmit` tagged `auto`, TabBar shows `⟳`, Since-you-left
       switches to loop-digest shape with correct iteration count.
-- [ ] Mixed session: one human turn, then 2 auto loop turns → digest shows
-      the 2 auto turns collapsed into the loop shape.
-- [ ] A loop iteration whose closing message is a no-op phrase ("no
+- [x] Mixed session: one human turn, then 2 auto loop turns → digest shows
+      the 2 auto turns collapsed into the loop shape. *(verified 2026-09-06:
+      human turn preceded 3 auto iterations, digest showed "3 iterations
+      while you were away" excluding the human turn; post-stop the panel
+      correctly reverted to flat delta shape for the stop-message's own
+      human turn)*
+- [x] A loop iteration whose closing message is a no-op phrase ("no
       change", "nothing to do", "still waiting", "all good") → collapses
       into the `×N no change` line; a real-work iteration renders its own
-      line with tool/error counts and its first assistant line.
-- [ ] A decision opened mid-loop → shown pinned at the top of the digest,
-      not buried inside an iteration line.
-- [ ] Outside-terminal session (cwd-fallback, no tether) →
+      line with tool/error counts and its first assistant line. *(verified
+      2026-09-06, safe_router: a 1m cron replying exactly "no change" twice
+      collapsed into "×2 no change"; a separate cron tick running `ls` and
+      summarizing the actual listing rendered its own line with tool count
+      and first-assistant-line text, not folded into the collapsed run.)*
+- [x] A decision opened mid-loop → shown pinned at the top of the digest,
+      not buried inside an iteration line. *(found+fixed 2026-09-06: decision
+      extraction is async and its row always lands ~6-7s after the
+      iteration's own Stop — confirmed live via safe_router session
+      `4e8ea829`, decisions at 01:21:11/01:22:23 landing after Stops at
+      01:21:05/01:22:16. `groupIterations`' old `[startTs, endTs)` window
+      (`loop.ts:96`) never matched, so the decision silently attached to no
+      iteration and never rendered. Fixed: a decision now attaches to
+      whichever iteration has the latest `startTs` at or before the
+      decision's ts — that iteration owns the gap up to the next iteration's
+      start, not just up to its own Stop. Regression case added to
+      `loop-check.ts` (decision ts in the post-Stop gap). Re-verified live
+      2026-09-06 in safe_router: a repeating unanswered either/or question
+      fired across 2 auto cron ticks, producing 2 decisions — both rendered
+      pinned above the iteration lines in digest shape, not folded into
+      either iteration's own text.)*
+- [x] Outside-terminal session (cwd-fallback, no tether) →
       `UserPromptSubmit` always tagged `human`, never misclassified `auto`.
-- [ ] Human pastes a multi-line block via ⌘V into the prompt, submits
-      within 5s → tagged `human` (paste counts as input).
-- [ ] Terminals: throughout, typing latency and PTY output unaffected.
+      *(verified 2026-09-06, safe_router: a 1m cron run from a terminal
+      outside Logic Loop, bound via cwd-fallback — no `⟳` appeared on the
+      matching tab across 2+ auto-fired ticks.)*
+- [x] Human pastes a multi-line block via ⌘V into the prompt, submits
+      within 5s → tagged `human` (paste counts as input). *(verified
+      2026-09-06, safe_router: pasted while a "no change" cron was actively
+      running (`lastInputTs` guaranteed stale) — no `⟳` on the pasted turn,
+      rendered with the normal human `>` prompt marker, didn't fold into the
+      auto no-change streak.)*
+- [x] Terminals: throughout, typing latency and PTY output unaffected.
+      *(confirmed 2026-09-06 — no lag observed during §25 testing; separate,
+      pre-existing lag noted on tab-switch while the landing note
+      auto-generates, tracked as a follow-up, not a §25 regression.)*
 
 ## Quality gates (machine-run, not manual)
 

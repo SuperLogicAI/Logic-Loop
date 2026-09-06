@@ -133,7 +133,7 @@ export function TabBar({
           />
           {tab.lastTurnAuto && (
             <span
-              className="shrink-0 text-base leading-none font-bold text-zinc-300"
+              className="shrink-0 text-xl leading-none font-bold text-zinc-200"
               title="last turn was auto (no human keystrokes)"
             >
               ⟳

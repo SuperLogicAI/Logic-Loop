@@ -3,10 +3,10 @@
 // Every failure is swallowed: extraction breaking must never touch terminals.
 import { invoke } from "@tauri-apps/api/core";
 import { buildPrompt, parseExtraction, type TurnPair } from "./extractor";
+import { serialize } from "./extractorQueue";
 import * as repo from "./repo";
 
 const assistantBuf = new Map<string, string>(); // session_id -> pending assistant text
-let queue: Promise<void> = Promise.resolve(); // serialize LLM calls
 
 export function textFromTranscriptLine(line: string): { role: string; text: string } | null {
   try {
@@ -54,8 +54,7 @@ function enqueue(sessionId: string, cwd: string, pair: TurnPair, onDone: () => v
   // ponytail: cheap prefilter — no question mark and no assumption language
   // means nothing to extract; saves an LLM call on most turns.
   if (!/\?|assum/i.test(pair.assistant)) return;
-  queue = queue
-    .then(() => extract(sessionId, cwd, pair))
+  void serialize(() => extract(sessionId, cwd, pair))
     .then(onDone)
     .catch(() => undefined);
 }
