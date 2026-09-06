@@ -22,7 +22,11 @@ const ANTIGRAVITY_HOOK_EVENTS: [&str; 3] = ["PostToolUse", "PostInvocation", "St
 /// primary identity; this exists so the shadow check below cannot mistake a
 /// Logic Loop registration filed under some *other* key (hand-copied, or a key
 /// the user renamed) for a stranger and warn about ourselves.
-const HOOK_FLAG: &str = "--antigravity-hook";
+/// Plain `pub`, not `pub(crate)`: `main.rs` is the binary crate (`app`), this
+/// module lives in the library crate (`app_lib`), and `pub(crate)` doesn't
+/// cross that boundary. `main.rs`'s headless-hook dispatch matches against
+/// this same constant so the two can't drift.
+pub const HOOK_FLAG: &str = "--antigravity-hook";
 
 fn home() -> String {
     std::env::var("HOME").unwrap_or_else(|_| "/tmp".into())
@@ -118,7 +122,7 @@ fn shadowing_post_tool_use(settings: &serde_json::Value) -> bool {
         handler
             .get("command")
             .and_then(|c| c.as_str())
-            .is_some_and(|c| c.contains(HOOK_FLAG) || c.contains(crate::ingest::MARKER))
+            .is_some_and(|c| c.contains(HOOK_FLAG))
     }
     fn entry_is_ours(entry: &serde_json::Value) -> bool {
         handler_is_ours(entry)

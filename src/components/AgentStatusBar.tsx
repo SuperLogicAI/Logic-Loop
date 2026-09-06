@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   antigravityDetect,
   antigravityHooksRemove,
@@ -44,17 +44,35 @@ export function AgentStatusBar({ onAntigravityShadowed }: Props) {
   const [extractor, setExtractor] = useState<ExtractorSettings | null>(null);
   const [showSettings, setShowSettings] = useState(false);
 
-  // Fail open like every other ingestion-side check: an unreadable hooks.json
-  // clears the warning rather than surfacing an error.
-  const refreshShadowed = (installed: boolean | null) => {
-    if (!installed) {
+  // A user who fixes the foreign hook by hand — exactly what the warning
+  // strip's own text tells them to do — never touches the toggle, so a
+  // mount/toggle-only check would never clear. Recheck on window focus (the
+  // moment they're most likely to come back from editing hooks.json) plus a
+  // slow interval as a backstop for a session that never loses focus. The
+  // sequence ref drops a stale in-flight result from a check that started
+  // before the toggle flipped again, closing the rapid on/off race.
+  const shadowSeq = useRef(0);
+  useEffect(() => {
+    if (!antigravityOn) {
       onAntigravityShadowed(false);
       return;
     }
-    void antigravityHooksShadowed()
-      .then(onAntigravityShadowed)
-      .catch(() => onAntigravityShadowed(false));
-  };
+    const check = () => {
+      const seq = ++shadowSeq.current;
+      void antigravityHooksShadowed()
+        .catch(() => false)
+        .then((shadowed) => {
+          if (seq === shadowSeq.current) onAntigravityShadowed(shadowed);
+        });
+    };
+    check();
+    window.addEventListener("focus", check);
+    const interval = setInterval(check, 15_000);
+    return () => {
+      window.removeEventListener("focus", check);
+      clearInterval(interval);
+    };
+  }, [antigravityOn]);
 
   useEffect(() => {
     void hooksStatus().then(setHooksOn).catch(() => setHooksOn(null));
@@ -75,12 +93,7 @@ export function AgentStatusBar({ onAntigravityShadowed }: Props) {
       .then((available) => {
         setAntigravityAvailable(available);
         if (available)
-          void antigravityHooksStatus()
-            .then((on) => {
-              setAntigravityOn(on);
-              refreshShadowed(on);
-            })
-            .catch(() => setAntigravityOn(null));
+          void antigravityHooksStatus().then(setAntigravityOn).catch(() => setAntigravityOn(null));
       })
       .catch(() => setAntigravityAvailable(false));
   }, []);
@@ -137,11 +150,9 @@ export function AgentStatusBar({ onAntigravityShadowed }: Props) {
       if (antigravityOn) {
         await antigravityHooksRemove();
         setAntigravityOn(false);
-        refreshShadowed(false);
       } else {
         await antigravityHooksSetup();
         setAntigravityOn(true);
-        refreshShadowed(true);
       }
     } catch (e) {
       console.error("antigravity hooks toggle failed:", e);
