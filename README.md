@@ -58,17 +58,22 @@ byte-identically when switched off.
 
 | Agent | Activity, state & fan-out | Decision / blocker extraction | Notes |
 |---|---|---|---|
-| **Claude Code** | ✅ | ✅ | Hooks + JSONL transcript tailing. The reference adapter. |
+| **Claude Code** | ✅ | ✅ | Hooks + JSONL transcript tailing. The reference adapter. Resume/re-entry supported. |
 | **OpenCode** | ✅ | — | In-process plugin translating native events; no transcript file to tail. |
-| **Codex** | ✅ | — | Hook contract is near-identical to Claude's; registers into `~/.codex/hooks.json`. |
+| **Codex** | ✅ | — | Hook contract is near-identical to Claude's; registers into `~/.codex/hooks.json`. Carries its own adapter marker, resumes via `codex resume`, and handles `Interrupt`/`SessionEnd` lifecycle events. |
 | **[Antigravity](https://github.com/google-antigravity/antigravity-cli)** (`agy`) | ✅ | — | See caveats below. |
 
 Decision and blocker extraction is Claude-only by design — the other agents
 expose no transcript in a shape the extractor reads, and normalizing them is
 its own piece of work rather than a flag to flip.
 
-Two Antigravity-specific limits, both upstream in `agy` and neither fixable
-from this side (full derivation in [docs/TESTING.md](docs/TESTING.md) §21):
+Antigravity's tool activity (file edits, commands run) now shows real detail
+in the Accomplished panel and Since-you-left digest, and a second turn in the
+same session correctly returns the tab to "working" instead of freezing on
+"idle" — both were Logic Loop-side gaps, now fixed.
+
+Two Antigravity-specific limits remain, both upstream in `agy` and neither
+fixable from this side (full derivation in [docs/TESTING.md](docs/TESTING.md) §21):
 
 - A tool call that exits non-zero is indistinguishable from one that
   succeeded — `agy` strips the field carrying that status before the hook
@@ -91,9 +96,9 @@ Early, actively built, dogfooded daily. Shipped:
 - ✅ Re-entry, unclaimed-result tracking, desktop nudges
 - ✅ Fan-out spawn groups — launch and track several agents from one session
 - ✅ OpenCode adapter — first non-Claude ingestion pipeline
-- ✅ Codex adapter
+- ✅ Codex adapter — adapter identity marker, resume/re-entry, Interrupt/SessionEnd lifecycle
 - ✅ Isolated loops (git worktree–backed tabs)
-- ✅ Antigravity (`agy`) adapter
+- ✅ Antigravity (`agy`) adapter — multi-turn tracking fix, normalized tool detail
 - ⏳ Crash recovery, onboarding, public release polish
 
 ## Stack

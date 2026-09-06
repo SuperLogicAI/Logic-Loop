@@ -91,6 +91,7 @@ pub fn start(app: AppHandle) {
                 continue;
             }
             let hook_version = header_value(&request, "X-Logic-Loop-Hook");
+            let agent_header = header_value(&request, "X-Logic-Loop-Agent");
             let mut body = String::new();
             if request.as_reader().take(1_000_000).read_to_string(&mut body).is_err() {
                 let _ = request.respond(tiny_http::Response::empty(400));
@@ -122,6 +123,9 @@ pub fn start(app: AppHandle) {
                         "hook_version".into(),
                         hook_version.and_then(|v| v.parse::<u64>().ok()).unwrap_or(0).into(),
                     );
+                    if let Some(agent) = recognized_agent(agent_header.as_deref()) {
+                        obj.insert("agent".into(), agent.into());
+                    }
                 }
                 let _ = app.emit("ingest://hook", payload);
             }
@@ -243,9 +247,36 @@ const HOOK_VERSION: u32 = 1;
 /// `$LOGIC_LOOP_TAB_ID` comes from the PTY env (see `pty_spawn`) and is empty
 /// for sessions started outside the app — the frontend then falls back to cwd.
 pub(crate) fn hook_command() -> String {
+    hook_command_with_agent(None)
+}
+
+/// Adapter identity marker, sent as a header (never JSON body — an adapter's
+/// stdin is piped through this command unmodified). `agent` is always a
+/// fixed Rust-selected constant, never adapter-controlled input. Recognized
+/// values are the `RECOGNIZED_AGENTS` allowlist below; an unrecognized or
+/// absent header stays absent in the normalized payload rather than being
+/// guessed as Claude.
+pub(crate) fn hook_command_with_agent(agent: Option<&'static str>) -> String {
+    let agent_header = agent
+        .map(|a| format!(" -H \"X-Logic-Loop-Agent: {a}\""))
+        .unwrap_or_default();
     format!(
-        "sh -c '. \"$HOME/.{MARKER}\" 2>/dev/null && curl -sf -m 2 -H \"Authorization: Bearer $CT_TOKEN\" -H \"X-Logic-Loop-Tab: $LOGIC_LOOP_TAB_ID\" -H \"X-Logic-Loop-Hook: {HOOK_VERSION}\" --data-binary @- \"http://127.0.0.1:$CT_PORT/event\" >/dev/null 2>&1; exit 0'"
+        "sh -c '. \"$HOME/.{MARKER}\" 2>/dev/null && curl -sf -m 2 -H \"Authorization: Bearer $CT_TOKEN\" -H \"X-Logic-Loop-Tab: $LOGIC_LOOP_TAB_ID\" -H \"X-Logic-Loop-Hook: {HOOK_VERSION}\"{agent_header} --data-binary @- \"http://127.0.0.1:$CT_PORT/event\" >/dev/null 2>&1; exit 0'"
     )
+}
+
+/// Adapter identity is an ingestion-origin marker (which adapter's hook sent
+/// this event), distinct from Codex's own `agent_id` payload field (which
+/// identifies a *subagent* within a Codex session and is used by
+/// `stateForHook` to avoid driving the parent tab's state). Extend this list
+/// when a future adapter plan wires up its own marker.
+const RECOGNIZED_AGENTS: [&str; 1] = ["codex"];
+
+/// An unrecognized or absent header must stay absent rather than being
+/// guessed as Claude — pulled out as a pure function so the allowlist
+/// behavior is unit-testable without a live HTTP request.
+fn recognized_agent(header: Option<&str>) -> Option<&str> {
+    header.filter(|a| RECOGNIZED_AGENTS.contains(a))
 }
 
 const HOOK_EVENTS: [&str; 5] =
@@ -361,6 +392,23 @@ mod tests {
     }
 
     #[test]
+    fn default_hook_command_carries_no_agent_marker() {
+        assert!(!hook_command().contains("X-Logic-Loop-Agent"));
+        assert_eq!(hook_command(), hook_command_with_agent(None));
+    }
+
+    #[test]
+    fn agent_marked_command_carries_the_marker_and_is_otherwise_identical() {
+        let marked = hook_command_with_agent(Some("codex"));
+        assert!(marked.contains("X-Logic-Loop-Agent: codex"), "{marked}");
+        assert_eq!(
+            marked.replace(" -H \"X-Logic-Loop-Agent: codex\"", ""),
+            hook_command(),
+            "agent header must be the only difference from the default command"
+        );
+    }
+
+    #[test]
     fn setup_is_idempotent_and_preserves_foreign_hooks() {
         let mut s = foreign_settings();
         apply_setup(&mut s).unwrap();
@@ -395,6 +443,14 @@ mod tests {
         assert!(s["hooks"]["PostToolUse"][0]["matcher"] == "*");
         strip_ours(&mut s);
         assert_eq!(s, serde_json::json!({ "hooks": {} }));
+    }
+
+    #[test]
+    fn recognized_agent_accepts_only_the_allowlist() {
+        assert_eq!(recognized_agent(Some("codex")), Some("codex"));
+        assert_eq!(recognized_agent(Some("antigravity")), None);
+        assert_eq!(recognized_agent(Some("")), None);
+        assert_eq!(recognized_agent(None), None);
     }
 
     #[test]

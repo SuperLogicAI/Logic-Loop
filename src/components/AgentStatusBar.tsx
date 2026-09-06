@@ -167,7 +167,7 @@ export function AgentStatusBar() {
               : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
           }`}
           onClick={() => void toggleAntigravityHooks()}
-          title="Toggle the Antigravity (agy) adapter hooks in ~/.gemini/config/hooks.json — shallower than Claude/Codex: no session-start or waiting signal, and tool activity shows without a tool name"
+          title="Toggle the Antigravity (agy) adapter hooks in ~/.gemini/config/hooks.json — shallower than Claude/Codex: no session-start (so no re-entry after a relaunch) or waiting signal for a question the agent asks"
         >
           {antigravityOn === null ? "antigravity ?" : antigravityOn ? "antigravity on" : "antigravity off"}
         </button>

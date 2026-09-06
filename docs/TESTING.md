@@ -1140,6 +1140,104 @@ All passed 2026-09-05.
       pre-existing lag noted on tab-switch while the landing note
       auto-generates, tracked as a follow-up, not a §25 regression.)*
 
+## 26. Phase 16 — Codex + Antigravity follow-up fixes
+
+Scope: `plans/Codex_Implementation_Plans.md` (Plans 001-003) and
+`plans/Antigravity_Implementation_Plans.md` (Plans 001-002). Agy 003/004
+deferred to a later phase (see PLAN.md).
+
+### Live verification performed during the build (not just unit tests)
+
+- [x] **Agy 001's live-verification gate** (mandatory per the plan before
+      registering any `Pre*` hook): built a scratch `.agents/hooks.json`
+      probe and temporarily swapped it into the real
+      `~/.gemini/config/hooks.json` (backed up first, restored byte-for-byte
+      after — confirmed via `diff`), then drove real `agy` 1.1.27 turns via
+      `--input-format stream-json` (non-interactive, multiple turns in one
+      long-lived process). Findings:
+      - A bare `{}` `PreInvocation` response never blocked, denied, or
+        errored a turn, across a trivial no-tool turn and a 2-tool-call
+        turn.
+      - A deliberately slow (2s sleep) + malformed (empty stdout) response
+        added exactly that latency and nothing worse — degraded to slow,
+        never stuck.
+      - **`PreInvocation` fires multiple times per top-level turn** (3
+        firings observed for one turn with 2 tool calls — once per
+        intra-turn model round-trip, not once per turn as the source review
+        assumed) — this would have inflated Since-you-left's turn count and
+        corrupted Phase 15 turn-provenance if translated naively.
+      - **`invocationNum` resets to `0` at the start of every new top-level
+        turn**, confirmed by resuming the same conversation for a second
+        turn in the same process and seeing `invocationNum: 0` again — this
+        is the reliable once-per-turn signal the fix actually uses (see
+        `antigravity.rs`'s `ANTIGRAVITY_HOOK_EVENTS` doc comment and
+        `translate()`'s `PreInvocation` branch).
+      - This changed the plan's implementation from the reviewed proposal
+        (map every `PreInvocation` → `UserPromptSubmit`) to the corrected
+        one (map only when `invocationNum == 0`) — recorded as a landmine in
+        CLAUDE.md.
+- [x] Manually exercised the real Antigravity turn-epoch fix end to end via
+      the same stream-json harness: turn 1 → `UserPromptSubmit`-mapped
+      `PreInvocation` (`invocationNum: 0`) → `working`; turn 2 (same
+      process, same conversation) → another `invocationNum: 0`
+      `PreInvocation` → epoch correctly reopens. This is the direct fix for
+      the bug (a real second Antigravity turn no longer gets silently
+      dropped by the `stoppedSessions` epoch guard).
+- [x] Codex 003's `Interrupt`/`SessionEnd` events, live-verified against
+      installed `codex-cli` 0.153.4 (temporarily swapped `~/.codex/hooks.json`
+      for a probe file, same backup/restore discipline): a plain `codex exec`
+      turn fired `SessionStart → UserPromptSubmit → Stop → SessionEnd`, all
+      with real `session_id`/`cwd`/`transcript_path`; `SIGINT`-ing a
+      long-running turn (proxy for interactive Esc) fired `Interrupt` (real
+      `turn_id`, no error field) immediately followed by `SessionEnd`
+      (`reason: "other"`) — exactly the event/field shapes Plan 003 assumed
+      from upstream source, and exactly what `stateForHook`'s new cases and
+      `App.tsx`'s `isTerminalResult` predicate already handle. Codex did not
+      reject the 7-event hooks.json (validates the STOP condition about an
+      unrecognized event key never triggered).
+- [x] Codex 002's resume syntax, live-verified: `codex resume --help`
+      confirms `codex resume [SESSION_ID] [PROMPT]` (matches `pty.rs`'s
+      `resume_command` exactly); a real resumed session
+      (`codex exec resume <sid>`) correctly recalled context from the prior
+      turn ("what word did I ask you to reply with?" → correctly answered
+      from the earlier turn, same `session_id`).
+- [x] Quality gates: `cargo test --lib` 49/49 (11 new — 2 ingest, 1 codex
+      marker, 2 codex lifecycle-adjacent already counted in setup loops, 2
+      pty resume-selection, 6 antigravity translate/normalize), `cargo
+      clippy --all-targets -- -D warnings` clean, `npx tsc --noEmit` clean,
+      `npm run check` 13/13 (unchanged script count — extended
+      `reentry-check.ts`, `epoch-check.ts`, `delta-check.ts` in place,
+      no new script needed), `npm run golden` 12/12 (unchanged — no
+      extraction-prompt files touched), `git diff --check` clean.
+
+### Still needs a human, live GUI pass (not verifiable headlessly)
+
+- [ ] Toggle "codex on" in the real app → `~/.codex/hooks.json` gets all 7
+      events (5 existing + `Interrupt`/`SessionEnd`), each `command`
+      carrying `X-Logic-Loop-Agent: codex`; toggle off/on again → idempotent.
+- [ ] Run a real Codex session in a Logic Loop tab, quit/relaunch the app,
+      confirm a re-entry ghost tab appears, click Re-enter, confirm the
+      resumed prompt is the same Codex conversation (visually, not just via
+      the headless check above).
+- [ ] Interrupt a real interactive Codex turn with Esc (not `SIGINT` on
+      `exec`) in a Logic Loop tab → tab dot returns to idle, no stuck
+      "working" state, no spurious duplicate result. Esc in the real
+      interactive TUI is very likely the same underlying path as the
+      `SIGINT`-on-`exec` test above (same `Interrupt`/`SessionEnd` sequence
+      appeared), but this is the one part of Plan 003's manual test not
+      literally reproduced with the real interactive keypress.
+- [ ] Run a real two-turn Antigravity session in a Logic Loop tab (not the
+      headless stream-json harness) → tab visibly returns to `working` on
+      turn 2 instead of staying `idle`. Record the `agy` version used.
+- [ ] Antigravity Accomplished panel + Since-you-left digest: run
+      `run_command` and `write_to_file` in a real Antigravity tab, confirm
+      real detail text (not a bare tool name) and non-zero file/command
+      counts.
+- [ ] A failing Antigravity `run_command` still does not surface a blocker
+      (this is expected, not a regression — agy strips the failure signal
+      from command hooks, per the pinned tripwire test; confirm the app
+      doesn't crash or misbehave, just correctly shows nothing).
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*

@@ -32,6 +32,22 @@ assert.equal(d.turns, 2, "UserPromptSubmit not counted as turns");
 assert.equal(d.stops, 1, "Stop not counted");
 assert.equal(d.lastWords, "final answer", "should pick last real text over a trailing tool_use-only line");
 
+// Antigravity's own tool names (Phase 16) — normalized fields, not Claude's
+// tool names — must count the same as their Claude/Codex equivalents.
+const agyRows: EventRow[] = [
+  row("hook:PostToolUse", { tool_name: "write_to_file", tool_input: { file_path: "/c.ts" } }, 1),
+  row("hook:PostToolUse", { tool_name: "run_command", tool_input: { command: "ls" } }, 2),
+  row(
+    "hook:PostToolUse",
+    { tool_name: "run_command", tool_input: { command: "false" }, tool_response: { is_error: true } },
+    3
+  ),
+];
+const agyDelta = summarizeDelta(agyRows, []);
+assert.deepEqual(agyDelta.files, ["/c.ts"], "Antigravity write_to_file not counted as a file change");
+assert.equal(agyDelta.bashRuns, 2, "Antigravity run_command not counted as a command run");
+assert.equal(agyDelta.bashErrors, 1, "Antigravity run_command error not counted");
+
 const empty = summarizeDelta([], []);
 assert.deepEqual(empty.files, [], "empty input should yield no files");
 assert.equal(empty.bashRuns, 0, "empty input should yield zero bash runs");

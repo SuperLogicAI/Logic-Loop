@@ -26,8 +26,9 @@ table below until one gets its own PLAN.md.
 | Isolated loops (worktrees) | Not started — Phase 9 shipped a different, narrower mechanism (branch-switch-in-place); this is still open | — | Tab tether |
 | Model traffic panel (Safe Router) | Phase 9 candidate | 1d | External: Safe Router v0 log |
 | Codex adapter | DONE (Phase 10) | — | OpenCode adapter |
-| Codex adapter follow-ups (identity marker, resume, Interrupt/SessionEnd) | Planned, unscheduled — see `plans/Codex_Implementation_Plans.md` | — | Codex adapter |
-| Antigravity adapter follow-ups (turn-epoch fix, tool-field normalization, SessionStart/resume, waiting signal) | Planned, unscheduled — see `plans/Antigravity_Implementation_Plans.md`; two plans gated on live `Pre*`-hook verification | — | Antigravity adapter, Codex adapter follow-ups (marker/resume infra) |
+| Codex adapter follow-ups (identity marker, resume, Interrupt/SessionEnd) | DONE (Phase 16) | — | Codex adapter |
+| Antigravity adapter follow-ups (turn-epoch fix, tool-field normalization) | DONE (Phase 16, Agy 001-002) | — | Antigravity adapter |
+| Antigravity SessionStart/resume, waiting signal | Planned, unscheduled — see `plans/Antigravity_Implementation_Plans.md` Plans 003-004; 004 gated on live `PreToolUse` verification | — | Codex adapter follow-ups (marker/resume infra, DONE), Antigravity turn-epoch fix (DONE) |
 | Remaining adapters (Gemini, Copilot) | v2 | — | Codex adapter |
 
 Phase boundaries still hard stops. Phase 5 items enter PLAN.md for approval

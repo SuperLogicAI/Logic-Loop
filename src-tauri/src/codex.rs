@@ -3,9 +3,24 @@ use std::path::PathBuf;
 
 /// Codex's hook contract is a near-literal clone of Claude's: same event
 /// names, same stdin-JSON delivery, so the existing `ingest::hook_command()`
-/// curl one-liner is reused verbatim — no translation layer, unlike OpenCode.
-const CODEX_HOOK_EVENTS: [&str; 5] =
-    ["SessionStart", "Stop", "PostToolUse", "UserPromptSubmit", "PermissionRequest"];
+/// curl one-liner is reused — no translation layer, unlike OpenCode — just
+/// with the shared `X-Logic-Loop-Agent: codex` marker added (see
+/// `ingest::hook_command_with_agent`) so downstream code can tell a Codex
+/// event apart from Claude's without guessing from payload shape.
+const CODEX_HOOK_EVENTS: [&str; 7] = [
+    "SessionStart",
+    "Stop",
+    "PostToolUse",
+    "UserPromptSubmit",
+    "PermissionRequest",
+    // Terminal lifecycle events: Esc-interruption and session shutdown.
+    // `stateForHook` (src/lib/ingest.ts) treats both as epoch-closing, same
+    // as Stop — an interrupted turn is idle, not an error.
+    "Interrupt",
+    "SessionEnd",
+];
+
+const CODEX_AGENT: &str = "codex";
 
 fn home() -> String {
     std::env::var("HOME").unwrap_or_else(|_| "/tmp".into())
@@ -19,11 +34,11 @@ fn settings_path() -> PathBuf {
     PathBuf::from(home()).join(".codex").join("hooks.json")
 }
 
-/// `command` is the exact string `crate::ingest::hook_command()` produces
-/// (reused verbatim, no Codex-specific translation layer), so it embeds
-/// `ingest::MARKER` rather than a marker of our own — that's still enough
-/// to distinguish our entries from foreign ones in `hooks.json`, a file
-/// Claude's settings.json never touches.
+/// `command` is `crate::ingest::hook_command_with_agent(Some(CODEX_AGENT))`
+/// — Claude's shared curl one-liner plus one extra header, no Codex-specific
+/// translation layer — so it embeds `ingest::MARKER` rather than a marker of
+/// our own — that's still enough to distinguish our entries from foreign
+/// ones in `hooks.json`, a file Claude's settings.json never touches.
 fn is_ours(entry: &serde_json::Value) -> bool {
     entry["hooks"]
         .as_array()
@@ -70,7 +85,7 @@ fn apply_setup(settings: &mut serde_json::Value) -> Result<(), String> {
     let hooks = settings["hooks"].as_object_mut().ok_or("hooks not an object")?;
     for event in CODEX_HOOK_EVENTS {
         let mut entry = serde_json::json!({
-            "hooks": [{ "type": "command", "command": crate::ingest::hook_command() }]
+            "hooks": [{ "type": "command", "command": crate::ingest::hook_command_with_agent(Some(CODEX_AGENT)) }]
         });
         if event == "PostToolUse" {
             entry["matcher"] = "*".into();
@@ -186,6 +201,28 @@ mod tests {
         assert!(s["hooks"]["PostToolUse"][0]["matcher"] == "*");
         strip_ours(&mut s);
         assert_eq!(s, serde_json::json!({ "hooks": {} }));
+    }
+
+    #[test]
+    fn setup_entries_carry_both_the_shared_and_codex_markers() {
+        let mut s = serde_json::json!({});
+        apply_setup(&mut s).unwrap();
+        for ev in CODEX_HOOK_EVENTS {
+            let cmd = s["hooks"][ev][0]["hooks"][0]["command"].as_str().unwrap();
+            assert!(cmd.contains(crate::ingest::MARKER), "{ev} missing shared marker: {cmd}");
+            assert!(cmd.contains("X-Logic-Loop-Agent: codex"), "{ev} missing codex marker: {cmd}");
+        }
+    }
+
+    #[test]
+    fn interrupt_and_session_end_are_installed_and_removed() {
+        let mut s = serde_json::json!({});
+        apply_setup(&mut s).unwrap();
+        for ev in ["Interrupt", "SessionEnd"] {
+            assert!(s["hooks"][ev][0]["hooks"][0]["command"].as_str().is_some(), "{ev} missing");
+        }
+        strip_ours(&mut s);
+        assert_eq!(s, serde_json::json!({ "hooks": {} }), "Interrupt/SessionEnd not fully removed");
     }
 
     #[test]

@@ -117,6 +117,14 @@ export async function listToolEvents(cwd: string, limit = 50): Promise<ToolEvent
     NotebookEdit: "Edited",
     Grep: "Searched",
     Glob: "Searched",
+    // Antigravity's own tool names (Phase 16) — tool_input's file_path/
+    // command/description are normalized in antigravity.rs's translate().
+    run_command: "Ran",
+    write_to_file: "Wrote",
+    replace_file_content: "Edited",
+    view_file: "Read",
+    grep_search: "Searched",
+    find_by_name: "Searched",
   };
   return rows.map((r) => {
     let tool = "?";
@@ -435,21 +443,25 @@ export async function decisionsOpenedSince(cwd: string, since: number): Promise<
 // tether uuid so a resumed session (new session_id) is still found under the
 // same tab. ---
 
-/** Written on every `SessionStart` for a tethered session. */
+/** Written on every `SessionStart` for a tethered session. `agent` is the
+ * adapter marker from the hook payload (see `types.ts`'s `HookPayload.agent`)
+ * — undefined for Claude and any adapter without one yet; stored as NULL,
+ * same as a legacy pre-adapter row. */
 export async function upsertSessionBinding(
   sessionId: string,
   tabTether: string,
   projectKey: string,
   cwd: string,
-  transcriptPath: string
+  transcriptPath: string,
+  agent?: string
 ): Promise<void> {
   const d = await getDb();
   await d.execute(
-    `INSERT INTO session_bindings (session_id, tab_tether, project_key, cwd, transcript_path, active, updated_at)
-     VALUES ($1, $2, $3, $4, $5, 1, $6)
+    `INSERT INTO session_bindings (session_id, tab_tether, project_key, cwd, transcript_path, agent, active, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, 1, $7)
      ON CONFLICT(session_id) DO UPDATE SET
-       tab_tether = $2, project_key = $3, cwd = $4, transcript_path = $5, active = 1, updated_at = $6`,
-    [sessionId, tabTether, projectKey, cwd, transcriptPath, Date.now()]
+       tab_tether = $2, project_key = $3, cwd = $4, transcript_path = $5, agent = $6, active = 1, updated_at = $7`,
+    [sessionId, tabTether, projectKey, cwd, transcriptPath, agent ?? null, Date.now()]
   );
 }
 
@@ -472,12 +484,13 @@ export function latestPerTether(rows: SessionBindingRow[]): ReentryCandidate[] {
     if (!cur || r.updated_at > cur.updated_at) byTether.set(r.tab_tether, r);
   }
   return [...byTether.values()].map(
-    ({ session_id, tab_tether, project_key, cwd, transcript_path }) => ({
+    ({ session_id, tab_tether, project_key, cwd, transcript_path, agent }) => ({
       session_id,
       tab_tether,
       project_key,
       cwd,
       transcript_path,
+      agent: agent ?? undefined,
     })
   );
 }
@@ -486,7 +499,7 @@ export function latestPerTether(rows: SessionBindingRow[]): ReentryCandidate[] {
 export async function reentryCandidates(): Promise<ReentryCandidate[]> {
   const d = await getDb();
   const rows = await d.select<SessionBindingRow[]>(
-    "SELECT session_id, tab_tether, project_key, cwd, transcript_path, updated_at FROM session_bindings WHERE active = 1"
+    "SELECT session_id, tab_tether, project_key, cwd, transcript_path, agent, updated_at FROM session_bindings WHERE active = 1"
   );
   return latestPerTether(rows);
 }

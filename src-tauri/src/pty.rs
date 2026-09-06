@@ -116,6 +116,21 @@ fn valid_resume_id(sid: &str) -> bool {
     !sid.is_empty() && sid.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
 }
 
+/// Closed set of resume commands, one per adapter that supports it. `agent`
+/// is the same marker `ingest.rs` stamps from `X-Logic-Loop-Agent` (persisted
+/// alongside the session binding — see `repo.ts`'s `upsertSessionBinding`).
+/// Absent or unrecognized values fall back to Claude's syntax, matching the
+/// pre-adapter behavior every existing binding already relies on. Never
+/// accept an arbitrary command string here — `sid` is still the only
+/// variable part, and `valid_resume_id` remains the shell-injection boundary
+/// at the call site.
+fn resume_command(agent: Option<&str>, sid: &str, shell: &str) -> String {
+    match agent {
+        Some("codex") => format!("codex resume {sid}; exec {shell} -l"),
+        _ => format!("claude --resume {sid}; exec {shell} -l"),
+    }
+}
+
 // Each param is a flat named field on the JS `invoke("pty_spawn", {...})`
 // call site (Tauri's command convention) — bundling them into a struct would
 // mean every caller nests its args under one key, an unrelated-to-this-phase
@@ -130,6 +145,7 @@ pub fn pty_spawn(
     rows: Option<u16>,
     tab_id: Option<String>,
     resume_session: Option<String>,
+    resume_agent: Option<String>,
     launch_cmd: Option<String>,
 ) -> Result<u32, String> {
     let pty_system = native_pty_system();
@@ -151,7 +167,7 @@ pub fn pty_spawn(
     // falls through to an interactive shell via the trailing `exec`.
     if let Some(sid) = resume_session.filter(|s| valid_resume_id(s)) {
         cmd.arg("-c");
-        cmd.arg(format!("claude --resume {sid}; exec {shell} -l"));
+        cmd.arg(resume_command(resume_agent.as_deref(), &sid, &shell));
     }
     cmd.env("TERM", "xterm-256color");
     // Tab tether: hooks inherit this and echo it back, so session→tab binding
@@ -585,7 +601,28 @@ pub fn git_pr_create(cwd: String, title: String, body: String) -> Result<String,
 
 #[cfg(test)]
 mod tests {
-    use super::{canon, project_key, valid_resume_id};
+    use super::{canon, project_key, resume_command, valid_resume_id};
+
+    #[test]
+    fn resume_command_selects_codex_syntax() {
+        assert_eq!(
+            resume_command(Some("codex"), "abc-123", "/bin/zsh"),
+            "codex resume abc-123; exec /bin/zsh -l"
+        );
+    }
+
+    #[test]
+    fn resume_command_defaults_to_claude_syntax() {
+        assert_eq!(
+            resume_command(None, "abc-123", "/bin/zsh"),
+            "claude --resume abc-123; exec /bin/zsh -l"
+        );
+        assert_eq!(
+            resume_command(Some("some-future-agent"), "abc-123", "/bin/zsh"),
+            "claude --resume abc-123; exec /bin/zsh -l",
+            "an unrecognized agent must not be guessed a command, and must not fall through to no resume at all"
+        );
+    }
 
     #[test]
     fn resume_id_rejects_shell_metacharacters() {

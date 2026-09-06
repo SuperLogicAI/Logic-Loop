@@ -10,12 +10,34 @@ use std::path::PathBuf;
 /// marker-substring scan per entry.
 const HOOK_NAME: &str = "logic-loop";
 
-/// Never `PreToolUse`/`PreInvocation` — those run synchronously and their
-/// hook contract expects a `{"decision": ...}` response that can block or
-/// deny the agent's action (confirmed in the doc's own "Current
-/// Limitations": hooks block the agent loop). A stalled/failed translation
-/// on a Post* event can only delay, never block or deny.
-const ANTIGRAVITY_HOOK_EVENTS: [&str; 3] = ["PostToolUse", "PostInvocation", "Stop"];
+/// Never `PreToolUse` — its contract (`hooks.md`'s "PreToolUse Contract")
+/// requires a `decision` field in the response (`"allow"`/`"deny"`/`"ask"`/
+/// `"force_ask"`); the `{}` this module always prints omits it, and the
+/// installed CLI's behavior for a missing `decision` on a real tool gate is
+/// unverified. Do not register it without first confirming that live and
+/// sending an explicit `{"decision": "allow"}` (see Plan 004 in
+/// `plans/Antigravity_Implementation_Plans.md`).
+///
+/// `PreInvocation` was excluded for the same reason until live-verified
+/// otherwise (Phase 16, 2026-09-06): its own contract
+/// (`hooks.md`'s "PreInvocation Contract") has no required response field at
+/// all — `injectSteps` is optional, there is no `decision`/deny semantics,
+/// it cannot block or fail the turn. Confirmed live against `agy` 1.1.27
+/// via `--input-format stream-json`: (1) a bare `{}` response never blocked,
+/// denied, or errored a turn across single- and multi-tool-call turns; (2) a
+/// 2-second-sleeping, malformed (empty-stdout) response added exactly that
+/// latency and nothing worse — degrades to slow, not stuck, matching this
+/// app's existing `-m 2` curl timeout order of magnitude; (3) critically,
+/// `invocationNum` resets to `0` at the start of every new top-level turn
+/// (two turns sent to one long-lived process each began at `invocationNum:
+/// 0`) despite firing multiple times *within* a turn's own tool-call loop
+/// (3 firings observed for one turn with 2 tool calls) — so `invocationNum
+/// == 0` is a reliable once-per-turn signal, and `translate()` uses exactly
+/// that to gate the `UserPromptSubmit` mapping below. All three findings
+/// contradicted this constant's own prior doc comment, which had
+/// (incorrectly) grouped `PreInvocation` with `PreToolUse` as uniformly
+/// unsafe — see CLAUDE.md's Phase 16 entry for the full methodology.
+const ANTIGRAVITY_HOOK_EVENTS: [&str; 4] = ["PostToolUse", "PostInvocation", "PreInvocation", "Stop"];
 
 fn home() -> String {
     std::env::var("HOME").unwrap_or_else(|_| "/tmp".into())
@@ -181,6 +203,23 @@ pub fn antigravity_hooks_status() -> Result<bool, String> {
 /// meaning is what invariant #1 exists to forbid.
 fn translate(event: &str, input: &serde_json::Value) -> serde_json::Value {
     let mut out = serde_json::json!({ "hook_event_name": event });
+    // Turn-epoch fix (Phase 16): agy has no direct UserPromptSubmit
+    // equivalent, and Stop alone left every session permanently stuck idle
+    // after turn 1 (nothing ever cleared `stoppedSessions` — see
+    // ingest.ts's epoch guard). `invocationNum == 0` (or absent, treated the
+    // same way — a payload missing the field entirely should not be assumed
+    // mid-turn) is the first model call of a new top-level turn, live-
+    // verified reliable across resumed turns in one process (see this file's
+    // `ANTIGRAVITY_HOOK_EVENTS` doc comment for the methodology). Any later
+    // invocation within the same turn's tool-call loop keeps the plain
+    // `"PreInvocation"` name, which `stateForHook`'s default arm ignores —
+    // exactly like the already-registered, currently-inert `PostInvocation`.
+    if event == "PreInvocation" {
+        let first_call = input.get("invocationNum").and_then(|v| v.as_u64()).unwrap_or(0) == 0;
+        if first_call {
+            out["hook_event_name"] = "UserPromptSubmit".into();
+        }
+    }
     if let Some(cid) = input.get("conversationId").and_then(|v| v.as_str()) {
         out["session_id"] = cid.into();
     }
@@ -200,13 +239,43 @@ fn translate(event: &str, input: &serde_json::Value) -> serde_json::Value {
             out["tool_name"] = name.into();
         }
         if let Some(args) = input.get("toolCall").and_then(|tc| tc.get("args")) {
-            out["tool_input"] = args.clone();
+            let mut normalized = args.clone();
+            normalize_tool_args(&mut normalized);
+            out["tool_input"] = normalized;
         }
         if let Some(err) = input.get("error").and_then(|v| v.as_str()).filter(|e| !e.is_empty()) {
             out["tool_response"] = serde_json::json!({ "is_error": true, "error": err });
         }
     }
     out
+}
+
+/// Antigravity's own PascalCase tool arg field names, added under the shared
+/// lowercase keys `repo.ts`'s Accomplished panel, `delta.ts`'s Since-you-left
+/// digest, and `App.tsx`'s blocker-detection gate already look for — without
+/// this every Antigravity tool row rendered blank detail and drove zero
+/// digest/blocker signal, even though `tool_input` itself was already
+/// populated (Phase 16 finding). Additive only: the raw PascalCase fields
+/// stay untouched for any future consumer that wants Antigravity-specific
+/// detail (e.g. `WaitMsBeforeAsync`), and an already-present lowercase key is
+/// never overwritten.
+fn normalize_tool_args(args: &mut serde_json::Value) {
+    let Some(obj) = args.as_object_mut() else { return };
+    let mut add = |key: &str, sources: &[&str]| {
+        if obj.contains_key(key) {
+            return;
+        }
+        for src in sources {
+            if let Some(v) = obj.get(*src).and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
+                let v = v.to_string();
+                obj.insert(key.into(), v.into());
+                return;
+            }
+        }
+    };
+    add("command", &["CommandLine"]);
+    add("file_path", &["TargetFile", "AbsolutePath", "SearchPath", "SearchDirectory"]);
+    add("description", &["toolSummary", "toolAction", "Description"]);
 }
 
 /// Headless entry point: `main.rs` routes `--antigravity-hook <Event>` here
@@ -413,6 +482,108 @@ mod tests {
             out.get("tool_response").is_none(),
             "agy signals no failure for a non-zero exit; do not fabricate one"
         );
+    }
+
+    #[test]
+    fn translate_pre_invocation_first_call_maps_to_user_prompt_submit() {
+        let input = serde_json::json!({
+            "conversationId": "abc-123",
+            "workspacePaths": ["/tmp/proj"],
+            "invocationNum": 0
+        });
+        let out = translate("PreInvocation", &input);
+        assert_eq!(out["hook_event_name"], "UserPromptSubmit");
+        assert_eq!(out["session_id"], "abc-123");
+    }
+
+    #[test]
+    fn translate_pre_invocation_missing_invocation_num_defaults_to_first_call() {
+        let input = serde_json::json!({ "conversationId": "abc-123", "workspacePaths": ["/tmp/proj"] });
+        assert_eq!(translate("PreInvocation", &input)["hook_event_name"], "UserPromptSubmit");
+    }
+
+    #[test]
+    fn translate_pre_invocation_later_call_keeps_its_own_name() {
+        // Real turns fire PreInvocation multiple times (once per intra-turn
+        // tool-call loop iteration) — only invocationNum 0 is a new turn.
+        let input = serde_json::json!({
+            "conversationId": "abc-123",
+            "workspacePaths": ["/tmp/proj"],
+            "invocationNum": 2
+        });
+        let out = translate("PreInvocation", &input);
+        assert_eq!(
+            out["hook_event_name"], "PreInvocation",
+            "a mid-turn invocation must not reopen the epoch or count as a new turn"
+        );
+    }
+
+    #[test]
+    fn translate_normalizes_run_command_args() {
+        let input = serde_json::json!({
+            "conversationId": "abc-123",
+            "workspacePaths": ["/tmp/ws2"],
+            "error": "",
+            "toolCall": {
+                "name": "run_command",
+                "args": { "CommandLine": "ls /nope", "Cwd": "/tmp/ws2", "toolSummary": "Run ls command" }
+            }
+        });
+        let out = translate("PostToolUse", &input);
+        assert_eq!(out["tool_input"]["command"], "ls /nope");
+        assert_eq!(out["tool_input"]["description"], "Run ls command");
+        // Raw PascalCase fields survive untouched alongside the new keys.
+        assert_eq!(out["tool_input"]["CommandLine"], "ls /nope");
+        assert_eq!(out["tool_input"]["Cwd"], "/tmp/ws2");
+    }
+
+    #[test]
+    fn translate_normalizes_write_to_file_and_view_file_args() {
+        let write = translate(
+            "PostToolUse",
+            &serde_json::json!({
+                "conversationId": "abc-123",
+                "toolCall": { "name": "write_to_file", "args": { "TargetFile": "/tmp/ws2/foo.ts", "Description": "add foo" } }
+            }),
+        );
+        assert_eq!(write["tool_input"]["file_path"], "/tmp/ws2/foo.ts");
+        assert_eq!(write["tool_input"]["description"], "add foo");
+
+        let view = translate(
+            "PostToolUse",
+            &serde_json::json!({
+                "conversationId": "abc-123",
+                "toolCall": { "name": "view_file", "args": { "AbsolutePath": "/tmp/ws2/bar.ts" } }
+            }),
+        );
+        assert_eq!(view["tool_input"]["file_path"], "/tmp/ws2/bar.ts");
+    }
+
+    #[test]
+    fn translate_normalizes_grep_search_args() {
+        let out = translate(
+            "PostToolUse",
+            &serde_json::json!({
+                "conversationId": "abc-123",
+                "toolCall": { "name": "grep_search", "args": { "SearchPath": "/tmp/ws2", "toolAction": "Searching for TODO" } }
+            }),
+        );
+        assert_eq!(out["tool_input"]["file_path"], "/tmp/ws2");
+        assert_eq!(out["tool_input"]["description"], "Searching for TODO");
+    }
+
+    #[test]
+    fn normalize_tool_args_never_overwrites_an_existing_lowercase_key() {
+        let mut args = serde_json::json!({ "command": "already-here", "CommandLine": "different" });
+        normalize_tool_args(&mut args);
+        assert_eq!(args["command"], "already-here");
+    }
+
+    #[test]
+    fn normalize_tool_args_skips_empty_source_strings() {
+        let mut args = serde_json::json!({ "CommandLine": "" });
+        normalize_tool_args(&mut args);
+        assert!(args.get("command").is_none(), "an empty source string must not fabricate a command");
     }
 
     #[test]

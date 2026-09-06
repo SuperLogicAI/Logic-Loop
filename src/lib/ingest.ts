@@ -242,6 +242,12 @@ export function stateForHook(p: HookPayload): AgentState | null {
     case "PermissionRequest":
       return stoppedSessions.has(p.session_id) ? null : "waiting";
     case "Stop":
+    // Codex-only terminal events (Plan: Codex interruption/session-end
+    // lifecycle). Both are turn/session-terminal, same as Stop: close the
+    // epoch so a late out-of-order event from the closed turn can't revive
+    // the tab. Neither is a failure — an interrupted turn is not an error.
+    case "Interrupt":
+    case "SessionEnd":
       stoppedSessions.add(p.session_id);
       return "idle";
     default:
