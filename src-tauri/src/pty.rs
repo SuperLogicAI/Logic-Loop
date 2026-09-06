@@ -604,6 +604,7 @@ mod tests {
     // not both spellings fall through canon unchanged and compare unequal.
     #[cfg(unix)]
     fn canon_resolves_case_and_tilde_to_one_key() {
+        let _guard = crate::home::ENV_LOCK.lock().unwrap();
         let home = crate::home::home().unwrap();
         // `~` expands, and a case-variant spelling of an existing dir resolves to
         // the same string — that equality is what keeps a project from splitting
@@ -646,6 +647,7 @@ mod tests {
     // half of the Windows port, not the env-var half.
     #[cfg(unix)]
     fn project_key_outside_a_repo_is_the_dir_itself() {
+        let _guard = crate::home::ENV_LOCK.lock().unwrap();
         let home = crate::home::home().unwrap();
         // No `.git` anywhere up to `/` → the dir is its own project, no panic
         // and no walk off the end of the tree.
