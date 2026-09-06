@@ -19,8 +19,12 @@ import {
   gitPush,
   gitUntrackedFiles,
 } from "../lib/pty";
-import { RainbowText } from "./RainbowText";
+import { HUES, RainbowText } from "./RainbowText";
 import type { AgentState, Blocker, Commit, Decision, FanOutRollup, Note, ToolEvent } from "../types";
+
+// Gradient border for the Next card when a landing note is waiting — the only
+// visual cue that it's a landing note, not a decision/blocker in the same slot.
+const RAINBOW_BORDER = `linear-gradient(90deg, ${[...HUES, HUES[0]].map((h) => `hsl(${h} 85% 62%)`).join(", ")})`;
 
 interface Props {
   cwd: string; // expanded absolute project dir of the active tab
@@ -716,10 +720,31 @@ export function SidePanel({
       </div>
       )}
       {momentum && (
-        <section className="rounded-lg border border-yellow-500/30 bg-yellow-400/5 p-3">
+        <section
+          className={
+            momentum.label === "landing note"
+              ? "rounded-lg p-3"
+              : "rounded-lg border border-yellow-500/30 bg-yellow-400/5 p-3"
+          }
+          style={
+            momentum.label === "landing note"
+              ? {
+                  border: "1px solid transparent",
+                  // Panel bg (zinc-900) pre-blended with the same 5% yellow tint the
+                  // other Next cards get — has to be opaque, or the gradient behind it
+                  // (clipped to border-box) bleeds through the whole card, not just the ring.
+                  backgroundImage: "linear-gradient(rgb(35, 33, 27), rgb(35, 33, 27)), " + RAINBOW_BORDER,
+                  backgroundOrigin: "border-box",
+                  backgroundClip: "padding-box, border-box",
+                }
+              : undefined
+          }
+        >
           <h2 className="mb-1 flex items-center gap-1.5 font-semibold tracking-wide text-yellow-300 uppercase">
             ▸ Next
-            <span className="ml-auto font-normal text-[10px] normal-case text-zinc-500">{momentum.label}</span>
+            <span className="ml-auto font-normal text-[10px] normal-case text-zinc-500">
+              {momentum.label === "landing note" ? <RainbowText text={momentum.label} /> : momentum.label}
+            </span>
           </h2>
           <p className="mb-2 break-words text-zinc-200">{momentum.text}</p>
           <button

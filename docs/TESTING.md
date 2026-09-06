@@ -1010,11 +1010,13 @@ untrusted (invariant #5) and parsing it for meaning is exactly what invariant
 
 ## 22. Clickable links in terminal output (2026-08-29)
 
-- [ ] Have an agent print a bare `https://` URL (or `cat` a file containing
+All passed 2026-09-05.
+
+- [x] Have an agent print a bare `https://` URL (or `cat` a file containing
       one). Hovering underlines it; clicking opens the system default browser.
-- [ ] The Logic Loop window itself does **not** navigate — the webview must
+- [x] The Logic Loop window itself does **not** navigate — the webview must
       still show the app, not the linked page.
-- [ ] Click a URL in a background tab's scrollback after switching to it;
+- [x] Click a URL in a background tab's scrollback after switching to it;
       still opens externally (addon is loaded per-terminal, not per-visible).
 
 ## 23. Since-you-left delta + Clock on state (Phase 14)
@@ -1036,6 +1038,24 @@ untrusted (invariant #5) and parsing it for meaning is exactly what invariant
       the command ends and PostToolUse lands, ring clears.
 - [ ] Leave an agent in `waiting` for 3 min → dot shows `3m` age text.
 - [ ] Terminals: throughout, typing latency and PTY output unaffected.
+
+## 24. Landing-note rainbow border (2026-09-05)
+
+All passed 2026-09-05.
+
+- [x] Work in tab A with real agent activity, switch to tab B, let the
+      landing-note prompt fire, and save a note.
+- [x] Return to the tab holding that note's project → the Next card border
+      shows the ROYGBV gradient ring (not the plain `yellow-500/30` border),
+      and the corners stay rounded, not squared off underneath.
+- [x] The grey label in the card's top-right corner now reads `landing note`
+      in per-letter rainbow, matching the same hue cycle as the landing-note
+      modal's own heading.
+- [x] Trigger a plain decision or blocker card afterward → confirm it still
+      renders the solid yellow border and grey label — no gradient bleeding
+      into the unrelated card.
+- [x] Click ✓ Done on the landing-note card → status still flips as before;
+      the style change touched only borders and label text.
 
 ## Quality gates (machine-run, not manual)
 
