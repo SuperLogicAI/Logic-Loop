@@ -24,9 +24,7 @@ These are the merge gates. CI runs all of them except `golden`:
 ```bash
 npx tsc --noEmit                                    # TypeScript, strict
 cd src-tauri && cargo clippy --all-targets -- -D warnings && cargo test
-npm run landing:check && npm run epoch:check && npm run bind:check \
-  && npm run dedupe:check && npm run reentry:check && npm run unclaimed:check \
-  && npm run notify:check && npm run spawn:check && npm run scope:check
+npm run check
 ```
 
 `npm run golden` is the extraction golden set. It shells out to the `claude`
