@@ -103,13 +103,35 @@ xterm.js · SQLite (tauri-plugin-sql) · localhost hook-ingest server.
 
 ## Requirements
 
-- macOS (Apple Silicon)
+- macOS (Apple Silicon) — primary, daily-dogfooded platform.
+- Windows — early testing build, see below.
 - [Rust](https://rustup.rs) + Node 18+
 - At least one supported agent CLI installed — [Claude Code](https://claude.com/claude-code),
   [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex),
   or [Antigravity](https://github.com/google-antigravity/antigravity-cli)
   (`agy`). Each is detected independently — `PATH` plus the
   usual install locations — and its toggle appears only once found.
+
+## Windows (early testing)
+
+CI compiles and tests the Rust core on `windows-latest` on every push, but the
+macOS build is what's dogfooded daily — treat Windows as early/unverified.
+
+To get an installer:
+
+1. Go to [Actions → Windows build](../../actions/workflows/windows-build.yml)
+   in this repo.
+2. Run the workflow (`Run workflow` button, `main` branch), or grab the
+   artifact from the latest run if one already exists.
+3. Once it finishes, open the run and download the `logic-loop-windows-unsigned`
+   artifact — it's a zip containing a `*-setup.exe` NSIS installer.
+4. Run the installer. It's **unsigned**, so Windows SmartScreen will warn —
+   click **More info → Run anyway**.
+
+No installer is published automatically; each run builds from whatever's on
+`main` at the time. Report issues (crashes, PTY/terminal quirks, missing
+agent detection) via GitHub Issues — include your Windows version and which
+agent CLI you were testing.
 
 ## Development
 
