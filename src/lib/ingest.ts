@@ -115,10 +115,13 @@ export function bindSession(
   }
   const { boundTabIds, activeTabId, projectKey } = opts;
   if (!projectKey) return null;
-  // `/` is never a real project: it means the session was started somewhere with
-  // no meaningful cwd. Binding it would overwrite the tab's cwd with a key that
-  // matches nothing, blanking the panel. Untethered + rootless = not ours.
-  if (projectKey === "/") return null;
+  // A filesystem root is never a real project: it means the session was started
+  // somewhere with no meaningful cwd. Binding it would overwrite the tab's cwd
+  // with a key that matches nothing, blanking the panel. Untethered + rootless =
+  // not ours. A Windows drive root (`C:\`, `C:/`, bare `C:`) is the same hazard.
+  // Deliberately anchored and exact — a prefix test would reject `/Users/x` and
+  // `C:\dev\proj` too, which fails far more quietly than the bug it fixes.
+  if (/^(?:[/\\]|[A-Za-z]:[/\\]?)$/.test(projectKey)) return null;
   return (
     tabs.find((t) => t.cwd === projectKey && !boundTabIds.has(t.id))?.id ??
     tabs.find((t) => t.cwd === projectKey)?.id ??
@@ -174,6 +177,31 @@ export function shouldNotify(
   muted: boolean
 ): boolean {
   return !muted && shouldFlagUnclaimed(tabId, activeTabId, windowFocused);
+}
+
+// ponytail: constant; settings-table knob if real use disagrees
+export const STALL_MS = 3 * 60 * 1000;
+
+/** Derived, not stored — keeps every adapter, stateForHook, fan-out rollup
+ * and check script untouched. Only "working" stalls: "waiting" already has
+ * its own pulse meaning ("needs you now"); a long-idle waiting tab just
+ * gets an age badge, not a stall label. */
+export function deriveClock(
+  tab: { agentState?: AgentState; lastEventTs?: number },
+  now: number
+): { quietMs: number; stalled: boolean } {
+  const quietMs = tab.lastEventTs ? now - tab.lastEventTs : 0;
+  return { quietMs, stalled: tab.agentState === "working" && quietMs > STALL_MS };
+}
+
+/** `Xs`/`Xm`/`Xh`/`Xd` for a duration in ms — same buckets as SidePanel's
+ * `ago()`, but for an elapsed span rather than a distance from an absolute ts. */
+export function formatAge(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.floor(s / 86400)}d`;
 }
 
 /** Map a hook event to the tab's agent state; null = no state change. */

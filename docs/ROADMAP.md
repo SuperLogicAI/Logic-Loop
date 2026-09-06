@@ -23,7 +23,7 @@ table below until one gets its own PLAN.md.
 | Nudges | Phase 6 | 0.5d | Unclaimed results |
 | Recursive fan-out spawn (RAH) | DONE (Phase 7) | 2d | Tab tether, Versioned hook contract |
 | OpenCode adapter | DONE (Phase 8) | — | Versioned hook contract |
-| Isolated loops (worktrees) | Phase 9 candidate (was v1.1) | — | Tab tether |
+| Isolated loops (worktrees) | Not started — Phase 9 shipped a different, narrower mechanism (branch-switch-in-place); this is still open | — | Tab tether |
 | Model traffic panel (Safe Router) | Phase 9 candidate | 1d | External: Safe Router v0 log |
 | Codex adapter | v2, next up | — | OpenCode adapter |
 | Remaining adapters (Antigravity, Gemini, Copilot) | v2, after Codex | — | Codex adapter |
@@ -289,6 +289,37 @@ cheaper exactly as Adapters gets more expensive.
   tab and project. Rows with an unknown tether → project-level only, no
   misattribution.
 
+**Checked against Safe Router 2026-09-04** (verdict from an investigation
+run in that repo, not this one — no code touched here): the Compass-study
+detail from the ROADMAP re-validation above (rate-limit reset countdown,
+account hot-swap) is not covered on the Safe Router side today, but the
+gap sits entirely in *their* schema, not in anything this panel does.
+
+- **Rate-limit visibility does not exist yet.** `requests` (docs/SPEC.md
+  in that repo) has no remaining/reset column; `is_retryable_status`
+  (`src/proxy.rs:203-204` there) checks HTTP status only, never reads
+  `x-ratelimit-*` response headers. If this panel ever wants a countdown,
+  Safe Router has to start capturing and logging that first — nothing to
+  build here until it does.
+- **Multi-account failover is already structurally free on their side** —
+  two `[[provider]]` blocks, same `base_url`, different `id`/
+  `keychain_item`, chained with `on_error = "next"`, is today's existing
+  frontier-cheap chain pattern (their docs/SPEC.md:234-239), not a new
+  feature. Confirmed compatible with their invariant #3 (no runtime-
+  mutable policy) since the swap is a static, startup-time config fact,
+  not a toggle. Nothing for this panel to represent differently — a
+  same-provider chain hop looks like any other `chain_pos` advance in the
+  existing `requests` log, already covered by the join this section
+  describes.
+- **No prior discussion found** of either idea in that repo's git
+  history or PLAN.md before this check.
+
+Net: this panel's scope is unchanged. Reset-countdown display stays
+blocked on a Safe Router schema change (their move, not ours); if/when
+they add `x-ratelimit-remaining`/`reset` columns, this panel picks them
+up the same read-only way it picks up `tokens_in`/`tokens_out` today —
+no new join, no new ingestion.
+
 ## Recursive fan-out spawn (RAH) — Phase 7, in progress
 
 Source: Lumer et al., "Recursive Agent Harnesses" (arXiv:2606.13643).
@@ -432,6 +463,20 @@ local branch, not just new-branch creation — right-click a branch, "open in
 worktree," cwd becomes that worktree. And sanitize branch names used as
 directory components (`feature/foo` → `feature-foo`) rather than assuming
 branch names are filesystem-safe as-is.
+
+**Re-validated 2026-09-04** (competitive research, internal codename:
+Compass study — concept only, no code copied): a mature multi-agent
+orchestrator's flagship fan-out feature is exactly this — one prompt across
+N agents, each in its own `git worktree`, compare and merge the winner. Real
+evidence this is the right mechanism and not gold-plating: Phase 9 shipped
+the narrower branch-switch-in-place flow instead (`commitAndPush("branch")`
+in `SidePanel.tsx`, a real `git checkout -b` in the tab's own live working
+directory) and it produced exactly the failure class worktree isolation
+exists to prevent — see the wip-branch-checkout landmine in CLAUDE.md
+(committed and pushed correctly, but silently left the tab's live checkout
+parked on the new branch with no worktree boundary to contain it). This
+item should build actual `git worktree add` isolation, not extend the
+branch-switch approach further.
 
 ## Split-pane tabs — v1.x UI
 

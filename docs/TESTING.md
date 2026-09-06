@@ -1017,6 +1017,26 @@ untrusted (invariant #5) and parsing it for meaning is exactly what invariant
 - [ ] Click a URL in a background tab's scrollback after switching to it;
       still opens externally (addon is loaded per-terminal, not per-visible).
 
+## 23. Since-you-left delta + Clock on state (Phase 14)
+
+- [ ] Two tabs, agent edits 3 files on tab A while tab B is active → switch to
+      A: "Since you left" shows 3 files, correct turn/stop counts, agent's
+      last message text. Accomplished below it unchanged.
+- [ ] Stay on A, agent edits one more file → section grows to 4 files.
+      Switch away and back → resets to the new delta only.
+- [ ] Cmd-Tab to another app while A is active, agent finishes → return:
+      section present, `result_claimed` also written (existing behaviour).
+- [ ] Quit with A live, relaunch, Re-enter → run one turn → section shows
+      only post-relaunch activity; verify in sqlite whether the resumed
+      `session_id` changed and that the tether path handled either case.
+- [ ] Tab with no bound session, and an unbound fan-out child: no section.
+- [ ] Start a `sleep 240` inside an agent turn on a background tab → after 3
+      min the dot shows the amber ring, tooltip reads `working · quiet 3m`,
+      one OS nudge fires (and does not re-fire), mute suppresses it. When
+      the command ends and PostToolUse lands, ring clears.
+- [ ] Leave an agent in `waiting` for 3 min → dot shows `3m` age text.
+- [ ] Terminals: throughout, typing latency and PTY output unaffected.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*

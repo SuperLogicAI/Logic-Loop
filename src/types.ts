@@ -17,6 +17,10 @@ export interface Tab {
   status: "live" | "dead";
   sessionId?: string;
   agentState?: AgentState;
+  /** ms epoch of the last state-bearing hook (Phase 14b's clock). Not
+   * persisted — a relaunch has no agentState either, both come back on the
+   * first hook. */
+  lastEventTs?: number;
 }
 
 export interface Blocker {
