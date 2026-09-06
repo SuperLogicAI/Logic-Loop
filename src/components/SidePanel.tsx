@@ -19,7 +19,7 @@ import {
   gitPush,
   gitUntrackedFiles,
 } from "../lib/pty";
-import { HUES, RainbowText } from "./RainbowText";
+import { GreyGradientText, HUES, RainbowText } from "./RainbowText";
 import type { AgentState, Blocker, Commit, Decision, FanOutRollup, Note, ToolEvent } from "../types";
 
 // Gradient border for the Next card when a landing note is waiting — the only
@@ -564,12 +564,12 @@ export function SidePanel({
           delta.stops > 0 ||
           delta.decisions.length > 0 ||
           delta.lastWords !== "") && (
-        <section className="rounded-lg border border-cyan-500/30 bg-cyan-400/5 p-3">
+        <section className="rounded-lg border border-teal-500/30 bg-teal-400/5 p-3">
           <h2
-            className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-cyan-300 uppercase select-none"
+            className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-teal-300 uppercase select-none"
             onClick={() => toggleSection("since-left")}
           >
-            <Chevron collapsed={collapsed.has("since-left")} className="text-cyan-300/85" />
+            <Chevron collapsed={collapsed.has("since-left")} className="text-teal-300/85" />
             Since you left
           </h2>
           {!collapsed.has("since-left") && (
@@ -577,7 +577,7 @@ export function SidePanel({
               <ul className="flex flex-col gap-1 text-zinc-300">
                 {delta.files.length > 0 && (
                   <li className="flex gap-1.5">
-                    <span className="shrink-0 text-cyan-500/60">•</span>
+                    <span className="shrink-0 text-teal-500/60">•</span>
                     <span>
                       {delta.files.length} file{delta.files.length === 1 ? "" : "s"} changed:{" "}
                       <span className="text-zinc-400">
@@ -588,7 +588,7 @@ export function SidePanel({
                 )}
                 {delta.bashRuns > 0 && (
                   <li className="flex gap-1.5">
-                    <span className="shrink-0 text-cyan-500/60">•</span>
+                    <span className="shrink-0 text-teal-500/60">•</span>
                     <span>
                       {delta.bashRuns} command{delta.bashRuns === 1 ? "" : "s"} run
                       {delta.bashErrors > 0 && (
@@ -598,7 +598,7 @@ export function SidePanel({
                   </li>
                 )}
                 <li className="flex gap-1.5 text-zinc-500">
-                  <span className="shrink-0 text-cyan-500/60">•</span>
+                  <span className="shrink-0 text-teal-500/60">•</span>
                   <span>
                     {delta.turns} turn{delta.turns === 1 ? "" : "s"} · {delta.stops} stop
                     {delta.stops === 1 ? "" : "s"}
@@ -606,7 +606,7 @@ export function SidePanel({
                 </li>
                 {delta.decisions.length > 0 && (
                   <li className="flex gap-1.5 text-orange-300">
-                    <span className="shrink-0 text-cyan-500/60">•</span>
+                    <span className="shrink-0 text-teal-500/60">•</span>
                     <span>
                       {delta.decisions.length} new decision{delta.decisions.length === 1 ? "" : "s"} opened
                     </span>
@@ -625,7 +625,7 @@ export function SidePanel({
       )}
       <section className="border-b border-zinc-800 pb-3">
         <h2 className="mb-1.5 font-semibold tracking-wide uppercase">
-          <RainbowText text="Notes and reminders" />
+          <GreyGradientText text="Notes and reminders" />
         </h2>
         <input
           className="mb-2 w-full rounded bg-zinc-800 px-2 py-1 text-zinc-200 outline-none placeholder:text-zinc-600"
