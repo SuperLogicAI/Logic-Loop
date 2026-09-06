@@ -110,6 +110,10 @@ export async function listToolEvents(cwd: string, limit = 50): Promise<ToolEvent
      ORDER BY ts DESC LIMIT $2`,
     [cwd, limit]
   );
+  // Tools that write the file they name. A Read/Grep row also carries a
+  // `file_path`, but there is no change to show for one — keeping the diffable
+  // set here means the panel never has to decide which rows are clickable.
+  const WRITES = new Set(["Edit", "Write", "NotebookEdit", "MultiEdit"]);
   const VERB: Record<string, string> = {
     Edit: "Edited",
     Write: "Wrote",
@@ -122,6 +126,7 @@ export async function listToolEvents(cwd: string, limit = 50): Promise<ToolEvent
     let tool = "?";
     let detail = "";
     let plain = "";
+    let written = "";
     try {
       const p = JSON.parse(r.payload_json) as Record<string, unknown>;
       tool = typeof p.tool_name === "string" ? p.tool_name : "?";
@@ -130,6 +135,7 @@ export async function listToolEvents(cwd: string, limit = 50): Promise<ToolEvent
       const command = typeof input.command === "string" ? input.command : "";
       const description = typeof input.description === "string" ? input.description : "";
       detail = filePath || command || description || "";
+      written = WRITES.has(tool) ? filePath : "";
       // Plain-English headline: hook descriptions first (Bash sends one),
       // else verb + filename, else the tool name.
       plain =
@@ -139,7 +145,7 @@ export async function listToolEvents(cwd: string, limit = 50): Promise<ToolEvent
     } catch {
       // keep defaults
     }
-    return { id: r.id, ts: r.ts, session_id: r.session_id, tool, detail, plain };
+    return { id: r.id, ts: r.ts, session_id: r.session_id, tool, detail, plain, filePath: written };
   });
 }
 
