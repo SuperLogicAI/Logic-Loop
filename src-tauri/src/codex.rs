@@ -1,3 +1,4 @@
+use crate::home::home_or_tmp;
 use std::fs;
 use std::path::PathBuf;
 
@@ -7,16 +8,12 @@ use std::path::PathBuf;
 const CODEX_HOOK_EVENTS: [&str; 5] =
     ["SessionStart", "Stop", "PostToolUse", "UserPromptSubmit", "PermissionRequest"];
 
-fn home() -> String {
-    std::env::var("HOME").unwrap_or_else(|_| "/tmp".into())
-}
-
 /// Standalone hooks.json, not inline `[hooks]` in config.toml — Codex
 /// auto-discovers this file with zero config.toml edits, and avoids touching
 /// tables (`[marketplaces]`, `[plugins]`, `[projects]`, `[tui]`, `[notice]`)
 /// a naive TOML rewrite could mangle.
 fn settings_path() -> PathBuf {
-    PathBuf::from(home()).join(".codex").join("hooks.json")
+    PathBuf::from(home_or_tmp()).join(".codex").join("hooks.json")
 }
 
 /// `command` is the exact string `crate::ingest::hook_command()` produces
@@ -109,7 +106,7 @@ pub fn codex_detect() -> bool {
     }
     ["homebrew/bin", ".local/bin"]
         .iter()
-        .any(|rel| is_executable(&PathBuf::from(home()).join(rel).join("codex")))
+        .any(|rel| is_executable(&PathBuf::from(home_or_tmp()).join(rel).join("codex")))
         || is_executable(&PathBuf::from("/opt/homebrew/bin/codex"))
         || is_executable(&PathBuf::from("/usr/local/bin/codex"))
 }

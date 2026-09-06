@@ -4,7 +4,7 @@ use std::process::{Command, Stdio};
 fn claude_bin() -> String {
     let local = format!(
         "{}/.local/bin/claude",
-        std::env::var("HOME").unwrap_or_default()
+        crate::home::home().unwrap_or_default()
     );
     if std::path::Path::new(&local).exists() {
         local
