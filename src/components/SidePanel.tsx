@@ -19,7 +19,7 @@ import {
   gitPush,
   gitUntrackedFiles,
 } from "../lib/pty";
-import { GreyGradientText, HUES, RainbowText } from "./RainbowText";
+import { HUES, RainbowText } from "./RainbowText";
 import type { AgentState, Blocker, Commit, Decision, FanOutRollup, Note, ToolEvent } from "../types";
 
 // Gradient border for the Next card when a landing note is waiting — the only
@@ -624,11 +624,11 @@ export function SidePanel({
         </section>
       )}
       <section className="border-b border-zinc-800 pb-3">
-        <h2 className="mb-1.5 font-semibold tracking-wide uppercase">
-          <GreyGradientText text="Notes and reminders" />
+        <h2 className="mb-1.5 font-semibold tracking-wide text-zinc-300 uppercase">
+          Notes and reminders
         </h2>
         <input
-          className="mb-2 w-full rounded bg-zinc-800 px-2 py-1 text-zinc-200 outline-none placeholder:text-zinc-600"
+          className="mb-2 w-full rounded border border-zinc-100 bg-zinc-800 px-2 py-1 text-zinc-200 outline-none placeholder:text-zinc-600"
           placeholder="Leave a note for this project…"
           value={noteDraft}
           onChange={(e) => setNoteDraft(e.target.value)}
