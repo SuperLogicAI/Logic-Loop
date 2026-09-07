@@ -98,7 +98,7 @@ export function decisionsEmptyReason(args: {
   if (args.sessionBlind) {
     return "Can't tell — no transcript for this session (extraction never ran).";
   }
-  if (args.agent) {
+  if (args.agent && args.agent !== "codex") {
     return "Decision tracking isn't available for this agent yet.";
   }
   return "Nothing waiting on you.";

@@ -2,7 +2,7 @@ use crate::home::home_or_tmp;
 use std::collections::HashSet;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter};
 
@@ -96,7 +96,7 @@ pub fn start(app: AppHandle) {
             }
             if let Ok(mut payload) = serde_json::from_str::<serde_json::Value>(&body) {
                 if let Some(path) = payload.get("transcript_path").and_then(|v| v.as_str()) {
-                    if is_claude_transcript_path(path) {
+                    if is_transcript_path(path, recognized_agent(agent_header.as_deref())) {
                         if let Some(sid) = payload.get("session_id").and_then(|v| v.as_str()) {
                             ensure_tailer(&app, sid.to_string(), path.to_string());
                         }
@@ -131,14 +131,47 @@ pub fn start(app: AppHandle) {
     });
 }
 
-/// Claude's own transcripts always live under `~/.claude/projects/`; nothing
-/// else does. Codex's `SessionStart` carries a `transcript_path` too (its own
-/// rollout-*.jsonl) and this server is agent-agnostic — an ungated tailer
-/// call here would tail and persist Codex's raw transcript, which Phase 10
-/// explicitly ruled out (found live during the Phase 10 manual test,
-/// 2026-08-27).
-fn is_claude_transcript_path(path: &str) -> bool {
-    path.contains("/.claude/projects/")
+/// Transcript paths are agent-scoped. An ungated tailer call here would tail
+/// arbitrary files and can self-amplify through agent subprocesses.
+fn is_transcript_path(path: &str, agent: Option<&str>) -> bool {
+    match agent {
+        None => path.contains("/.claude/projects/"),
+        Some("codex") => crate::home::home()
+            .map(|home| is_codex_rollout_path(Path::new(path), Path::new(&home)))
+            .unwrap_or(false),
+        Some(_) => false,
+    }
+}
+
+fn is_codex_rollout_path(path: &Path, home: &Path) -> bool {
+    let Ok(relative) = path.strip_prefix(home.join(".codex").join("sessions")) else {
+        return false;
+    };
+    let mut components = relative.components().rev();
+    let Some(std::path::Component::Normal(file)) = components.next() else {
+        return false;
+    };
+    let file = file.to_string_lossy();
+    if !file.starts_with("rollout-") || !file.ends_with(".jsonl") {
+        return false;
+    }
+    let Some(std::path::Component::Normal(day)) = components.next() else {
+        return false;
+    };
+    let Some(std::path::Component::Normal(month)) = components.next() else {
+        return false;
+    };
+    let Some(std::path::Component::Normal(year)) = components.next() else {
+        return false;
+    };
+    components.next().is_none()
+        && is_fixed_digits(&year.to_string_lossy(), 4)
+        && is_fixed_digits(&month.to_string_lossy(), 2)
+        && is_fixed_digits(&day.to_string_lossy(), 2)
+}
+
+fn is_fixed_digits(value: &str, length: usize) -> bool {
+    value.len() == length && value.bytes().all(|b| b.is_ascii_digit())
 }
 
 fn header_value(request: &tiny_http::Request, name: &'static str) -> Option<String> {
@@ -451,13 +484,41 @@ mod tests {
     }
 
     #[test]
-    fn only_claude_transcript_paths_are_tailed() {
-        assert!(is_claude_transcript_path(
-            "/Users/x/.claude/projects/-foo/abc-123.jsonl"
+    fn transcript_paths_are_agent_scoped() {
+        assert!(is_transcript_path(
+            "/Users/x/.claude/projects/-foo/abc-123.jsonl",
+            None
         ));
-        assert!(!is_claude_transcript_path(
-            "/Users/x/.codex/sessions/2026/08/27/rollout-2026-08-27T06-10-13-abc.jsonl"
+        let rollout =
+            "/Users/x/.codex/sessions/2026/08/27/rollout-2026-08-27T06-10-13-abc.jsonl";
+        assert!(is_codex_rollout_path(
+            std::path::Path::new(rollout),
+            std::path::Path::new("/Users/x")
         ));
-        assert!(!is_claude_transcript_path(""));
+        assert!(!is_transcript_path(rollout, None));
+        assert!(!is_transcript_path(rollout, Some("antigravity")));
+        assert!(!is_codex_rollout_path(
+            std::path::Path::new("/Users/x/.codex/sessions/2026/08/27/events.jsonl"),
+            std::path::Path::new("/Users/x")
+        ));
+        assert!(!is_codex_rollout_path(
+            std::path::Path::new(
+                "/Users/x/.codex/sessions/2026/8/27/rollout-2026-08-27T06-10-13-abc.jsonl"
+            ),
+            std::path::Path::new("/Users/x")
+        ));
+        assert!(!is_codex_rollout_path(
+            std::path::Path::new(
+                "/Users/x/.codex/sessions/2026/08/27/rollout-2026-08-27T06-10-13-abc.txt"
+            ),
+            std::path::Path::new("/Users/x")
+        ));
+        assert!(!is_codex_rollout_path(
+            std::path::Path::new(
+                "/Users/other/.codex/sessions/2026/08/27/rollout-2026-08-27T06-10-13-abc.jsonl"
+            ),
+            std::path::Path::new("/Users/x")
+        ));
+        assert!(!is_transcript_path("", None));
     }
 }

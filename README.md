@@ -61,15 +61,16 @@ byte-identically when switched off.
 |---|---|---|---|
 | **Claude Code** | ✅ | ✅ | Hooks + JSONL transcript tailing. The reference adapter. Resume/re-entry supported. |
 | **OpenCode** | ✅ | — | In-process plugin translating native events; no transcript file to tail. |
-| **Codex** | ✅ | — | Hook contract is near-identical to Claude's; registers into `~/.codex/hooks.json`. Carries its own adapter marker, resumes via `codex resume`, and handles `Interrupt`/`SessionEnd` lifecycle events. |
+| **Codex** | ✅ | ✅ | Hook contract is near-identical to Claude's; registers into `~/.codex/hooks.json`. Carries its own adapter marker, resumes via `codex resume`, handles `Interrupt`/`SessionEnd` lifecycle events, and can back the Sidebar LM extractor. |
 | **[Antigravity](https://github.com/google-antigravity/antigravity-cli)** (`agy`) | ✅ | — | See caveats below. |
 
-Decision and blocker extraction is Claude-only by design — the other agents
-expose no transcript in a shape the extractor reads, and normalizing them is
-its own piece of work rather than a flag to flip. The Decisions panel groups
-open questions into per-session, collapsible clusters (newest expanded, one
-"dismiss all" per cluster) instead of one flat list, and its empty state now
-says *why* nothing's showing rather than one generic "nothing waiting" —
+Decision and blocker extraction is available for Claude Code and Codex. The
+Sidebar LM chooser supports Claude CLI (default), Codex CLI, and LM Studio
+(local); Codex CLI uses its configured default model unless an optional model
+override is supplied. The Decisions panel groups open questions into
+per-session, collapsible clusters (newest expanded, one "dismiss all" per
+cluster) instead of one flat list, and its empty state now says *why* nothing's
+showing rather than one generic "nothing waiting" —
 confirmed-empty, blind session (no transcript), unbound fan-out child, or
 "not available for this agent" are each called out distinctly.
 

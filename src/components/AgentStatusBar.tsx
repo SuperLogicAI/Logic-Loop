@@ -194,11 +194,27 @@ export function AgentStatusBar() {
           <label className="flex items-center gap-2 text-zinc-300">
             <input
               type="radio"
+              checked={extractor.backend === "codex"}
+              onChange={() => saveExtractor({ ...extractor, backend: "codex" })}
+            />
+            Codex CLI
+          </label>
+          <label className="flex items-center gap-2 text-zinc-300">
+            <input
+              type="radio"
               checked={extractor.backend === "lmstudio"}
               onChange={() => saveExtractor({ ...extractor, backend: "lmstudio" })}
             />
             LM Studio (local)
           </label>
+          {extractor.backend === "codex" && (
+            <input
+              className="rounded bg-zinc-900 px-2 py-1 text-zinc-200 outline-none"
+              placeholder="Codex model override (optional)"
+              value={extractor.codexModel}
+              onChange={(e) => saveExtractor({ ...extractor, codexModel: e.target.value })}
+            />
+          )}
           {extractor.backend === "lmstudio" && (
             <>
               <input

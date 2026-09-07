@@ -1212,31 +1212,55 @@ deferred to a later phase (see PLAN.md).
 
 ### Still needs a human, live GUI pass (not verifiable headlessly)
 
-- [ ] Toggle "codex on" in the real app → `~/.codex/hooks.json` gets all 7
+- [x] Toggle "codex on" in the real app → `~/.codex/hooks.json` gets all 7
       events (5 existing + `Interrupt`/`SessionEnd`), each `command`
       carrying `X-Logic-Loop-Agent: codex`; toggle off/on again → idempotent.
-- [ ] Run a real Codex session in a Logic Loop tab, quit/relaunch the app,
+      *(2026-09-07: confirmed live — hooks.json had all 7 events with the
+      header on every command, all 7 trust hashes present in config.toml.
+      Live testing surfaced a real timing gap, not a hooks.json bug: toggling
+      on while a Codex process from before the toggle is still running has
+      no effect — Codex reads hooks.json once at session start, so that
+      already-running session never fires hooks (session started 03:38:42,
+      hooks.json rewritten 03:40:51, zero events in the DB for it). A fresh
+      Codex session/turn started after the toggle picked up hooks correctly
+      — `session_bindings` bound `agent='codex'`, `UserPromptSubmit`→`Stop`
+      landed with real timestamps. Not a regression, just an undocumented
+      "toggle before starting the session, not mid-session" caveat.)*
+- [x] Run a real Codex session in a Logic Loop tab, quit/relaunch the app,
       confirm a re-entry ghost tab appears, click Re-enter, confirm the
       resumed prompt is the same Codex conversation (visually, not just via
-      the headless check above).
-- [ ] Interrupt a real interactive Codex turn with Esc (not `SIGINT` on
+      the headless check above). *(2026-09-07: passed live.)*
+- [x] Interrupt a real interactive Codex turn with Esc (not `SIGINT` on
       `exec`) in a Logic Loop tab → tab dot returns to idle, no stuck
       "working" state, no spurious duplicate result. Esc in the real
       interactive TUI is very likely the same underlying path as the
       `SIGINT`-on-`exec` test above (same `Interrupt`/`SessionEnd` sequence
       appeared), but this is the one part of Plan 003's manual test not
       literally reproduced with the real interactive keypress.
-- [ ] Run a real two-turn Antigravity session in a Logic Loop tab (not the
+      *(2026-09-07: confirmed live — tab dot went blue (working) on run,
+      Esc brought it back to green (idle). DB showed `hook:Interrupt` fired,
+      no `SessionEnd` (fine — `isTerminalResult` in App.tsx already treats
+      `Interrupt` alone as terminal), and zero `result_landed`/
+      `result_claimed` rows — no stuck state, no spurious duplicate result.)*
+- [x] Run a real two-turn Antigravity session in a Logic Loop tab (not the
       headless stream-json harness) → tab visibly returns to `working` on
       turn 2 instead of staying `idle`. Record the `agy` version used.
+      *(2026-09-07: passed live, Antigravity CLI 1.1.27.)*
 - [ ] Antigravity Accomplished panel + Since-you-left digest: run
       `run_command` and `write_to_file` in a real Antigravity tab, confirm
       real detail text (not a bare tool name) and non-zero file/command
-      counts.
+      counts. **BLOCKED 2026-09-07**: hit account-level API quota
+      ("Individual quota reached") mid-session, unrelated to this app —
+      cooldown ~142h (~6 days), resets ~2026-09-13. Recheck then.
 - [ ] A failing Antigravity `run_command` still does not surface a blocker
       (this is expected, not a regression — agy strips the failure signal
       from command hooks, per the pinned tripwire test; confirm the app
       doesn't crash or misbehave, just correctly shows nothing).
+      **BLOCKED 2026-09-07**: same quota cooldown as above, not yet
+      attempted — a real quota-exhaustion error *did* correctly surface as
+      a "Rate limited" blocker card during the item-1 test, but that's a
+      different signal (account-level API error, not a `run_command`
+      tool-call failure) and doesn't exercise this check. Recheck ~2026-09-13.
 
 ## 27. Decisions cleanup — grouped by session, bulk-dismiss (Phase 17)
 
@@ -1340,9 +1364,10 @@ deferred to a later phase (see PLAN.md).
       transcript at a bad path) with zero open decisions → the Decisions
       section itself (not just the top banner) reads "Can't tell — no
       transcript for this session (extraction never ran)."
-- [x] A Codex/OpenCode/Antigravity tab with zero open decisions → "Decision
+- [x] An OpenCode/Antigravity tab with zero open decisions → "Decision
       tracking isn't available for this agent yet." — never the
-      confirmed-empty text.
+      confirmed-empty text. Codex is covered by Phase 21 below and now uses
+      the confirmed-empty text when its transcript is readable.
 - [x] An unbound fan-out child tab → "Can't tell — this tab isn't bound to
       a tracked session yet." — outranks both blind and non-Claude-agent
       when more than one would apply.
@@ -1371,6 +1396,50 @@ deferred to a later phase (see PLAN.md).
 - [x] Hand-edit the board file to add `now: true` to a card externally,
       switch tabs away and back → the star and collapsed-strip title
       appear without any app-side toggle.
+
+## 31. Codex decision/blocker tracking (Phase 21)
+
+- [x] Enable Codex hooks before starting a fresh Codex session. Existing Codex
+      processes do not reload hooks after the toggle; if hook command text has
+      changed and trust is stale, follow the Codex trust-hash landmine in
+      `CLAUDE.md` and approve the fresh-session prompt.
+- [x] In a Logic Loop Codex tab, produce an assistant message containing an
+      explicit question and confirm a decision appears after the turn ends.
+- [x] Produce an unanswered Codex question and confirm it is stored as an
+      open decision; answer a later question and confirm it is stored as
+      answered.
+- [x] Confirm a Codex tab with a readable transcript and zero open decisions
+      says "Nothing waiting on you."; a blind Codex session still says it
+      cannot tell because no transcript was readable.
+- [x] Trigger a Codex tool failure and confirm the existing Bash-scoped
+      blocker path behaves as it does for Claude. Do not expect quoted
+      transcript prose to create a blocker.
+- [x] Relaunch and re-enter the Codex session; confirm the session remains
+      bound to the Codex tab and new transcript lines continue extracting.
+- [x] While extraction runs, confirm no second observed Codex session,
+      recursive extraction, cwd overwrite, or terminal impact appears. The
+      extractor child must remain covered by the
+      `LOGIC_LOOP_TAB_ID=__logic_loop_extractor__` tether.
+
+## 32. Codex CLI Sidebar LM backend (Phase 22)
+
+- [ ] Open Sidebar LM and select Codex CLI; close and reopen the settings
+      popover → Codex remains selected.
+- [ ] Leave the Codex model override blank and extract a decision, landing
+      note, and commit-message draft → all three use the configured Codex
+      default without changing the prompts or writing to the terminal.
+- [ ] Enter a model override, rerun one extraction, then clear it → the
+      setting persists and clearing returns to the CLI default.
+- [ ] Run `EXTRACTOR=codex npm run golden` → all 12 fixtures pass, including
+      the injection case.
+- [ ] Temporarily make Codex unavailable or use an invalid model → extraction
+      fails open; terminals and panels remain usable and no partial decision
+      row is written.
+- [ ] During a Codex-backed extraction, confirm no extractor child appears as
+      a Logic Loop session, no cwd changes to `/`, and no recursive decisions
+      are created.
+- [ ] Select Claude CLI and LM Studio afterward → both still work and their
+      existing settings remain intact.
 
 ## Quality gates (machine-run, not manual)
 
@@ -1422,3 +1491,5 @@ deferred to a later phase (see PLAN.md).
 - [x] `cargo test` — `board::tests` read/write/round-trip/error-path assertions pass. *(new, Phase 18)*
 - [x] `npm run empty-state:check` — decisions-empty-reason priority-order assertions pass. *(new, Phase 19)*
 - [x] `npm run board:check` — extended with Now-set round-trip/cap assertions. *(Phase 20)*
+- [x] `npm run codex-transcript:check` — redacted real-shape Codex JSONL
+      parser, ignored event types, and transcript-as-data assertions pass.

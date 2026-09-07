@@ -13,23 +13,48 @@ export function textFromTranscriptLine(line: string): { role: string; text: stri
     const obj = JSON.parse(line) as {
       type?: string;
       message?: { content?: unknown };
+      payload?: {
+        type?: string;
+        role?: string;
+        content?: unknown;
+      };
     };
-    if (obj.type !== "assistant" && obj.type !== "user") return null;
-    const content = obj.message?.content;
-    let text = "";
-    if (typeof content === "string") {
-      text = content;
-    } else if (Array.isArray(content)) {
-      text = content
-        .filter((b): b is { type: string; text: string } =>
-          typeof b === "object" && b !== null && (b as { type?: string }).type === "text"
-        )
-        .map((b) => b.text)
-        .join("\n");
+    if (obj.type === "assistant" || obj.type === "user") {
+      const content = obj.message?.content;
+      let text = "";
+      if (typeof content === "string") {
+        text = content;
+      } else if (Array.isArray(content)) {
+        text = content
+          .filter((b): b is { type: string; text: string } =>
+            typeof b === "object" && b !== null && (b as { type?: string }).type === "text"
+          )
+          .map((b) => b.text)
+          .join("\n");
+      }
+      // tool_use-only messages and tool_result user messages carry no text
+      if (!text.trim()) return null;
+      return { role: obj.type, text };
     }
-    // tool_use-only messages and tool_result user messages carry no text
+    if (obj.type !== "response_item") return null;
+    const payload = obj.payload;
+    if (payload?.type !== "message" || (payload.role !== "assistant" && payload.role !== "user")) {
+      return null;
+    }
+    const blockType = payload.role === "assistant" ? "output_text" : "input_text";
+    if (!Array.isArray(payload.content)) return null;
+    const text = payload.content
+      .filter(
+        (b): b is { type: string; text: string } =>
+          typeof b === "object" &&
+          b !== null &&
+          (b as { type?: unknown }).type === blockType &&
+          typeof (b as { text?: unknown }).text === "string"
+      )
+      .map((b) => b.text)
+      .join("\n");
     if (!text.trim()) return null;
-    return { role: obj.type, text };
+    return { role: payload.role, text };
   } catch {
     return null;
   }
@@ -42,6 +67,7 @@ async function extract(sessionId: string, cwd: string, pair: TurnPair): Promise<
     backend: s.backend,
     lmstudioUrl: s.lmstudioUrl,
     lmstudioModel: s.lmstudioModel,
+    codexModel: s.codexModel,
   });
   const decisions = parseExtraction(raw);
   if (!decisions) return; // contract violation → drop, fail open

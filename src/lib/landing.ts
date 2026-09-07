@@ -54,6 +54,7 @@ export async function draftLandingNote(sessionId: string): Promise<string> {
         backend: s.backend,
         lmstudioUrl: s.lmstudioUrl,
         lmstudioModel: s.lmstudioModel,
+        codexModel: s.codexModel,
       })
     );
     return parseLandingDraft(raw);

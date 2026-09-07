@@ -78,9 +78,10 @@ export interface Note {
 }
 
 export interface ExtractorSettings {
-  backend: "claude" | "lmstudio";
+  backend: "claude" | "codex" | "lmstudio";
   lmstudioUrl: string;
   lmstudioModel: string;
+  codexModel: string;
 }
 
 /** A tab-tether-keyed re-entry candidate: the latest session bound to a tab
