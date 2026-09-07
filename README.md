@@ -37,6 +37,7 @@ switching:
 | **Landing Note** | *State reconstruction cost* — rebuilding mental state on return can take 15–25 min; a written next action collapses it. |
 | **Attention Residue** | *Attention residue* — part of your mind stays on the task you left; externalize the loop to return clean. |
 | **Momentum Builder** | *Re-entry friction* — surfaces the single lowest-friction next action to convert staring into motion. |
+| **Idea Board** | *Where did that idea go* — a per-project kanban dock (idea → planned → building → later → done) living in a git-committed `.logic-loop/board.md`; star up to 3 cards as "Now" and Momentum Builder prefers them over the plain top-of-column pick. |
 
 ## How it works
 
@@ -65,7 +66,12 @@ byte-identically when switched off.
 
 Decision and blocker extraction is Claude-only by design — the other agents
 expose no transcript in a shape the extractor reads, and normalizing them is
-its own piece of work rather than a flag to flip.
+its own piece of work rather than a flag to flip. The Decisions panel groups
+open questions into per-session, collapsible clusters (newest expanded, one
+"dismiss all" per cluster) instead of one flat list, and its empty state now
+says *why* nothing's showing rather than one generic "nothing waiting" —
+confirmed-empty, blind session (no transcript), unbound fan-out child, or
+"not available for this agent" are each called out distinctly.
 
 Antigravity's tool activity (file edits, commands run) now shows real detail
 in the Accomplished panel and Since-you-left digest, and a second turn in the
@@ -99,6 +105,10 @@ Early, actively built, dogfooded daily. Shipped:
 - ✅ Codex adapter — adapter identity marker, resume/re-entry, Interrupt/SessionEnd lifecycle
 - ✅ Isolated loops (git worktree–backed tabs)
 - ✅ Antigravity (`agy`) adapter — multi-turn tracking fix, normalized tool detail
+- ✅ Decisions grouped by session with per-cluster bulk-dismiss
+- ✅ Decisions empty-state clarity — distinguishes confirmed-empty from
+  blind/unbound/non-Claude-agent
+- ✅ Idea Board — per-project kanban dock with a starred "Now" set
 - ⏳ Crash recovery, onboarding, public release polish
 
 ## Stack
