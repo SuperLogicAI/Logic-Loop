@@ -19,6 +19,7 @@ import {
 import { detectBlockers } from "./lib/detectors";
 import * as decisions from "./lib/decisions";
 import { initNotifications, notify } from "./lib/notify";
+import { IdeaBoard } from "./components/IdeaBoard";
 import { SidePanel } from "./components/SidePanel";
 import { LandingNoteModal } from "./components/LandingNoteModal";
 import { FanOutModal } from "./components/FanOutModal";
@@ -975,6 +976,8 @@ export default function App() {
             accent={activeTab.color === PALETTE[7] ? null : activeTab.color}
             refreshKey={panelRefresh}
             blindPaths={Object.values(blindSessions)}
+            sessionBlind={!!(activeTab.sessionId && blindSessions[activeTab.sessionId])}
+            agent={activeTab.agent}
             fanOut={fanOutRollups}
             onSelectTab={setActiveId}
             onDismissMember={dismissSpawnMember}
@@ -997,6 +1000,7 @@ export default function App() {
               />
             ))}
           </div>
+          {activeTab && <IdeaBoard cwd={expand(activeTab.cwd)} />}
         </div>
       </div>
       {landingPrompt && (

@@ -282,6 +282,54 @@ export async function decisionCounts(): Promise<Record<string, number>> {
   return Object.fromEntries(rows.map((r) => [r.cwd, r.n]));
 }
 
+export interface DecisionSessionGroup {
+  session_id: string;
+  n: number;
+  min_ts: number;
+  max_ts: number;
+}
+
+/** Per-session open-decision clusters for one project, newest first. */
+export async function decisionsBySession(cwd: string): Promise<DecisionSessionGroup[]> {
+  const d = await getDb();
+  return d.select<DecisionSessionGroup[]>(
+    `SELECT session_id, count(*) AS n, min(ts) AS min_ts, max(ts) AS max_ts
+     FROM decisions WHERE cwd = $1 AND status = 'open'
+     GROUP BY session_id ORDER BY max_ts DESC`,
+    [cwd]
+  );
+}
+
+/** Bulk-dismiss every open decision in one session — same "not a real
+ * decision" semantic as the per-row ✕ (`setDecisionStatus(id, "dismissed")`),
+ * just applied to a whole cluster at once. */
+export async function dismissSession(sessionId: string): Promise<void> {
+  const d = await getDb();
+  await d.execute("UPDATE decisions SET status = 'dismissed' WHERE session_id = $1 AND status = 'open'", [
+    sessionId,
+  ]);
+}
+
+/** Pure grouping step for the open-decisions list, newest cluster first.
+ * Exported for `decisions-check.ts` — no DB round trip needed since
+ * `listDecisions` already has everything. */
+export function groupDecisionsBySession(open: Decision[]): DecisionSessionGroup[] {
+  const bySession = new Map<string, Decision[]>();
+  for (const d of open) {
+    const list = bySession.get(d.session_id);
+    if (list) list.push(d);
+    else bySession.set(d.session_id, [d]);
+  }
+  return [...bySession.entries()]
+    .map(([session_id, ds]) => ({
+      session_id,
+      n: ds.length,
+      min_ts: Math.min(...ds.map((d) => d.ts)),
+      max_ts: Math.max(...ds.map((d) => d.ts)),
+    }))
+    .sort((a, b) => b.max_ts - a.max_ts);
+}
+
 export async function getExtractorSettings(): Promise<ExtractorSettings> {
   const d = await getDb();
   const rows = await d.select<{ key: string; value: string }[]>(
@@ -328,6 +376,45 @@ export async function setProjectMuted(cwd: string, muted: boolean): Promise<void
   await d.execute(
     "INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $2",
     [MUTE_KEY_PREFIX + cwd, muted ? "1" : "0"]
+  );
+}
+
+// --- Idea Board (Phase 18): per-project collapsed/height, same settings-
+// table pattern as project mute above. ---
+
+const BOARD_COLLAPSED_PREFIX = "board_collapsed:";
+const BOARD_HEIGHT_PREFIX = "board_height:";
+
+export async function getBoardCollapsed(cwd: string): Promise<boolean> {
+  const d = await getDb();
+  const rows = await d.select<{ value: string }[]>("SELECT value FROM settings WHERE key = $1", [
+    BOARD_COLLAPSED_PREFIX + cwd,
+  ]);
+  return rows[0]?.value !== "0"; // collapsed by default until the user opens it once
+}
+
+export async function setBoardCollapsed(cwd: string, collapsed: boolean): Promise<void> {
+  const d = await getDb();
+  await d.execute(
+    "INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $2",
+    [BOARD_COLLAPSED_PREFIX + cwd, collapsed ? "1" : "0"]
+  );
+}
+
+export async function getBoardHeight(cwd: string): Promise<number | null> {
+  const d = await getDb();
+  const rows = await d.select<{ value: string }[]>("SELECT value FROM settings WHERE key = $1", [
+    BOARD_HEIGHT_PREFIX + cwd,
+  ]);
+  const n = rows[0] ? Number(rows[0].value) : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
+export async function setBoardHeight(cwd: string, height: number): Promise<void> {
+  const d = await getDb();
+  await d.execute(
+    "INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $2",
+    [BOARD_HEIGHT_PREFIX + cwd, String(Math.round(height))]
   );
 }
 

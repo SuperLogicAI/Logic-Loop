@@ -45,7 +45,9 @@ read-only version doesn't cover.
 
 ## Decisions cleanup — grouped by session, bulk-dismiss
 
-**Sequenced as Phase 16** (2026-09-05), ahead of Idea Board (now Phase 17) —
+**Renumbered to Phase 17** (2026-09-06 — actual Phase 16 landed as Codex/
+Antigravity adapter follow-ups, not this; sequencing table below corrected),
+ahead of Idea Board (now Phase 18) —
 user hit this live during Phase 15 §25 manual testing: 80 open decisions
 accumulated on this project alone, oldest ~2 months old, no way to work
 through them except one at a time in a flat list.
@@ -89,7 +91,7 @@ don't run twelve iterations while you sleep, don't owe you an answer.
 Phase 14 adds time; #3 adds provenance; #4 moves status out of the tab
 strip entirely.
 
-## 3. Turn provenance + loop digest — likely add-on
+## 3. Turn provenance + loop digest — DONE (Phase 15)
 
 **What.** Tag every turn as `human` or `auto`, then group consecutive
 `auto` turns into iterations so a `/loop`- or graph-running session can be
@@ -372,3 +374,128 @@ new lifecycle, new failure modes to keep invariant #2 fail-open through) —
 not a cheap add like the rest of this file. Not key to the current version.
 Revisit if losing in-flight turns to a quit becomes a recurring complaint
 rather than a one-off during testing.
+
+---
+
+# GPT-5 Astra product/UX review (2026-09-06)
+
+External review (`improve` skill, read-only — no files changed, no live
+usability/correctness audit) of source + concept doc + IDEAS.md + ROADMAP.md
++ a repo screenshot. Core concern: sidebar panels (landing notes, decisions,
+blockers, since-you-left, loop digest, re-entry) increasingly compete for
+attention — more visible info can raise the burden Logic Loop exists to cut.
+Six features prioritized below; three map onto existing parked ideas (#4
+inbox, #6 board) and are folded there rather than duplicated. Three are new.
+
+**Corrections to the review's stated inconsistencies** (checked against
+current repo state, not taken at face value):
+- Worktree isolation: review says ROADMAP claims "not started" while the app
+  already creates worktrees. Actual ROADMAP text (`Isolated loops` section)
+  already draws this distinction correctly — Phase 9 shipped a narrower
+  branch-switch-in-place mechanism, real `git worktree add` isolation is
+  still unbuilt. Not a doc bug; review read the sequencing-table cell
+  without the section below it.
+- Loop digest "likely add-on": true when Astra apparently read a stale
+  copy — it shipped as Phase 15 (2026-09-06, same day). Fixed above.
+- Decisions cleanup mis-numbered Phase 16 (actual Phase 16 = adapter
+  follow-ups): real conflict, fixed above (renumbered Phase 17).
+- Blockers lack session identity: already a known, explicitly-scoped-out gap
+  — see ROADMAP's RAH section, "Not fixed, scope explicitly excluded."
+  Correct finding, already tracked, not new.
+
+## A. Cross-project attention inbox — same feature as #4 above
+
+Astra's version adds two refinements worth carrying into #4's build sketch
+when it's picked up:
+- **Rank by explicit priority/actionability first, age second** — not
+  age-weighted alone. #4's `weight = kind base × age` should read `weight =
+  kind base × priority, tiebreak age` so a fresh answerable question doesn't
+  lose to a two-month-old dead blocker. State the ranking in plain text next
+  to the list, not just an implicit sort order.
+- **Preview/snooze/pin without switching tabs.** #4's sketch already makes
+  Enter activate a tab; add a snooze (defer N hours, re-surfaces) and a pin
+  (manual priority override) as row actions, and a preview affordance
+  (expand in place) before committing to a tab switch.
+
+## B. Compact re-entry brief — extends Phase 14's delta, not a new panel
+
+Phase 14 (`src/lib/delta.ts`) already computes files/commands/turns/last
+words. Astra's ask is presentation, not new data: render it as one
+structured block at the top of the side panel instead of separate stat
+lines — project · agent · branch, one-line goal (from the landing note or a
+pinned board card, never a fresh LLM summary), "you left / changed / needs
+you / next" as four short fields with the underlying evidence (diff, tool
+event, decision) one click away. No new ingestion. Reference: a resumption-
+cues study found automated cues beat notes alone for task completion, with
+users preferring chronological snippets over prose — supports pairing the
+brief with drill-down evidence rather than another generated summary
+(Microsoft Research, "Evaluating Cues for Resuming Interrupted Programming
+Tasks").
+
+**Risk called out correctly:** don't require a fresh generated summary on
+every tab switch — that's more LLM cost and another place for drift between
+claim and evidence. Use only facts already computed (delta, landing note,
+board card) plus links to their source rows.
+
+## C. Seen ≠ reviewed ≠ resolved — extends Phase 5's unclaimed-results model
+
+Today, focusing a tab claims its result (`App.tsx`, `claimTab`) — good
+enough for an unread dot, weak evidence the human actually acted on it.
+Real gap: nothing distinguishes "I glanced at it" from "I decided what to do
+about it." Proposal: keep a result's row open (separate from the
+`result_landed`/`result_claimed` pair Phase 6 already has) until an explicit
+action — "Answer," "Delegate," "Dismiss," "Resolve blocker" — replaces the
+generic Momentum-card "Done" (`SidePanel.tsx`). Pairs directly with the
+already-parked diff/file preview pop-out above: open the diff, see it,
+mark it explicitly. Risk (stated correctly): don't add bookkeeping to every
+tool event — gate this on Momentum-card-level items only (decisions,
+blockers, landing notes), not the Accomplished panel's raw tool rows.
+
+Also: the current "Nothing waiting on you" empty state (`SidePanel.tsx`)
+should distinguish "confirmed nothing" from "extraction unavailable for
+this agent" (e.g. non-Claude fan-out children with no decision tracking,
+per the RAH open-finding above) — conflating the two overstates confidence
+exactly where an adapter has the least visibility.
+
+## D. Focus mode with batched notifications — extends Phase 6's per-project mute
+
+Phase 6 already ships notification filtering + per-project mute. Extend to
+"Focus on this project": batch ordinary Stop/completion nudges into one
+quiet digest, still let `WAITING_ON_YOU`-class events through per user
+choice, show a restrained background count, offer "review queued updates"
+on focus-off. Agents keep running — this changes when output reaches the
+human, not what agents do (invariant #4 untouched). Motivation: an
+interruption study found people compensate for interruptions by working
+faster while reporting more stress/frustration — faster notification is not
+itself evidence of a better experience (Mark, Gudith, Klocke, CHI 2008).
+
+## E. Lighter departure capture — alternative to the landing-note modal
+
+`LandingNoteModal.tsx` is a full modal with a 60s auto-skip, shown on
+switch-away. Prototype a smaller inline strip instead — "Leave a next step
+for <project>," optional draft, keyboard shortcut, preserves in-progress
+text — with the current modal ritual demoted to an opt-in preference rather
+than the default. Add a quick-capture affordance with an explicit
+destination ("Save thought to <project>") defaulting to the *previous*
+project, not silently inferred — misfiled notes are worse than no note.
+
+## F. Idea Board: add a small "Now" set — extends #6 above
+
+#6's board already has `status: planned`. Add one more concept on top: a
+human-selected, size-bounded "Now" subset (not just sorted-by-status) with
+an explicit "Return to this next" action, so switching to a different
+terminal doesn't silently change what the human intended to do next. Keep
+the board collapsed during execution (already a non-goal-respecting design
+in #6) — this is additive to the existing spec, not a new board shape.
+
+## Sequencing note from the review
+
+Suggested order: decisions cleanup + observation-clarity (item C's second
+half) → inbox (A/#4) → re-entry brief (B) + review queue (C) → focus mode
+(D) + departure capture (E) → board Now-set (F). Split panes, detached
+windows, mobile, usage dashboards named as lower-priority than all of the
+above — already reflected in ROADMAP's v1.x/v2 placement, no change needed
+there. Validation suggestion for whichever ships first: dogfood across
+several projects, track time-to-next-action, bounce-back switches,
+overlooked results, perceived overload — qualitative, not a metrics
+dashboard to build.

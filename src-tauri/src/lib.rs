@@ -1,3 +1,4 @@
+mod board;
 mod clipboard;
 mod extractor;
 mod codex;
@@ -262,7 +263,9 @@ pub fn run() {
             antigravity::antigravity_hooks_status,
             extractor::run_extractor,
             clipboard::clipboard_text,
-            clipboard::clipboard_image_path
+            clipboard::clipboard_image_path,
+            board::read_board,
+            board::write_board
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {

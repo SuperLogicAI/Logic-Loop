@@ -1238,6 +1238,140 @@ deferred to a later phase (see PLAN.md).
       from command hooks, per the pinned tripwire test; confirm the app
       doesn't crash or misbehave, just correctly shows nothing).
 
+## 27. Decisions cleanup — grouped by session, bulk-dismiss (Phase 17)
+
+- [x] Project with open decisions across 2+ sessions: Decisions section
+      shows one collapsible cluster per session, most-recent expanded,
+      older ones collapsed. Header reads relative age + count (e.g. "~2
+      months ago · 12 decisions"). **Found + fixed a real bug during this
+      check**: `SidePanel.tsx`'s `reload()` was passing decisions through
+      `scopeBySession(dc, sessionId)` before grouping — every tab could
+      only ever see its own session's cluster, so cross-session grouping
+      was dead on arrival. Surfaced live: tab badge showed 10 open
+      decisions for the project while the active tab's own Decisions
+      section read "Nothing waiting on you." Fixed by dropping the scoping
+      for `decisions` state only (tool events keep it — that scoping is
+      correct there). Passed after fix.
+- [x] Toggling a cluster's chevron expands/collapses just that cluster;
+      others unaffected.
+- [x] A session with exactly 1 open decision shows no "dismiss all" button
+      on its cluster header; a session with 2+ does.
+- [x] "dismiss all" on a cluster clears every open decision in that session
+      only — sibling clusters' counts and rows unchanged, badge count in the
+      section header (`Decisions (N)`) drops by exactly that cluster's
+      count.
+- [x] "dismiss all" on the only remaining cluster collapses the whole
+      section to "Nothing waiting on you."
+- [x] Per-row actions (answer/context/delegate/dismiss) inside an expanded
+      cluster behave exactly as before grouping was added.
+- [x] Switching project tabs re-seeds which cluster is expanded (newest for
+      the new project); a manual expand/collapse made earlier in the
+      previous project is not carried over. (Confirmed decisions persisting
+      across a new session start in the same project is correct by design —
+      decisions are cwd-scoped, not session-scoped, and only clear on
+      answer/dismiss.)
+- [x] Closed-decisions tail below the open clusters is unchanged in
+      appearance and behavior. Bonus check confirmed too: dismissing in one
+      tab is reflected in a second tab on the same project (shared DB, no
+      per-tab staleness).
+
+## 28. Idea Board (Phase 18)
+
+- [x] Collapsed dock strip shows under the terminal pane by default (first
+      run, no `.logic-loop/board.md` yet); clicking it expands to five
+      columns (Idea/Planned/Building/Later/Done), all empty, `+` quick-add
+      live.
+- [x] Quick-add with just text (no title) creates a card in Idea whose
+      title is the first line typed; `.logic-loop/board.md` now exists on
+      disk with that one `## ` card.
+- [x] Moving a card via its status dropdown updates the column it renders
+      in immediately, and the on-disk file's `status:` line for that card
+      changes — no other card's lines change.
+- [x] Hand-edit `.logic-loop/board.md` in an external editor (add a card,
+      change a `next:` line) while the app is open, switch tabs away and
+      back → the board picks up the external edit; then move a card in the
+      UI → confirm the hand-edited card and its edit are still there in the
+      file afterward (reload-before-write didn't clobber it).
+- [x] Click a card's title → expands in place showing body/next/link, no
+      markdown rendering (raw text only); click again collapses it. First
+      attempt read as a fail on a body/next/link-less quick-add card (nothing
+      to show is correct, not a bug); passed once retested against a card
+      with `body`/`next`/`link` lines added by hand.
+- [x] Drag the top resize handle → dock height changes; collapse the app
+      and relaunch (or switch away and back to the project tab) → collapsed
+      state and height both persisted per project.
+
+### Scope added mid-sprint (not in the original Phase 18 plan, built and
+### verified in this pass, ship with the same stamp as the rest of §28)
+
+- [x] Per-card delete (✕, far right of the title row) — removes the card
+      from the board and from `.logic-loop/board.md` permanently (`board.ts`
+      `deleteCard`, wired as `remove()` in `IdeaBoard.tsx`).
+- [x] Per-card accent color — grey dot with a rainbow-gradient ring next to
+      the star opens a swatch popover; picking a color tints the card's
+      border and title-row background and persists as a `color: #hex` line
+      (`board.ts` `Card.color` + `parseBoard`/`serializeCard`, `setColor()`
+      in `IdeaBoard.tsx`). "No color" swatch clears it.
+- [x] Row order finalized: chevron (expand) → star (Now) → color dot →
+      title → ✕ (delete), far right.
+- [x] All triangle glyphs (▸/▾/▼/▲) replaced with the same `Chevron` SVG
+      used by Decisions/Blockers, for visual consistency — per-card expand
+      toggle, the dock's own collapse/expand row, and the momentum "NEXT"
+      card header (`SidePanel.tsx`) all now share the one chevron style.
+- [x] `npx tsc --noEmit` and `npm run check` (incl. `board:check`) clean
+      after all of the above.
+- [x] Switch to a different project tab with its own (or no) board → shows
+      that project's own file, not the previous tab's cards.
+- [x] With no landing note, no open decision, and no open blocker, but a
+      `planned` card exists → SidePanel's momentum card shows that card's
+      `next:` (or title if no `next:`); clicking Done moves the card to
+      `building`, not `done`, and it disappears from momentum (blocker/
+      decision fallback resumes, or "nothing waiting" if truly empty).
+- [x] Terminals: opening/collapsing/resizing the board and adding/moving
+      cards while an agent is streaming output — typing latency and PTY
+      output unaffected, no input ever sent to the terminal session.
+
+## 29. Decisions empty-state clarity (Phase 19)
+
+- [x] Idle Claude project, transcript readable, zero open decisions →
+      Decisions section reads "Nothing waiting on you." (unchanged text,
+      now specifically meaning confirmed-empty).
+- [x] Simulate a blind session (kill/deny the tailer, or point a session's
+      transcript at a bad path) with zero open decisions → the Decisions
+      section itself (not just the top banner) reads "Can't tell — no
+      transcript for this session (extraction never ran)."
+- [x] A Codex/OpenCode/Antigravity tab with zero open decisions → "Decision
+      tracking isn't available for this agent yet." — never the
+      confirmed-empty text.
+- [x] An unbound fan-out child tab → "Can't tell — this tab isn't bound to
+      a tracked session yet." — outranks both blind and non-Claude-agent
+      when more than one would apply.
+- [x] Blockers and notes empty states are unchanged — this phase touches
+      only the Decisions section's zero-state text.
+
+## 30. Idea Board "Now" set (Phase 20)
+
+- [x] Star (★) a card from any column → it appears in the collapsed dock
+      strip's title list (visible without expanding the board); un-starring
+      it removes it from that strip.
+- [x] Star 3 cards; attempt to star a 4th → inline "Now is full (3/3) —
+      remove one first" message, the 4th card's star does not fill in, and
+      the file's `now:` count stays at 3.
+- [x] Un-star one of the 3, then star a different card → succeeds (cap only
+      blocks adding, never removing).
+- [x] With a Now card starred and a different `planned` card that isn't
+      starred: SidePanel's momentum card shows the Now card's `next:` (or
+      title), not the top-planned one.
+- [x] Clicking Done on that momentum card moves it to `building` in the
+      board and un-stars it (frees the Now slot); momentum then falls back
+      correctly (another Now card if any, else top-planned, else "nothing
+      waiting").
+- [x] Un-star all cards → momentum reverts to the plain top-planned pick,
+      matching Phase 18 behavior.
+- [x] Hand-edit the board file to add `now: true` to a card externally,
+      switch tabs away and back → the star and collapsed-strip title
+      appear without any app-side toggle.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*
@@ -1283,3 +1417,8 @@ deferred to a later phase (see PLAN.md).
 - [x] `npm run reentry:check` — one row per tether, latest wins on resume. *(new, Phase 6)*
 - [x] `npm run unclaimed:check` — flag/claim predicate assertions pass. *(new, Phase 6)*
 - [x] `npm run notify:check` — nudge fire predicate assertions pass. *(new, Phase 6)*
+- [x] `npm run decisions:check` — session-grouping/sort assertions pass. *(new, Phase 17)*
+- [x] `npm run board:check` — parse/splice/append round-trip assertions pass. *(new, Phase 18)*
+- [x] `cargo test` — `board::tests` read/write/round-trip/error-path assertions pass. *(new, Phase 18)*
+- [x] `npm run empty-state:check` — decisions-empty-reason priority-order assertions pass. *(new, Phase 19)*
+- [x] `npm run board:check` — extended with Now-set round-trip/cap assertions. *(Phase 20)*
