@@ -52,7 +52,19 @@ mod tests {
 
     #[test]
     fn write_to_nonexistent_project_dir_fails_cleanly() {
-        let key = "/definitely/not/a/real/path/xyz".to_string();
+        // ponytail: relying on OS permission-denial (e.g. writing under "/")
+        // isn't cross-platform — Windows CI runners can create dirs there.
+        // Instead put a *file* where a directory needs to go, so
+        // create_dir_all hits ENOTDIR (or the Windows equivalent) everywhere.
+        let dir = std::env::temp_dir().join(format!(
+            "logic-loop-board-test-blocked-{}",
+            std::process::id()
+        ));
+        std::fs::write(&dir, "not a directory").unwrap();
+        let key = dir.to_string_lossy().into_owned();
+
         assert!(write_board(key, "x".into()).is_err());
+
+        std::fs::remove_file(&dir).ok();
     }
 }
