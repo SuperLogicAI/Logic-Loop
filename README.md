@@ -78,17 +78,20 @@ in the Accomplished panel and Since-you-left digest, and a second turn in the
 same session correctly returns the tab to "working" instead of freezing on
 "idle" — both were Logic Loop-side gaps, now fixed.
 
-Two Antigravity-specific limits remain, both upstream in `agy` and neither
-fixable from this side (full derivation in [docs/TESTING.md](docs/TESTING.md) §21):
+One Antigravity-specific limit remains, upstream in `agy` and not fixable
+from this side (full derivation in [docs/TESTING.md](docs/TESTING.md) §21):
 
 - A tool call that exits non-zero is indistinguishable from one that
   succeeded — `agy` strips the field carrying that status before the hook
   sees it, so an `agy` tab shows "working" rather than "error" on a failed
   command. Everything else still lands.
-- `agy` doesn't merge multiple named `PostToolUse` hooks despite documenting
-  that it does. If you already have your own `PostToolUse` hook in
-  `~/.gemini/config/hooks.json`, Logic Loop's may never fire — the toggle
-  will still read "on". Check for a foreign hook first if no rows appear.
+
+`agy`'s separate `PostToolUse` named-hook merge bug (present through earlier
+`agy` releases) is confirmed fixed upstream as of `agy` 1.1.27. Logic Loop
+now also detects a foreign `PostToolUse` hook in `~/.gemini/config/hooks.json`
+at setup time and surfaces a warning strip if one is found, so an older or
+regressed `agy` install fails loud instead of silently dropping every tool
+event.
 
 ## Status
 
@@ -104,7 +107,7 @@ Early, actively built, dogfooded daily. Shipped:
 - ✅ OpenCode adapter — first non-Claude ingestion pipeline
 - ✅ Codex adapter — adapter identity marker, resume/re-entry, Interrupt/SessionEnd lifecycle
 - ✅ Isolated loops (git worktree–backed tabs)
-- ✅ Antigravity (`agy`) adapter — multi-turn tracking fix, normalized tool detail
+- ✅ Antigravity (`agy`) adapter — multi-turn tracking fix, normalized tool detail, foreign-`PostToolUse`-hook detection
 - ✅ Decisions grouped by session with per-cluster bulk-dismiss
 - ✅ Decisions empty-state clarity — distinguishes confirmed-empty from
   blind/unbound/non-Claude-agent

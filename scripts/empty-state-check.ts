@@ -1,7 +1,7 @@
-// Self-check for the Phase 19 decisions-empty-state priority order.
-// Run: npm run empty-state:check
 import { strict as assert } from "node:assert";
-import { decisionsEmptyReason } from "../src/components/SidePanel";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { adapterWarningMessage, decisionsEmptyReason } from "../src/components/SidePanel";
 
 const base = { isUnboundFanOutChild: false, sessionBlind: false, agent: undefined as string | undefined };
 
@@ -22,6 +22,27 @@ assert.match(
 assert.match(
   decisionsEmptyReason({ isUnboundFanOutChild: true, sessionBlind: true, agent: "codex" }),
   /isn't bound to a tracked session/
+);
+
+// Adapter warning formatting
+assert.match(
+  adapterWarningMessage({ agent: "antigravity", reason: "foreign_post_tool_use" }),
+  /foreign PostToolUse hook detected/
+);
+assert.match(
+  adapterWarningMessage({ agent: "antigravity", reason: "custom_reason" }),
+  /antigravity: adapter warning \(custom_reason\)/
+);
+
+// Verify App.tsx registers the onAdapterWarning listener in its listener effect
+const appSource = readFileSync(join(import.meta.dirname, "../src/App.tsx"), "utf-8");
+assert.ok(
+  appSource.includes("onAdapterWarning"),
+  "App.tsx must import and register onAdapterWarning"
+);
+assert.ok(
+  appSource.includes("void onAdapterWarning("),
+  "App.tsx must subscribe to onAdapterWarning in its listener effect"
 );
 
 console.log("empty-state-check: all assertions passed");

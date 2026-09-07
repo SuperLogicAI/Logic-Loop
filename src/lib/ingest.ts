@@ -85,6 +85,13 @@ export function onTailerFailed(
   return listen<{ session_id: string; path: string }>("ingest://tailer-failed", (e) => cb(e.payload));
 }
 
+/** Adapter setup warning (e.g. foreign PostToolUse hook collision in agy < 1.1.27). */
+export function onAdapterWarning(
+  cb: (p: { agent: string; reason: string }) => void
+): Promise<UnlistenFn> {
+  return listen<{ agent: string; reason: string }>("ingest://adapter-warning", (e) => cb(e.payload));
+}
+
 /** The subset of a tab this module needs to bind a session to it. */
 export interface BindCandidate {
   id: string;

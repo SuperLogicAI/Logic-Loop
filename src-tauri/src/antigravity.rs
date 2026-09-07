@@ -2,6 +2,7 @@ use crate::home::home_or_tmp;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::PathBuf;
+use tauri::{AppHandle, Emitter};
 
 /// Antigravity's own hook doc (`~/.gemini/antigravity-cli/builtin/skills/
 /// agy-customizations/docs/hooks.md`, read against a live install during
@@ -139,9 +140,31 @@ pub fn antigravity_detect() -> bool {
         || is_executable(&PathBuf::from("/usr/local/bin/agy"))
 }
 
+/// Detect if a foreign (non-"logic-loop") hook registration contains a
+/// `PostToolUse` handler list. In older `agy` releases (< 1.1.27), named hooks
+/// failed to merge on `PostToolUse`, causing our hook to be silently ignored if
+/// a foreign `PostToolUse` hook was already present.
+fn detect_foreign_post_tool_use(settings: &serde_json::Value) -> bool {
+    let Some(obj) = settings.as_object() else { return false };
+    obj.iter().any(|(k, v)| {
+        if k == HOOK_NAME {
+            return false;
+        }
+        v.get("PostToolUse")
+            .and_then(|ptu| ptu.as_array())
+            .is_some_and(|arr| !arr.is_empty())
+    })
+}
+
 #[tauri::command]
-pub fn antigravity_hooks_setup() -> Result<(), String> {
+pub fn antigravity_hooks_setup(app: AppHandle) -> Result<(), String> {
     let mut settings = read_settings()?;
+    if detect_foreign_post_tool_use(&settings) {
+        let _ = app.emit(
+            "ingest://adapter-warning",
+            serde_json::json!({ "agent": "antigravity", "reason": "foreign_post_tool_use" }),
+        );
+    }
     apply_setup(&mut settings)?;
     write_settings(&settings)
 }
@@ -360,6 +383,48 @@ mod tests {
         assert!(hooks_status_from(&s));
         strip_ours(&mut s);
         assert_eq!(s, serde_json::json!({}));
+    }
+
+    #[test]
+    fn detect_foreign_post_tool_use_flags_foreign_and_ignores_ours() {
+        let foreign = foreign_settings();
+        assert!(
+            detect_foreign_post_tool_use(&foreign),
+            "foreign PostToolUse hook must be flagged"
+        );
+
+        let mut ours_only = serde_json::json!({});
+        apply_setup(&mut ours_only).unwrap();
+        assert!(
+            !detect_foreign_post_tool_use(&ours_only),
+            "logic-loop's own PostToolUse hook must not be flagged as foreign"
+        );
+
+        let non_ptu_foreign = serde_json::json!({
+            "reminder": {
+                "PreInvocation": [{ "type": "command", "command": "./scripts/reminder.sh" }],
+                "Stop": [{ "type": "command", "command": "./scripts/stop.sh" }]
+            }
+        });
+        assert!(
+            !detect_foreign_post_tool_use(&non_ptu_foreign),
+            "foreign hooks without PostToolUse must not be flagged"
+        );
+
+        let empty_ptu_foreign = serde_json::json!({
+            "empty": {
+                "PostToolUse": []
+            }
+        });
+        assert!(
+            !detect_foreign_post_tool_use(&empty_ptu_foreign),
+            "foreign hook with empty PostToolUse array must not be flagged"
+        );
+
+        assert!(
+            !detect_foreign_post_tool_use(&serde_json::json!({})),
+            "empty settings must not be flagged"
+        );
     }
 
     #[test]

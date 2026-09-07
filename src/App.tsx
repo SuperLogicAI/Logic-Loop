@@ -8,6 +8,7 @@ import {
   bindSession,
   computeProvenance,
   deriveClock,
+  onAdapterWarning,
   onHookEvent,
   onTailerFailed,
   onTranscriptLine,
@@ -72,6 +73,8 @@ export default function App() {
   // Sessions whose transcript file could not be opened — they emit hooks but no
   // transcript, so decisions never extract for them. Silent until surfaced.
   const [blindSessions, setBlindSessions] = useState<Record<string, string>>({});
+  // Adapter setup warnings (e.g. foreign PostToolUse hook collision in older agy).
+  const [adapterWarnings, setAdapterWarnings] = useState<Array<{ agent: string; reason: string }>>([]);
 
   // Nudges (Phase 6): muted project keys, cached so the hot ingestion path
   // never blocks on a DB read before deciding whether to notify.
@@ -692,6 +695,13 @@ export default function App() {
       setBlindSessions((s) => (s[p.session_id] === p.path ? s : { ...s, [p.session_id]: p.path }));
     }).then(track);
 
+    void onAdapterWarning((w) => {
+      setAdapterWarnings((prev) => {
+        if (prev.some((x) => x.agent === w.agent && x.reason === w.reason)) return prev;
+        return [...prev, w];
+      });
+    }).then(track);
+
     return () => {
       cancelled = true;
       unlisteners.forEach((u) => u());
@@ -976,6 +986,7 @@ export default function App() {
             accent={activeTab.color === PALETTE[7] ? null : activeTab.color}
             refreshKey={panelRefresh}
             blindPaths={Object.values(blindSessions)}
+            adapterWarnings={adapterWarnings}
             sessionBlind={!!(activeTab.sessionId && blindSessions[activeTab.sessionId])}
             agent={activeTab.agent}
             fanOut={fanOutRollups}

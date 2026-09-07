@@ -39,6 +39,7 @@ interface Props {
   accent: string | null; // matching bookmark's color, if the project is bookmarked
   refreshKey: number; // bump to force reload (new events / blocker changes)
   blindPaths: string[]; // transcripts that failed to open — panels are incomplete
+  adapterWarnings?: Array<{ agent: string; reason: string }>; // adapter setup warnings (e.g. foreign PostToolUse collision)
   sessionBlind: boolean; // active tab's own session has no transcript — decisions may be missed, not confirmed absent
   agent?: string; // active tab's adapter marker ("codex"/"opencode"/"antigravity"), undefined for plain Claude
   fanOut: FanOutRollup[]; // every fan-out group the active tab belongs to (as parent, possibly several; as child, at most one), oldest first
@@ -73,6 +74,14 @@ function Chevron({ collapsed, className }: { collapsed: boolean; className?: str
       <path d="M6 9l6 6 6-6" />
     </svg>
   );
+}
+
+/** Format adapter setup warning messages for the side-panel warning strip. */
+export function adapterWarningMessage(w: { agent: string; reason: string }): string {
+  if (w.reason === "foreign_post_tool_use") {
+    return `${w.agent}: foreign PostToolUse hook detected in hooks.json — tool events may not fire in older agy releases`;
+  }
+  return `${w.agent}: adapter warning (${w.reason})`;
 }
 
 /** Why the Decisions section is showing zero open decisions — distinguishes
@@ -113,6 +122,7 @@ export function SidePanel({
   accent,
   refreshKey,
   blindPaths,
+  adapterWarnings = [],
   sessionBlind,
   agent,
   fanOut,
@@ -596,6 +606,15 @@ export function SidePanel({
           {muted ? "muted" : "notify"}
         </button>
       </div>
+      {/* Adapter warnings: e.g. foreign PostToolUse collision in older agy releases */}
+      {adapterWarnings.map((w, i) => (
+        <p
+          key={`${w.agent}-${w.reason}-${i}`}
+          className="flex shrink-0 items-start gap-1 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-[10px] text-amber-300"
+        >
+          <span>⚠ {adapterWarningMessage(w)}</span>
+        </p>
+      ))}
       {/* Blind sessions: hooks arrive but the transcript file will not open, so
           decisions and every transcript-fed panel are silently incomplete. This
           says so rather than looking like a quiet day. */}
