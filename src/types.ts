@@ -47,6 +47,7 @@ export interface ToolEvent {
   tool: string;
   detail: string;
   plain: string; // human-readable headline derived in the repo layer
+  filePath: string; // path this event *changed*; "" for tools that changed nothing, so only diffable rows offer a diff
 }
 
 export interface Commit {

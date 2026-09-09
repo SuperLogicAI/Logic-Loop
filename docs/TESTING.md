@@ -1441,6 +1441,34 @@ deferred to a later phase (see PLAN.md).
 - [ ] Select Claude CLI and LM Studio afterward → both still work and their
       existing settings remain intact.
 
+## 26. Diff pop-out from Accomplished rows (issue #10)
+
+Written on Windows, where the app can't run — every box below is unverified
+and needs a Mac pass.
+
+- [ ] Have an agent edit a tracked file in the tab's repo, then `git add` that
+      file (the pop-out reads `git diff --cached` only). The Accomplished row
+      "Edited `<file>`" underlines on hover; clicking it opens the pop-out with
+      that file's unified diff, monospace, and **only** that file's section —
+      no other staged file bleeds in.
+- [ ] Esc closes it; so does clicking the dimmed overlay and the Close button.
+      Clicking inside the diff (e.g. selecting text) does not close it.
+- [ ] Stage a second file too → each row opens its own section, not the other's.
+- [ ] Unstaged edit: agent edits a file, nothing staged → row still clicks,
+      pop-out shows the "No staged diff for this file" empty state, no crash
+      and no blank panel behind it.
+- [ ] Row for a file outside the tab's repo (e.g. agent edits a file in another
+      checkout): staged there → its diff shows; unstaged → empty state. Either
+      way the tab's own panel is unchanged after closing.
+- [ ] Non-file rows ("Ran …", Read/Grep rows) are **not** clickable — plain
+      text, no hover underline.
+- [ ] Delete the file's directory (or prune the worktree) with the row still on
+      screen → clicking it falls back to the tab's repo and either shows the
+      diff or the empty state; never an unhandled error.
+- [ ] Terminals: open/close the pop-out repeatedly while an agent is streaming
+      output — typing latency and PTY output unaffected, no input is ever sent
+      to the session.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*
@@ -1493,3 +1521,6 @@ deferred to a later phase (see PLAN.md).
 - [x] `npm run board:check` — extended with Now-set round-trip/cap assertions. *(Phase 20)*
 - [x] `npm run codex-transcript:check` — redacted real-shape Codex JSONL
       parser, ignored event types, and transcript-as-data assertions pass.
+- [x] `npm run diff:check` — per-file diff slicing assertions pass, including
+      the same-basename-in-a-sibling-directory case that must NOT match.
+      *(new, issue #10; run 2026-09-06 on Windows via `npm run check`)*

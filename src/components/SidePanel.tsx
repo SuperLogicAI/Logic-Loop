@@ -22,6 +22,7 @@ import {
   gitPush,
   gitUntrackedFiles,
 } from "../lib/pty";
+import { DiffModal } from "./DiffModal";
 import { HUES, RainbowText } from "./RainbowText";
 import type { AgentState, Blocker, Commit, Decision, FanOutRollup, Note, ToolEvent } from "../types";
 
@@ -144,6 +145,7 @@ export function SidePanel({
   const [landing, setLanding] = useState<Note | null>(null); // active project, momentum
   const [notes, setNotes] = useState<Note[]>([]); // active project, open notes & reminders
   const [context, setContext] = useState<Decision | null>(null);
+  const [diffPath, setDiffPath] = useState<string | null>(null);
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
   const [plannedCard, setPlannedCard] = useState<Card | null>(null);
   const seededCwdRef = useRef<string | null>(null);
@@ -1109,9 +1111,19 @@ export function SidePanel({
                 <li key={e.id} className="flex gap-2">
                   <span className="w-8 shrink-0 text-right text-zinc-600">{ago(e.ts)}</span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-emerald-300" title={e.plain}>
-                      {e.plain}
-                    </span>
+                    {e.filePath ? (
+                      <button
+                        className="block w-full truncate text-left text-emerald-300 hover:text-emerald-200 hover:underline"
+                        title={`Show diff — ${e.plain}`}
+                        onClick={() => setDiffPath(e.filePath)}
+                      >
+                        {e.plain}
+                      </button>
+                    ) : (
+                      <span className="block truncate text-emerald-300" title={e.plain}>
+                        {e.plain}
+                      </span>
+                    )}
                     {e.detail && (
                       <span className="block truncate font-mono text-[10px] text-zinc-600" title={e.detail}>
                         {e.tool} {e.detail}
@@ -1165,6 +1177,8 @@ export function SidePanel({
           </>
         )}
       </section>
+
+      {diffPath && <DiffModal filePath={diffPath} cwd={cwd} onClose={() => setDiffPath(null)} />}
 
       {context && (
         // top-7 keeps the titlebar drag region reachable under the overlay
