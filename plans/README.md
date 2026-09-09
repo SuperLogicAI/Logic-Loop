@@ -21,18 +21,17 @@ verification.
 ## Execution order & status
 
 Cross-project attention inbox design added 2026-09-07 against `c0c0cdd`,
-combining IDEAS #4 and Astra A. It is unscheduled and does not replace the
-current phase's `PLAN.md`. The plan includes ordered implementation slices,
-provider capability limits, and sequential solo execution. Review update:
-explicitly choose the approximately 12-hour UI spike, the 48–80-hour durable
-build, or deferral before phase assignment. New test dependencies require
-separate explicit approval.
+combining IDEAS #4 and Astra A. Phase 22 completed its source-context and
+lifecycle-evidence foundation. Phase 26 now proposes the bounded read-only UI
+slice: one global query, deterministic ranking, safe navigation, and a palette.
+Durable interactions and badge replacement remain separately gated. No new
+test dependency is proposed for Phase 26.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| [001](001-cross-project-attention-inbox.md) | Cross-project attention inbox | P1 | L (6–10d + dogfood) | Existing Phase 14/21 foundations; identity/query prerequisites included | TODO |
+| [001](001-cross-project-attention-inbox.md) | Cross-project attention inbox | P1 | L overall; bounded Phase 26 slice | Phase 22 foundation, Phase 25 rail | BUILT — Phase 26 awaiting live dogfood |
 | [003](003-opencode-repo-contract-and-checks.md) | OpenCode repo contract and baseline checks | P1 | S (0.5–1d + manual pass) | Phase 22 accepted and committed | DONE — Phase 23 accepted |
-| [004](004-folded-side-rail.md) | Folded side rail | P1 | M (1–2d + live visual pass) | Phase 24 accepted and committed | TODO — candidate for Phase 25 |
+| [004](004-folded-side-rail.md) | Folded side rail | P1 | M (1–2d + live visual pass) | Phase 24 accepted and committed | DONE — Phase 25 accepted |
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|

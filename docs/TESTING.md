@@ -1470,6 +1470,94 @@ deferred to a later phase (see PLAN.md).
 - [x] Confirm clicking `clear all` does not collapse the Blockers section and
       per-row resolve, reopen, and delete still work.
 
+## 35. Folded side rail (Phase 25)
+
+Implementation built and accepted 2026-09-09 from baseline `b623569`.
+Automated layout, type, build, frontend, and Rust gates are recorded below.
+The live macOS GUI matrix passed after the first visual review revised the
+control placement: fold/expand now stays in the shared hook bar, while Sidebar
+LM and Notify occupy a second expanded-panel row.
+
+- [x] Start expanded at a custom width, compact, expand, and confirm the custom
+      width returns. Relaunch and confirm the selected mode and width restore.
+- [x] Exercise `Cmd+B` from expanded, compact, and hidden. Exercise
+      `Cmd+Shift+B` from each visible mode and restore. Confirm no characters
+      appear in the active terminal.
+- [x] Populate decisions, blockers, notes, a Next candidate, a Since You Left
+      delta, and an unclaimed result. Confirm presence, count, and accent rules.
+- [x] Click each compact section icon. Confirm the panel expands, routes to the
+      correct destination, opens collapsed sections, and changes no semantic
+      decision, blocker, note, or result state.
+- [x] With adapter and transcript warnings present, confirm compact mode keeps
+      a visible warning indicator with explanatory tooltip and accessible copy.
+- [x] At the narrowest practical window and a short window, confirm the middle
+      rail scrolls while project state and expand stay pinned, with no overlap
+      over the terminal or Idea Board.
+- [x] Confirm the expanded panel's mute, resize, section collapse, commit
+      footer, context modal, blocker actions, and decision actions are unchanged.
+- [x] Confirm fold/expand stays at the left edge of the hook bar instead of
+      moving to the compact rail bottom; hook pills are vertically aligned and
+      ordered Antigravity, Claude, Codex, OpenCode when all are available.
+- [x] Confirm expanded headings reuse the compact section icons, and the pinned
+      compact GitHub icon expands and routes to Git log without opening or
+      triggering commit/push controls.
+- [x] Confirm the compact rail contains no Inbox, Lock-In, timed-lock,
+      commit/push, or fan-out controls.
+
+## 36. Cross-project Attention Inbox (Phase 26)
+
+Implementation built 2026-09-09 on top of the accepted Phase 25 working tree.
+The focused inbox check, aggregate frontend checks, strict TypeScript check,
+and production build are recorded clean below. Live macOS interaction and
+three-session dogfood remain pending; do not infer visual acceptance from the
+headless gates.
+
+- [ ] Open at least two projects and six tabs. Produce decisions, observed
+      waiting, unclaimed results, unresolved blockers, and a quiet working
+      session. Confirm cross-project presence, project labels, ages, count,
+      and actionability-first ordering.
+- [ ] Open Attention from terminal focus with `Cmd+K`, the compact mail icon,
+      and the expanded-panel header control. Confirm no `k` or other bytes
+      appear in the terminal.
+- [ ] Search, use Up/Down/Enter, select a row and use `Open tab`, then press
+      Escape. Confirm preview behavior, empty-search copy, keyboard focus
+      trapping, and restoration to the previously focused control.
+- [ ] Preview an unclaimed result without navigating and confirm it remains
+      unclaimed. Navigate to it and confirm the existing claim behavior runs
+      once.
+- [ ] Create same-project sibling tabs, then close or retarget destinations.
+      Confirm ambiguous, conflicting, dead, and stale routes show unavailable
+      rather than selecting a guessed sibling.
+- [ ] Relaunch with durable decisions, blockers, and results. Confirm they
+      remain, while prior-run waiting/stalled rows stay absent until fresh live
+      evidence arrives.
+- [ ] Let a working tab cross the real three-minute quiet boundary. Confirm the
+      shared clock adds the quiet row after the boundary and fresh accepted
+      activity removes it without per-row polling.
+- [ ] Temporarily make the Attention query unavailable. Confirm `Attention may
+      be stale` retains the last good list and terminals and existing panels
+      remain usable.
+- [ ] Confirm compact/expanded/hidden panel shortcuts, persisted width,
+      section routing, notifications, tab badges, and the dock badge retain
+      their Phase 25 behavior.
+- [ ] Dogfood Attention for three normal work sessions. Record whether it was
+      used instead of scanning tabs and note duplicate, misleading, or missing
+      rows before approving any pin/snooze/badge follow-up.
+
+Automated evidence (2026-09-09):
+
+- [x] `npm run attention-inbox:check` — all five kinds, strict stall boundary,
+      current-run eligibility, deterministic rank/search, safe route cases,
+      one global query shape, shortcut/UI wiring, and reserved icons pass.
+- [x] `npm run check` — all 22 configured checks pass, including the new
+      `attention-inbox:check` aggregate entry.
+- [x] `npx tsc --noEmit` — strict TypeScript clean.
+- [x] `npm run build` — production frontend build clean; only the existing
+      chunk-size advisory is emitted.
+- [x] `cd src-tauri && cargo test --lib` — 57/57 pass.
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings` — clean.
+- [x] `git diff --check` — clean.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*
@@ -1524,3 +1612,5 @@ deferred to a later phase (see PLAN.md).
       parser, ignored event types, and transcript-as-data assertions pass.
 - [x] `npm run blockers:check` — project-scoped bulk-resolve SQL and Blockers
       clear-all UI wiring assertions pass. *(new, Phase 24)*
+- [x] `npm run panel-layout:check` — panel mode transitions, invalid persisted
+      values, and width fallback/clamping assertions pass. *(new, Phase 25)*

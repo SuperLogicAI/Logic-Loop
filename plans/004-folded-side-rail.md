@@ -30,6 +30,19 @@
 - **Category**: direction
 - **Planned at**: commit `8eb3a3e`, 2026-09-08
 
+### Approved implementation revision — 2026-09-09
+
+The first live visual review explicitly revised the layout after the compact
+rail landed. The persistent fold/expand control moves from SidePanel into the
+left edge of `AgentStatusBar`; Sidebar LM moves from that bar into a second
+expanded-panel utility row beside Notify; hook pills are alphabetized and
+vertically aligned; expanded section headings reuse the compact icons; and a
+functional GitHub/Git-log icon remains pinned at the compact rail bottom.
+This expands the implementation scope to `src/components/AgentStatusBar.tsx`
+and `src/components/SidebarLmControl.tsx`, and supersedes the earlier rule that
+compact mode contains no Git affordance. It does not change Git operations,
+hook behavior, extractor settings behavior, or terminal input.
+
 ## Why this matters
 
 Logic Loop's side panel now contains re-entry context, notes, fan-out state,
@@ -528,23 +541,23 @@ The script should import the production helpers, not reimplement them.
 
 ## Done criteria
 
-- [ ] `npm run panel-layout:check` exits 0 and prints its success line.
-- [ ] `npm run check` exits 0 with the new check in the aggregate chain.
-- [ ] `npx tsc --noEmit` exits 0.
-- [ ] `npm run build` exits 0.
-- [ ] `cd src-tauri && cargo test --lib` passes.
-- [ ] `cd src-tauri && cargo clippy --all-targets -- -D warnings` exits 0.
-- [ ] `git diff --check` produces no output.
-- [ ] The compact rail is exactly 48px and all controls have at least 40px hit
+- [x] `npm run panel-layout:check` exits 0 and prints its success line.
+- [x] `npm run check` exits 0 with the new check in the aggregate chain.
+- [x] `npx tsc --noEmit` exits 0.
+- [x] `npm run build` exits 0.
+- [x] `cd src-tauri && cargo test --lib` passes.
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings` exits 0.
+- [x] `git diff --check` produces no output.
+- [x] The compact rail is exactly 48px and all controls have at least 40px hit
   targets plus `aria-label` and `title`.
-- [ ] Ordinary compact mode, explicit hidden mode, section routing, warning
+- [x] Ordinary compact mode, explicit hidden mode, section routing, warning
   visibility, persisted width, and relaunch restoration pass the manual matrix.
-- [ ] No Inbox, Lock-In, notification, ingestion, claim, or PTY semantic was
+- [x] No Inbox, Lock-In, notification, ingestion, claim, or PTY semantic was
   added or changed.
-- [ ] No dependency or database migration was added.
-- [ ] `docs/TESTING.md` contains dated manual evidence.
-- [ ] No unrelated user change was overwritten.
-- [ ] `plans/README.md` reflects the actual execution status.
+- [x] No dependency or database migration was added.
+- [x] `docs/TESTING.md` contains dated manual evidence.
+- [x] No unrelated user change was overwritten.
+- [x] `plans/README.md` reflects the actual execution status.
 
 ## STOP conditions
 

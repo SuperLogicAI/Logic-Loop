@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as repo from "../lib/repo";
+import { PanelIcon } from "./PanelIcon";
 import {
   appendCard,
   deleteCard,
@@ -183,12 +184,17 @@ export function IdeaBoard({ cwd }: Props) {
         onClick={toggleCollapsed}
       >
         {nowCards.length > 0 ? (
-          <span className="truncate">
-            <span className="text-yellow-500">★</span> {nowCards.map((c) => c.title).join(" · ")}
+          <span className="flex min-w-0 items-center gap-1.5 text-xs">
+            <PanelIcon name="idea-board" className="h-4 w-4 shrink-0" />
+            <span className="truncate">
+              <span className="text-yellow-500">★</span> {nowCards.map((c) => c.title).join(" · ")}
+            </span>
           </span>
         ) : (
-          <span className="flex items-center gap-1.5">
-            <Chevron collapsed={true} /> Idea Board {cards.length > 0 && `(${cards.length})`}
+          <span className="flex items-center gap-1.5 text-xs">
+            <Chevron collapsed={true} />
+            <PanelIcon name="idea-board" className="h-4 w-4 shrink-0" />
+            Idea Board {cards.length > 0 && `(${cards.length})`}
           </span>
         )}
       </div>
@@ -202,8 +208,10 @@ export function IdeaBoard({ cwd }: Props) {
         onPointerDown={onResizePointerDown}
       />
       <div className="flex h-7 shrink-0 items-center gap-1.5 px-3 text-zinc-500">
-        <span className="flex cursor-pointer items-center gap-1.5 hover:text-zinc-300" onClick={toggleCollapsed}>
-          <Chevron collapsed={false} /> Idea Board {cards.length > 0 && `(${cards.length})`}
+        <span className="flex cursor-pointer items-center gap-1.5 text-xs hover:text-zinc-300" onClick={toggleCollapsed}>
+          <Chevron collapsed={false} />
+          <PanelIcon name="idea-board" className="h-4 w-4 shrink-0" />
+          Idea Board {cards.length > 0 && `(${cards.length})`}
         </span>
         {capNotice && <span className="text-yellow-600">Now is full ({NOW_CAP}/{NOW_CAP}) — remove one first</span>}
       </div>

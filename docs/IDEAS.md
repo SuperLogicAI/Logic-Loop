@@ -79,7 +79,7 @@ to a panel every phase touches.
 # Fable 5.1 concepts (review of 2026-09-02)
 
 Source: Fable 5.1 build review, 2026-09-02. Five concepts were proposed;
-#1 (since-you-left delta) and #2 (clock on state) were accepted on the spot
+## 1 (since-you-left delta) and #2 (clock on state) were accepted on the spot
 and live in `PLAN.md` as Phase 14. The three below are parked here with
 enough of a build plan that whoever picks one up doesn't re-derive it.
 Priority as agreed with the user: #3 likely next, #4 long-term (design for
@@ -206,8 +206,8 @@ decisions/next-action/blockers deterministic and adapter-neutral.
 changes how the agents behave, not just how they're observed. Turning it
 on mid-dogfood muddies every result Phase 14 / #3 produce — a cleaner
 delta could be the status line, not the panel. Also adjacent to invariant
-#4 in spirit: the app would be shaping agent output, even if it never
-types into the terminal.
+
+##4 in spirit: the app would be shaping agent output, even if it nevertypes into the terminal.
 
 **If it ever ships:** explicit toggle, default off, README-documented,
 and a golden-style fixture set for the parser. Not before #3 has a month
@@ -377,7 +377,7 @@ rather than a one-off during testing.
 
 ---
 
-# GPT-5 Astra product/UX review (2026-09-06)
+# GPT-6 Astra product/UX review (2026-09-06)
 
 External review (`improve` skill, read-only — no files changed, no live
 usability/correctness audit) of source + concept doc + IDEAS.md + ROADMAP.md
@@ -499,3 +499,376 @@ there. Validation suggestion for whichever ships first: dogfood across
 several projects, track time-to-next-action, bounce-back switches,
 overlooked results, perceived overload — qualitative, not a metrics
 dashboard to build.
+
+---
+
+# Prime Agent adapter candidate (research pass, 2026-09-08)
+
+Source: `github.com/PrimeIntellect-ai/prime-agent` — user asked for a
+fit review against Logic Loop's adapter model. Research only (GitHub API +
+raw doc fetches, no local install, no code touched). Verdict: **strong
+candidate, clears the ROADMAP litmus test better than any adapter shipped
+so far** — but pre-1.0, flag the churn risk before committing a PLAN.md.
+
+**Repo facts:** MIT, TypeScript, 20.3k stars, created 2026-05-08, active
+(daily pushes). Built on `pi` (earendil-works). Backed by PrimeIntellect;
+has an arXiv paper (2608.23552). Current release `v0.9.4` — pre-1.0.
+
+**Why it clears ROADMAP's litmus test** ("Adapters — v2" section: *check
+whether the CLI already speaks a structured protocol before hand-rolling a
+hooks-equivalent"*) — Prime Agent has three, richer than what any current
+adapter gets from its own CLI:
+- **Persisted JSONL session transcripts** — `~/.prime/agent/sessions/
+  <id>.jsonl`, header carries `cwd`, tree-structured (`id`/`parentId`),
+  fully typed entries (`message`, `model_change`, `compaction`,
+  `branch_summary`, etc. — see `packages/coding-agent/docs/
+  session-format.md`). Same tailable shape as Codex's rollout transcript
+  (Phase 21) — `decisions.ts`'s pattern would port directly.
+- **RPC mode (`--mode rpc`) with an `observe` command** — a *separate*
+  process can attach read-only to another already-running session's live
+  event stream (`agent_start`/`turn_start`/`tool_execution_*`/
+  `message_*`) via the shared daemon, with zero lease conflict and zero
+  hooks.json/plugin-file editing. Lighter footprint than every adapter
+  built so far (Claude/Codex edit a hooks file; OpenCode/Antigravity
+  install a plugin/forwarder). This is the daemon's own documented
+  multi-client feature (`packages/coding-agent/docs/rpc.md`,
+  `daemon.md`), not a hack.
+- **ACP mode (`--mode acp`)** — speaks `agentclientprotocol.com` directly
+  (JSON-RPC 2.0 over stdin/stdout), the exact protocol ROADMAP's litmus
+  test calls out as "several providers are converging on."
+
+**Gap vs. current adapters:** the persisted JSONL file does **not**
+contain turn/agent lifecycle entries (`agent_start`/`turn_end`/etc — only
+`message`/`model_change`/`compaction`/... are written to disk). Getting a
+Stop/idle-equivalent needs the RPC `observe` live stream (or polling
+`get_state`), not file-tailing alone — unlike Codex, where the rollout
+file alone is enough. `SessionStateEntry` (`active`/`archived`, in-file)
+might substitute loosely; unconfirmed against a live process.
+
+**Tether/resume fit:** header's `cwd` + session id matches the existing
+cwd-fallback/project_key pattern; `prime-agent --resume <id>` matches
+`pty.rs`'s `resume_command` selector (Phase 16) directly.
+
+**Risks — read before writing a PLAN.md:**
+- Pre-1.0, and the daemon's own docs say its public protocol is already
+  at **v4** in ~4 months of the repo's existence — high churn precedent,
+  same shape as the Codex hook-trust landmine and the Antigravity
+  contract-drift landmine already hit twice in this project. Expect the
+  same class of surprise.
+- New architecture shape for Logic Loop: a shared background daemon +
+  supervisor per machine, not a pure PTY-child process like Claude/Codex/
+  OpenCode/Antigravity. Auth tokens and worker descriptors live under
+  `~/.prime/agent/` with owner-only permissions — untested against this
+  project's TCC/Desktop-folder landmine history; could surface a new one.
+- Single-vendor, no deprecation policy documented.
+
+**If picked up:** scope as its own adapter phase (Codex/OpenCode-sized,
+not a small patch). MVP = tail `~/.prime/agent/sessions/*.jsonl` for
+content (reuse `decisions.ts`) + one companion `prime-agent --mode rpc`
+process per bound tab issuing `observe` for the turn/idle signal the file
+doesn't carry; gate session discovery by `cwd` like Codex's path gate
+(Phase 21). **Do a live spike before PLAN.md** — install the real binary,
+drive one session, inspect the actual JSONL + daemon socket — docs have
+already diverged from live behavior twice for other adapters (Codex hook
+trust, Antigravity's `PreInvocation` firing count) and would be expected
+to again here given the v4 protocol churn above.
+
+**Slots into ROADMAP's "Adapters — v2" adapter order** (currently OpenCode
+→ Antigravity → "Codex / Gemini / Copilot as their hook/log surfaces
+mature") — Prime Agent isn't in that list yet; add it there when this
+gets promoted, ranked ahead of Gemini/Copilot on protocol-richness grounds
+alone (ACP + observe beats a still-unmatured hook surface).
+
+**Correction (2026-09-08, during the Pi Agent review below):** the
+RPC-`observe`-plus-daemon MVP sketched above is more machinery than
+needed. Prime Agent's `packages/coding-agent/docs/extensions.md` (not
+checked in the original pass) documents an in-process extension system —
+`~/.prime/agent/extensions/*.ts`, global, auto-discovered — inherited
+verbatim from upstream `pi` (see below). It fires `tool_execution_start/
+update/end`, `turn_start/end`, `agent_start/end/settled`,
+`before_agent_start`, `session_start`, and more, all as typed JS handlers
+inside the running process. That's a direct POST-to-ingest-server target
+exactly like the OpenCode plugin (Phase 8) — no daemon socket, no
+companion RPC process, no `observe` command needed at all. Revise the MVP
+sketch above accordingly: one extension file, not a tailer + companion
+process. See the Pi Agent section below for the full event list and the
+shared-extension insight that makes this cheaper for both candidates at
+once.
+
+---
+
+# Pi Agent adapter candidate (research pass, 2026-09-08)
+
+Source: `github.com/earendil-works/pi` — user asked for a fit review as a
+second adapter candidate, same session as the Prime Agent review above.
+Research only (GitHub API + raw doc fetches, no local install). **This is
+the upstream project Prime Agent is built on** — Prime Agent's README
+says so directly, and its docs literally reference pi's internal paths
+(`packages/agent/src/types.ts`, `@earendil-works/pi-coding-agent`).
+Verdict: **stronger candidate than Prime Agent for Logic Loop's specific
+need**, and the two aren't really competing options — see "relationship
+to the Prime Agent entry" below.
+
+**Repo facts:** MIT, TypeScript, **103k stars, 12.9k forks**, created
+2025-08-09 (13 months old vs. Prime Agent's 4), pushed daily, `v0.85.1`
+(85+ releases vs. Prime Agent's `v0.9.4` — far more iteration behind it).
+Maintained by Mario Zechner (`badlogic`, of libGDX) under earendil-works.
+Real supply-chain hardening documented in the README: pinned direct deps,
+`npm-shrinkwrap.json`, `min-release-age=2`, scheduled `npm audit`+
+signature checks, isolated release smoke tests — more process rigor
+visible than either of the other two adapters this project has evaluated
+externally (Prime Agent, herdr).
+
+**The adapter surface — an in-process extension/hook system, not a
+protocol to reverse-engineer:**
+- `~/.pi/agent/extensions/*.ts` (global, auto-discovered) or
+  `.pi/extensions/*.ts` (project-local, loads only after project trust).
+  A default-exported function receives a typed `ExtensionAPI`; Node
+  built-ins and npm deps both work (`packages/coding-agent/docs/
+  extensions.md`, 3000+ lines, by far the most detailed hook doc of any
+  adapter reviewed here).
+- Event coverage maps almost 1:1 onto Claude Code's own hook set, but
+  richer and fully typed instead of JSON-over-stdin: `session_start`
+  (≈`SessionStart`, with `reason: startup|reload|new|resume|fork`),
+  `before_agent_start` (≈`UserPromptSubmit`, can inject a message or
+  rewrite the system prompt), `turn_start`/`turn_end`,
+  `tool_execution_start`/`update`/`end` (≈`PreToolUse`/`PostToolUse`,
+  `tool_execution_start` can `{ block: true, reason }` a call — real
+  policy enforcement, not just observation), `agent_end`/`agent_settled`
+  (`agent_settled` is the real "Pi will not run again on its own" signal
+  — closer to a clean idle/Stop boundary than Claude's own `Stop` hook,
+  which Phase 15/16 found has real edge cases), `session_shutdown`,
+  `ui_prompt_start`/`end` (fires around blocking extension UI — a
+  "waiting on user" signal for free, no need to reverse-engineer it the
+  way Antigravity's `PreInvocation` had to be).
+- Each handler gets `ctx.sessionManager` (session id, session file path,
+  cwd) directly — no separate file-discovery step, no header-sniffing.
+  Combined with `process.env.LOGIC_LOOP_TAB_ID` (inherited automatically
+  since the extension runs inside the same process the tab spawned),
+  every POST this extension makes can carry the tether header and
+  session id in one shot — the same shape as `ingest::hook_command()`'s
+  output today, assembled in JS instead of a shelled `curl`.
+
+**Session storage — a nicer tether-discovery primitive than Prime
+Agent's:** `~/.pi/agent/sessions/--<sanitized-cwd>--/<timestamp>_<session-
+id>.jsonl` — the project path is encoded directly in the directory name.
+Prime Agent moved *away* from this exact scheme to a flat directory
+(per its own docs: "Current releases keep sessions in a flat directory;
+older per-project directories are migrated automatically") — meaning pi's
+current on-disk layout is actually easier to gate by cwd than Prime
+Agent's, closer to Codex's date-partitioned `rollout-*.jsonl` gate
+(Phase 21) than to Prime Agent's flat-dir-plus-header-read.
+
+**Version field is the same lineage:** header `version: 3` ("Renamed
+`hookMessage` role to `custom`, extensions unification") — Prime Agent's
+session-format.md carries the identical version history verbatim,
+confirming the fork point.
+
+**What pi does *not* have that Prime Agent added:** no `acp.md`, no
+`daemon.md`/`architecture.md`, no `rlm.md`, no `--mode acp`, no RPC
+`observe` command, no resident-daemon multi-worker supervisor. Confirmed
+by diffing docs directories directly (`acp.md` 404s on pi's raw GitHub
+path) rather than assumed. None of that turns out to matter for Logic
+Loop's use case — the extension-hook system above already covers
+everything an ingest adapter needs without any of it.
+
+**What pi has that Prime Agent's docs haven't caught up to:** newer
+top-level docs — `environment-variables.md`, `llama-cpp.md` (local model
+support), `security.md` — absent from Prime Agent's docs tree. Confirms
+Prime Agent trails its upstream; building against pi directly means one
+fewer place for the two to silently drift apart.
+
+**Relationship to the Prime Agent entry above — not a choice between
+them.** They're different binaries (`pi` vs. `prime-agent`), different
+config dirs (`~/.pi/agent/` vs. `~/.prime/agent/`), and someone running
+one doesn't have the other. But because Prime Agent forked pi's coding
+agent wholesale, **the extension API is identical** — same event names,
+same `ExtensionAPI` shape, same `ctx.sessionManager`. A single extension
+body written once could ship to both `~/.pi/agent/extensions/
+logic-loop.ts` and `~/.prime/agent/extensions/logic-loop.ts` with only
+the install path (and maybe an ingest-payload `agent` tag) differing —
+the same "reuse verbatim" move Codex's adapter made off Claude's
+`ingest::hook_command()` in Phase 10. If both ever get built, build the
+shared extension body once and parameterize the install location, don't
+duplicate the hook logic.
+
+**Risks:**
+- Same pre-1.0 semver posture as Prime Agent (`v0.85.1`), though the
+  supply-chain rigor and 13-month/103k-star track record make silent
+  breaking changes to the *extension API specifically* less likely than
+  Prime Agent's newer, less-battle-tested fork. Unconfirmed without a
+  live spike either way — flag, don't assume.
+- Extensions run with full user permissions, no sandbox (README says so
+  directly) — not a Logic Loop-specific risk, but worth remembering the
+  installed extension file is trusted code the same way Claude Code's
+  hook commands already are.
+- Hot-reload (`/reload`) re-binds extensions per session — an extension
+  holding open state (e.g. a persistent fetch keep-alive) needs to clean
+  up in `session_shutdown`, or a reload could double-register handlers.
+  Unconfirmed live; check during a spike.
+
+**If picked up:** MVP is one TypeScript extension file — `pi.on(
+"tool_execution_end", ...)`, `pi.on("agent_settled", ...)`,
+`pi.on("session_start", ...)`, `pi.on("before_agent_start", ...)` — each
+handler does a fire-and-forget `fetch()` POST to the ingest server
+carrying `X-Logic-Loop-Tab` from `process.env` and the session id from
+`ctx.sessionManager.getSessionId()`. No Rust-side hooks.json writer
+needed the way Claude/Codex adapters have — the Rust side only needs to
+place the `.ts` file at `~/.pi/agent/extensions/` (global toggle,
+install/remove idempotent, same shape as OpenCode's plugin-file
+adapter). Do a live spike before PLAN.md regardless — same standing
+advice as the Prime Agent entry: docs and live behavior have diverged
+before on every adapter built here so far.
+
+**Slots into ROADMAP's "Adapters — v2" adapter order** — rank pi ahead of
+Prime Agent given the maturity gap, and note in ROADMAP that both share
+one extension-body implementation per the point above.
+
+---
+
+# Hermes Agent adapter candidate (research pass, 2026-09-08 — last of this batch, per user)
+
+Source: `github.com/NousResearch/hermes-agent`. Research only (GitHub API
++ raw doc fetches, no local install). Verdict: **viable, but the most
+architecturally different of the three candidates reviewed this session**
+— real structured-protocol wins (a native hook system, a shipped ACP
+adapter) offset by a session-identity model that doesn't think in terms
+of project directories at all. Buildable, with one concrete mitigation
+identified below; not a clean drop-in the way pi/Prime Agent are.
+
+**Legitimacy check (done explicitly given the numbers below look
+implausible at a glance):** GitHub API reports **243.5k stars, 50.2k
+forks, 41.1k open issues** — an order of magnitude past Prime Agent and
+pi both, on a repo created 2025-07-22. That combination (huge stars +
+five-digit open issues) is exactly the shape of a star-farmed repo, so it
+was checked rather than taken at face value: **3,365+ contributors**
+(paginated contributor count), commits landing multiple times per hour
+from named individual authors, weekly dated releases (`v2026.9.7`,
+`v2026.8.31`, `v2026.8.27`, ...), a real docs site, a real Discord, and an
+`AGENTS.md` with a genuinely rigorous contribution rubric (footprint
+ladder, cache-safety invariants, an explicit "what we don't want" list).
+Real project, real scale, built by Nous Research (known for the Hermes
+model fine-tunes) — not inflated.
+
+**What it is — read this before assuming it's "a coding CLI":** per its
+own `AGENTS.md`, Hermes "runs the same agent core across a CLI, a
+messaging gateway (Telegram, Discord, Slack, ~20 platforms), a TUI, and
+an Electron desktop app," with a persistent cross-session memory model
+("Honcho dialectic user modeling," periodic memory nudges, autonomous
+skill creation) explicitly designed to build "a deepening model of who
+you are across sessions" — a personal-assistant product with coding as
+one capability, not a coding-first tool like the other two candidates.
+
+**Structured-protocol wins (clears the ROADMAP litmus test, same bar as
+pi/Prime Agent):**
+- **Native hook system** (`gateway/hooks.py`) — hooks live at
+  `~/.hermes/hooks/<name>/HOOK.yaml` (name, description, events) +
+  `handler.py` (`def handle(event_type, context)`, sync or async).
+  Events: `gateway:startup`, `session:start/end/reset`, `agent:start`,
+  `agent:step` (once per tool-loop turn), `agent:end`, `command:*`
+  wildcard. **A failing handler is logged, never fatal** — the exact
+  fail-open contract Logic Loop's own invariant #2 requires, stated
+  almost verbatim in the module's own docstring. Coarser granularity
+  than pi's per-tool `tool_execution_start/end`: Hermes fires once per
+  whole turn, not once per individual tool call — the Accomplished
+  panel's per-tool detail would need the state DB (next point), not the
+  hook payload alone.
+- **A shipped ACP adapter** (`acp_adapter/` — `server.py`, `session.py`,
+  `events.py`, `permissions.py`, `edit_approval.py`, `model_catalog.py`)
+  — same `agentclientprotocol.com` wire protocol as Prime Agent's `--mode
+  acp`, invoked as `python -m acp_adapter`. Confirms the ROADMAP note
+  that "several providers are converging on ACP" a third time over.
+- **SQLite-backed state, not JSONL** — `hermes_state_*.py` (schema, WAL,
+  FTS5 search, sessions, repair, portability). WAL mode means safe
+  concurrent reads while the agent writes — arguably a *better* tailable
+  primitive than a growing JSONL file, closer to Logic Loop's own "dumb
+  SQL views over append-only tables" philosophy (invariant #3) than any
+  other adapter's session format. Full per-message/tool-call content
+  would come from here to backfill what the coarser hook events omit.
+
+**The real mismatch — session identity has no project-directory concept.**
+Read `gateway/session.py` directly: `SessionSource` and `build_session_key`
+are built entirely from *messaging* dimensions — `platform`, `chat_id`,
+`chat_type`, `thread_id`, `user_id` — there is no `cwd` field anywhere in
+the session key. For the CLI (`Platform.LOCAL`), a bare `hermes` invocation
+does not key its session by working directory the way Claude/Codex/
+OpenCode/Antigravity/pi/Prime Agent all do — every CLI session under one
+profile is, by design, the same continuous conversation with the same
+long-term memory, matching the "deepening model of who you are across
+sessions" framing above. Two Logic Loop tabs pointed at two different
+project directories would collapse onto the *same* Hermes session/memory
+by default — a real regression from the per-tab isolation every other
+adapter gets for free from cwd.
+
+**Mitigation — confirmed to exist, not just hoped for.** Hermes has a
+first-class `-p`/`--profile <name>` flag (`hermes_cli/config.py`,
+`hermes_cli/profiles.py`): each profile gets its own `HERMES_HOME`,
+`profiles/<name>/` state dir, config, secrets scope, and memory —
+`AGENTS.md`'s own contribution rubric confirms this is deliberate design
+("Profiles are independent islands on purpose... a PR adding live config
+inheritance from the default profile was closed because coupling
+profiles is exactly what the design prevents"). Logic Loop's `pty_spawn`
+launching `hermes --profile <sanitized-project_key>` per project would
+give each project its own isolated Hermes session/memory — the same
+"tab tether, not cwd-guessing" move Logic Loop already prefers for
+Claude/Codex, just supplied as an explicit spawn-time flag instead of an
+env var. **Unconfirmed without a live spike:** whether `--profile` fully
+isolates session-key derivation for `Platform.LOCAL` the way the docs
+imply, and whether Logic Loop's existing cwd-fallback path (for sessions
+started outside the app) has anything to bind to if profile isolation
+turns out to be the only reliable key.
+
+**Risks:**
+- **Confirmed active internal churn, evidenced directly, not assumed.**
+  `COMPAT_MANIFEST.md` documents a September 2026 module decomposition
+  (PR #102117) that moved **1,148 public names** to new locations, with a
+  temporary compat shim *expiring 2026-09-14* — six days after this
+  research pass. This is exactly the class of breaking-change risk that
+  already bit this project twice (Codex hook-trust invalidation,
+  Antigravity `PreInvocation` surprises), except here it's scoped to
+  **internal Python import paths only** — the manifest explicitly frames
+  it as a plugin-author concern, not a change to the documented
+  `HOOK.yaml`/`handler.py` hook contract or the ACP wire protocol. If
+  Logic Loop's adapter is built strictly against those two documented
+  surfaces (never importing internal `hermes_cli.*`/`gateway.*` modules
+  directly), this specific churn shouldn't reach it — but it's honest
+  evidence of how fast this codebase moves versus pi/Prime Agent, and a
+  reason to re-check after any Hermes version bump rather than assume
+  stability.
+- Weekly release cadence, ~300-file `hermes_cli/` alone — the largest,
+  fastest-moving codebase of the three candidates. More surface for
+  something adjacent to the hook contract to shift under an adapter over
+  time, even with the documented compat process.
+- Coarser hook granularity than pi/Prime Agent means the adapter likely
+  needs both the hook (for turn/session boundaries) and a direct SQLite
+  read (for per-tool/message content) — two integration points instead
+  of one, though both are first-party structured sources, not screen
+  parsing.
+
+**If picked up:** confirmed-viable MVP is `~/.hermes/hooks/logic-loop/`
+(`HOOK.yaml` declaring `session:start/end`, `agent:start/step/end`, plus
+a `handler.py` that does a fire-and-forget POST to the ingest server) for
+turn/session boundaries, backed by a read-only SQLite query against the
+profile's state DB for per-tool-call content (WAL mode makes concurrent
+reads safe). Spawn with `--profile <project_key>` for isolation. **Spike
+before PLAN.md, more than for the other two** given the confirmed live
+churn evidence above — verify `--profile` session isolation and the
+actual `agent:step`/`agent:end` context payload shape against a real
+running `hermes`, not just the docstring.
+
+**Slots into ROADMAP's "Adapters — v2" adapter order** — rank behind pi
+and Prime Agent given the session-identity mismatch and the confirmed
+active churn; the ACP-adapter path is the safer of Hermes's two
+integration surfaces if this is ever built, since it's a versioned
+external wire protocol rather than an in-repo Python contract.
+
+---
+
+**Batch note:** three adapter candidates reviewed this session (Prime
+Agent, Pi Agent, Hermes Agent), capped here per user request. Ranked
+build order if any get picked up: **pi first** (richest hook API, most
+mature, no session-identity mismatch), **Prime Agent second** (same hook
+API verbatim, smaller/younger project, share pi's extension body per the
+note above), **Hermes third** (real structured surfaces but the
+project-directory mismatch and confirmed active internal churn make it
+the highest-effort, least drop-in of the three).

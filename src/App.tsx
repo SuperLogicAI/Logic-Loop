@@ -27,12 +27,17 @@ import { SidePanel } from "./components/SidePanel";
 import { LandingNoteModal } from "./components/LandingNoteModal";
 import { FanOutModal } from "./components/FanOutModal";
 import { IsolateLoopModal } from "./components/IsolateLoopModal";
+import { AttentionInbox } from "./components/AttentionInbox";
 import type { Decision } from "./types";
 import { ptyWrite } from "./lib/pty";
 import { TabBar } from "./components/TabBar";
 import { AgentStatusBar } from "./components/AgentStatusBar";
 import { BookmarksBar } from "./components/BookmarksBar";
 import { Terminal } from "./components/Terminal";
+import {
+  buildAttentionItems,
+  type AttentionTabSnapshot,
+} from "./lib/attention";
 import {
   canonicalizeCwd,
   getLastInputTs,
@@ -45,7 +50,21 @@ import {
 } from "./lib/pty";
 import { sanitizeSlug } from "./lib/worktree";
 import * as repo from "./lib/repo";
-import type { AttentionSourceContext, Bookmark, FanOutRollup, SpawnGroup, SpawnGroupMember, Tab } from "./types";
+import {
+  togglePanelHidden,
+  togglePanelMode,
+  type VisiblePanelMode,
+} from "./lib/panelLayout";
+import type {
+  AttentionEvidence,
+  AttentionSourceContext,
+  Bookmark,
+  FanOutRollup,
+  PanelMode,
+  SpawnGroup,
+  SpawnGroupMember,
+  Tab,
+} from "./types";
 import { PALETTE } from "./types";
 
 export default function App() {
@@ -61,8 +80,28 @@ export default function App() {
   // use it to avoid reviving a historical working state after relaunch.
   const attentionRunIdRef = useRef(crypto.randomUUID());
   const [home, setHome] = useState("");
-  const [railOpen, setRailOpen] = useState(true);
+  const [panelMode, setPanelMode] = useState<PanelMode>("expanded");
+  const panelModeRef = useRef<PanelMode>(panelMode);
+  panelModeRef.current = panelMode;
+  const [lastVisiblePanelMode, setLastVisiblePanelMode] = useState<VisiblePanelMode>("expanded");
+  const lastVisiblePanelModeRef = useRef<VisiblePanelMode>(lastVisiblePanelMode);
+  lastVisiblePanelModeRef.current = lastVisiblePanelMode;
+  const panelLayoutTouchedRef = useRef(false);
   const [panelRefresh, setPanelRefresh] = useState(0);
+  const [attentionEvidence, setAttentionEvidence] = useState<AttentionEvidence[]>([]);
+  const [attentionLoading, setAttentionLoading] = useState(true);
+  const [attentionStale, setAttentionStale] = useState(false);
+  const [attentionRefresh, setAttentionRefresh] = useState(0);
+  const [attentionOpen, setAttentionOpen] = useState(false);
+  const attentionRefreshPendingRef = useRef(false);
+  const scheduleAttentionRefresh = useCallback(() => {
+    if (attentionRefreshPendingRef.current) return;
+    attentionRefreshPendingRef.current = true;
+    queueMicrotask(() => {
+      attentionRefreshPendingRef.current = false;
+      setAttentionRefresh((value) => value + 1);
+    });
+  }, []);
   const [blockerCountsByCwd, setBlockerCountsByCwd] = useState<Record<string, number>>({});
   const [unseenStops, setUnseenStops] = useState<Set<string>>(new Set());
   const unseenStopsRef = useRef(unseenStops);
@@ -80,6 +119,34 @@ export default function App() {
   const [blindSessions, setBlindSessions] = useState<Record<string, string>>({});
   // Adapter setup warnings (e.g. foreign PostToolUse hook collision in older agy).
   const [adapterWarnings, setAdapterWarnings] = useState<Array<{ agent: string; reason: string }>>([]);
+
+  const applyPanelLayout = useCallback(
+    (next: { mode: PanelMode; lastVisible: VisiblePanelMode }) => {
+      panelLayoutTouchedRef.current = true;
+      panelModeRef.current = next.mode;
+      lastVisiblePanelModeRef.current = next.lastVisible;
+      setPanelMode(next.mode);
+      setLastVisiblePanelMode(next.lastVisible);
+      void Promise.all([
+        repo.setPanelMode(next.mode),
+        repo.setPanelLastVisibleMode(next.lastVisible),
+      ]).catch(() => undefined);
+    },
+    []
+  );
+
+  const togglePanel = useCallback(() => {
+    applyPanelLayout(togglePanelMode(panelModeRef.current, lastVisiblePanelModeRef.current));
+  }, [applyPanelLayout]);
+
+  const toggleHiddenPanel = useCallback(() => {
+    applyPanelLayout(togglePanelHidden(panelModeRef.current, lastVisiblePanelModeRef.current));
+  }, [applyPanelLayout]);
+
+  const showPanelMode = useCallback(
+    (mode: VisiblePanelMode) => applyPanelLayout({ mode, lastVisible: mode }),
+    [applyPanelLayout]
+  );
 
   // Nudges (Phase 6): muted project keys, cached so the hot ingestion path
   // never blocks on a DB read before deciding whether to notify.
@@ -116,6 +183,38 @@ export default function App() {
     [home]
   );
 
+  useEffect(() => {
+    let cancelled = false;
+    setAttentionLoading(true);
+    void repo
+      .listAttentionEvidence(attentionRunIdRef.current)
+      .then((rows) => {
+        if (cancelled) return;
+        setAttentionEvidence(rows);
+        setAttentionStale(false);
+        setAttentionLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAttentionStale(true);
+        setAttentionLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [attentionRefresh]);
+
+  const attentionItems = useMemo(() => {
+    const attentionTabs: AttentionTabSnapshot[] = tabs.map((tab) => ({
+      id: tab.id,
+      cwd: expand(tab.cwd),
+      sessionId: tab.sessionId,
+      agent: tab.agent,
+      status: tab.status,
+    }));
+    return buildAttentionItems(attentionEvidence, attentionTabs, attentionRunIdRef.current, now);
+  }, [attentionEvidence, expand, now, tabs]);
+
   // Prompt a landing note when leaving a tab that had agent activity since the
   // last prompt. Debounced to one prompt per tab per 10 min (tab-flipping while
   // testing must not spam the ritual). Never stacks over an open modal.
@@ -141,12 +240,14 @@ export default function App() {
 
   const refreshBlockerCounts = useCallback(() => {
     void repo.blockerCounts().then(setBlockerCountsByCwd).catch(() => undefined);
-  }, []);
+    scheduleAttentionRefresh();
+  }, [scheduleAttentionRefresh]);
 
   const refreshDecisionCounts = useCallback(() => {
     void repo.decisionCounts().then(setDecisionCountsByCwd).catch(() => undefined);
     setPanelRefresh((n) => n + 1);
-  }, []);
+    scheduleAttentionRefresh();
+  }, [scheduleAttentionRefresh]);
 
   useEffect(() => {
     void homeDir().then((h) => setHome(h.replace(/\/$/, "")));
@@ -374,6 +475,7 @@ export default function App() {
             adapter_id: tab.agent,
           })
         )
+        .then(scheduleAttentionRefresh)
         .catch(() => undefined);
     }
     setUnseenStops((s) => {
@@ -382,7 +484,7 @@ export default function App() {
       next.delete(tabId);
       return next;
     });
-  }, []);
+  }, [expand, scheduleAttentionRefresh]);
 
   // Since-you-left anchor (Phase 14a): written whenever the human stops
   // looking at a tab that has a bound session — tab switch, window blur, tab
@@ -508,6 +610,15 @@ export default function App() {
     if (didInit.current) return; // StrictMode double-mount guard
     didInit.current = true;
     void refreshBookmarks();
+    void Promise.all([repo.getPanelMode(), repo.getPanelLastVisibleMode()])
+      .then(([mode, lastVisible]) => {
+        if (panelLayoutTouchedRef.current) return;
+        panelModeRef.current = mode;
+        lastVisiblePanelModeRef.current = lastVisible;
+        setPanelMode(mode);
+        setLastVisiblePanelMode(lastVisible);
+      })
+      .catch(() => undefined);
     // reap PTYs orphaned by a webview crash/reload, then start fresh
     void ptyKillAll().then(async () => {
       // Ghost tabs: sessions still active when the app last quit. Never
@@ -647,6 +758,7 @@ export default function App() {
       if (!tabId) {
         void repo
           .addHookEvent(p.session_id, `hook:${p.hook_event_name}`, JSON.stringify(payload))
+          .then(scheduleAttentionRefresh)
           .catch(() => undefined); // fail open: panel data loss must not break terminals
         return; // session from an outside terminal
       }
@@ -673,6 +785,7 @@ export default function App() {
               }
             : undefined
         )
+        .then(scheduleAttentionRefresh)
         .catch(() => undefined); // fail open: attention evidence never affects the terminal
       setTabs((prev) =>
         prev.map((t) => {
@@ -729,6 +842,7 @@ export default function App() {
                 actor_id: sourceContext.actorId,
               })
             )
+            .then(scheduleAttentionRefresh)
             .catch(() => undefined);
         }
         if (canNotify()) notify("Finished", nudgeLabel);
@@ -771,7 +885,7 @@ export default function App() {
       cancelled = true;
       unlisteners.forEach((u) => u());
     };
-  }, [expand, refreshBlockerCounts, refreshDecisionCounts]);
+  }, [expand, refreshBlockerCounts, refreshDecisionCounts, scheduleAttentionRefresh]);
 
   // File drag-drop: the webview intercepts native drops (no DOM drop events),
   // so paste dropped paths into the active terminal — the human dragged them,
@@ -885,19 +999,24 @@ export default function App() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
-      if (mod && e.key === "b") {
+      const key = e.key.toLowerCase();
+      if (mod && key === "k") {
         e.preventDefault();
-        setRailOpen((o) => !o);
-      } else if (mod && e.key === "t") {
+        setAttentionOpen((open) => !open);
+      } else if (mod && key === "b") {
+        e.preventDefault();
+        if (e.shiftKey) toggleHiddenPanel();
+        else togglePanel();
+      } else if (mod && key === "t") {
         e.preventDefault();
         void openTab();
-      } else if (mod && e.key === "w") {
+      } else if (mod && key === "w") {
         e.preventDefault();
         setActiveId((a) => {
           if (a) closeTab(a);
           return a;
         });
-      } else if (mod && e.key === "v") {
+      } else if (mod && key === "v") {
         // The menu's Paste role was removed (it double-pasted into terminals),
         // so form inputs need a manual ⌘V. Terminals handle their own ⌘V via
         // xterm's custom key handler — skip its hidden helper textarea here.
@@ -938,7 +1057,7 @@ export default function App() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [openTab, closeTab]);
+  }, [openTab, closeTab, toggleHiddenPanel, togglePanel]);
 
   // On tab switch: offer the landing prompt for the tab we left, and claim
   // the tab switched to. A closed tab is gone here — closeTab already
@@ -982,6 +1101,13 @@ export default function App() {
   }, [markTabLeft]);
 
   const activeTab = tabs.find((t) => t.id === activeId) ?? null;
+
+  const openAttentionTab = useCallback((tabId: string) => {
+    const tab = tabsRef.current.find((candidate) => candidate.id === tabId && candidate.status === "live");
+    if (!tab) return;
+    setAttentionOpen(false);
+    setActiveId(tab.id);
+  }, []);
 
   // Answer-now prefill: writes a draft into the bound tab's terminal and marks
   // the decision answered. User edits and presses Enter — never sent by us.
@@ -1040,8 +1166,10 @@ export default function App() {
         onReorder={reorderBookmarks}
       />
       <div className="flex min-h-0 flex-1">
-        {railOpen && activeTab && (
+        {panelMode !== "hidden" && activeTab && (
           <SidePanel
+            mode={panelMode}
+            onModeChange={showPanelMode}
             cwd={expand(activeTab.cwd)}
             sessionId={activeTab.sessionId ?? null}
             tabTether={activeTab.id}
@@ -1061,10 +1189,14 @@ export default function App() {
             onDecisionsChanged={refreshDecisionCounts}
             onAnswerNow={answerNow}
             onMuteChanged={refreshMutedProjects}
+            attentionCount={attentionItems.length}
+            attentionLoading={attentionLoading}
+            attentionStale={attentionStale}
+            onOpenAttention={() => setAttentionOpen(true)}
           />
         )}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <AgentStatusBar />
+          <AgentStatusBar panelMode={panelMode} onTogglePanel={togglePanel} />
           <div className="min-h-0 flex-1">
             {tabs.map((tab) => (
               <Terminal
@@ -1117,6 +1249,16 @@ export default function App() {
             setIsolateLoopModalOpen(false);
           }}
           onCancel={() => setIsolateLoopModalOpen(false)}
+        />
+      )}
+      {attentionOpen && (
+        <AttentionInbox
+          items={attentionItems}
+          now={now}
+          loading={attentionLoading}
+          stale={attentionStale}
+          onClose={() => setAttentionOpen(false)}
+          onOpenTab={openAttentionTab}
         />
       )}
     </div>

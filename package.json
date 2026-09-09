@@ -10,12 +10,13 @@
     "tauri": "tauri",
     "reinstall": "sh scripts/reinstall.sh",
     "golden": "tsx scripts/golden.ts",
-    "check": "npm run landing:check && npm run epoch:check && npm run bind:check && npm run dedupe:check && npm run attention-state:check && npm run reentry:check && npm run unclaimed:check && npm run notify:check && npm run spawn:check && npm run scope:check && npm run clock:check && npm run delta:check && npm run loop:check && npm run extractor-queue:check && npm run decisions:check && npm run blockers:check && npm run codex-transcript:check && npm run board:check && npm run empty-state:check && npm run opencode:check",
+    "check": "npm run landing:check && npm run epoch:check && npm run bind:check && npm run dedupe:check && npm run attention-state:check && npm run attention-inbox:check && npm run reentry:check && npm run unclaimed:check && npm run notify:check && npm run spawn:check && npm run scope:check && npm run clock:check && npm run delta:check && npm run loop:check && npm run extractor-queue:check && npm run decisions:check && npm run blockers:check && npm run codex-transcript:check && npm run board:check && npm run empty-state:check && npm run opencode:check && npm run panel-layout:check",
     "landing:check": "tsx scripts/landing-check.ts",
     "epoch:check": "tsx scripts/epoch-check.ts",
     "bind:check": "tsx scripts/bind-check.ts",
     "dedupe:check": "tsx scripts/dedupe-check.ts",
     "attention-state:check": "tsx scripts/attention-state-check.ts",
+    "attention-inbox:check": "tsx scripts/attention-inbox-check.ts",
     "reentry:check": "tsx scripts/reentry-check.ts",
     "unclaimed:check": "tsx scripts/unclaimed-check.ts",
     "notify:check": "tsx scripts/notify-check.ts",
@@ -30,7 +31,8 @@
     "codex-transcript:check": "tsx scripts/codex-transcript-check.ts",
     "board:check": "tsx scripts/board-check.ts",
     "empty-state:check": "tsx scripts/empty-state-check.ts",
-    "opencode:check": "tsx scripts/opencode-check.ts"
+    "opencode:check": "tsx scripts/opencode-check.ts",
+    "panel-layout:check": "tsx scripts/panel-layout-check.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

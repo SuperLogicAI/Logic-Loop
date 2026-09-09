@@ -8,6 +8,8 @@ export interface Bookmark {
 
 export type AgentState = "working" | "waiting" | "idle" | "error";
 
+export type PanelMode = "expanded" | "compact" | "hidden";
+
 export type AttentionKind = "decision" | "waiting" | "stalled" | "result" | "blocker";
 
 /** Source identity captured at ingestion time. It is deliberately distinct
@@ -36,6 +38,24 @@ export interface AttentionItem {
   actionability: "act" | "review" | "investigate" | "unknown";
   confidence: "explicit" | "inferred" | "unknown";
   route: "exact" | "session" | "project" | "unavailable";
+}
+
+/** Raw cross-project evidence returned by the repo query. Live eligibility,
+ * routing, actionability, and display ordering are derived in attention.ts. */
+export interface AttentionEvidence {
+  id: string;
+  kind: AttentionKind;
+  projectKey: string;
+  sessionId: string | null;
+  tabId: string | null;
+  adapterId: string | null;
+  actorId: string | null;
+  createdAt: number;
+  lastActivityAt: number | null;
+  text: string;
+  evidenceId: number | null;
+  runId: string | null;
+  observedState: AgentState | null;
 }
 
 export interface Tab {

@@ -2,11 +2,13 @@ import Database from "@tauri-apps/plugin-sql";
 import type {
   Blocker,
   AgentState,
+  AttentionEvidence,
   AttentionSourceContext,
   Bookmark,
   Decision,
   ExtractorSettings,
   Note,
+  PanelMode,
   ReentryCandidate,
   SpawnGroup,
   SpawnGroupMember,
@@ -14,6 +16,7 @@ import type {
   WorktreeTab,
 } from "../types";
 import type { ExtractedDecision } from "./extractor";
+import { clampPanelWidth, parsePanelMode, type VisiblePanelMode } from "./panelLayout";
 
 let db: Database | null = null;
 // Lifecycle hooks can arrive concurrently. Keep each raw-hook/derivative pair
@@ -308,6 +311,148 @@ export async function unclaimedSessions(): Promise<Set<string>> {
   return new Set(rows.map((r) => r.session_id));
 }
 
+interface AttentionEvidenceRow {
+  id: string;
+  kind: AttentionEvidence["kind"];
+  project_key: string;
+  session_id: string | null;
+  tab_id: string | null;
+  adapter_id: string | null;
+  actor_id: string | null;
+  created_at: number;
+  last_activity_at: number | null;
+  text: string;
+  evidence_id: number | null;
+  run_id: string | null;
+  observed_state: AgentState | null;
+}
+
+/** One global read over durable obligations plus the latest lifecycle evidence
+ * for this App run. Live-tab eligibility and safe routing remain pure UI-side
+ * derivations because the database cannot prove a PTY is still alive. */
+export async function listAttentionEvidence(runId: string): Promise<AttentionEvidence[]> {
+  const d = await getDb();
+  const rows = await d.select<AttentionEvidenceRow[]>(
+    `WITH valid_events AS (
+       SELECT id, session_id, type, payload_json, ts
+       FROM events
+       WHERE json_valid(payload_json)
+     ),
+     outstanding_results AS (
+       SELECT l.*,
+              ROW_NUMBER() OVER (PARTITION BY l.session_id ORDER BY l.ts DESC, l.id DESC) AS rn
+       FROM valid_events l
+       WHERE l.type = 'result_landed'
+         AND COALESCE(json_extract(l.payload_json, '$.project_key'), json_extract(l.payload_json, '$.cwd')) IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM events c
+           WHERE c.type = 'result_claimed' AND c.session_id = l.session_id AND c.ts > l.ts
+         )
+     ),
+     run_observations AS (
+       SELECT e.*,
+              ROW_NUMBER() OVER (
+                PARTITION BY e.session_id
+                ORDER BY CAST(json_extract(e.payload_json, '$.observed_at') AS INTEGER) DESC, e.id DESC
+              ) AS rn
+       FROM valid_events e
+       WHERE e.type = 'attention_state_observed'
+         AND json_extract(e.payload_json, '$.run_id') = $1
+     )
+     SELECT 'decision:' || id AS id,
+            'decision' AS kind,
+            cwd AS project_key,
+            session_id,
+            tab_id,
+            agent AS adapter_id,
+            actor_id,
+            ts AS created_at,
+            NULL AS last_activity_at,
+            question AS text,
+            id AS evidence_id,
+            NULL AS run_id,
+            NULL AS observed_state
+     FROM decisions
+     WHERE status = 'open'
+     UNION ALL
+     SELECT 'blocker:' || id,
+            'blocker',
+            cwd,
+            session_id,
+            tab_id,
+            agent,
+            actor_id,
+            ts,
+            NULL,
+            text,
+            id,
+            NULL,
+            NULL
+     FROM blockers
+     WHERE resolved = 0
+     UNION ALL
+     SELECT 'result:' || id,
+            'result',
+            COALESCE(json_extract(payload_json, '$.project_key'), json_extract(payload_json, '$.cwd')),
+            session_id,
+            json_extract(payload_json, '$.tab_id'),
+            json_extract(payload_json, '$.adapter_id'),
+            json_extract(payload_json, '$.actor_id'),
+            ts,
+            ts,
+            'Result ready to review',
+            id,
+            NULL,
+            NULL
+     FROM outstanding_results
+     WHERE rn = 1
+     UNION ALL
+     SELECT CASE json_extract(payload_json, '$.state')
+              WHEN 'waiting' THEN 'waiting:'
+              ELSE 'stalled:'
+            END || CAST(json_extract(payload_json, '$.source_event_id') AS TEXT),
+            CASE json_extract(payload_json, '$.state')
+              WHEN 'waiting' THEN 'waiting'
+              ELSE 'stalled'
+            END,
+            json_extract(payload_json, '$.project_key'),
+            session_id,
+            json_extract(payload_json, '$.tab_id'),
+            json_extract(payload_json, '$.adapter_id'),
+            json_extract(payload_json, '$.actor_id'),
+            CAST(json_extract(payload_json, '$.observed_at') AS INTEGER),
+            CAST(json_extract(payload_json, '$.observed_at') AS INTEGER),
+            CASE json_extract(payload_json, '$.state')
+              WHEN 'waiting' THEN 'Agent is waiting for input'
+              ELSE 'No observed activity for 3m'
+            END,
+            CAST(json_extract(payload_json, '$.source_event_id') AS INTEGER),
+            json_extract(payload_json, '$.run_id'),
+            json_extract(payload_json, '$.state')
+     FROM run_observations
+     WHERE rn = 1
+       AND json_extract(payload_json, '$.project_key') IS NOT NULL
+       AND json_extract(payload_json, '$.source_event_id') IS NOT NULL
+       AND json_extract(payload_json, '$.state') IN ('waiting', 'working')`,
+    [runId]
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    projectKey: row.project_key,
+    sessionId: row.session_id,
+    tabId: row.tab_id,
+    adapterId: row.adapter_id,
+    actorId: row.actor_id,
+    createdAt: row.created_at,
+    lastActivityAt: row.last_activity_at,
+    text: row.text,
+    evidenceId: row.evidence_id,
+    runId: row.run_id,
+    observedState: row.observed_state,
+  }));
+}
+
 export async function listBlockers(cwd: string): Promise<Blocker[]> {
   const d = await getDb();
   return d.select<Blocker[]>(
@@ -496,6 +641,54 @@ export async function setExtractorSettings(s: ExtractorSettings): Promise<void> 
       [k, v]
     );
   }
+}
+
+// --- Global side-panel presentation (Phase 25): stored in the existing
+// settings table. Layout is global because it describes the app shell, not a
+// project's semantic state. ---
+
+const PANEL_MODE_KEY = "panel_mode";
+const PANEL_LAST_VISIBLE_MODE_KEY = "panel_last_visible_mode";
+const PANEL_WIDTH_KEY = "panel_width";
+
+async function getSetting(key: string): Promise<string | null> {
+  const d = await getDb();
+  const rows = await d.select<{ value: string }[]>("SELECT value FROM settings WHERE key = $1", [key]);
+  return rows[0]?.value ?? null;
+}
+
+async function setSetting(key: string, value: string): Promise<void> {
+  const d = await getDb();
+  await d.execute(
+    "INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $2",
+    [key, value]
+  );
+}
+
+export async function getPanelMode(): Promise<PanelMode> {
+  return parsePanelMode(await getSetting(PANEL_MODE_KEY));
+}
+
+export async function setPanelMode(mode: PanelMode): Promise<void> {
+  await setSetting(PANEL_MODE_KEY, mode);
+}
+
+export async function getPanelLastVisibleMode(): Promise<VisiblePanelMode> {
+  const mode = parsePanelMode(await getSetting(PANEL_LAST_VISIBLE_MODE_KEY));
+  return mode === "compact" ? "compact" : "expanded";
+}
+
+export async function setPanelLastVisibleMode(mode: VisiblePanelMode): Promise<void> {
+  await setSetting(PANEL_LAST_VISIBLE_MODE_KEY, mode);
+}
+
+export async function getPanelWidth(): Promise<number> {
+  const value = await getSetting(PANEL_WIDTH_KEY);
+  return clampPanelWidth(Number(value ?? Number.NaN));
+}
+
+export async function setPanelWidth(width: number): Promise<void> {
+  await setSetting(PANEL_WIDTH_KEY, String(Math.round(clampPanelWidth(width))));
 }
 
 // --- Per-project notification mute (Phase 6): reuses the settings
