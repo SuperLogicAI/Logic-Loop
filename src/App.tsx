@@ -15,6 +15,8 @@ import {
   seedUnclaimedTabs,
   shouldFlagUnclaimed,
   shouldNotify,
+  sourceContextForHook,
+  isTerminalResult,
   stateForHook,
 } from "./lib/ingest";
 import { detectBlockers } from "./lib/detectors";
@@ -43,7 +45,7 @@ import {
 } from "./lib/pty";
 import { sanitizeSlug } from "./lib/worktree";
 import * as repo from "./lib/repo";
-import type { Bookmark, FanOutRollup, SpawnGroup, SpawnGroupMember, Tab } from "./types";
+import type { AttentionSourceContext, Bookmark, FanOutRollup, SpawnGroup, SpawnGroupMember, Tab } from "./types";
 import { PALETTE } from "./types";
 
 export default function App() {
@@ -55,6 +57,9 @@ export default function App() {
   const activeIdRef = useRef(activeId);
   activeIdRef.current = activeId;
   const didInit = useRef(false);
+  // One browser process is one Attention observation run. Later inbox queries
+  // use it to avoid reviving a historical working state after relaunch.
+  const attentionRunIdRef = useRef(crypto.randomUUID());
   const [home, setHome] = useState("");
   const [railOpen, setRailOpen] = useState(true);
   const [panelRefresh, setPanelRefresh] = useState(0);
@@ -358,7 +363,18 @@ export default function App() {
     if (!unseenStopsRef.current.has(tabId)) return; // nothing to claim — no event to persist
     const tab = tabsRef.current.find((t) => t.id === tabId);
     if (tab?.sessionId) {
-      void repo.addEvent(tab.sessionId, "result_claimed", "{}").catch(() => undefined);
+      void repo
+        .addEvent(
+          tab.sessionId,
+          "result_claimed",
+          JSON.stringify({
+            v: 1,
+            project_key: expand(tab.cwd),
+            tab_id: tab.id,
+            adapter_id: tab.agent,
+          })
+        )
+        .catch(() => undefined);
     }
     setUnseenStops((s) => {
       if (!s.has(tabId)) return s;
@@ -375,7 +391,17 @@ export default function App() {
     (tab: Tab) => {
       if (!tab.sessionId) return;
       void repo
-        .addEvent(tab.sessionId, "tab_left", JSON.stringify({ cwd: expand(tab.cwd), tab_id: tab.id }))
+        .addEvent(
+          tab.sessionId,
+          "tab_left",
+          JSON.stringify({
+            v: 1,
+            cwd: expand(tab.cwd),
+            project_key: expand(tab.cwd),
+            tab_id: tab.id,
+            adapter_id: tab.agent,
+          })
+        )
         .catch(() => undefined);
     },
     [expand]
@@ -519,19 +545,21 @@ export default function App() {
   // drive the per-tab agent state machine.
   const bindingsRef = useRef(new Map<string, string>()); // session_id -> tab id
   const sessionCwdRef = useRef(new Map<string, string>()); // session_id -> project cwd
+  const sessionContextRef = useRef(new Map<string, AttentionSourceContext>()); // frozen source identity per session
 
   useEffect(() => {
     const bindings = bindingsRef.current;
     const sessionCwd = sessionCwdRef.current;
+    const sessionContexts = sessionContextRef.current;
 
     // Detection lives here — the ingestion layer. Panels only read SQL.
-    const runDetectors = (sessionId: string, text: string) => {
+    const runDetectors = (sessionId: string, text: string, context: AttentionSourceContext) => {
       const cwd = sessionCwd.get(sessionId);
       if (!cwd) return;
       for (const d of detectBlockers(text)) {
         const line = text.split("\n").find((l) => d.re.test(l))?.trim().slice(0, 120) ?? d.label;
         void repo
-          .addBlocker(cwd, line, d.label)
+          .addBlocker(cwd, line, d.label, context)
           .then(() => {
             refreshBlockerCounts();
             setPanelRefresh((n) => n + 1);
@@ -555,53 +583,12 @@ export default function App() {
         ? computeProvenance(p.tab_id, p.tab_id ? getLastInputTs(p.tab_id) : undefined, Date.now())
         : undefined;
       const payload = provenance ? { ...p, provenance } : p;
-      void repo
-        .addEvent(p.session_id, `hook:${p.hook_event_name}`, JSON.stringify(payload))
-        .catch(() => undefined); // fail open: panel data loss must not break terminals
-
       // project_key (repo root, derived server-side) is the panel key; p.cwd is
       // the agent's literal dir and may be a subdir of it.
       const projectKey = p.project_key ?? p.cwd?.replace(/\/$/, "");
       if (projectKey) {
         sessionCwd.set(p.session_id, projectKey);
       }
-      // Re-entry write path: only tethered sessions (started by this app) are
-      // ours to resume — an outside terminal's SessionStart carries no tab_id.
-      // transcript_path is allowed to be absent (a Codex SessionStart can send
-      // none) — stored as an empty-string sentinel; resume never reads this
-      // column, only tail-worthiness (gated separately in ingest.rs) does.
-      if (p.hook_event_name === "SessionStart" && p.tab_id && projectKey && p.cwd) {
-        void repo
-          .upsertSessionBinding(p.session_id, p.tab_id, projectKey, p.cwd, p.transcript_path ?? "", p.agent)
-          .catch(() => undefined); // fail open, same as addEvent above
-      }
-      if (p.hook_event_name === "Stop") {
-        decisions.onStop(p.session_id, sessionCwd.get(p.session_id), refreshDecisionCounts);
-      }
-      // A completed or interrupted turn is a real result worth flagging when
-      // unseen; SessionEnd alone is session shutdown, not a new result — it
-      // only closes the epoch (via stateForHook), it doesn't land one here.
-      const isTerminalResult = p.hook_event_name === "Stop" || p.hook_event_name === "Interrupt";
-      if (p.hook_event_name === "PostToolUse") {
-        // Scoped to Bash/run_command: Read/Grep/Glob tool_response is file/doc
-        // content, not command output — scanning it flags blockers on error
-        // strings quoted in comments or docs (e.g. this file's own landmine
-        // notes) rather than real failures. run_command is Antigravity's
-        // shell-command tool (Phase 16) — file-edit tools are deliberately
-        // not added here, this gate is for command *output*, not edit content.
-        if (p["tool_name"] === "Bash" || p["tool_name"] === "run_command") {
-          const resp = p["tool_response"];
-          const text =
-            typeof resp === "string"
-              ? resp
-              : resp && typeof resp === "object"
-                ? Object.values(resp).filter((v): v is string => typeof v === "string").join("\n")
-                : "";
-          runDetectors(p.session_id, text);
-        }
-        setPanelRefresh((n) => n + 1); // accomplished panel has a new row
-      }
-
       let tabId = bindings.get(p.session_id);
       if (!tabId) {
         const match = bindSession(
@@ -618,7 +605,51 @@ export default function App() {
           bindings.set(p.session_id, tabId);
         }
       }
-      if (!tabId) return; // session from an outside terminal
+      const sourceContext = sourceContextForHook(p, tabId);
+      sessionContexts.set(p.session_id, sourceContext);
+      // Re-entry write path: only tethered sessions (started by this app) are
+      // ours to resume — an outside terminal's SessionStart carries no tab_id.
+      // transcript_path is allowed to be absent (a Codex SessionStart can send
+      // none) — stored as an empty-string sentinel; resume never reads this
+      // column, only tail-worthiness (gated separately in ingest.rs) does.
+      if (p.hook_event_name === "SessionStart" && p.tab_id && projectKey && p.cwd) {
+        void repo
+          .upsertSessionBinding(p.session_id, p.tab_id, projectKey, p.cwd, p.transcript_path ?? "", p.agent)
+          .catch(() => undefined); // fail open, same as addEvent above
+      }
+      if (p.hook_event_name === "Stop") {
+        decisions.onStop(p.session_id, sessionCwd.get(p.session_id), refreshDecisionCounts, sourceContext);
+      }
+      // A completed or interrupted turn is a real result worth flagging when
+      // unseen; SessionEnd alone is session shutdown, not a new result — it
+      // only closes the epoch (via stateForHook), it doesn't land one here.
+      const terminalResult = isTerminalResult(p);
+      if (p.hook_event_name === "PostToolUse") {
+        // Scoped to Bash/run_command: Read/Grep/Glob tool_response is file/doc
+        // content, not command output — scanning it flags blockers on error
+        // strings quoted in comments or docs (e.g. this file's own landmine
+        // notes) rather than real failures. run_command is Antigravity's
+        // shell-command tool (Phase 16) — file-edit tools are deliberately
+        // not added here, this gate is for command *output*, not edit content.
+        if (p["tool_name"] === "Bash" || p["tool_name"] === "run_command") {
+          const resp = p["tool_response"];
+          const text =
+            typeof resp === "string"
+              ? resp
+              : resp && typeof resp === "object"
+                ? Object.values(resp).filter((v): v is string => typeof v === "string").join("\n")
+                : "";
+          runDetectors(p.session_id, text, sourceContext);
+        }
+        setPanelRefresh((n) => n + 1); // accomplished panel has a new row
+      }
+
+      if (!tabId) {
+        void repo
+          .addHookEvent(p.session_id, `hook:${p.hook_event_name}`, JSON.stringify(payload))
+          .catch(() => undefined); // fail open: panel data loss must not break terminals
+        return; // session from an outside terminal
+      }
       tabActivityRef.current.set(tabId, Date.now()); // for the landing-note ritual
       // A new turn is a fresh epoch — let the next stall re-notify.
       if (p.hook_event_name === "UserPromptSubmit") nudgedStallRef.current.delete(tabId);
@@ -626,6 +657,23 @@ export default function App() {
       const prevAgentState = tabsRef.current.find((t) => t.id === tabId)?.agentState;
       const state = stateForHook(p);
       const cwd = sessionCwd.get(p.session_id);
+      void repo
+        .addHookEvent(
+          p.session_id,
+          `hook:${p.hook_event_name}`,
+          JSON.stringify(payload),
+          state
+            ? {
+                state,
+                sourceHook: p.hook_event_name,
+                observedAt: Date.now(),
+                runId: attentionRunIdRef.current,
+                projectKey: cwd,
+                context: sourceContext,
+              }
+            : undefined
+        )
+        .catch(() => undefined); // fail open: attention evidence never affects the terminal
       setTabs((prev) =>
         prev.map((t) => {
           if (t.id !== tabId) return t;
@@ -662,14 +710,25 @@ export default function App() {
       // agent finished on a tab the human isn't looking at right now — either
       // a background tab (app focused, different tab active) or the whole app
       // backgrounded. Flagged until claimTab (tab switch / window focus).
-      if (isTerminalResult && shouldFlagUnclaimed(tabId, activeIdRef.current, document.hasFocus())) {
+      if (terminalResult && shouldFlagUnclaimed(tabId, activeIdRef.current, document.hasFocus())) {
         const id = tabId;
         setUnseenStops((s) => new Set(s).add(id));
         // Without a cwd the row can never match unclaimedResults' cwd filter —
         // skip the write rather than persist an event nothing can read.
         if (cwd) {
           void repo
-            .addEvent(p.session_id, "result_landed", JSON.stringify({ cwd }))
+            .addEvent(
+              p.session_id,
+              "result_landed",
+              JSON.stringify({
+                v: 1,
+                cwd,
+                project_key: cwd,
+                tab_id: sourceContext.tabId,
+                adapter_id: sourceContext.agent,
+                actor_id: sourceContext.actorId,
+              })
+            )
             .catch(() => undefined);
         }
         if (canNotify()) notify("Finished", nudgeLabel);
@@ -681,7 +740,13 @@ export default function App() {
       // Blocker detection deliberately skips raw transcript lines (assistant/
       // user prose, quoted doc content) — PostToolUse's Bash-scoped tool_response
       // above is the only real-error channel now. See note there.
-      decisions.onTranscript(p.session_id, sessionCwd.get(p.session_id), p.line, refreshDecisionCounts);
+      decisions.onTranscript(
+        p.session_id,
+        sessionCwd.get(p.session_id),
+        p.line,
+        refreshDecisionCounts,
+        sessionContexts.get(p.session_id) ?? { sessionId: p.session_id }
+      );
       // transcripts flowing again → clear any warning for this session
       setBlindSessions((s) => {
         if (!(p.session_id in s)) return s;

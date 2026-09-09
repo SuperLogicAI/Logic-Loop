@@ -1,6 +1,8 @@
 import Database from "@tauri-apps/plugin-sql";
 import type {
   Blocker,
+  AgentState,
+  AttentionSourceContext,
   Bookmark,
   Decision,
   ExtractorSettings,
@@ -14,6 +16,9 @@ import type {
 import type { ExtractedDecision } from "./extractor";
 
 let db: Database | null = null;
+// Lifecycle hooks can arrive concurrently. Keep each raw-hook/derivative pair
+// ordered so a later accepted observation cannot overtake its source event.
+const hookWriteChains = new Map<string, Promise<void>>();
 
 async function getDb(): Promise<Database> {
   if (!db) db = await Database.load("sqlite:context-terminal.db");
@@ -85,13 +90,113 @@ export function dedupeKey(sessionId: string, type: string, payloadJson: string, 
   return `${type}|${sessionId}|agent:${agentId ?? ""}|${bucket}|${payloadJson}`;
 }
 
-export async function addEvent(sessionId: string, type: string, payloadJson: string): Promise<void> {
+export interface EventWriteResult {
+  id: number | null;
+  inserted: boolean;
+}
+
+async function writeEvent(
+  d: Database,
+  sessionId: string,
+  type: string,
+  payloadJson: string,
+  ts: number,
+  dedupe: string
+): Promise<EventWriteResult> {
+  const result = await d.execute(
+    "INSERT OR IGNORE INTO events (session_id, type, payload_json, ts, dedupe_key) VALUES ($1, $2, $3, $4, $5)",
+    [sessionId, type, payloadJson, ts, dedupe]
+  );
+  const rows = await d.select<{ id: number }[]>("SELECT id FROM events WHERE dedupe_key = $1", [dedupe]);
+  return { id: rows[0]?.id ?? result.lastInsertId ?? null, inserted: result.rowsAffected === 1 };
+}
+
+/** All event writes use this path so their dedupe key is never skipped. */
+export async function addEvent(sessionId: string, type: string, payloadJson: string): Promise<EventWriteResult> {
   const d = await getDb();
   const ts = Date.now();
-  await d.execute(
-    "INSERT OR IGNORE INTO events (session_id, type, payload_json, ts, dedupe_key) VALUES ($1, $2, $3, $4, $5)",
-    [sessionId, type, payloadJson, ts, dedupeKey(sessionId, type, payloadJson, ts)]
+  return writeEvent(d, sessionId, type, payloadJson, ts, dedupeKey(sessionId, type, payloadJson, ts));
+}
+
+export interface AttentionObservation {
+  state: AgentState;
+  sourceHook: string;
+  observedAt: number;
+  runId: string;
+  projectKey?: string;
+  context: AttentionSourceContext;
+}
+
+/** Stable across retries of one accepted raw hook, unlike the time-bucketed
+ * raw-event dedupe key. This lets a retry repair a failed derivative write
+ * without inventing another lifecycle occurrence. */
+export function attentionObservationDedupeKey(sessionId: string, sourceEventId: number): string {
+  return `attention_state_observed|${sessionId}|source:${sourceEventId}`;
+}
+
+export function attentionObservationPayload(
+  sessionId: string,
+  sourceEventId: number,
+  o: AttentionObservation
+): string {
+  return JSON.stringify({
+    v: 1,
+    source_event_id: sourceEventId,
+    session_id: sessionId,
+    state: o.state,
+    source_hook: o.sourceHook,
+    observed_at: o.observedAt,
+    run_id: o.runId,
+    project_key: o.projectKey,
+    tab_id: o.context.tabId,
+    adapter_id: o.context.agent,
+    actor_id: o.context.actorId,
+  });
+}
+
+/** Persist a raw hook and, only when the existing state machine accepted a
+ * live parent state, its durable attention observation. Keeping this ordered
+ * in the repo layer means duplicate hooks share one source occurrence. */
+export async function addHookEvent(
+  sessionId: string,
+  type: string,
+  payloadJson: string,
+  observation?: AttentionObservation
+): Promise<EventWriteResult> {
+  const previous = hookWriteChains.get(sessionId) ?? Promise.resolve();
+  const task = previous.catch(() => undefined).then(() => addHookEventNow(sessionId, type, payloadJson, observation));
+  const tail = task.then(
+    () => undefined,
+    () => undefined
   );
+  hookWriteChains.set(sessionId, tail);
+  try {
+    return await task;
+  } finally {
+    if (hookWriteChains.get(sessionId) === tail) hookWriteChains.delete(sessionId);
+  }
+}
+
+async function addHookEventNow(
+  sessionId: string,
+  type: string,
+  payloadJson: string,
+  observation?: AttentionObservation
+): Promise<EventWriteResult> {
+  const d = await getDb();
+  const ts = Date.now();
+  const raw = await writeEvent(d, sessionId, type, payloadJson, ts, dedupeKey(sessionId, type, payloadJson, ts));
+  if (!observation || raw.id == null) return raw;
+  const payload = attentionObservationPayload(sessionId, raw.id, observation);
+  await writeEvent(
+    d,
+    sessionId,
+    "attention_state_observed",
+    payload,
+    observation.observedAt,
+    attentionObservationDedupeKey(sessionId, raw.id)
+  );
+  return raw;
 }
 
 /** Last path segment, for either separator. Agent payloads carry native paths,
@@ -211,18 +316,36 @@ export async function listBlockers(cwd: string): Promise<Blocker[]> {
   );
 }
 
-/** Dedupe while unresolved: manual entries by text, detector entries by detector label. */
-export async function addBlocker(cwd: string, text: string, source: string): Promise<void> {
+/** Dedupe while unresolved: manual entries by text, detector entries by
+ * project + session + detector label so sibling agents remain distinct. */
+export async function addBlocker(
+  cwd: string,
+  text: string,
+  source: string,
+  context: AttentionSourceContext = {}
+): Promise<void> {
   const d = await getDb();
   await d.execute(
-    `INSERT INTO blockers (cwd, text, source, resolved, ts)
-     SELECT $1, $2, $3, 0, $4
+    `INSERT INTO blockers (cwd, text, source, resolved, ts, session_id, tab_id, agent, actor_id)
+     SELECT $1, $2, $3, 0, $4, $5, $6, $7, $8
      WHERE NOT EXISTS (
        SELECT 1 FROM blockers
        WHERE cwd = $1 AND resolved = 0
-         AND ((source = 'manual' AND text = $2) OR (source != 'manual' AND source = $3))
+         AND (
+           (source = 'manual' AND text = $2)
+           OR (source != 'manual' AND source = $3 AND session_id IS $5)
+         )
      )`,
-    [cwd, text, source, Date.now()]
+    [
+      cwd,
+      text,
+      source,
+      Date.now(),
+      context.sessionId ?? null,
+      context.tabId ?? null,
+      context.agent ?? null,
+      context.actorId ?? null,
+    ]
   );
 }
 
@@ -240,12 +363,13 @@ export async function insertDecision(
   sessionId: string,
   cwd: string,
   d: ExtractedDecision,
-  contextJson: string
+  contextJson: string,
+  context: AttentionSourceContext = {}
 ): Promise<void> {
   const db = await getDb();
   await db.execute(
-    `INSERT INTO decisions (session_id, cwd, question, status, user_answer, assumption, context_json, ts)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    `INSERT INTO decisions (session_id, cwd, question, status, user_answer, assumption, context_json, ts, tab_id, agent, actor_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
     [
       sessionId,
       cwd,
@@ -255,6 +379,9 @@ export async function insertDecision(
       d.agent_assumption,
       contextJson,
       Date.now(),
+      context.tabId ?? null,
+      context.agent ?? null,
+      context.actorId ?? null,
     ]
   );
 }

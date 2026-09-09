@@ -20,6 +20,18 @@ verification.
 
 ## Execution order & status
 
+Cross-project attention inbox design added 2026-09-07 against `c0c0cdd`,
+combining IDEAS #4 and Astra A. It is unscheduled and does not replace the
+current phase's `PLAN.md`. The plan includes ordered implementation slices,
+provider capability limits, and sequential solo execution. Review update:
+explicitly choose the approximately 12-hour UI spike, the 48–80-hour durable
+build, or deferral before phase assignment. New test dependencies require
+separate explicit approval.
+
+| Plan | Title | Priority | Effort | Depends on | Status |
+|------|-------|----------|--------|------------|--------|
+| [001](001-cross-project-attention-inbox.md) | Cross-project attention inbox | P1 | L (6–10d + dogfood) | Existing Phase 14/21 foundations; identity/query prerequisites included | TODO |
+
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
 | Codex 001 | Carry Codex adapter identity through ingestion | P1 | M | — | DONE (Phase 16) |

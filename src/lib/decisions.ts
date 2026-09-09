@@ -5,8 +5,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { buildPrompt, parseExtraction, type TurnPair } from "./extractor";
 import { serialize } from "./extractorQueue";
 import * as repo from "./repo";
+import type { AttentionSourceContext } from "../types";
 
-const assistantBuf = new Map<string, string>(); // session_id -> pending assistant text
+interface PendingAssistant {
+  text: string;
+  context: AttentionSourceContext;
+}
+
+const assistantBuf = new Map<string, PendingAssistant>(); // session_id -> pending assistant text
 
 export function textFromTranscriptLine(line: string): { role: string; text: string } | null {
   try {
@@ -60,7 +66,12 @@ export function textFromTranscriptLine(line: string): { role: string; text: stri
   }
 }
 
-async function extract(sessionId: string, cwd: string, pair: TurnPair): Promise<void> {
+async function extract(
+  sessionId: string,
+  cwd: string,
+  pair: TurnPair,
+  context: AttentionSourceContext
+): Promise<void> {
   const s = await repo.getExtractorSettings();
   const raw = await invoke<string>("run_extractor", {
     prompt: buildPrompt(pair),
@@ -72,15 +83,21 @@ async function extract(sessionId: string, cwd: string, pair: TurnPair): Promise<
   const decisions = parseExtraction(raw);
   if (!decisions) return; // contract violation → drop, fail open
   for (const d of decisions) {
-    await repo.insertDecision(sessionId, cwd, d, JSON.stringify(pair));
+    await repo.insertDecision(sessionId, cwd, d, JSON.stringify(pair), context);
   }
 }
 
-function enqueue(sessionId: string, cwd: string, pair: TurnPair, onDone: () => void): void {
+function enqueue(
+  sessionId: string,
+  cwd: string,
+  pair: TurnPair,
+  context: AttentionSourceContext,
+  onDone: () => void
+): void {
   // ponytail: cheap prefilter — no question mark and no assumption language
   // means nothing to extract; saves an LLM call on most turns.
   if (!/\?|assum/i.test(pair.assistant)) return;
-  void serialize(() => extract(sessionId, cwd, pair))
+  void serialize(() => extract(sessionId, cwd, pair, context))
     .then(onDone)
     .catch(() => undefined);
 }
@@ -90,27 +107,40 @@ export function onTranscript(
   sessionId: string,
   cwd: string | undefined,
   line: string,
-  onDone: () => void
+  onDone: () => void,
+  context: AttentionSourceContext = { sessionId }
 ): void {
   const msg = textFromTranscriptLine(line);
   if (!msg) return;
   if (msg.role === "assistant") {
     const prev = assistantBuf.get(sessionId);
-    assistantBuf.set(sessionId, prev ? `${prev}\n${msg.text}` : msg.text);
+    assistantBuf.set(sessionId, {
+      text: prev ? `${prev.text}\n${msg.text}` : msg.text,
+      // Capture context with the assistant message, before extraction enters
+      // its async queue. A later tab switch cannot retarget this decision.
+      context: prev?.context ?? { ...context },
+    });
     return;
   }
   // user reply closes the pending pair
   const assistant = assistantBuf.get(sessionId);
   assistantBuf.delete(sessionId);
-  if (assistant && cwd) enqueue(sessionId, cwd, { assistant, user: msg.text }, onDone);
+  if (assistant && cwd) enqueue(sessionId, cwd, { assistant: assistant.text, user: msg.text }, assistant.context, onDone);
 }
 
 /** Feed Stop hooks here: turn ended with no user reply. Delayed so the
  *  500ms transcript tailer can deliver the turn's trailing assistant lines. */
-export function onStop(sessionId: string, cwd: string | undefined, onDone: () => void): void {
+export function onStop(
+  sessionId: string,
+  cwd: string | undefined,
+  onDone: () => void,
+  context: AttentionSourceContext = { sessionId }
+): void {
   setTimeout(() => {
     const assistant = assistantBuf.get(sessionId);
     assistantBuf.delete(sessionId);
-    if (assistant && cwd) enqueue(sessionId, cwd, { assistant, user: null }, onDone);
+    if (assistant && cwd) {
+      enqueue(sessionId, cwd, { assistant: assistant.text, user: null }, assistant.context ?? { ...context }, onDone);
+    }
   }, 2000);
 }

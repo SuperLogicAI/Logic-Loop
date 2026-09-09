@@ -1,6 +1,21 @@
 // Self-check for the unclaimed-results flag/claim predicate. Run: npm run unclaimed:check
 import { strict as assert } from "node:assert";
-import { seedUnclaimedTabs, shouldFlagUnclaimed } from "../src/lib/ingest";
+import { isTerminalResult, seedUnclaimedTabs, shouldFlagUnclaimed } from "../src/lib/ingest";
+import type { HookPayload } from "../src/types";
+
+const hook = (hook_event_name: string, extra: Record<string, unknown> = {}): HookPayload => ({
+  hook_event_name,
+  session_id: "parent-session",
+  ...extra,
+});
+
+// A Codex Task subagent shares the parent session/tether, so result landing
+// must use agent_id rather than session identity alone.
+assert.equal(isTerminalResult(hook("Stop")), true);
+assert.equal(isTerminalResult(hook("Interrupt")), true);
+assert.equal(isTerminalResult(hook("SessionEnd")), false);
+assert.equal(isTerminalResult(hook("Stop", { agent_id: "child-a" })), false);
+assert.equal(isTerminalResult(hook("Interrupt", { agent_id: "child-a" })), false);
 
 // Background Stop on a non-active tab flags, app focused or not.
 assert.equal(shouldFlagUnclaimed("tab-2", "tab-1", true), true, "background tab Stop did not flag");

@@ -300,7 +300,7 @@ fn normalize_tool_args(args: &mut serde_json::Value) {
 
 /// Headless entry point: `main.rs` routes `--antigravity-hook <Event>` here
 /// before booting the GUI. Reads Antigravity's native stdin JSON, translates
-/// it, and shells out to the same `ingest::hook_command()` curl one-liner
+/// it, and shells out to the same `ingest::hook_command_with_agent()` curl one-liner
 /// every other adapter's hook already uses — reusing its tether/marker/
 /// timeout handling rather than duplicating it. Always exits 0: a
 /// translation or delivery failure must never surface to Antigravity as a
@@ -313,7 +313,7 @@ pub fn run_hook_mode(event_name: &str) -> ! {
         if translated.get("session_id").and_then(|v| v.as_str()).is_some_and(|s| !s.is_empty()) {
             if let Ok(mut child) = std::process::Command::new("sh")
                 .arg("-c")
-                .arg(crate::ingest::hook_command())
+                .arg(crate::ingest::hook_command_with_agent(Some("antigravity")))
                 .stdin(std::process::Stdio::piped())
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())

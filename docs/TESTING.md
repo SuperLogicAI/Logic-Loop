@@ -1421,25 +1421,26 @@ deferred to a later phase (see PLAN.md).
       extractor child must remain covered by the
       `LOGIC_LOOP_TAB_ID=__logic_loop_extractor__` tether.
 
-## 32. Codex CLI Sidebar LM backend (Phase 22)
+## 32. Cross-project Attention foundation (Phase 22)
 
-- [ ] Open Sidebar LM and select Codex CLI; close and reopen the settings
-      popover → Codex remains selected.
-- [ ] Leave the Codex model override blank and extract a decision, landing
-      note, and commit-message draft → all three use the configured Codex
-      default without changing the prompts or writing to the terminal.
-- [ ] Enter a model override, rerun one extraction, then clear it → the
-      setting persists and clearing returns to the CLI default.
-- [ ] Run `EXTRACTOR=codex npm run golden` → all 12 fixtures pass, including
-      the injection case.
-- [ ] Temporarily make Codex unavailable or use an invalid model → extraction
-      fails open; terminals and panels remain usable and no partial decision
-      row is written.
-- [ ] During a Codex-backed extraction, confirm no extractor child appears as
-      a Logic Loop session, no cwd changes to `/`, and no recursive decisions
-      are created.
-- [ ] Select Claude CLI and LM Studio afterward → both still work and their
-      existing settings remain intact.
+- [x] Open two agent tabs for the same project and trigger the same detector
+      in each. Confirm each new blocker remains tied to its own session/tab;
+      a manually added blocker remains project-level.
+- [x] Produce an extractable decision, switch tabs before extraction
+      completes, then inspect the row. Its session, tether, and adapter must
+      remain from the observed assistant turn, never the newly active tab.
+- [x] In Codex and OpenCode sessions, confirm observed activity retains the
+      correct adapter marker. Unmarked Claude and legacy observations remain
+      unknown rather than being labeled as another provider.
+- [ ] Repeat the adapter-marker check in a real Antigravity session.
+      *(Deferred 2026-09-08: weekly Antigravity limit exhausted. Required
+      before Phase 22 acceptance; does not block a draft PR.)*
+- [x] Trigger a parent Stop followed by a late subagent event. The parent
+      stays idle, and the subagent neither creates a parent lifecycle
+      observation nor lands/flags an unclaimed result on the parent tab.
+- [x] Temporarily make the database unavailable while a hook arrives. The
+      terminal remains usable; the app may lose attention evidence but does
+      not block, type, or alter the terminal session.
 
 ## Quality gates (machine-run, not manual)
 

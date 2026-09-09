@@ -8,6 +8,36 @@ export interface Bookmark {
 
 export type AgentState = "working" | "waiting" | "idle" | "error";
 
+export type AttentionKind = "decision" | "waiting" | "stalled" | "result" | "blocker";
+
+/** Source identity captured at ingestion time. It is deliberately distinct
+ * from an inbox route: historical/project-level rows can lack some fields. */
+export interface AttentionSourceContext {
+  sessionId?: string;
+  tabId?: string;
+  agent?: string;
+  actorId?: string;
+}
+
+/** Common durable read shape for the cross-project Attention inbox. The
+ * query/UI arrive in later phases; defining it now keeps source writes typed. */
+export interface AttentionItem {
+  id: string;
+  kind: AttentionKind;
+  projectKey: string;
+  sessionId: string | null;
+  tabId: string | null;
+  adapterId: string | null;
+  actorId: string | null;
+  createdAt: number;
+  lastActivityAt: number | null;
+  text: string;
+  evidenceId: number | null;
+  actionability: "act" | "review" | "investigate" | "unknown";
+  confidence: "explicit" | "inferred" | "unknown";
+  route: "exact" | "session" | "project" | "unavailable";
+}
+
 export interface Tab {
   id: string;
   ptyId: number;
@@ -34,6 +64,10 @@ export interface Tab {
 export interface Blocker {
   id: number;
   cwd: string;
+  session_id: string | null;
+  tab_id: string | null;
+  agent: string | null;
+  actor_id: string | null;
   text: string;
   source: string; // 'manual' | detector label
   resolved: number;
@@ -59,6 +93,9 @@ export interface Decision {
   id: number;
   session_id: string;
   cwd: string;
+  tab_id: string | null;
+  agent: string | null;
+  actor_id: string | null;
   question: string;
   status: "open" | "answered" | "delegated" | "dismissed";
   user_answer: string | null;

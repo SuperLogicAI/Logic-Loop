@@ -164,6 +164,20 @@ pub fn run() {
         // resume_command, which is exactly what pre-adapter bindings are.
         sql: "ALTER TABLE session_bindings ADD COLUMN agent TEXT;",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 11,
+        description: "attention source context",
+        // Historical rows stay NULL: the inbox must never invent a session,
+        // tether, adapter, or actor for evidence it did not observe.
+        sql: "ALTER TABLE blockers ADD COLUMN session_id TEXT;
+              ALTER TABLE blockers ADD COLUMN tab_id TEXT;
+              ALTER TABLE blockers ADD COLUMN agent TEXT;
+              ALTER TABLE blockers ADD COLUMN actor_id TEXT;
+              ALTER TABLE decisions ADD COLUMN tab_id TEXT;
+              ALTER TABLE decisions ADD COLUMN agent TEXT;
+              ALTER TABLE decisions ADD COLUMN actor_id TEXT;",
+        kind: MigrationKind::Up,
     }];
 
     tauri::Builder::default()

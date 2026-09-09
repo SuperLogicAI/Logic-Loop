@@ -188,7 +188,7 @@ export function SidePanel({
     });
 
   const dismissUnclaimed = async (sessionId: string) => {
-    await repo.addEvent(sessionId, "result_claimed", "{}");
+    await repo.addEvent(sessionId, "result_claimed", JSON.stringify({ v: 1, project_key: cwd }));
     await reload();
   };
 
