@@ -9,7 +9,7 @@ const MARKER: &str = "logic-loop-opencode-plugin";
 
 /// Bump when the plugin's translated payload shape changes in a way a reader
 /// must know about, same role as `ingest.rs`'s `HOOK_VERSION`.
-const OPENCODE_PLUGIN_VERSION: u32 = 1;
+const OPENCODE_PLUGIN_VERSION: u32 = 2;
 
 /// OpenCode resolves its global config dir from `$XDG_CONFIG_HOME` or
 /// `~/.config` on every platform, including Windows — no per-OS branch.
@@ -100,6 +100,7 @@ export const LogicLoopAdapter = async ({{ directory }}) => {{
           Authorization: `Bearer ${{ingest.CT_TOKEN}}`,
           "X-Logic-Loop-Tab": tabId,
           "X-Logic-Loop-Hook": String(VERSION),
+          "X-Logic-Loop-Agent": "opencode",
           "Content-Type": "application/json",
         }},
         body: JSON.stringify(payload),
@@ -318,6 +319,7 @@ mod tests {
         let src = plugin_source();
         assert!(src.contains(&format!("version {OPENCODE_PLUGIN_VERSION}")));
         assert!(src.contains("X-Logic-Loop-Tab"));
+        assert!(src.contains("X-Logic-Loop-Agent\": \"opencode"));
         assert!(src.contains("LOGIC_LOOP_TAB_ID"));
         assert!(src.contains("ingest.env"));
     }

@@ -15,6 +15,8 @@ import {
   seedUnclaimedTabs,
   shouldFlagUnclaimed,
   shouldNotify,
+  sourceContextForHook,
+  isTerminalResult,
   stateForHook,
 } from "./lib/ingest";
 import { detectBlockers } from "./lib/detectors";
@@ -25,12 +27,17 @@ import { SidePanel } from "./components/SidePanel";
 import { LandingNoteModal } from "./components/LandingNoteModal";
 import { FanOutModal } from "./components/FanOutModal";
 import { IsolateLoopModal } from "./components/IsolateLoopModal";
+import { AttentionInbox } from "./components/AttentionInbox";
 import type { Decision } from "./types";
 import { ptyWrite } from "./lib/pty";
 import { TabBar } from "./components/TabBar";
 import { AgentStatusBar } from "./components/AgentStatusBar";
 import { BookmarksBar } from "./components/BookmarksBar";
 import { Terminal } from "./components/Terminal";
+import {
+  buildAttentionItems,
+  type AttentionTabSnapshot,
+} from "./lib/attention";
 import {
   canonicalizeCwd,
   getLastInputTs,
@@ -43,7 +50,21 @@ import {
 } from "./lib/pty";
 import { sanitizeSlug } from "./lib/worktree";
 import * as repo from "./lib/repo";
-import type { Bookmark, FanOutRollup, SpawnGroup, SpawnGroupMember, Tab } from "./types";
+import {
+  togglePanelHidden,
+  togglePanelMode,
+  type VisiblePanelMode,
+} from "./lib/panelLayout";
+import type {
+  AttentionEvidence,
+  AttentionSourceContext,
+  Bookmark,
+  FanOutRollup,
+  PanelMode,
+  SpawnGroup,
+  SpawnGroupMember,
+  Tab,
+} from "./types";
 import { PALETTE } from "./types";
 
 export default function App() {
@@ -55,9 +76,32 @@ export default function App() {
   const activeIdRef = useRef(activeId);
   activeIdRef.current = activeId;
   const didInit = useRef(false);
+  // One browser process is one Attention observation run. Later inbox queries
+  // use it to avoid reviving a historical working state after relaunch.
+  const attentionRunIdRef = useRef(crypto.randomUUID());
   const [home, setHome] = useState("");
-  const [railOpen, setRailOpen] = useState(true);
+  const [panelMode, setPanelMode] = useState<PanelMode>("expanded");
+  const panelModeRef = useRef<PanelMode>(panelMode);
+  panelModeRef.current = panelMode;
+  const [lastVisiblePanelMode, setLastVisiblePanelMode] = useState<VisiblePanelMode>("expanded");
+  const lastVisiblePanelModeRef = useRef<VisiblePanelMode>(lastVisiblePanelMode);
+  lastVisiblePanelModeRef.current = lastVisiblePanelMode;
+  const panelLayoutTouchedRef = useRef(false);
   const [panelRefresh, setPanelRefresh] = useState(0);
+  const [attentionEvidence, setAttentionEvidence] = useState<AttentionEvidence[]>([]);
+  const [attentionLoading, setAttentionLoading] = useState(true);
+  const [attentionStale, setAttentionStale] = useState(false);
+  const [attentionRefresh, setAttentionRefresh] = useState(0);
+  const [attentionOpen, setAttentionOpen] = useState(false);
+  const attentionRefreshPendingRef = useRef(false);
+  const scheduleAttentionRefresh = useCallback(() => {
+    if (attentionRefreshPendingRef.current) return;
+    attentionRefreshPendingRef.current = true;
+    queueMicrotask(() => {
+      attentionRefreshPendingRef.current = false;
+      setAttentionRefresh((value) => value + 1);
+    });
+  }, []);
   const [blockerCountsByCwd, setBlockerCountsByCwd] = useState<Record<string, number>>({});
   const [unseenStops, setUnseenStops] = useState<Set<string>>(new Set());
   const unseenStopsRef = useRef(unseenStops);
@@ -75,6 +119,34 @@ export default function App() {
   const [blindSessions, setBlindSessions] = useState<Record<string, string>>({});
   // Adapter setup warnings (e.g. foreign PostToolUse hook collision in older agy).
   const [adapterWarnings, setAdapterWarnings] = useState<Array<{ agent: string; reason: string }>>([]);
+
+  const applyPanelLayout = useCallback(
+    (next: { mode: PanelMode; lastVisible: VisiblePanelMode }) => {
+      panelLayoutTouchedRef.current = true;
+      panelModeRef.current = next.mode;
+      lastVisiblePanelModeRef.current = next.lastVisible;
+      setPanelMode(next.mode);
+      setLastVisiblePanelMode(next.lastVisible);
+      void Promise.all([
+        repo.setPanelMode(next.mode),
+        repo.setPanelLastVisibleMode(next.lastVisible),
+      ]).catch(() => undefined);
+    },
+    []
+  );
+
+  const togglePanel = useCallback(() => {
+    applyPanelLayout(togglePanelMode(panelModeRef.current, lastVisiblePanelModeRef.current));
+  }, [applyPanelLayout]);
+
+  const toggleHiddenPanel = useCallback(() => {
+    applyPanelLayout(togglePanelHidden(panelModeRef.current, lastVisiblePanelModeRef.current));
+  }, [applyPanelLayout]);
+
+  const showPanelMode = useCallback(
+    (mode: VisiblePanelMode) => applyPanelLayout({ mode, lastVisible: mode }),
+    [applyPanelLayout]
+  );
 
   // Nudges (Phase 6): muted project keys, cached so the hot ingestion path
   // never blocks on a DB read before deciding whether to notify.
@@ -111,6 +183,38 @@ export default function App() {
     [home]
   );
 
+  useEffect(() => {
+    let cancelled = false;
+    setAttentionLoading(true);
+    void repo
+      .listAttentionEvidence(attentionRunIdRef.current)
+      .then((rows) => {
+        if (cancelled) return;
+        setAttentionEvidence(rows);
+        setAttentionStale(false);
+        setAttentionLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAttentionStale(true);
+        setAttentionLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [attentionRefresh]);
+
+  const attentionItems = useMemo(() => {
+    const attentionTabs: AttentionTabSnapshot[] = tabs.map((tab) => ({
+      id: tab.id,
+      cwd: expand(tab.cwd),
+      sessionId: tab.sessionId,
+      agent: tab.agent,
+      status: tab.status,
+    }));
+    return buildAttentionItems(attentionEvidence, attentionTabs, attentionRunIdRef.current, now);
+  }, [attentionEvidence, expand, now, tabs]);
+
   // Prompt a landing note when leaving a tab that had agent activity since the
   // last prompt. Debounced to one prompt per tab per 10 min (tab-flipping while
   // testing must not spam the ritual). Never stacks over an open modal.
@@ -136,12 +240,14 @@ export default function App() {
 
   const refreshBlockerCounts = useCallback(() => {
     void repo.blockerCounts().then(setBlockerCountsByCwd).catch(() => undefined);
-  }, []);
+    scheduleAttentionRefresh();
+  }, [scheduleAttentionRefresh]);
 
   const refreshDecisionCounts = useCallback(() => {
     void repo.decisionCounts().then(setDecisionCountsByCwd).catch(() => undefined);
     setPanelRefresh((n) => n + 1);
-  }, []);
+    scheduleAttentionRefresh();
+  }, [scheduleAttentionRefresh]);
 
   useEffect(() => {
     void homeDir().then((h) => setHome(h.replace(/\/$/, "")));
@@ -358,7 +464,19 @@ export default function App() {
     if (!unseenStopsRef.current.has(tabId)) return; // nothing to claim — no event to persist
     const tab = tabsRef.current.find((t) => t.id === tabId);
     if (tab?.sessionId) {
-      void repo.addEvent(tab.sessionId, "result_claimed", "{}").catch(() => undefined);
+      void repo
+        .addEvent(
+          tab.sessionId,
+          "result_claimed",
+          JSON.stringify({
+            v: 1,
+            project_key: expand(tab.cwd),
+            tab_id: tab.id,
+            adapter_id: tab.agent,
+          })
+        )
+        .then(scheduleAttentionRefresh)
+        .catch(() => undefined);
     }
     setUnseenStops((s) => {
       if (!s.has(tabId)) return s;
@@ -366,7 +484,7 @@ export default function App() {
       next.delete(tabId);
       return next;
     });
-  }, []);
+  }, [expand, scheduleAttentionRefresh]);
 
   // Since-you-left anchor (Phase 14a): written whenever the human stops
   // looking at a tab that has a bound session — tab switch, window blur, tab
@@ -375,7 +493,17 @@ export default function App() {
     (tab: Tab) => {
       if (!tab.sessionId) return;
       void repo
-        .addEvent(tab.sessionId, "tab_left", JSON.stringify({ cwd: expand(tab.cwd), tab_id: tab.id }))
+        .addEvent(
+          tab.sessionId,
+          "tab_left",
+          JSON.stringify({
+            v: 1,
+            cwd: expand(tab.cwd),
+            project_key: expand(tab.cwd),
+            tab_id: tab.id,
+            adapter_id: tab.agent,
+          })
+        )
         .catch(() => undefined);
     },
     [expand]
@@ -482,6 +610,15 @@ export default function App() {
     if (didInit.current) return; // StrictMode double-mount guard
     didInit.current = true;
     void refreshBookmarks();
+    void Promise.all([repo.getPanelMode(), repo.getPanelLastVisibleMode()])
+      .then(([mode, lastVisible]) => {
+        if (panelLayoutTouchedRef.current) return;
+        panelModeRef.current = mode;
+        lastVisiblePanelModeRef.current = lastVisible;
+        setPanelMode(mode);
+        setLastVisiblePanelMode(lastVisible);
+      })
+      .catch(() => undefined);
     // reap PTYs orphaned by a webview crash/reload, then start fresh
     void ptyKillAll().then(async () => {
       // Ghost tabs: sessions still active when the app last quit. Never
@@ -519,19 +656,21 @@ export default function App() {
   // drive the per-tab agent state machine.
   const bindingsRef = useRef(new Map<string, string>()); // session_id -> tab id
   const sessionCwdRef = useRef(new Map<string, string>()); // session_id -> project cwd
+  const sessionContextRef = useRef(new Map<string, AttentionSourceContext>()); // frozen source identity per session
 
   useEffect(() => {
     const bindings = bindingsRef.current;
     const sessionCwd = sessionCwdRef.current;
+    const sessionContexts = sessionContextRef.current;
 
     // Detection lives here — the ingestion layer. Panels only read SQL.
-    const runDetectors = (sessionId: string, text: string) => {
+    const runDetectors = (sessionId: string, text: string, context: AttentionSourceContext) => {
       const cwd = sessionCwd.get(sessionId);
       if (!cwd) return;
       for (const d of detectBlockers(text)) {
         const line = text.split("\n").find((l) => d.re.test(l))?.trim().slice(0, 120) ?? d.label;
         void repo
-          .addBlocker(cwd, line, d.label)
+          .addBlocker(cwd, line, d.label, context)
           .then(() => {
             refreshBlockerCounts();
             setPanelRefresh((n) => n + 1);
@@ -555,53 +694,12 @@ export default function App() {
         ? computeProvenance(p.tab_id, p.tab_id ? getLastInputTs(p.tab_id) : undefined, Date.now())
         : undefined;
       const payload = provenance ? { ...p, provenance } : p;
-      void repo
-        .addEvent(p.session_id, `hook:${p.hook_event_name}`, JSON.stringify(payload))
-        .catch(() => undefined); // fail open: panel data loss must not break terminals
-
       // project_key (repo root, derived server-side) is the panel key; p.cwd is
       // the agent's literal dir and may be a subdir of it.
       const projectKey = p.project_key ?? p.cwd?.replace(/\/$/, "");
       if (projectKey) {
         sessionCwd.set(p.session_id, projectKey);
       }
-      // Re-entry write path: only tethered sessions (started by this app) are
-      // ours to resume — an outside terminal's SessionStart carries no tab_id.
-      // transcript_path is allowed to be absent (a Codex SessionStart can send
-      // none) — stored as an empty-string sentinel; resume never reads this
-      // column, only tail-worthiness (gated separately in ingest.rs) does.
-      if (p.hook_event_name === "SessionStart" && p.tab_id && projectKey && p.cwd) {
-        void repo
-          .upsertSessionBinding(p.session_id, p.tab_id, projectKey, p.cwd, p.transcript_path ?? "", p.agent)
-          .catch(() => undefined); // fail open, same as addEvent above
-      }
-      if (p.hook_event_name === "Stop") {
-        decisions.onStop(p.session_id, sessionCwd.get(p.session_id), refreshDecisionCounts);
-      }
-      // A completed or interrupted turn is a real result worth flagging when
-      // unseen; SessionEnd alone is session shutdown, not a new result — it
-      // only closes the epoch (via stateForHook), it doesn't land one here.
-      const isTerminalResult = p.hook_event_name === "Stop" || p.hook_event_name === "Interrupt";
-      if (p.hook_event_name === "PostToolUse") {
-        // Scoped to Bash/run_command: Read/Grep/Glob tool_response is file/doc
-        // content, not command output — scanning it flags blockers on error
-        // strings quoted in comments or docs (e.g. this file's own landmine
-        // notes) rather than real failures. run_command is Antigravity's
-        // shell-command tool (Phase 16) — file-edit tools are deliberately
-        // not added here, this gate is for command *output*, not edit content.
-        if (p["tool_name"] === "Bash" || p["tool_name"] === "run_command") {
-          const resp = p["tool_response"];
-          const text =
-            typeof resp === "string"
-              ? resp
-              : resp && typeof resp === "object"
-                ? Object.values(resp).filter((v): v is string => typeof v === "string").join("\n")
-                : "";
-          runDetectors(p.session_id, text);
-        }
-        setPanelRefresh((n) => n + 1); // accomplished panel has a new row
-      }
-
       let tabId = bindings.get(p.session_id);
       if (!tabId) {
         const match = bindSession(
@@ -618,7 +716,52 @@ export default function App() {
           bindings.set(p.session_id, tabId);
         }
       }
-      if (!tabId) return; // session from an outside terminal
+      const sourceContext = sourceContextForHook(p, tabId);
+      sessionContexts.set(p.session_id, sourceContext);
+      // Re-entry write path: only tethered sessions (started by this app) are
+      // ours to resume — an outside terminal's SessionStart carries no tab_id.
+      // transcript_path is allowed to be absent (a Codex SessionStart can send
+      // none) — stored as an empty-string sentinel; resume never reads this
+      // column, only tail-worthiness (gated separately in ingest.rs) does.
+      if (p.hook_event_name === "SessionStart" && p.tab_id && projectKey && p.cwd) {
+        void repo
+          .upsertSessionBinding(p.session_id, p.tab_id, projectKey, p.cwd, p.transcript_path ?? "", p.agent)
+          .catch(() => undefined); // fail open, same as addEvent above
+      }
+      if (p.hook_event_name === "Stop") {
+        decisions.onStop(p.session_id, sessionCwd.get(p.session_id), refreshDecisionCounts, sourceContext);
+      }
+      // A completed or interrupted turn is a real result worth flagging when
+      // unseen; SessionEnd alone is session shutdown, not a new result — it
+      // only closes the epoch (via stateForHook), it doesn't land one here.
+      const terminalResult = isTerminalResult(p);
+      if (p.hook_event_name === "PostToolUse") {
+        // Scoped to Bash/run_command: Read/Grep/Glob tool_response is file/doc
+        // content, not command output — scanning it flags blockers on error
+        // strings quoted in comments or docs (e.g. this file's own landmine
+        // notes) rather than real failures. run_command is Antigravity's
+        // shell-command tool (Phase 16) — file-edit tools are deliberately
+        // not added here, this gate is for command *output*, not edit content.
+        if (p["tool_name"] === "Bash" || p["tool_name"] === "run_command") {
+          const resp = p["tool_response"];
+          const text =
+            typeof resp === "string"
+              ? resp
+              : resp && typeof resp === "object"
+                ? Object.values(resp).filter((v): v is string => typeof v === "string").join("\n")
+                : "";
+          runDetectors(p.session_id, text, sourceContext);
+        }
+        setPanelRefresh((n) => n + 1); // accomplished panel has a new row
+      }
+
+      if (!tabId) {
+        void repo
+          .addHookEvent(p.session_id, `hook:${p.hook_event_name}`, JSON.stringify(payload))
+          .then(scheduleAttentionRefresh)
+          .catch(() => undefined); // fail open: panel data loss must not break terminals
+        return; // session from an outside terminal
+      }
       tabActivityRef.current.set(tabId, Date.now()); // for the landing-note ritual
       // A new turn is a fresh epoch — let the next stall re-notify.
       if (p.hook_event_name === "UserPromptSubmit") nudgedStallRef.current.delete(tabId);
@@ -626,6 +769,24 @@ export default function App() {
       const prevAgentState = tabsRef.current.find((t) => t.id === tabId)?.agentState;
       const state = stateForHook(p);
       const cwd = sessionCwd.get(p.session_id);
+      void repo
+        .addHookEvent(
+          p.session_id,
+          `hook:${p.hook_event_name}`,
+          JSON.stringify(payload),
+          state
+            ? {
+                state,
+                sourceHook: p.hook_event_name,
+                observedAt: Date.now(),
+                runId: attentionRunIdRef.current,
+                projectKey: cwd,
+                context: sourceContext,
+              }
+            : undefined
+        )
+        .then(scheduleAttentionRefresh)
+        .catch(() => undefined); // fail open: attention evidence never affects the terminal
       setTabs((prev) =>
         prev.map((t) => {
           if (t.id !== tabId) return t;
@@ -662,14 +823,26 @@ export default function App() {
       // agent finished on a tab the human isn't looking at right now — either
       // a background tab (app focused, different tab active) or the whole app
       // backgrounded. Flagged until claimTab (tab switch / window focus).
-      if (isTerminalResult && shouldFlagUnclaimed(tabId, activeIdRef.current, document.hasFocus())) {
+      if (terminalResult && shouldFlagUnclaimed(tabId, activeIdRef.current, document.hasFocus())) {
         const id = tabId;
         setUnseenStops((s) => new Set(s).add(id));
         // Without a cwd the row can never match unclaimedResults' cwd filter —
         // skip the write rather than persist an event nothing can read.
         if (cwd) {
           void repo
-            .addEvent(p.session_id, "result_landed", JSON.stringify({ cwd }))
+            .addEvent(
+              p.session_id,
+              "result_landed",
+              JSON.stringify({
+                v: 1,
+                cwd,
+                project_key: cwd,
+                tab_id: sourceContext.tabId,
+                adapter_id: sourceContext.agent,
+                actor_id: sourceContext.actorId,
+              })
+            )
+            .then(scheduleAttentionRefresh)
             .catch(() => undefined);
         }
         if (canNotify()) notify("Finished", nudgeLabel);
@@ -681,7 +854,13 @@ export default function App() {
       // Blocker detection deliberately skips raw transcript lines (assistant/
       // user prose, quoted doc content) — PostToolUse's Bash-scoped tool_response
       // above is the only real-error channel now. See note there.
-      decisions.onTranscript(p.session_id, sessionCwd.get(p.session_id), p.line, refreshDecisionCounts);
+      decisions.onTranscript(
+        p.session_id,
+        sessionCwd.get(p.session_id),
+        p.line,
+        refreshDecisionCounts,
+        sessionContexts.get(p.session_id) ?? { sessionId: p.session_id }
+      );
       // transcripts flowing again → clear any warning for this session
       setBlindSessions((s) => {
         if (!(p.session_id in s)) return s;
@@ -706,7 +885,7 @@ export default function App() {
       cancelled = true;
       unlisteners.forEach((u) => u());
     };
-  }, [expand, refreshBlockerCounts, refreshDecisionCounts]);
+  }, [expand, refreshBlockerCounts, refreshDecisionCounts, scheduleAttentionRefresh]);
 
   // File drag-drop: the webview intercepts native drops (no DOM drop events),
   // so paste dropped paths into the active terminal — the human dragged them,
@@ -820,19 +999,24 @@ export default function App() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
-      if (mod && e.key === "b") {
+      const key = e.key.toLowerCase();
+      if (mod && key === "k") {
         e.preventDefault();
-        setRailOpen((o) => !o);
-      } else if (mod && e.key === "t") {
+        setAttentionOpen((open) => !open);
+      } else if (mod && key === "b") {
+        e.preventDefault();
+        if (e.shiftKey) toggleHiddenPanel();
+        else togglePanel();
+      } else if (mod && key === "t") {
         e.preventDefault();
         void openTab();
-      } else if (mod && e.key === "w") {
+      } else if (mod && key === "w") {
         e.preventDefault();
         setActiveId((a) => {
           if (a) closeTab(a);
           return a;
         });
-      } else if (mod && e.key === "v") {
+      } else if (mod && key === "v") {
         // The menu's Paste role was removed (it double-pasted into terminals),
         // so form inputs need a manual ⌘V. Terminals handle their own ⌘V via
         // xterm's custom key handler — skip its hidden helper textarea here.
@@ -873,7 +1057,7 @@ export default function App() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [openTab, closeTab]);
+  }, [openTab, closeTab, toggleHiddenPanel, togglePanel]);
 
   // On tab switch: offer the landing prompt for the tab we left, and claim
   // the tab switched to. A closed tab is gone here — closeTab already
@@ -917,6 +1101,13 @@ export default function App() {
   }, [markTabLeft]);
 
   const activeTab = tabs.find((t) => t.id === activeId) ?? null;
+
+  const openAttentionTab = useCallback((tabId: string) => {
+    const tab = tabsRef.current.find((candidate) => candidate.id === tabId && candidate.status === "live");
+    if (!tab) return;
+    setAttentionOpen(false);
+    setActiveId(tab.id);
+  }, []);
 
   // Answer-now prefill: writes a draft into the bound tab's terminal and marks
   // the decision answered. User edits and presses Enter — never sent by us.
@@ -975,8 +1166,10 @@ export default function App() {
         onReorder={reorderBookmarks}
       />
       <div className="flex min-h-0 flex-1">
-        {railOpen && activeTab && (
+        {panelMode !== "hidden" && activeTab && (
           <SidePanel
+            mode={panelMode}
+            onModeChange={showPanelMode}
             cwd={expand(activeTab.cwd)}
             sessionId={activeTab.sessionId ?? null}
             tabTether={activeTab.id}
@@ -996,10 +1189,14 @@ export default function App() {
             onDecisionsChanged={refreshDecisionCounts}
             onAnswerNow={answerNow}
             onMuteChanged={refreshMutedProjects}
+            attentionCount={attentionItems.length}
+            attentionLoading={attentionLoading}
+            attentionStale={attentionStale}
+            onOpenAttention={() => setAttentionOpen(true)}
           />
         )}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <AgentStatusBar />
+          <AgentStatusBar panelMode={panelMode} onTogglePanel={togglePanel} />
           <div className="min-h-0 flex-1">
             {tabs.map((tab) => (
               <Terminal
@@ -1052,6 +1249,16 @@ export default function App() {
             setIsolateLoopModalOpen(false);
           }}
           onCancel={() => setIsolateLoopModalOpen(false)}
+        />
+      )}
+      {attentionOpen && (
+        <AttentionInbox
+          items={attentionItems}
+          now={now}
+          loading={attentionLoading}
+          stale={attentionStale}
+          onClose={() => setAttentionOpen(false)}
+          onOpenTab={openAttentionTab}
         />
       )}
     </div>

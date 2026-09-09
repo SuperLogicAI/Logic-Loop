@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ask } from "@tauri-apps/plugin-dialog";
 import * as repo from "../lib/repo";
@@ -9,6 +9,8 @@ import { collapseNoopRuns, groupIterations, isLoopRun, type Iteration } from "..
 import { deriveClock, formatAge } from "../lib/ingest";
 import { parseBoard, readBoard, spliceCard, writeBoard, type Card } from "../lib/board";
 import { topPlannedCard } from "./IdeaBoard";
+import { PanelIcon } from "./PanelIcon";
+import { SidebarLmControl } from "./SidebarLmControl";
 import {
   gitAddAll,
   gitAddU,
@@ -24,13 +26,21 @@ import {
 } from "../lib/pty";
 import { DiffModal } from "./DiffModal";
 import { HUES, RainbowText } from "./RainbowText";
-import type { AgentState, Blocker, Commit, Decision, FanOutRollup, Note, ToolEvent } from "../types";
+import {
+  PANEL_COMPACT_WIDTH,
+  PANEL_DEFAULT_WIDTH,
+  clampPanelWidth,
+  type VisiblePanelMode,
+} from "../lib/panelLayout";
+import type { AgentState, Blocker, Commit, Decision, FanOutRollup, Note, PanelMode, ToolEvent } from "../types";
 
 // Gradient border for the Next card when a landing note is waiting — the only
 // visual cue that it's a landing note, not a decision/blocker in the same slot.
 const RAINBOW_BORDER = `linear-gradient(90deg, ${[...HUES, HUES[0]].map((h) => `hsl(${h} 85% 62%)`).join(", ")})`;
 
 interface Props {
+  mode: PanelMode;
+  onModeChange: (mode: VisiblePanelMode) => void;
   cwd: string; // expanded absolute project dir of the active tab
   sessionId: string | null; // session currently bound to the active tab, for scoping decisions/tool events away from sibling tabs on the same cwd
   tabTether: string; // active tab's own id — the since-you-left anchor key
@@ -50,12 +60,53 @@ interface Props {
   onDecisionsChanged: () => void;
   onAnswerNow: (d: Decision) => void; // prefill terminal — user still hits Enter
   onMuteChanged: () => void; // App's notify-hot-path mute cache needs a refresh
+  attentionCount: number;
+  attentionLoading: boolean;
+  attentionStale: boolean;
+  onOpenAttention: () => void;
 }
 
 // Long lists collapse to this many rows behind a full-width ＋ toggle.
 const ROW_CAP = 5;
 const EXPAND_BTN =
   "mt-1.5 w-full rounded border border-zinc-800 py-0.5 text-center text-zinc-500 hover:border-zinc-700 hover:bg-zinc-800/50 hover:text-zinc-200";
+
+type RailSection = "since-left" | "notes" | "next" | "decisions" | "blockers" | "accomplished" | "gitlog";
+
+function RailButton({
+  label,
+  section,
+  icon,
+  count,
+  className = "text-zinc-500",
+  onClick,
+}: {
+  label: string;
+  section: RailSection | "attention" | "warnings" | "expand";
+  icon: ReactNode;
+  count?: number;
+  className?: string;
+  onClick: () => void;
+}) {
+  const shownCount = count === undefined ? null : count > 99 ? "99+" : String(count);
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      data-rail-section={section}
+      className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-md hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400 ${className}`}
+      onClick={onClick}
+    >
+      {icon}
+      {shownCount && (
+        <span className="absolute top-0 right-0 min-w-3.5 rounded-full bg-zinc-700 px-0.5 text-center font-mono text-[8px] leading-3.5 text-zinc-100">
+          {shownCount}
+        </span>
+      )}
+    </button>
+  );
+}
 
 // Unicode ▾/▸ render as an unstyled fallback glyph (tofu dot) at 9px in the
 // webview font — SVG avoids relying on font glyph coverage.
@@ -73,6 +124,21 @@ function Chevron({ collapsed, className }: { collapsed: boolean; className?: str
       className={`shrink-0 transition-transform ${collapsed ? "-rotate-90" : ""} ${className ?? ""}`}
     >
       <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+function WarningIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M12 2.5 22 20.5H2L12 2.5Z" fill="currentColor" />
+      <path d="M12 8v6" stroke="white" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="12" cy="17.25" r="1.15" fill="white" />
     </svg>
   );
 }
@@ -114,6 +180,8 @@ function ago(ts: number): string {
 }
 
 export function SidePanel({
+  mode,
+  onModeChange,
   cwd,
   sessionId,
   tabTether,
@@ -133,6 +201,10 @@ export function SidePanel({
   onDecisionsChanged,
   onAnswerNow,
   onMuteChanged,
+  attentionCount,
+  attentionLoading,
+  attentionStale,
+  onOpenAttention,
 }: Props) {
   const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
   const [muted, setMuted] = useState(false);
@@ -171,8 +243,16 @@ export function SidePanel({
   const [footerError, setFooterError] = useState<string | null>(null);
   const [footerOpen, setFooterOpen] = useState(false);
   const [prUrl, setPrUrl] = useState<string | null>(null);
-  const [width, setWidth] = useState(288); // w-72
+  const [liveWidth, setLiveWidth] = useState(PANEL_DEFAULT_WIDTH);
   const resizeStart = useRef<{ x: number; width: number } | null>(null);
+  const pendingSectionRef = useRef<RailSection | null>(null);
+  const sinceLeftRef = useRef<HTMLElement>(null);
+  const notesRef = useRef<HTMLElement>(null);
+  const nextRef = useRef<HTMLElement>(null);
+  const decisionsRef = useRef<HTMLElement>(null);
+  const blockersRef = useRef<HTMLElement>(null);
+  const accomplishedRef = useRef<HTMLElement>(null);
+  const gitLogRef = useRef<HTMLElement>(null);
   // cwd -> the diff a cached message was generated from, so a repeat click
   // (or an unrelated panel refresh) never re-calls the LLM for the same diff.
   const commitCacheRef = useRef(new Map<string, { diff: string; message: string }>());
@@ -190,7 +270,7 @@ export function SidePanel({
     });
 
   const dismissUnclaimed = async (sessionId: string) => {
-    await repo.addEvent(sessionId, "result_claimed", "{}");
+    await repo.addEvent(sessionId, "result_claimed", JSON.stringify({ v: 1, project_key: cwd }));
     await reload();
   };
 
@@ -201,6 +281,33 @@ export function SidePanel({
       else next.add(key);
       return next;
     });
+
+  const openRailSection = (section: RailSection) => {
+    pendingSectionRef.current = section;
+    setCollapsed((current) => {
+      if (!current.has(section)) return current;
+      const next = new Set(current);
+      next.delete(section);
+      return next;
+    });
+    onModeChange("expanded");
+  };
+
+  useEffect(() => {
+    if (mode !== "expanded" || !pendingSectionRef.current) return;
+    const refs: Record<RailSection, RefObject<HTMLElement | null>> = {
+      "since-left": sinceLeftRef,
+      notes: notesRef,
+      next: nextRef,
+      decisions: decisionsRef,
+      blockers: blockersRef,
+      accomplished: accomplishedRef,
+      gitlog: gitLogRef,
+    };
+    const target = pendingSectionRef.current;
+    refs[target].current?.scrollIntoView({ block: "start" });
+    pendingSectionRef.current = null;
+  }, [mode]);
 
   // A fan-out child never picked up its own tether (its CLI fires no Claude
   // Code hooks, so `sessionId` stays null forever) is not the same "no
@@ -278,6 +385,19 @@ export function SidePanel({
   useEffect(() => {
     void reload();
   }, [reload, refreshKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void repo
+      .getPanelWidth()
+      .then((storedWidth) => {
+        if (!cancelled) setLiveWidth(storedWidth);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Footer state (error/PR link/expanded) belongs to whichever cwd produced
   // it — carrying it across a tab switch makes a stale error from tab A read
@@ -493,6 +613,12 @@ export function SidePanel({
     onBlockersChanged();
   };
 
+  const clearAllBlockers = async () => {
+    await repo.resolveAllBlockers(cwd);
+    await reload();
+    onBlockersChanged();
+  };
+
   const remove = async (b: Blocker) => {
     await repo.deleteBlocker(b.id);
     await reload();
@@ -510,6 +636,15 @@ export function SidePanel({
   const openDecisions = decisions.filter((d) => d.status === "open");
   const closedDecisions = decisions.filter((d) => d.status !== "open").slice(0, 10);
   const decisionGroups = repo.groupDecisionsBySession(openDecisions);
+  const hasDelta =
+    delta !== null &&
+    (delta.files.length > 0 ||
+      delta.bashRuns > 0 ||
+      delta.turns > 0 ||
+      delta.stops > 0 ||
+      delta.decisions.length > 0 ||
+      delta.lastWords !== "");
+  const hasWarnings = adapterWarnings.length > 0 || blindPaths.length > 0 || sessionBlind;
 
   // Most recent cluster expanded by default, older ones collapsed — reseed
   // only when the active project changes, so a manual toggle survives a
@@ -536,16 +671,19 @@ export function SidePanel({
   // lives in the bottom-right corner, unreachable on a full-height panel.
   const onResizePointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
-    resizeStart.current = { x: e.clientX, width };
+    resizeStart.current = { x: e.clientX, width: liveWidth };
+    let completedWidth = liveWidth;
     const onMove = (ev: PointerEvent) => {
       if (!resizeStart.current) return;
       const next = resizeStart.current.width + (ev.clientX - resizeStart.current.x);
-      setWidth(Math.min(512, Math.max(192, next)));
+      completedWidth = clampPanelWidth(next);
+      setLiveWidth(completedWidth);
     };
     const onUp = () => {
       resizeStart.current = null;
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      void repo.setPanelWidth(completedWidth).catch(() => undefined);
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -555,10 +693,147 @@ export function SidePanel({
   const parentGroups = fanOut.filter((f) => f.isParent);
   const visibleParentGroups = showAllFanOut ? parentGroups : parentGroups.slice(0, 1);
 
+  if (mode === "compact") {
+    const projectName = cwd.split("/").filter(Boolean).pop() ?? cwd;
+    const stateLabel = `${projectName}: ${agentState ?? "no session"}${
+      lastEventTs !== undefined
+        ? `, last event ${formatAge(deriveClock({ agentState, lastEventTs }, now).quietMs)} ago`
+        : ", no events yet"
+    }`;
+    const stateColor =
+      agentState === "working"
+        ? "bg-blue-400"
+        : agentState === "waiting"
+          ? "bg-yellow-400"
+          : agentState === "idle"
+            ? "bg-emerald-500"
+            : agentState === "error"
+              ? "bg-red-500"
+              : "bg-zinc-600";
+    const warningLabel = [
+      ...adapterWarnings.map(adapterWarningMessage),
+      ...(blindPaths.length > 0
+        ? [`No transcript for ${blindPaths.length} session${blindPaths.length === 1 ? "" : "s"}`]
+        : sessionBlind
+          ? ["No transcript for this session"]
+          : []),
+    ].join("; ");
+
+    return (
+      <aside
+        className="flex h-full shrink-0 flex-col overflow-hidden border-r border-zinc-800 bg-zinc-900 text-zinc-500"
+        style={{ width: PANEL_COMPACT_WIDTH }}
+        aria-label="Compact project panel"
+      >
+        <div
+          className="flex h-10 w-full shrink-0 items-center justify-center"
+          role="img"
+          aria-label={stateLabel}
+          title={stateLabel}
+        >
+          <span
+            className={`h-2.5 w-2.5 rounded-full ${stateColor}`}
+            style={accent ? { boxShadow: `0 0 0 2px rgb(24 24 27), 0 0 0 4px ${accent}` } : undefined}
+          />
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col items-center overflow-x-hidden overflow-y-auto px-1 py-1">
+          <RailButton
+            label={
+              attentionLoading
+                ? "Attention: loading"
+                : attentionStale
+                  ? `Attention may be stale: ${attentionCount} item${attentionCount === 1 ? "" : "s"}`
+                  : `Attention: ${attentionCount} item${attentionCount === 1 ? "" : "s"}`
+            }
+            section="attention"
+            icon={
+              <PanelIcon
+                name={attentionCount > 0 ? "global-mail-unread" : "global-mail-read"}
+                className="h-5 w-5"
+              />
+            }
+            count={attentionCount || undefined}
+            className={attentionStale ? "text-orange-300" : attentionCount > 0 ? "text-sky-300" : "text-zinc-600"}
+            onClick={onOpenAttention}
+          />
+          {hasWarnings && (
+            <RailButton
+              label={`Panel warning: ${warningLabel}`}
+              section="warnings"
+              icon={<WarningIcon className="h-5 w-5" />}
+              className="text-orange-300"
+              onClick={() => onModeChange("expanded")}
+            />
+          )}
+          <div className="my-1 w-7 shrink-0 border-t border-zinc-800" />
+          {hasDelta && (
+            <RailButton
+              label="Since You Left"
+              section="since-left"
+              icon={<PanelIcon name="since-left" className="h-5 w-5" />}
+              className="text-teal-400"
+              onClick={() => openRailSection("since-left")}
+            />
+          )}
+          <RailButton
+            label={notes.length > 0 ? `Notes and Reminders: ${notes.length} open` : "Notes and Reminders: none open"}
+            section="notes"
+            icon={<PanelIcon name="notes" className="h-5 w-5" />}
+            count={notes.length || undefined}
+            className={notes.length > 0 ? "text-zinc-200" : "text-zinc-600"}
+            onClick={() => openRailSection("notes")}
+          />
+          {momentum && (
+            <RailButton
+              label={`Next: ${momentum.label}`}
+              section="next"
+              icon={<PanelIcon name="next" className="h-5 w-5" rainbow={momentum.label === "landing note"} />}
+              className="text-yellow-300"
+              onClick={() => openRailSection("next")}
+            />
+          )}
+          <RailButton
+            label={openDecisions.length > 0 ? `Decisions: ${openDecisions.length} open` : "Decisions: none open"}
+            section="decisions"
+            icon={<PanelIcon name="decisions" className="h-[18px] w-[18px]" />}
+            count={openDecisions.length || undefined}
+            className={openDecisions.length > 0 ? "text-orange-400" : "text-zinc-600"}
+            onClick={() => openRailSection("decisions")}
+          />
+          <RailButton
+            label={open.length > 0 ? `Blockers: ${open.length} open` : "Blockers: none open"}
+            section="blockers"
+            icon={<PanelIcon name="blockers" className="h-5 w-5" />}
+            count={open.length || undefined}
+            className={open.length > 0 ? "text-red-400" : "text-zinc-600"}
+            onClick={() => openRailSection("blockers")}
+          />
+          <RailButton
+            label={unclaimed.length > 0 ? `Accomplished: ${unclaimed.length} unclaimed` : "Accomplished: no unclaimed results"}
+            section="accomplished"
+            icon={<PanelIcon name="accomplished" className="h-5 w-5" />}
+            count={unclaimed.length || undefined}
+            className={unclaimed.length > 0 ? "text-emerald-400" : "text-zinc-600"}
+            onClick={() => openRailSection("accomplished")}
+          />
+        </div>
+        <div className="mx-2 border-t border-zinc-800" />
+        <div className="flex h-12 shrink-0 items-center justify-center">
+          <RailButton
+            label="GitHub and Git log"
+            section="gitlog"
+            icon={<PanelIcon name="github" className="h-5 w-5" />}
+            onClick={() => openRailSection("gitlog")}
+          />
+        </div>
+      </aside>
+    );
+  }
+
   return (
     <div
       className="relative flex h-full shrink-0 flex-col overflow-hidden border-r border-zinc-800 bg-zinc-900 text-xs text-zinc-300"
-      style={{ width }}
+      style={{ width: liveWidth }}
     >
       <div
         className="absolute right-0 top-0 z-10 h-full w-1.5 -mr-0.5 cursor-col-resize hover:bg-zinc-600/60 active:bg-zinc-500"
@@ -566,23 +841,42 @@ export function SidePanel({
       />
       {/* Pinned header: never scrolls away. Text takes the project's bookmark
           color when one exists; plain grey otherwise. */}
-      <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-zinc-800 px-3">
-        <p
-          className="min-w-0 flex-1 truncate font-mono text-[10px] text-zinc-500"
-          style={accent ? { color: accent } : undefined}
-          title={cwd}
-        >
-          project: {cwd.split("/").filter(Boolean).pop() ?? cwd}
-        </p>
-        <p className="shrink-0 text-[10px] text-zinc-600" title="Phase 14b clock">
-          {agentState ?? "no session"}
-          {" · "}
-          {lastEventTs !== undefined
-            ? `${formatAge(deriveClock({ agentState, lastEventTs }, now).quietMs)} ago`
-            : "no events yet"}
-        </p>
+      <div className="flex h-9 shrink-0 items-center gap-2 px-3">
+        <div className="min-w-0 flex-1">
+          <p
+            className="w-full truncate font-mono text-[10px] leading-none text-zinc-500"
+            style={accent ? { color: accent } : undefined}
+            title={cwd}
+          >
+            project: {cwd.split("/").filter(Boolean).pop() ?? cwd}
+          </p>
+          <p className="mt-0.5 w-full truncate text-[9px] leading-none text-zinc-600" title="Phase 14b clock">
+            {agentState ?? "no session"}
+            {" · "}
+            {lastEventTs !== undefined
+              ? `${formatAge(deriveClock({ agentState, lastEventTs }, now).quietMs)} ago`
+              : "no events yet"}
+          </p>
+        </div>
         <button
-          className={`flex shrink-0 items-center gap-1 rounded px-1 leading-none ${muted ? "text-zinc-600 hover:text-zinc-400" : "text-zinc-400 hover:text-zinc-200"}`}
+          type="button"
+          aria-label={`Open Attention Inbox${attentionCount ? `, ${attentionCount} items` : ""}`}
+          title={attentionStale ? "Open Attention Inbox (data may be stale)" : "Open Attention Inbox (⌘K)"}
+          className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-sky-400 ${attentionStale ? "text-orange-300" : attentionCount > 0 ? "text-sky-300" : "text-zinc-600"}`}
+          onClick={onOpenAttention}
+        >
+          <PanelIcon name={attentionCount > 0 ? "global-mail-unread" : "global-mail-read"} className="h-4 w-4" />
+          {attentionCount > 0 && (
+            <span className="absolute -right-1 -top-0.5 min-w-3 rounded-full bg-zinc-700 px-0.5 text-center font-mono text-[7px] leading-3 text-zinc-100">
+              {attentionCount > 99 ? "99+" : attentionCount}
+            </span>
+          )}
+        </button>
+      </div>
+      <div className="flex h-8 shrink-0 items-center gap-1.5 border-b border-zinc-800 px-3">
+        <SidebarLmControl />
+        <button
+          className={`ml-auto flex h-7 shrink-0 items-center gap-1 rounded-full px-2 leading-none ${muted ? "text-zinc-600 hover:bg-zinc-800 hover:text-zinc-400" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}
           title={muted ? "Notifications muted for this project — click to unmute" : "Mute notifications for this project"}
           onClick={() => void toggleMute()}
         >
@@ -612,9 +906,10 @@ export function SidePanel({
       {adapterWarnings.map((w, i) => (
         <p
           key={`${w.agent}-${w.reason}-${i}`}
-          className="flex shrink-0 items-start gap-1 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-[10px] text-amber-300"
+          className="flex shrink-0 items-center gap-2 border-b border-orange-400/40 bg-rose-500/10 px-3 py-1.5 text-[10px] text-orange-200"
         >
-          <span>⚠ {adapterWarningMessage(w)}</span>
+          <WarningIcon className="h-7 w-7 shrink-0 text-orange-300" />
+          <span className="min-w-0 flex-1 leading-4">{adapterWarningMessage(w)}</span>
         </p>
       ))}
       {/* Blind sessions: hooks arrive but the transcript file will not open, so
@@ -622,19 +917,22 @@ export function SidePanel({
           says so rather than looking like a quiet day. */}
       {blindPaths.length > 0 && (
         <p
-          className="flex shrink-0 items-start gap-1 border-b border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[10px] text-red-300"
+          className="flex shrink-0 items-center gap-2 border-b border-orange-400/40 bg-rose-500/10 px-3 py-1.5 text-[10px] text-orange-200"
           title={blindPaths.join("\n")}
         >
-          <span>
-            ⚠ no transcript for {blindPaths.length} session{blindPaths.length > 1 ? "s" : ""} — decisions
-            incomplete
+          <WarningIcon className="h-7 w-7 shrink-0 text-orange-300" />
+          <span className="min-w-0 flex-1 leading-4">
+            <span className="block">
+              no transcript for {blindPaths.length} session{blindPaths.length > 1 ? "s" : ""}
+            </span>
+            <span className="block">— decisions incomplete</span>
           </span>
           {/* Not every blind session is a failure: Claude Desktop cowork sessions
               share ~/.claude/settings.json (so they send hooks) but never write a
               flat <id>.jsonl, so they warn forever. Detecting them is Phase 6;
               until then, say so here rather than let the strip cry wolf. */}
           <span
-            className="ml-auto cursor-help text-red-300/60"
+            className="ml-auto flex h-7 w-7 shrink-0 cursor-help items-center justify-center text-xl leading-none text-orange-200/60"
             title={
               "Expected for Claude Desktop cowork sessions: they send hooks but never write a transcript file, so this warning will not clear.\n\n" +
               "For a Claude Code session it means decisions are genuinely being missed."
@@ -661,12 +959,13 @@ export function SidePanel({
           delta.stops > 0 ||
           delta.decisions.length > 0 ||
           delta.lastWords !== "") && (
-        <section className="rounded-lg border border-teal-500/30 bg-teal-400/5 p-3">
+        <section ref={sinceLeftRef} className="scroll-mt-3 rounded-lg border border-teal-500/30 bg-teal-400/5 p-3">
           <h2
             className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-teal-300 uppercase select-none"
             onClick={() => toggleSection("since-left")}
           >
             <Chevron collapsed={collapsed.has("since-left")} className="text-teal-300/85" />
+            <PanelIcon name="since-left" className="h-4 w-4" />
             Since you left
           </h2>
           {!collapsed.has("since-left") &&
@@ -760,8 +1059,9 @@ export function SidePanel({
             ))}
         </section>
       )}
-      <section className="border-b border-zinc-800 pb-3">
-        <h2 className="mb-1.5 font-semibold tracking-wide text-zinc-300 uppercase">
+      <section ref={notesRef} className="scroll-mt-3 border-b border-zinc-800 pb-3">
+        <h2 className="mb-1.5 flex items-center gap-1.5 font-semibold tracking-wide text-zinc-300 uppercase">
+          <PanelIcon name="notes" className="h-4 w-4" />
           Notes and reminders
         </h2>
         <input
@@ -858,6 +1158,7 @@ export function SidePanel({
       )}
       {momentum && (
         <section
+          ref={nextRef}
           className={
             momentum.label === "landing note"
               ? "rounded-lg p-3"
@@ -878,7 +1179,8 @@ export function SidePanel({
           }
         >
           <h2 className="mb-1 flex items-center gap-1.5 font-semibold tracking-wide text-yellow-300 uppercase">
-            <Chevron collapsed={false} className="text-yellow-300" /> Next
+            <Chevron collapsed={false} className="text-yellow-300" />
+            <PanelIcon name="next" className="h-4 w-4" rainbow={momentum.label === "landing note"} /> Next
             <span className="ml-auto font-normal text-[10px] normal-case text-zinc-500">
               {momentum.label === "landing note" ? <RainbowText text={momentum.label} /> : momentum.label}
             </span>
@@ -894,12 +1196,13 @@ export function SidePanel({
         </section>
       )}
 
-      <section>
+      <section ref={decisionsRef} className="scroll-mt-3">
         <h2
           className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-orange-400 uppercase select-none"
           onClick={() => toggleSection("decisions")}
         >
           <Chevron collapsed={collapsed.has("decisions")} className="text-orange-400/85" />
+          <PanelIcon name="decisions" className="h-3.5 w-3.5" />
           Decisions {openDecisions.length > 0 && `(${openDecisions.length})`}
         </h2>
         {!collapsed.has("decisions") && (
@@ -991,13 +1294,26 @@ export function SidePanel({
         )}
       </section>
 
-      <section>
+      <section ref={blockersRef} className="scroll-mt-3">
         <h2
           className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-red-400 uppercase select-none"
           onClick={() => toggleSection("blockers")}
         >
           <Chevron collapsed={collapsed.has("blockers")} className="text-red-400/85" />
+          <PanelIcon name="blockers" className="h-4 w-4" />
           Blockers {open.length > 0 && `(${open.length})`}
+          {open.length > 1 && (
+            <button
+              className="ml-auto font-normal text-[10px] text-red-700 normal-case hover:text-red-400"
+              title="Resolve all open blockers"
+              onClick={(e) => {
+                e.stopPropagation();
+                void clearAllBlockers();
+              }}
+            >
+              clear all
+            </button>
+          )}
         </h2>
         {!collapsed.has("blockers") && (
           <>
@@ -1075,12 +1391,13 @@ export function SidePanel({
         )}
       </section>
 
-      <section>
+      <section ref={accomplishedRef} className="scroll-mt-3">
         <h2
           className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-emerald-400 uppercase select-none"
           onClick={() => toggleSection("accomplished")}
         >
           <Chevron collapsed={collapsed.has("accomplished")} className="text-emerald-400/85" />
+          <PanelIcon name="accomplished" className="h-4 w-4" />
           Accomplished
         </h2>
         {!collapsed.has("accomplished") && (
@@ -1145,12 +1462,13 @@ export function SidePanel({
         )}
       </section>
 
-      <section>
+      <section ref={gitLogRef} className="scroll-mt-3">
         <h2
           className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-sky-400 uppercase select-none"
           onClick={() => toggleSection("gitlog")}
         >
           <Chevron collapsed={collapsed.has("gitlog")} className="text-sky-400/85" />
+          <PanelIcon name="github" className="h-4 w-4" />
           Git log
         </h2>
         {!collapsed.has("gitlog") && (

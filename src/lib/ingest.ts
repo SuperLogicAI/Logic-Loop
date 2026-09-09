@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { AgentState, HookPayload } from "../types";
+import type { AgentState, AttentionSourceContext, HookPayload } from "../types";
 
 export function hooksSetup(): Promise<void> {
   return invoke("hooks_setup");
@@ -233,7 +233,7 @@ export function formatAge(ms: number): string {
 /** Map a hook event to the tab's agent state; null = no state change. */
 export function stateForHook(p: HookPayload): AgentState | null {
   // Subagent events carry agent_id; they never drive tab state.
-  if (typeof p["agent_id"] === "string" && p["agent_id"] !== "") return null;
+  if (isSubagentHook(p)) return null;
   switch (p.hook_event_name) {
     case "UserPromptSubmit":
       stoppedSessions.delete(p.session_id);
@@ -260,4 +260,28 @@ export function stateForHook(p: HookPayload): AgentState | null {
     default:
       return null;
   }
+}
+
+/** Codex subagents share the parent's session/tether, so event name and
+ * session alone cannot prove the parent turn completed. */
+export function isSubagentHook(p: HookPayload): boolean {
+  return typeof p["agent_id"] === "string" && p["agent_id"] !== "";
+}
+
+/** A landed result belongs only to a parent Stop/Interrupt. SessionEnd closes
+ * the epoch without producing a result, and a subagent completion must never
+ * flag its parent's tab as finished. */
+export function isTerminalResult(p: HookPayload): boolean {
+  return !isSubagentHook(p) && (p.hook_event_name === "Stop" || p.hook_event_name === "Interrupt");
+}
+
+/** Freeze the trusted identity attached to a normalized hook before work is
+ * queued. The hook tether wins over a later cwd fallback binding. */
+export function sourceContextForHook(p: HookPayload, matchedTabId?: string): AttentionSourceContext {
+  return {
+    sessionId: p.session_id,
+    tabId: p.tab_id ?? matchedTabId,
+    agent: p.agent,
+    actorId: typeof p["agent_id"] === "string" && p["agent_id"] ? p["agent_id"] : undefined,
+  };
 }

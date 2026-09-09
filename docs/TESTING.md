@@ -1421,25 +1421,142 @@ deferred to a later phase (see PLAN.md).
       extractor child must remain covered by the
       `LOGIC_LOOP_TAB_ID=__logic_loop_extractor__` tether.
 
-## 32. Codex CLI Sidebar LM backend (Phase 22)
+## 32. Cross-project Attention foundation (Phase 22)
 
-- [ ] Open Sidebar LM and select Codex CLI; close and reopen the settings
-      popover → Codex remains selected.
-- [ ] Leave the Codex model override blank and extract a decision, landing
-      note, and commit-message draft → all three use the configured Codex
-      default without changing the prompts or writing to the terminal.
-- [ ] Enter a model override, rerun one extraction, then clear it → the
-      setting persists and clearing returns to the CLI default.
-- [ ] Run `EXTRACTOR=codex npm run golden` → all 12 fixtures pass, including
-      the injection case.
-- [ ] Temporarily make Codex unavailable or use an invalid model → extraction
-      fails open; terminals and panels remain usable and no partial decision
-      row is written.
-- [ ] During a Codex-backed extraction, confirm no extractor child appears as
-      a Logic Loop session, no cwd changes to `/`, and no recursive decisions
-      are created.
-- [ ] Select Claude CLI and LM Studio afterward → both still work and their
-      existing settings remain intact.
+- [x] Open two agent tabs for the same project and trigger the same detector
+      in each. Confirm each new blocker remains tied to its own session/tab;
+      a manually added blocker remains project-level.
+- [x] Produce an extractable decision, switch tabs before extraction
+      completes, then inspect the row. Its session, tether, and adapter must
+      remain from the observed assistant turn, never the newly active tab.
+- [x] In Codex and OpenCode sessions, confirm observed activity retains the
+      correct adapter marker. Unmarked Claude and legacy observations remain
+      unknown rather than being labeled as another provider.
+- [ ] Repeat the adapter-marker check in a real Antigravity session.
+      *(Deferred 2026-09-08: weekly Antigravity limit exhausted. Required
+      before Phase 22 acceptance; does not block a draft PR.)*
+- [x] Trigger a parent Stop followed by a late subagent event. The parent
+      stays idle, and the subagent neither creates a parent lifecycle
+      observation nor lands/flags an unclaimed result on the parent tab.
+- [x] Temporarily make the database unavailable while a hook arrives. The
+      terminal remains usable; the app may lose attention evidence but does
+      not block, type, or alter the terminal session.
+
+## 33. OpenCode repo contract and baseline checks (Phase 23)
+
+- [x] Launch OpenCode 1.x from this repository and ask it to state the phase
+      gate, primary TypeScript/Rust checks, and structured-only ingestion
+      invariant from `AGENTS.md`.
+- [x] Request `git push --dry-run`, `rm` against a disposable test file, and
+      one package mutation command. Confirm OpenCode asks for approval for
+      each, then reject each request.
+- [x] Confirm ordinary `git status`, `rg`, focused checks, edits inside the
+      repository, and `npm run opencode:check` do not gain unexpected prompts.
+- [x] Toggle the Logic Loop OpenCode adapter on, start a new OpenCode session,
+      and confirm activity binds to the correct tab and is stored with
+      `agent: opencode`. OpenCode transcript extraction and tool-error state
+      are not supported by this phase.
+- [x] If validating a change to `AGENTS.md`, restart the OpenCode session first;
+      instruction content is session context, not a live-reloaded UI setting.
+
+## 34. Blockers bulk clear (Phase 24)
+
+- [x] With two or more open blockers, confirm `clear all` is visible; with one
+      or zero open blockers, confirm it is hidden.
+- [x] Click `clear all` and confirm every open blocker moves to resolved
+      history, the Blockers count and project tab badge clear, and momentum
+      advances to its next candidate.
+- [x] Confirm another project's blockers are unchanged.
+- [x] Confirm clicking `clear all` does not collapse the Blockers section and
+      per-row resolve, reopen, and delete still work.
+
+## 35. Folded side rail (Phase 25)
+
+Implementation built and accepted 2026-09-09 from baseline `b623569`.
+Automated layout, type, build, frontend, and Rust gates are recorded below.
+The live macOS GUI matrix passed after the first visual review revised the
+control placement: fold/expand now stays in the shared hook bar, while Sidebar
+LM and Notify occupy a second expanded-panel row.
+
+- [x] Start expanded at a custom width, compact, expand, and confirm the custom
+      width returns. Relaunch and confirm the selected mode and width restore.
+- [x] Exercise `Cmd+B` from expanded, compact, and hidden. Exercise
+      `Cmd+Shift+B` from each visible mode and restore. Confirm no characters
+      appear in the active terminal.
+- [x] Populate decisions, blockers, notes, a Next candidate, a Since You Left
+      delta, and an unclaimed result. Confirm presence, count, and accent rules.
+- [x] Click each compact section icon. Confirm the panel expands, routes to the
+      correct destination, opens collapsed sections, and changes no semantic
+      decision, blocker, note, or result state.
+- [x] With adapter and transcript warnings present, confirm compact mode keeps
+      a visible warning indicator with explanatory tooltip and accessible copy.
+- [x] At the narrowest practical window and a short window, confirm the middle
+      rail scrolls while project state and expand stay pinned, with no overlap
+      over the terminal or Idea Board.
+- [x] Confirm the expanded panel's mute, resize, section collapse, commit
+      footer, context modal, blocker actions, and decision actions are unchanged.
+- [x] Confirm fold/expand stays at the left edge of the hook bar instead of
+      moving to the compact rail bottom; hook pills are vertically aligned and
+      ordered Antigravity, Claude, Codex, OpenCode when all are available.
+- [x] Confirm expanded headings reuse the compact section icons, and the pinned
+      compact GitHub icon expands and routes to Git log without opening or
+      triggering commit/push controls.
+- [x] Confirm the compact rail contains no Inbox, Lock-In, timed-lock,
+      commit/push, or fan-out controls.
+
+## 36. Cross-project Attention Inbox (Phase 26)
+
+Implementation built 2026-09-09 on top of the accepted Phase 25 working tree.
+The focused inbox check, aggregate frontend checks, strict TypeScript check,
+and production build are recorded clean below. Live macOS interaction and
+three-session dogfood remain pending; do not infer visual acceptance from the
+headless gates.
+
+- [ ] Open at least two projects and six tabs. Produce decisions, observed
+      waiting, unclaimed results, unresolved blockers, and a quiet working
+      session. Confirm cross-project presence, project labels, ages, count,
+      and actionability-first ordering.
+- [ ] Open Attention from terminal focus with `Cmd+K`, the compact mail icon,
+      and the expanded-panel header control. Confirm no `k` or other bytes
+      appear in the terminal.
+- [ ] Search, use Up/Down/Enter, select a row and use `Open tab`, then press
+      Escape. Confirm preview behavior, empty-search copy, keyboard focus
+      trapping, and restoration to the previously focused control.
+- [ ] Preview an unclaimed result without navigating and confirm it remains
+      unclaimed. Navigate to it and confirm the existing claim behavior runs
+      once.
+- [ ] Create same-project sibling tabs, then close or retarget destinations.
+      Confirm ambiguous, conflicting, dead, and stale routes show unavailable
+      rather than selecting a guessed sibling.
+- [ ] Relaunch with durable decisions, blockers, and results. Confirm they
+      remain, while prior-run waiting/stalled rows stay absent until fresh live
+      evidence arrives.
+- [ ] Let a working tab cross the real three-minute quiet boundary. Confirm the
+      shared clock adds the quiet row after the boundary and fresh accepted
+      activity removes it without per-row polling.
+- [ ] Temporarily make the Attention query unavailable. Confirm `Attention may
+      be stale` retains the last good list and terminals and existing panels
+      remain usable.
+- [ ] Confirm compact/expanded/hidden panel shortcuts, persisted width,
+      section routing, notifications, tab badges, and the dock badge retain
+      their Phase 25 behavior.
+- [ ] Dogfood Attention for three normal work sessions. Record whether it was
+      used instead of scanning tabs and note duplicate, misleading, or missing
+      rows before approving any pin/snooze/badge follow-up.
+
+Automated evidence (2026-09-09):
+
+- [x] `npm run attention-inbox:check` — all five kinds, strict stall boundary,
+      current-run eligibility, deterministic rank/search, safe route cases,
+      one global query shape, shortcut/UI wiring, and reserved icons pass.
+- [x] `npm run check` — all 22 configured checks pass, including the new
+      `attention-inbox:check` aggregate entry.
+- [x] `npx tsc --noEmit` — strict TypeScript clean.
+- [x] `npm run build` — production frontend build clean; only the existing
+      chunk-size advisory is emitted.
+- [x] `cd src-tauri && cargo test --lib` — 57/57 pass.
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings` — clean.
+- [x] `git diff --check` — clean.
 
 ## 26. Diff pop-out from Accomplished rows (issue #10)
 
@@ -1521,6 +1638,10 @@ and needs a Mac pass.
 - [x] `npm run board:check` — extended with Now-set round-trip/cap assertions. *(Phase 20)*
 - [x] `npm run codex-transcript:check` — redacted real-shape Codex JSONL
       parser, ignored event types, and transcript-as-data assertions pass.
+- [x] `npm run blockers:check` — project-scoped bulk-resolve SQL and Blockers
+      clear-all UI wiring assertions pass. *(new, Phase 24)*
+- [x] `npm run panel-layout:check` — panel mode transitions, invalid persisted
+      values, and width fallback/clamping assertions pass. *(new, Phase 25)*
 - [x] `npm run diff:check` — per-file diff slicing assertions pass, including
       the same-basename-in-a-sibling-directory case that must NOT match.
       *(new, issue #10; run 2026-09-06 on Windows via `npm run check`)*

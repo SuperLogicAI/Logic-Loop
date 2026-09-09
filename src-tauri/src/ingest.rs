@@ -300,7 +300,7 @@ pub(crate) fn hook_command_with_agent(agent: Option<&'static str>) -> String {
 /// identifies a *subagent* within a Codex session and is used by
 /// `stateForHook` to avoid driving the parent tab's state). Extend this list
 /// when a future adapter plan wires up its own marker.
-const RECOGNIZED_AGENTS: [&str; 1] = ["codex"];
+const RECOGNIZED_AGENTS: [&str; 3] = ["codex", "opencode", "antigravity"];
 
 /// An unrecognized or absent header must stay absent rather than being
 /// guessed as Claude — pulled out as a pure function so the allowlist
@@ -478,7 +478,9 @@ mod tests {
     #[test]
     fn recognized_agent_accepts_only_the_allowlist() {
         assert_eq!(recognized_agent(Some("codex")), Some("codex"));
-        assert_eq!(recognized_agent(Some("antigravity")), None);
+        assert_eq!(recognized_agent(Some("opencode")), Some("opencode"));
+        assert_eq!(recognized_agent(Some("antigravity")), Some("antigravity"));
+        assert_eq!(recognized_agent(Some("claude")), None);
         assert_eq!(recognized_agent(Some("")), None);
         assert_eq!(recognized_agent(None), None);
     }
