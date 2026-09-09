@@ -12,6 +12,11 @@ export const DETECTORS: Detector[] = [
   { label: "Merge conflict", re: /merge conflict|CONFLICT \(|Automatic merge failed/i },
   { label: "Rate limited", re: /rate.?limit(?:ed)?|429 Too Many Requests|overloaded_error/i },
   { label: "Missing file/module", re: /command not found|Cannot find module|ModuleNotFoundError|No such file or directory/i },
+  { label: "Port in use", re: /\bEADDRINUSE\b|address already in use|port (?:\d+ )?(?:is )?already in use/i },
+  { label: "Disk full", re: /\bENOSPC\b|No space left on device|disk (?:is )?full/i },
+  { label: "Docker daemon down", re: /Cannot connect to the Docker daemon|Is the docker daemon running|docker daemon is not running/i },
+  { label: "TLS/cert error", re: /\bCERT_HAS_EXPIRED\b|certificate has expired|SSL certificate problem|self.?signed certificate|unable to verify the first certificate|x509: certificate/i },
+  { label: "Lock held", re: /\bELOCKED\b|Unable to acquire lock|another process has locked|Waiting for (?:the )?(?:cache )?lock|could not get lock/i },
 ];
 
 export function detectBlockers(text: string): Detector[] {

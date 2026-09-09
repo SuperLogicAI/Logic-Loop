@@ -1,0 +1,10 @@
+{
+  "assistant": "Veo dos formas de manejar la paginación: cursores o desplazamiento por offset. ¿Cuál prefieres para el endpoint de usuarios?",
+  "user": "Usa cursores.",
+  "expect": {
+    "count": 1,
+    "answered": [
+      true
+    ]
+  }
+}
