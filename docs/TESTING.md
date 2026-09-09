@@ -1442,6 +1442,34 @@ deferred to a later phase (see PLAN.md).
       terminal remains usable; the app may lose attention evidence but does
       not block, type, or alter the terminal session.
 
+## 33. OpenCode repo contract and baseline checks (Phase 23)
+
+- [x] Launch OpenCode 1.x from this repository and ask it to state the phase
+      gate, primary TypeScript/Rust checks, and structured-only ingestion
+      invariant from `AGENTS.md`.
+- [x] Request `git push --dry-run`, `rm` against a disposable test file, and
+      one package mutation command. Confirm OpenCode asks for approval for
+      each, then reject each request.
+- [x] Confirm ordinary `git status`, `rg`, focused checks, edits inside the
+      repository, and `npm run opencode:check` do not gain unexpected prompts.
+- [x] Toggle the Logic Loop OpenCode adapter on, start a new OpenCode session,
+      and confirm activity binds to the correct tab and is stored with
+      `agent: opencode`. OpenCode transcript extraction and tool-error state
+      are not supported by this phase.
+- [x] If validating a change to `AGENTS.md`, restart the OpenCode session first;
+      instruction content is session context, not a live-reloaded UI setting.
+
+## 34. Blockers bulk clear (Phase 24)
+
+- [x] With two or more open blockers, confirm `clear all` is visible; with one
+      or zero open blockers, confirm it is hidden.
+- [x] Click `clear all` and confirm every open blocker moves to resolved
+      history, the Blockers count and project tab badge clear, and momentum
+      advances to its next candidate.
+- [x] Confirm another project's blockers are unchanged.
+- [x] Confirm clicking `clear all` does not collapse the Blockers section and
+      per-row resolve, reopen, and delete still work.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*
@@ -1494,3 +1522,5 @@ deferred to a later phase (see PLAN.md).
 - [x] `npm run board:check` — extended with Now-set round-trip/cap assertions. *(Phase 20)*
 - [x] `npm run codex-transcript:check` — redacted real-shape Codex JSONL
       parser, ignored event types, and transcript-as-data assertions pass.
+- [x] `npm run blockers:check` — project-scoped bulk-resolve SQL and Blockers
+      clear-all UI wiring assertions pass. *(new, Phase 24)*

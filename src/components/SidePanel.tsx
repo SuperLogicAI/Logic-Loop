@@ -491,6 +491,12 @@ export function SidePanel({
     onBlockersChanged();
   };
 
+  const clearAllBlockers = async () => {
+    await repo.resolveAllBlockers(cwd);
+    await reload();
+    onBlockersChanged();
+  };
+
   const remove = async (b: Blocker) => {
     await repo.deleteBlocker(b.id);
     await reload();
@@ -996,6 +1002,18 @@ export function SidePanel({
         >
           <Chevron collapsed={collapsed.has("blockers")} className="text-red-400/85" />
           Blockers {open.length > 0 && `(${open.length})`}
+          {open.length > 1 && (
+            <button
+              className="ml-auto font-normal text-[10px] text-red-700 normal-case hover:text-red-400"
+              title="Resolve all open blockers"
+              onClick={(e) => {
+                e.stopPropagation();
+                void clearAllBlockers();
+              }}
+            >
+              clear all
+            </button>
+          )}
         </h2>
         {!collapsed.has("blockers") && (
           <>

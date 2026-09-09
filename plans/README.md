@@ -31,6 +31,8 @@ separate explicit approval.
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
 | [001](001-cross-project-attention-inbox.md) | Cross-project attention inbox | P1 | L (6–10d + dogfood) | Existing Phase 14/21 foundations; identity/query prerequisites included | TODO |
+| [003](003-opencode-repo-contract-and-checks.md) | OpenCode repo contract and baseline checks | P1 | S (0.5–1d + manual pass) | Phase 22 accepted and committed | DONE — Phase 23 accepted |
+| [004](004-folded-side-rail.md) | Folded side rail | P1 | M (1–2d + live visual pass) | Phase 24 accepted and committed | TODO — candidate for Phase 25 |
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
@@ -42,7 +44,7 @@ separate explicit approval.
 | Agy 003 | Antigravity SessionStart emission and session re-entry | P1 | L | Codex 001, Codex 002, Agy 001 | TODO |
 | Agy 004 | Waiting-state signal for `ask_question` | P2 | S | Agy 001 (live verify) | TODO |
 | OpenCode 001 | OpenCode transcript ingestion (decisions / loop digest / landing) | P0 | L | — (002 batches with it) | TODO |
-| OpenCode 002 | Carry OpenCode adapter identity through ingestion | P1 | S | — | TODO |
+| OpenCode 002 | Carry OpenCode adapter identity through ingestion | P1 | S | — | IN PROGRESS (Phase 22 working tree) |
 | OpenCode 003 | Normalize tool responses so OpenCode tool errors read as failures | P1 | S | OpenCode 002 | TODO |
 | OpenCode 004 | Re-load ingest.env per POST so a restarted app reconnects | P2 | S | — | TODO |
 | OpenCode 005 | Map session.error to the Error tab state | P2 | S | — | TODO |
@@ -82,6 +84,16 @@ plan's originally-drafted `invocationNum == 1` assumption.
   verification of OpenCode's `chat.message`/`message.updated` payloads —
   the assistant-side hook registration is gated on it. Do not schedule 001
   without budgeting a live `opencode` session.
+- Plan 003 establishes only the current OpenCode adapter baseline. It pulls a
+  narrow non-live check ahead of OpenCode 008, but does not assert that plan's
+  future transcript or tool-error behavior. Phase 22 must be accepted and
+  committed first because both phases touch `package.json` and
+  `docs/TESTING.md`.
+- Plan 004 is the presentation foundation for the later Attention Inbox and
+  Lock-In work. It deliberately ships no mail/lock controls, notification
+  changes, or duplicate read model. Phase 24 must land first because both
+  phases touch `SidePanel.tsx`, `repo.ts`, `package.json`, and
+  `docs/TESTING.md`.
 
 ## Findings considered and rejected
 

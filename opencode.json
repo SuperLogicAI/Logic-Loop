@@ -1,0 +1,24 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md"],
+  "permission": {
+    "external_directory": "ask",
+    "bash": {
+      "*": "allow",
+      "git push*": "ask",
+      "git reset*": "ask",
+      "git clean*": "ask",
+      "git checkout --*": "ask",
+      "rm *": "ask",
+      "npm install*": "ask",
+      "npm uninstall*": "ask",
+      "npm update*": "ask",
+      "pnpm add*": "ask",
+      "yarn add*": "ask",
+      "cargo add*": "ask",
+      "npm run tauri*build*": "ask",
+      "cargo tauri build*": "ask",
+      "npx tauri build*": "ask"
+    }
+  }
+}

@@ -354,6 +354,12 @@ export async function setBlockerResolved(id: number, resolved: boolean): Promise
   await d.execute("UPDATE blockers SET resolved = $1 WHERE id = $2", [resolved ? 1 : 0, id]);
 }
 
+/** Resolve every open blocker for one project while preserving blocker history. */
+export async function resolveAllBlockers(cwd: string): Promise<void> {
+  const d = await getDb();
+  await d.execute("UPDATE blockers SET resolved = 1 WHERE cwd = $1 AND resolved = 0", [cwd]);
+}
+
 export async function deleteBlocker(id: number): Promise<void> {
   const d = await getDb();
   await d.execute("DELETE FROM blockers WHERE id = $1", [id]);
