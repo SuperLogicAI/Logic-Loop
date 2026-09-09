@@ -37,6 +37,7 @@ switching:
 | **Landing Note** | *State reconstruction cost* — rebuilding mental state on return can take 15–25 min; a written next action collapses it. |
 | **Attention Residue** | *Attention residue* — part of your mind stays on the task you left; externalize the loop to return clean. |
 | **Momentum Builder** | *Re-entry friction* — surfaces the single lowest-friction next action to convert staring into motion. |
+| **Idea Board** | *Where did that idea go* — a per-project kanban dock (idea → planned → building → later → done) living in a git-committed `.logic-loop/board.md`; star up to 3 cards as "Now" and Momentum Builder prefers them over the plain top-of-column pick. |
 
 ## How it works
 
@@ -58,26 +59,40 @@ byte-identically when switched off.
 
 | Agent | Activity, state & fan-out | Decision / blocker extraction | Notes |
 |---|---|---|---|
-| **Claude Code** | ✅ | ✅ | Hooks + JSONL transcript tailing. The reference adapter. |
+| **Claude Code** | ✅ | ✅ | Hooks + JSONL transcript tailing. The reference adapter. Resume/re-entry supported. |
 | **OpenCode** | ✅ | — | In-process plugin translating native events; no transcript file to tail. |
-| **Codex** | ✅ | — | Hook contract is near-identical to Claude's; registers into `~/.codex/hooks.json`. |
+| **Codex** | ✅ | ✅ | Hook contract is near-identical to Claude's; registers into `~/.codex/hooks.json`. Carries its own adapter marker, resumes via `codex resume`, handles `Interrupt`/`SessionEnd` lifecycle events, and can back the Sidebar LM extractor. |
 | **[Antigravity](https://github.com/google-antigravity/antigravity-cli)** (`agy`) | ✅ | — | See caveats below. |
 
-Decision and blocker extraction is Claude-only by design — the other agents
-expose no transcript in a shape the extractor reads, and normalizing them is
-its own piece of work rather than a flag to flip.
+Decision and blocker extraction is available for Claude Code and Codex. The
+Sidebar LM chooser supports Claude CLI (default), Codex CLI, and LM Studio
+(local); Codex CLI uses its configured default model unless an optional model
+override is supplied. The Decisions panel groups open questions into
+per-session, collapsible clusters (newest expanded, one "dismiss all" per
+cluster) instead of one flat list, and its empty state now says *why* nothing's
+showing rather than one generic "nothing waiting" —
+confirmed-empty, blind session (no transcript), unbound fan-out child, or
+"not available for this agent" are each called out distinctly.
 
-Two Antigravity-specific limits, both upstream in `agy` and neither fixable
+Antigravity's tool activity (file edits, commands run) now shows real detail
+in the Accomplished panel and Since-you-left digest, and a second turn in the
+same session correctly returns the tab to "working" instead of freezing on
+"idle" — both were Logic Loop-side gaps, now fixed.
+
+One Antigravity-specific limit remains, upstream in `agy` and not fixable
 from this side (full derivation in [docs/TESTING.md](docs/TESTING.md) §21):
 
 - A tool call that exits non-zero is indistinguishable from one that
   succeeded — `agy` strips the field carrying that status before the hook
   sees it, so an `agy` tab shows "working" rather than "error" on a failed
   command. Everything else still lands.
-- `agy` doesn't merge multiple named `PostToolUse` hooks despite documenting
-  that it does. If you already have your own `PostToolUse` hook in
-  `~/.gemini/config/hooks.json`, Logic Loop's may never fire — the toggle
-  will still read "on". Check for a foreign hook first if no rows appear.
+
+`agy`'s separate `PostToolUse` named-hook merge bug (present through earlier
+`agy` releases) is confirmed fixed upstream as of `agy` 1.1.27. Logic Loop
+now also detects a foreign `PostToolUse` hook in `~/.gemini/config/hooks.json`
+at setup time and surfaces a warning strip if one is found, so an older or
+regressed `agy` install fails loud instead of silently dropping every tool
+event.
 
 ## Status
 
@@ -91,9 +106,13 @@ Early, actively built, dogfooded daily. Shipped:
 - ✅ Re-entry, unclaimed-result tracking, desktop nudges
 - ✅ Fan-out spawn groups — launch and track several agents from one session
 - ✅ OpenCode adapter — first non-Claude ingestion pipeline
-- ✅ Codex adapter
+- ✅ Codex adapter — adapter identity marker, resume/re-entry, Interrupt/SessionEnd lifecycle
 - ✅ Isolated loops (git worktree–backed tabs)
-- ✅ Antigravity (`agy`) adapter
+- ✅ Antigravity (`agy`) adapter — multi-turn tracking fix, normalized tool detail, foreign-`PostToolUse`-hook detection
+- ✅ Decisions grouped by session with per-cluster bulk-dismiss
+- ✅ Decisions empty-state clarity — distinguishes confirmed-empty from
+  blind/unbound/non-Claude-agent
+- ✅ Idea Board — per-project kanban dock with a starred "Now" set
 - ⏳ Crash recovery, onboarding, public release polish
 
 ## Stack
@@ -103,15 +122,35 @@ xterm.js · SQLite (tauri-plugin-sql) · localhost hook-ingest server.
 
 ## Requirements
 
-- macOS (Apple Silicon). Primary supported target.
-- Windows: experimental. CI produces an unsigned NSIS installer for manual
-  testing (SmartScreen warns on first run), not yet officially supported.
+- macOS (Apple Silicon) — primary, daily-dogfooded platform.
+- Windows — early testing build, see below.
 - [Rust](https://rustup.rs) + Node 18+
 - At least one supported agent CLI installed — [Claude Code](https://claude.com/claude-code),
   [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex),
   or [Antigravity](https://github.com/google-antigravity/antigravity-cli)
   (`agy`). Each is detected independently — `PATH` plus the
   usual install locations — and its toggle appears only once found.
+
+## Windows (early testing)
+
+CI compiles and tests the Rust core on `windows-latest` on every push, but the
+macOS build is what's dogfooded daily — treat Windows as early/unverified.
+
+To get an installer:
+
+1. Go to [Actions → Windows build](../../actions/workflows/windows-build.yml)
+   in this repo.
+2. Run the workflow (`Run workflow` button, `main` branch), or grab the
+   artifact from the latest run if one already exists.
+3. Once it finishes, open the run and download the `logic-loop-windows-unsigned`
+   artifact — it's a zip containing a `*-setup.exe` NSIS installer.
+4. Run the installer. It's **unsigned**, so Windows SmartScreen will warn —
+   click **More info → Run anyway**.
+
+No installer is published automatically; each run builds from whatever's on
+`main` at the time. Report issues (crashes, PTY/terminal quirks, missing
+agent detection) via GitHub Issues — include your Windows version and which
+agent CLI you were testing.
 
 ## Development
 

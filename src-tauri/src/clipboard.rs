@@ -20,7 +20,7 @@ pub fn clipboard_text() -> String {
 /// ~/.context-terminal/pastes/ and return the path. None otherwise.
 #[tauri::command]
 pub fn clipboard_image_path() -> Option<String> {
-    let home = std::env::var("HOME").ok()?;
+    let home = crate::home::home()?;
     let dir = std::path::Path::new(&home).join(".context-terminal/pastes");
     std::fs::create_dir_all(&dir).ok()?;
     let ts = std::time::SystemTime::now()

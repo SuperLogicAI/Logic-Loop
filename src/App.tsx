@@ -6,6 +6,9 @@ import { homeDir } from "@tauri-apps/api/path";
 import { ask } from "@tauri-apps/plugin-dialog";
 import {
   bindSession,
+  computeProvenance,
+  deriveClock,
+  onAdapterWarning,
   onHookEvent,
   onTailerFailed,
   onTranscriptLine,
@@ -17,6 +20,7 @@ import {
 import { detectBlockers } from "./lib/detectors";
 import * as decisions from "./lib/decisions";
 import { initNotifications, notify } from "./lib/notify";
+import { IdeaBoard } from "./components/IdeaBoard";
 import { SidePanel } from "./components/SidePanel";
 import { LandingNoteModal } from "./components/LandingNoteModal";
 import { FanOutModal } from "./components/FanOutModal";
@@ -29,6 +33,7 @@ import { BookmarksBar } from "./components/BookmarksBar";
 import { Terminal } from "./components/Terminal";
 import {
   canonicalizeCwd,
+  getLastInputTs,
   gitWorktreeAdd,
   gitWorktreeRemove,
   projectKeyOf,
@@ -57,9 +62,19 @@ export default function App() {
   const [unseenStops, setUnseenStops] = useState<Set<string>>(new Set());
   const unseenStopsRef = useRef(unseenStops);
   unseenStopsRef.current = unseenStops;
+  // Clock on state (Phase 14b): a `now` tick drives the stalled/age display —
+  // agentState never changes on its own, so nothing else would re-render
+  // TabBar/SidePanel as a quiet tab's age grows.
+  const [now, setNow] = useState(() => Date.now());
+  // Stalled-edge nudge dedupe: fires once per turn (epoch), cleared on the
+  // next UserPromptSubmit for that tab — not on the ring clearing, so a tool
+  // call that un-stalls and re-stalls within the same turn doesn't re-notify.
+  const nudgedStallRef = useRef(new Set<string>());
   // Sessions whose transcript file could not be opened — they emit hooks but no
   // transcript, so decisions never extract for them. Silent until surfaced.
   const [blindSessions, setBlindSessions] = useState<Record<string, string>>({});
+  // Adapter setup warnings (e.g. foreign PostToolUse hook collision in older agy).
+  const [adapterWarnings, setAdapterWarnings] = useState<Array<{ agent: string; reason: string }>>([]);
 
   // Nudges (Phase 6): muted project keys, cached so the hot ingestion path
   // never blocks on a DB read before deciding whether to notify.
@@ -242,11 +257,16 @@ export default function App() {
   // Tab-strip glow (all tabs, not just the active one) — same membership
   // data the rollup already tracks, just not scoped to `activeId`.
   const [fanOutChildIds, setFanOutChildIds] = useState<Set<string>>(new Set());
+  const [fanOutParentIds, setFanOutParentIds] = useState<Set<string>>(new Set());
   const [worktreeTabIds, setWorktreeTabIds] = useState<Set<string>>(new Set());
   useEffect(() => {
     void repo
       .allFanOutChildTabIds()
       .then((ids) => setFanOutChildIds(new Set(ids)))
+      .catch(() => undefined);
+    void repo
+      .allFanOutParentTabIds()
+      .then((ids) => setFanOutParentIds(new Set(ids)))
       .catch(() => undefined);
     void repo
       .allWorktreeTabIds()
@@ -348,6 +368,19 @@ export default function App() {
     });
   }, []);
 
+  // Since-you-left anchor (Phase 14a): written whenever the human stops
+  // looking at a tab that has a bound session — tab switch, window blur, tab
+  // close. Never for a tab with no sessionId; nothing to delta against.
+  const markTabLeft = useCallback(
+    (tab: Tab) => {
+      if (!tab.sessionId) return;
+      void repo
+        .addEvent(tab.sessionId, "tab_left", JSON.stringify({ cwd: expand(tab.cwd), tab_id: tab.id }))
+        .catch(() => undefined);
+    },
+    [expand]
+  );
+
   const finishCloseTab = useCallback((tabId: string) => {
     // Side effects outside the updater — StrictMode double-invokes updaters.
     const tab = tabsRef.current.find((t) => t.id === tabId);
@@ -355,6 +388,7 @@ export default function App() {
     // An explicitly closed tab must not ghost back next launch — a tab that
     // died with the app (quit, crash) should.
     void repo.deactivateSessionBinding(tabId).catch(() => undefined);
+    if (tab) markTabLeft(tab);
     // PTY dies now; the landing modal collects the note after the fact,
     // reading the (already-persisted) transcript for its draft.
     if (tab) maybePromptLanding(tab);
@@ -373,7 +407,7 @@ export default function App() {
       });
       return next;
     });
-  }, [maybePromptLanding, claimTab]);
+  }, [maybePromptLanding, claimTab, markTabLeft]);
 
   /** Worktree-bound tabs (Phase 9) get a cleanup prompt before the ordinary
    * close path runs — native `ask()`, same dialog the quit guard already
@@ -424,7 +458,17 @@ export default function App() {
     if (!tab) return;
     // Same tether openTab already passes — without it a restarted tab respawns
     // untethered and its next session binds by cwd fallback instead of tether.
-    const ptyId = await ptySpawn(tab.cwd === "~" ? null : tab.cwd, 80, 24, tab.id, resumeSessionId);
+    // tab.agent (persisted with the binding for a ghost tab, tracked live
+    // otherwise) picks the resume syntax — see pty.rs's resume_command.
+    const ptyId = await ptySpawn(
+      tab.cwd === "~" ? null : tab.cwd,
+      80,
+      24,
+      tab.id,
+      resumeSessionId,
+      undefined,
+      tab.agent
+    );
     setTabs((prev) =>
       prev.map((t) => (t.id === tabId ? { ...t, ptyId, status: "live" as const } : t))
     );
@@ -457,6 +501,7 @@ export default function App() {
         color: PALETTE[7],
         status: "dead",
         sessionId: c.session_id,
+        agent: c.agent,
       }));
       // Seed the unclaimed flags before activating a tab: claimTab reads the
       // in-memory set, so a result that outlived the last quit is unclaimable
@@ -502,8 +547,16 @@ export default function App() {
       else unlisteners.push(u);
     };
     void onHookEvent((p) => {
+      // Turn provenance (Phase 15): only UserPromptSubmit carries it, stamped
+      // onto a clone before the row is written — payload_json is append-only,
+      // this is the one chance to record it.
+      const isPromptSubmit = p.hook_event_name === "UserPromptSubmit";
+      const provenance = isPromptSubmit
+        ? computeProvenance(p.tab_id, p.tab_id ? getLastInputTs(p.tab_id) : undefined, Date.now())
+        : undefined;
+      const payload = provenance ? { ...p, provenance } : p;
       void repo
-        .addEvent(p.session_id, `hook:${p.hook_event_name}`, JSON.stringify(p))
+        .addEvent(p.session_id, `hook:${p.hook_event_name}`, JSON.stringify(payload))
         .catch(() => undefined); // fail open: panel data loss must not break terminals
 
       // project_key (repo root, derived server-side) is the panel key; p.cwd is
@@ -514,21 +567,29 @@ export default function App() {
       }
       // Re-entry write path: only tethered sessions (started by this app) are
       // ours to resume — an outside terminal's SessionStart carries no tab_id.
-      if (p.hook_event_name === "SessionStart" && p.tab_id && projectKey && p.cwd && p.transcript_path) {
+      // transcript_path is allowed to be absent (a Codex SessionStart can send
+      // none) — stored as an empty-string sentinel; resume never reads this
+      // column, only tail-worthiness (gated separately in ingest.rs) does.
+      if (p.hook_event_name === "SessionStart" && p.tab_id && projectKey && p.cwd) {
         void repo
-          .upsertSessionBinding(p.session_id, p.tab_id, projectKey, p.cwd, p.transcript_path)
+          .upsertSessionBinding(p.session_id, p.tab_id, projectKey, p.cwd, p.transcript_path ?? "", p.agent)
           .catch(() => undefined); // fail open, same as addEvent above
       }
       if (p.hook_event_name === "Stop") {
         decisions.onStop(p.session_id, sessionCwd.get(p.session_id), refreshDecisionCounts);
       }
-      const isStop = p.hook_event_name === "Stop";
+      // A completed or interrupted turn is a real result worth flagging when
+      // unseen; SessionEnd alone is session shutdown, not a new result — it
+      // only closes the epoch (via stateForHook), it doesn't land one here.
+      const isTerminalResult = p.hook_event_name === "Stop" || p.hook_event_name === "Interrupt";
       if (p.hook_event_name === "PostToolUse") {
-        // Scoped to Bash: Read/Grep/Glob tool_response is file/doc content, not
-        // command output — scanning it flags blockers on error strings quoted
-        // in comments or docs (e.g. this file's own landmine notes) rather than
-        // real failures.
-        if (p["tool_name"] === "Bash") {
+        // Scoped to Bash/run_command: Read/Grep/Glob tool_response is file/doc
+        // content, not command output — scanning it flags blockers on error
+        // strings quoted in comments or docs (e.g. this file's own landmine
+        // notes) rather than real failures. run_command is Antigravity's
+        // shell-command tool (Phase 16) — file-edit tools are deliberately
+        // not added here, this gate is for command *output*, not edit content.
+        if (p["tool_name"] === "Bash" || p["tool_name"] === "run_command") {
           const resp = p["tool_response"];
           const text =
             typeof resp === "string"
@@ -559,6 +620,8 @@ export default function App() {
       }
       if (!tabId) return; // session from an outside terminal
       tabActivityRef.current.set(tabId, Date.now()); // for the landing-note ritual
+      // A new turn is a fresh epoch — let the next stall re-notify.
+      if (p.hook_event_name === "UserPromptSubmit") nudgedStallRef.current.delete(tabId);
 
       const prevAgentState = tabsRef.current.find((t) => t.id === tabId)?.agentState;
       const state = stateForHook(p);
@@ -570,7 +633,15 @@ export default function App() {
           // query the right project even after an in-shell `cd`. A `cd` within
           // the same repo is now a no-op here — that's the fix.
           const next = cwd && expand(t.cwd) !== cwd ? { ...t, cwd } : t;
-          return state ? { ...next, sessionId: p.session_id, agentState: state } : next;
+          const withAgent = p.agent && next.agent !== p.agent ? { ...next, agent: p.agent } : next;
+          if (!state) return withAgent;
+          return {
+            ...withAgent,
+            sessionId: p.session_id,
+            agentState: state,
+            lastEventTs: Date.now(),
+            lastTurnAuto: isPromptSubmit ? provenance === "auto" : withAgent.lastTurnAuto,
+          };
         })
       );
       // Fan-out rollup's "done"/"running" depends on live agentState, so it
@@ -591,7 +662,7 @@ export default function App() {
       // agent finished on a tab the human isn't looking at right now — either
       // a background tab (app focused, different tab active) or the whole app
       // backgrounded. Flagged until claimTab (tab switch / window focus).
-      if (isStop && shouldFlagUnclaimed(tabId, activeIdRef.current, document.hasFocus())) {
+      if (isTerminalResult && shouldFlagUnclaimed(tabId, activeIdRef.current, document.hasFocus())) {
         const id = tabId;
         setUnseenStops((s) => new Set(s).add(id));
         // Without a cwd the row can never match unclaimedResults' cwd filter —
@@ -622,6 +693,13 @@ export default function App() {
 
     void onTailerFailed((p) => {
       setBlindSessions((s) => (s[p.session_id] === p.path ? s : { ...s, [p.session_id]: p.path }));
+    }).then(track);
+
+    void onAdapterWarning((w) => {
+      setAdapterWarnings((prev) => {
+        if (prev.some((x) => x.agent === w.agent && x.reason === w.reason)) return prev;
+        return [...prev, w];
+      });
     }).then(track);
 
     return () => {
@@ -698,6 +776,27 @@ export default function App() {
   useEffect(() => {
     void getCurrentWindow().setBadgeCount(waitingCount > 0 ? waitingCount : undefined);
   }, [waitingCount]);
+
+  // Clock on state (Phase 14b): one interval, no per-tab timers. Also checks
+  // every live tab for a fresh stall on each tick — a stall can start with no
+  // hook firing (that's the whole point), so nothing else would ever notice.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const t = Date.now();
+      setNow(t);
+      for (const tab of tabsRef.current) {
+        if (tab.status !== "live" || !deriveClock(tab, t).stalled) continue;
+        if (nudgedStallRef.current.has(tab.id)) continue;
+        nudgedStallRef.current.add(tab.id);
+        const cwd = expand(tab.cwd);
+        const muted = mutedProjectsRef.current.has(cwd);
+        if (shouldNotify(tab.id, activeIdRef.current, document.hasFocus(), muted)) {
+          notify("Agent quiet 3m", cwd.split("/").filter(Boolean).pop() ?? cwd);
+        }
+      }
+    }, 15000);
+    return () => clearInterval(id);
+  }, [expand]);
 
   // Quit guard: confirm when live PTYs would be terminated.
   useEffect(() => {
@@ -785,6 +884,7 @@ export default function App() {
     if (prevId && prevId !== activeId) {
       const prevTab = tabsRef.current.find((t) => t.id === prevId);
       if (prevTab) {
+        markTabLeft(prevTab);
         // Consumed here, not on a timer/await elsewhere — clearing the flag
         // from the spawn call site raced this effect's async scheduling
         // (only fanOut's extra post-openTab await happened to hide it; a
@@ -802,7 +902,19 @@ export default function App() {
     // background automation) must not silently claim it — same rule the
     // focus-listener follows.
     if (activeId && document.hasFocus()) claimTab(activeId);
-  }, [activeId, expand, maybePromptLanding, claimTab]);
+  }, [activeId, expand, maybePromptLanding, claimTab, markTabLeft]);
+
+  // Since-you-left anchor, blur half: Cmd-Tabbing to another app leaves the
+  // active tab without switching activeId, so the tab-switch effect above
+  // never fires for it.
+  useEffect(() => {
+    const onBlur = () => {
+      const tab = tabsRef.current.find((t) => t.id === activeIdRef.current);
+      if (tab) markTabLeft(tab);
+    };
+    window.addEventListener("blur", onBlur);
+    return () => window.removeEventListener("blur", onBlur);
+  }, [markTabLeft]);
 
   const activeTab = tabs.find((t) => t.id === activeId) ?? null;
 
@@ -845,7 +957,9 @@ export default function App() {
         decisionCount={(t) => decisionCountsByCwd[expand(t.cwd)] ?? 0}
         unclaimed={(t) => unseenStops.has(t.id)}
         isFanOutChild={(t) => fanOutChildIds.has(t.id)}
+        isFanOutParent={(t) => fanOutParentIds.has(t.id)}
         isWorktreeBound={(t) => worktreeTabIds.has(t.id)}
+        now={now}
       />
       <BookmarksBar
         bookmarks={bookmarks}
@@ -865,9 +979,16 @@ export default function App() {
           <SidePanel
             cwd={expand(activeTab.cwd)}
             sessionId={activeTab.sessionId ?? null}
+            tabTether={activeTab.id}
+            agentState={activeTab.agentState}
+            lastEventTs={activeTab.lastEventTs}
+            now={now}
             accent={activeTab.color === PALETTE[7] ? null : activeTab.color}
             refreshKey={panelRefresh}
             blindPaths={Object.values(blindSessions)}
+            adapterWarnings={adapterWarnings}
+            sessionBlind={!!(activeTab.sessionId && blindSessions[activeTab.sessionId])}
+            agent={activeTab.agent}
             fanOut={fanOutRollups}
             onSelectTab={setActiveId}
             onDismissMember={dismissSpawnMember}
@@ -890,6 +1011,7 @@ export default function App() {
               />
             ))}
           </div>
+          {activeTab && <IdeaBoard cwd={expand(activeTab.cwd)} />}
         </div>
       </div>
       {landingPrompt && (

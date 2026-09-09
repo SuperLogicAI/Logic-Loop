@@ -1,6 +1,7 @@
 // Golden test runner: node scripts via tsx. Runs every fixture in
 // tests/golden/ through the real extractor backend (claude CLI by default,
-// EXTRACTOR=lmstudio for LM Studio) and checks expectations.
+// EXTRACTOR=codex for Codex CLI, EXTRACTOR=lmstudio for LM Studio) and checks
+// expectations.
 // Usage: npm run golden
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
@@ -36,6 +37,33 @@ function runClaude(prompt: string): string {
     timeout: 120_000,
     env: { ...process.env, LOGIC_LOOP_TAB_ID: EXTRACTOR_TETHER },
   });
+}
+
+function runCodex(prompt: string): string {
+  const args = ["exec", "--ephemeral", "--sandbox", "read-only", "--skip-git-repo-check", "--json", "-"];
+  if (process.env.CODEX_MODEL) args.splice(6, 0, "-m", process.env.CODEX_MODEL);
+  const stdout = execFileSync("codex", args, {
+    input: prompt,
+    encoding: "utf8",
+    timeout: 120_000,
+    env: { ...process.env, LOGIC_LOOP_TAB_ID: EXTRACTOR_TETHER },
+  });
+  let finalMessage = "";
+  for (const line of stdout.split("\n")) {
+    try {
+      const event = JSON.parse(line) as {
+        type?: string;
+        item?: { type?: string; text?: unknown };
+      };
+      if (event.type === "item.completed" && event.item?.type === "agent_message" && typeof event.item.text === "string") {
+        finalMessage = event.item.text;
+      }
+    } catch {
+      // Ignore non-JSON noise; the final agent_message remains authoritative.
+    }
+  }
+  if (!finalMessage) throw new Error("codex: no final agent message");
+  return finalMessage;
 }
 
 async function runLmStudio(prompt: string): Promise<string> {
@@ -89,7 +117,7 @@ for (const file of files) {
   const prompt = buildPrompt({ assistant: f.assistant, user: f.user });
   let raw: string;
   try {
-    raw = backend === "lmstudio" ? await runLmStudio(prompt) : runClaude(prompt);
+    raw = backend === "lmstudio" ? await runLmStudio(prompt) : backend === "codex" ? runCodex(prompt) : runClaude(prompt);
   } catch (e) {
     console.error(`✗ ${file}: backend error: ${String(e).slice(0, 200)}`);
     failures++;

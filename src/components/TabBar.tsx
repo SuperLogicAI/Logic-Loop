@@ -1,12 +1,15 @@
 import { useState } from "react";
+import { deriveClock, formatAge } from "../lib/ingest";
 import type { Tab } from "../types";
 
-// WAITING pulses — that dot is the whole point of the product.
-function dotClass(tab: Tab): string {
+// WAITING pulses — that dot is the whole point of the product. A stalled
+// "working" dot loses its blue for a dim amber ring instead — distinct from
+// waiting's pulse ("needs you now" vs. "check on me").
+function dotClass(tab: Tab, stalled: boolean): string {
   if (tab.status === "dead") return "bg-red-500";
   switch (tab.agentState) {
     case "working":
-      return "bg-blue-400";
+      return stalled ? "bg-blue-900 ring-2 ring-amber-500/70" : "bg-blue-400";
     case "waiting":
       return "bg-amber-400 animate-pulse";
     case "idle":
@@ -33,8 +36,14 @@ interface Props {
   unclaimed: (tab: Tab) => boolean;
   /** Fan-out child (any group) — purple glow. */
   isFanOutChild: (tab: Tab) => boolean;
+  /** Fan-out origin tab (any group) — purple text glow ties it back to its
+   * children after launch. */
+  isFanOutParent: (tab: Tab) => boolean;
   /** Isolate-loop worktree tab — blue glow. */
   isWorktreeBound: (tab: Tab) => boolean;
+  /** Clock tick (Phase 14b) — drives stalled/age display, nothing else
+   * changes agentState on its own. */
+  now: number;
 }
 
 // Left/right/top only, no bottom — the tab visually joins the terminal pane
@@ -58,7 +67,9 @@ export function TabBar({
   decisionCount,
   unclaimed,
   isFanOutChild,
+  isFanOutParent,
   isWorktreeBound,
+  now,
 }: Props) {
   const [dragId, setDragId] = useState<string | null>(null);
   return (
@@ -79,7 +90,9 @@ export function TabBar({
           where the old outer px-2 lived. Outer px-2 dropped in favor of
           this to avoid double-padding the tab-strip/button gap. */}
       <div className="tab-strip flex min-w-0 items-end gap-1 overflow-x-auto px-2 pt-2">
-        {tabs.map((tab) => (
+        {tabs.map((tab) => {
+        const clock = deriveClock(tab, now);
+        return (
         <div
           key={tab.id}
           onClick={() => onSelect(tab.id)}
@@ -117,11 +130,29 @@ export function TabBar({
           }}
         >
           <span
-            className={`h-2 w-2 shrink-0 rounded-full ${dotClass(tab)} ${
+            className={`h-2 w-2 shrink-0 rounded-full ${dotClass(tab, clock.stalled)} ${
               unclaimed(tab) ? "shadow-[0_0_6px_2px_rgba(16,185,129,0.6)]" : ""
             }`}
+            title={tab.agentState ? `${tab.agentState} · quiet ${formatAge(clock.quietMs)}` : undefined}
           />
-          <span className="truncate">{tab.title}</span>
+          {tab.lastTurnAuto && (
+            <span
+              className="shrink-0 text-xl leading-none font-bold text-zinc-200"
+              title="last turn was auto (no human keystrokes)"
+            >
+              ⟳
+            </span>
+          )}
+          {tab.agentState === "waiting" && clock.quietMs > 2 * 60 * 1000 && (
+            <span className="shrink-0 text-[9px] text-amber-400/70">{formatAge(clock.quietMs)}</span>
+          )}
+          <span
+            className={`truncate ${isFanOutParent(tab) ? "text-purple-300" : ""}`}
+            style={isFanOutParent(tab) ? { textShadow: "0 0 6px rgba(168,85,247,0.85)" } : undefined}
+            title={isFanOutParent(tab) ? "fan-out origin tab" : undefined}
+          >
+            {tab.title}
+          </span>
           {blockerCount(tab) > 0 && (
             <span className="shrink-0 rounded-full bg-red-500/20 px-1.5 text-[10px] font-semibold text-red-400">
               {blockerCount(tab)}
@@ -142,7 +173,8 @@ export function TabBar({
             ✕
           </button>
         </div>
-        ))}
+        );
+        })}
       </div>
       <button
         className="mb-0.5 shrink-0 rounded px-2.5 py-1 text-lg leading-none text-zinc-400 hover:bg-zinc-700"

@@ -5,7 +5,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
-import { onPtyExit, onPtyOutput, ptyResize, ptyWrite } from "../lib/pty";
+import { onPtyExit, onPtyOutput, ptyResize, ptyWrite, stampInput } from "../lib/pty";
 import type { Tab } from "../types";
 
 interface Props {
@@ -77,7 +77,10 @@ export function Terminal({ tab, visible, onExit, onRestart }: Props) {
     const term = termRef.current;
     if (!term) return;
     const ptyId = tab.ptyId;
-    const dataSub = term.onData((d) => void ptyWrite(ptyId, d));
+    const dataSub = term.onData((d) => {
+      stampInput(tab.id, d);
+      void ptyWrite(ptyId, d);
+    });
     let cancelled = false;
     const unlisteners: Array<() => void> = [];
     const track = (u: () => void) => {

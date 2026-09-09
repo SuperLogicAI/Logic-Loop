@@ -42,3 +42,460 @@ pop-out. Also duplicates what the agent and the user's actual editor already
 do. The diff/file preview pop-out above gets ~90% of the value with none of
 the risk — build that instead unless a concrete case shows up that the
 read-only version doesn't cover.
+
+## Decisions cleanup — grouped by session, bulk-dismiss
+
+**Renumbered to Phase 17** (2026-09-06 — actual Phase 16 landed as Codex/
+Antigravity adapter follow-ups, not this; sequencing table below corrected),
+ahead of Idea Board (now Phase 18) —
+user hit this live during Phase 15 §25 manual testing: 80 open decisions
+accumulated on this project alone, oldest ~2 months old, no way to work
+through them except one at a time in a flat list.
+
+**Why not a bug.** `decisions` is deliberately project-scoped, not
+session-scoped (`decisionCounts`/`listDecisions`, `repo.ts:254,268`) — the
+badge counts every unanswered question ever asked in the project, forever.
+Confirmed against the live DB: no duplicates, all 80 genuinely distinct,
+real backlog from real dogfooding, not a scoping leak.
+
+**Sketch — no migration needed.** `decisions.session_id` already exists
+(`lib.rs:62`). New repo queries only:
+- `decisionsBySession(cwd)` — `SELECT session_id, count(*), min(ts), max(ts)
+  FROM decisions WHERE cwd=$1 AND status='open' GROUP BY session_id`.
+- `dismissSession(sessionId)` — bulk `UPDATE decisions SET
+  status='answered' WHERE session_id=$1 AND status='open'`.
+
+SidePanel's decisions section groups into collapsible session clusters
+(most recent expanded, older collapsed) instead of one flat list. Each
+cluster: relative age + count ("~2 months ago · 12 decisions") since a raw
+session_id UUID means nothing to a human; "dismiss all" bulk button per
+cluster; individual decisions still dismissable one at a time underneath.
+
+Own PLAN.md when its turn comes — not a quick patch, real UI surface change
+to a panel every phase touches.
+
+---
+
+# Fable 5.1 concepts (review of 2026-09-02)
+
+Source: Fable 5.1 build review, 2026-09-02. Five concepts were proposed;
+#1 (since-you-left delta) and #2 (clock on state) were accepted on the spot
+and live in `PLAN.md` as Phase 14. The three below are parked here with
+enough of a build plan that whoever picks one up doesn't re-derive it.
+Priority as agreed with the user: #3 likely next, #4 long-term (design for
+it, don't build it), #5 off the table for now.
+
+Review's framing, kept because it drives all three: Chrome tabs are fine as
+a **viewport** and fail as **status**. Documents don't stall, don't age,
+don't run twelve iterations while you sleep, don't owe you an answer.
+Phase 14 adds time; #3 adds provenance; #4 moves status out of the tab
+strip entirely.
+
+## 3. Turn provenance + loop digest — DONE (Phase 15)
+
+**What.** Tag every turn as `human` or `auto`, then group consecutive
+`auto` turns into iterations so a `/loop`- or graph-running session can be
+digested as "12 iterations · 3 files · 1 decision waiting · last: 'no
+change'" instead of a 200-row trace.
+
+**Limitation addressed.** Unattended-activity blindness. Today a `/loop`
+wakeup and a human prompt both arrive as `UserPromptSubmit`; the app cannot
+tell a loop from a chat, so Phase 14's delta over-counts "turns" and the
+Decision Tracker can't say "the agent decided this for you 8 iterations
+ago and kept going".
+
+**Signal (deterministic, invariant #1-safe).** The app owns the PTY write
+path (`pty_write`, `pty.rs`) — it already knows when the human types. No
+output parsing, no transcript heuristics:
+- `pty.rs` (or the TS side in `pty.ts`, which is simpler) records
+  `lastInputTs` per tab whenever a write carries printable bytes or a
+  newline. Paste counts; arrow keys/resizes don't (filter on byte class,
+  not content — never inspect what was typed).
+- Ingest: a `UserPromptSubmit` bound to a tab is `human` if
+  `now - lastInputTs < PROVENANCE_WINDOW_MS` (start at 5s), else `auto`.
+  Stamp `provenance` into the payload before `addEvent` so it lives in
+  `events.payload_json` — no migration, and SQL can `json_extract` it.
+- Edge: a session started with a prompt on the command line
+  (`claude "do X"`) fires `UserPromptSubmit` with no PTY input after
+  spawn; treat "spawn-time launch command" as human (spawn args are already
+  human-triggered by invariant #4).
+
+**Iterations.** Pure reducer `groupIterations(events)`: an iteration opens
+at an `auto` `UserPromptSubmit` and closes at the next `Stop`. Per
+iteration: first assistant text line (from `transcript` rows), tool count,
+`is_error` count, decisions opened (`decisions.ts` within the window),
+whether the closing assistant text is a no-op ("no change", "still
+waiting", "nothing to do" — a short allowlist, not NLP; misses are fine,
+they just don't collapse).
+
+**Surface.**
+- Side panel: when a session has ≥2 consecutive `auto` turns, the
+  "Since you left" section (Phase 14) switches to loop shape: iteration
+  count, collapsed no-op run ("×7 no change"), every non-noop iteration as
+  one line, decisions opened inside the loop pinned to the top in red.
+- TabBar: a small `⟳` glyph on tabs whose last turn was `auto` — the tab
+  is running itself.
+- Human turns keep today's single-shot shape.
+
+**Slots into.** `pty.ts` (input timestamp) → `App.tsx` hook handler
+(stamp provenance) → `events` (no schema change) → `src/lib/loop.ts`
+(pure reducer, `loop:check` script) → `SidePanel.tsx`. No Rust changes if
+the input timestamp is taken on the TS side of `pty_write`.
+
+**Non-goals.** No attempt to detect loops from prompt text. No cross-
+session graphs (fan-out already models the parent/child case). No
+per-iteration LLM summaries.
+
+**Risks.** A human who types a prompt, then Cmd-Tabs away for 6s before
+hitting Enter is tagged `auto` — window is measured from the last
+printable byte, not from Enter, so this only bites on a >5s pause between
+last keystroke and Enter. Start at 5s, tune from dogfood.
+
+## 4. Global obligation inbox — long-term, design for it now
+
+**What.** One cross-project list of everything that needs the human,
+ranked by age × blocking: open decisions, `waiting` sessions, stalled
+sessions (Phase 14b), unclaimed results, unresolved blockers. Click → tab.
+Cmd-K palette or a left-rail view. Tabs stay the way you *open* a thread;
+the inbox becomes the way you *choose* one.
+
+**Limitation addressed.** "Which tab needs me?" Chrome never answers it;
+per-tab badges stop scaling around 6 tabs, and a badge can't rank a
+3-second-old question against a 40-minute-old permission prompt.
+
+**Why not yet.** It's the one concept that changes what the tab strip is
+for. Dogfood Phase 14 + #3 first; if the human still scans tabs left-to-
+right to find work, that's the evidence this needs.
+
+**Schema readiness — rules to keep now, so the inbox is a query later,
+not a migration:**
+1. Every obligation-bearing row carries `(project_key or cwd, session_id,
+   ts)`. `decisions` and `blockers` already do; `result_landed` carries
+   `cwd` and must keep it; `tab_left` (Phase 14a) carries `cwd`+`tab_id`.
+2. Age is derivable from `events`: `MAX(ts) … GROUP BY session_id` —
+   never stash "last activity" in a mutable column.
+3. "Seen by human" is an **event** (`result_claimed`, `tab_left`), never a
+   flag on the obligation row. Append-only, invariant #3 intact.
+4. Tab tether appears in payloads (`tab_id`) so an inbox row can jump to
+   a tab without a join through `session_bindings`.
+5. No new obligation *kind* gets its own table unless it has fields the
+   others don't. A `kind` discriminator in a view is enough.
+
+**Build sketch (when it's time).** `repo.inbox()` = one UNION ALL over the
+sources above producing `{kind, project_key, session_id, tab_id, ts,
+text, weight}`; `weight` = kind base × age. Pure `rankInbox()` reducer
+with a check script. UI: `Cmd-K` opens a list; Enter activates the tab
+(and `claimTab` fires as today). Dock badge count moves from
+"tabs with anything" to "inbox length". Est. 1.5d.
+
+## 5. Agent-emitted structured status — parked, do not build yet
+
+**What.** Have the agent end each turn with a one-line
+`LL-STATUS: next=… blocked=… ask=…` by returning `additionalContext`
+from the `UserPromptSubmit` hook (the ingest server answers with a JSON
+body instead of 204; curl's `>/dev/null` is dropped so Claude Code reads
+it). Parse deterministically; works for every adapter that supports
+prompt-time context injection.
+
+**Limitation addressed.** The LLM-extraction ceiling: Decision Tracker is
+Claude-only, gated on a `?|assum` regex prefilter, and never reconciles a
+decision answered after Stop-extraction. Structured status would make
+decisions/next-action/blockers deterministic and adapter-neutral.
+
+**Why parked (user decision 2026-09-02).** It's the only concept that
+changes how the agents behave, not just how they're observed. Turning it
+on mid-dogfood muddies every result Phase 14 / #3 produce — a cleaner
+delta could be the status line, not the panel. Also adjacent to invariant
+#4 in spirit: the app would be shaping agent output, even if it never
+types into the terminal.
+
+**If it ever ships:** explicit toggle, default off, README-documented,
+and a golden-style fixture set for the parser. Not before #3 has a month
+of dogfood behind it.
+
+## 6. Idea Board — bottom dock, markdown-backed (user concept 2026-09-02)
+
+**What.** A collapsible strip under the terminal pane (wireframe:
+`~/Desktop/Screenshot 2026-09-02 at 1.16.59 PM.png`). Status columns and
+cards with a `+` to add. The visual is the front end; the back end is one
+terse markdown file per project the UI parses and rewrites.
+
+**Limitation addressed.** Ideas are generated faster than they're chased.
+Some get built, some get parked, most get lost between sessions. This is
+the project-management-fundamentals layer the original concept doc
+gestured at: a visible queue of *intended* work next to the *live* work,
+so re-entry can start from "what did I mean to do here" as well as "what
+did the agent do".
+
+**Decision (2026-09-02): new format, not a view over existing docs.**
+`docs/IDEAS.md` / `docs/ROADMAP.md` are agent-facing — rationale,
+landmines, history, `<details>` blocks, optimized for loading context,
+not for scanning. Parsing their `## ` headings into cards yields fifteen
+400-char blobs in boxes: same clunk, different frame. Terse is fine for
+agents; verbose is bad for humans. So the board is a file that is
+human-shaped by construction, and agents read it too.
+
+**Board = index. Docs = detail.** A card carries what/status/next and a
+link; the *why* lives in the doc it points at. Second-source-of-truth
+drift is real but small, and one line in CLAUDE.md process rules ("phase
+accepted → move its card to `done`") keeps agents maintaining it.
+
+**Format contract (keep it this dumb).** `.logic-loop/board.md`, one per
+project (`project_key`), committed. Valid markdown — renders in GitHub /
+Obsidian, agent reads it in one `Read`.
+```
+## <title>
+status: idea | planned | building | later | done
+<one-liner, ≤ 2 lines by convention>
+link: PLAN.md            (optional; path relative to repo root or URL)
+next: <one physical action>   (optional)
+```
+- Card = one `## ` heading. Anything above the first `## ` is preamble,
+  preserved untouched. Unknown lines in a card body are kept verbatim.
+- Columns = `status:` values. **Move = edit one line.** No file moves.
+- `+` = quick add: title optional; empty title → first line of body
+  becomes the title, status `idea`. That is the "Brain Dump" — an
+  affordance, not a column.
+- Create = append block. Edit/move/delete = splice by heading range.
+  **Never** rewrite the file wholesale from parsed state.
+- Pure module `src/lib/board.ts`: `parseBoard(md) → Card[]`,
+  `spliceCard(md, card) → md`, `appendCard(md, card) → md`.
+  `board:check` roundtrips a fixture with preamble, unknown body lines,
+  and a table inside a card: parse → splice one card → byte-identical.
+
+**Per-project only (v1).** No global "later" file. A cross-project view
+is a Cmd-K query over every open project's board later — which is
+concept #4's inbox, and it should arrive with it, not before.
+
+**Momentum tie-in (the leverage).** Momentum Builder today surfaces only
+*leftovers*: landing note → oldest open decision → oldest blocker;
+nothing open → no card. The board adds *intent* as the fourth fallback:
+the top `planned` card's `next:` line (else its title). Re-entry stops
+being only "what did the agent do" and becomes "what did I mean to do
+here". `SidePanel.tsx`'s momentum chain gains one branch; Done on that
+card sets `status: building` (not `done`) so the card follows the work.
+
+**Slots into.** Two Rust commands (`read_text_file`, `write_text_file`)
+with a path guard — the path must resolve under the tab's `project_key`;
+no writes into `~`. UI: `src/components/IdeaBoard.tsx`, mounted under
+`Terminal`, height-resizable the same way the side panel is (Phase 7
+pattern), collapsed state + height in `settings`. Reload the board on
+window focus, tab switch, and before every own write (reload-before-
+write is the two-writer mitigation: re-read, splice, write, never write
+from stale parse). Missing file → empty board with `+` live; first card
+creates `.logic-loop/board.md`.
+
+**Bootstrapping this repo.** Not the UI's job. One agent turn writes the
+initial `board.md` from `docs/IDEAS.md` + `docs/ROADMAP.md`'s sequencing
+table, each card linking back to its section.
+
+**Non-goals v1.** No drag-and-drop ("move to…" menu is one line). No
+markdown rendering inside cards — plain text, click to expand raw. No
+per-card agent actions. No cross-project view. No sync beyond git.
+
+**Sequence.** After Phase 14. Est. 1.5d: `board.ts` + check (0.5),
+Rust commands + guard (0.25), component + momentum branch (0.75).
+
+---
+
+# Compass study concepts (review of 2026-09-04)
+
+Source: competitive research, internal codename Compass study — concept
+only, no code copied. Worktree isolation (the concrete lesson from this
+review) was promoted straight to `docs/ROADMAP.md`'s "Isolated loops"
+section, not parked here. The four below are lower-conviction or
+larger-scope; parked for later review.
+
+## Usage / rate-limit tracking + account hot-swap
+
+Validates the already-parked "Model traffic panel (Safe Router)" idea in
+`docs/ROADMAP.md`. Concrete detail worth carrying forward: surface each
+account's rate-limit reset countdown, not just current usage — and support
+hot-swapping accounts without re-authenticating. Same dependency as the
+existing item (external: Safe Router v0 log).
+
+## Annotate AI diffs
+
+Drop a comment on any diff line and ship it back to the agent as follow-up
+context — review, edit, and commit without leaving the app. Pairs naturally
+with the existing Commit & Push footer (`SidePanel.tsx`); not on the roadmap
+today. Would need a place to land the comment (new prompt turn vs.
+queued context) — worth a real design pass before a PLAN.md, not a cheap
+add.
+
+## Quick open / Cmd-K across worktrees, files, agents, commands
+
+Validates the parked "Global obligation inbox" direction (IDEAS.md #4
+above) — same shape, broader index (files/agents/commands, not just
+obligations). If #4 ever gets built, this is the natural generalization to
+consider next rather than a separate feature.
+
+## Mobile companion app
+
+Monitor/steer agents from a phone, get notified when one finishes, send
+follow-ups remotely. Real differentiator if we ever want it, but native
+iOS/Android is a different order of scope than anything else in this file —
+long-horizon, not a cheap add. No action until something forces the
+question.
+
+---
+
+# Session persistence across app quit (2026-09-05)
+
+Surfaced during manual §23 (Phase 14) testing: quit Logic Loop mid-turn,
+relaunch, Re-enter — the interrupted turn doesn't finish or pick back up, it's
+just gone. Confirmed as expected given the current architecture, not a bug:
+PTY sessions are direct child processes of the app (`pty_spawn`, `pty.rs`),
+so Cmd-Q kills every live `claude` process with it. Re-entry's
+`claude --resume <session_id>` (`pty.rs:152-154`) restores the transcript —
+prior turns and replies — into a fresh process; it doesn't replay a turn that
+never completed. That's Claude Code's own `--resume` semantic, not something
+Logic Loop adds or could patch around without changing what Re-entry is.
+
+herdr (see `[[ref-herdrdev-herdr]]`) doesn't hit this: it's a persistent
+background daemon + thin client, tmux-style detach/reattach, so the agent
+process's lifetime is decoupled from any UI window closing. Logic Loop has no
+daemon — PTY lifetime is tied to app lifetime, full stop.
+
+**This is a distinct question from the one already decided in
+`docs/ROADMAP.md`'s "Adapters — v2."** That section dismisses herdr's
+*agent-initiated orchestration* (agents autonomously spawning/driving sibling
+panes) as out of scope per invariant #4. It says nothing about herdr's
+*persistence* model — a daemon that keeps a human-triggered session alive
+across client restarts doesn't touch invariant #4 at all. Don't let the
+existing "not adopting herdr's model" line get cited as already covering
+this; it doesn't.
+
+**Open question, not a decision:** is "sessions survive an app quit"
+important enough to justify a background-daemon architecture change, or does
+Re-entry's "resume the transcript, re-prompt if needed" already cover the
+real need? A daemon would be a genuine architecture shift (new process,
+new lifecycle, new failure modes to keep invariant #2 fail-open through) —
+not a cheap add like the rest of this file. Not key to the current version.
+Revisit if losing in-flight turns to a quit becomes a recurring complaint
+rather than a one-off during testing.
+
+---
+
+# GPT-5 Astra product/UX review (2026-09-06)
+
+External review (`improve` skill, read-only — no files changed, no live
+usability/correctness audit) of source + concept doc + IDEAS.md + ROADMAP.md
++ a repo screenshot. Core concern: sidebar panels (landing notes, decisions,
+blockers, since-you-left, loop digest, re-entry) increasingly compete for
+attention — more visible info can raise the burden Logic Loop exists to cut.
+Six features prioritized below; three map onto existing parked ideas (#4
+inbox, #6 board) and are folded there rather than duplicated. Three are new.
+
+**Corrections to the review's stated inconsistencies** (checked against
+current repo state, not taken at face value):
+- Worktree isolation: review says ROADMAP claims "not started" while the app
+  already creates worktrees. Actual ROADMAP text (`Isolated loops` section)
+  already draws this distinction correctly — Phase 9 shipped a narrower
+  branch-switch-in-place mechanism, real `git worktree add` isolation is
+  still unbuilt. Not a doc bug; review read the sequencing-table cell
+  without the section below it.
+- Loop digest "likely add-on": true when Astra apparently read a stale
+  copy — it shipped as Phase 15 (2026-09-06, same day). Fixed above.
+- Decisions cleanup mis-numbered Phase 16 (actual Phase 16 = adapter
+  follow-ups): real conflict, fixed above (renumbered Phase 17).
+- Blockers lack session identity: already a known, explicitly-scoped-out gap
+  — see ROADMAP's RAH section, "Not fixed, scope explicitly excluded."
+  Correct finding, already tracked, not new.
+
+## A. Cross-project attention inbox — same feature as #4 above
+
+Astra's version adds two refinements worth carrying into #4's build sketch
+when it's picked up:
+- **Rank by explicit priority/actionability first, age second** — not
+  age-weighted alone. #4's `weight = kind base × age` should read `weight =
+  kind base × priority, tiebreak age` so a fresh answerable question doesn't
+  lose to a two-month-old dead blocker. State the ranking in plain text next
+  to the list, not just an implicit sort order.
+- **Preview/snooze/pin without switching tabs.** #4's sketch already makes
+  Enter activate a tab; add a snooze (defer N hours, re-surfaces) and a pin
+  (manual priority override) as row actions, and a preview affordance
+  (expand in place) before committing to a tab switch.
+
+## B. Compact re-entry brief — extends Phase 14's delta, not a new panel
+
+Phase 14 (`src/lib/delta.ts`) already computes files/commands/turns/last
+words. Astra's ask is presentation, not new data: render it as one
+structured block at the top of the side panel instead of separate stat
+lines — project · agent · branch, one-line goal (from the landing note or a
+pinned board card, never a fresh LLM summary), "you left / changed / needs
+you / next" as four short fields with the underlying evidence (diff, tool
+event, decision) one click away. No new ingestion. Reference: a resumption-
+cues study found automated cues beat notes alone for task completion, with
+users preferring chronological snippets over prose — supports pairing the
+brief with drill-down evidence rather than another generated summary
+(Microsoft Research, "Evaluating Cues for Resuming Interrupted Programming
+Tasks").
+
+**Risk called out correctly:** don't require a fresh generated summary on
+every tab switch — that's more LLM cost and another place for drift between
+claim and evidence. Use only facts already computed (delta, landing note,
+board card) plus links to their source rows.
+
+## C. Seen ≠ reviewed ≠ resolved — extends Phase 5's unclaimed-results model
+
+Today, focusing a tab claims its result (`App.tsx`, `claimTab`) — good
+enough for an unread dot, weak evidence the human actually acted on it.
+Real gap: nothing distinguishes "I glanced at it" from "I decided what to do
+about it." Proposal: keep a result's row open (separate from the
+`result_landed`/`result_claimed` pair Phase 6 already has) until an explicit
+action — "Answer," "Delegate," "Dismiss," "Resolve blocker" — replaces the
+generic Momentum-card "Done" (`SidePanel.tsx`). Pairs directly with the
+already-parked diff/file preview pop-out above: open the diff, see it,
+mark it explicitly. Risk (stated correctly): don't add bookkeeping to every
+tool event — gate this on Momentum-card-level items only (decisions,
+blockers, landing notes), not the Accomplished panel's raw tool rows.
+
+Also: the current "Nothing waiting on you" empty state (`SidePanel.tsx`)
+should distinguish "confirmed nothing" from "extraction unavailable for
+this agent" (e.g. non-Claude fan-out children with no decision tracking,
+per the RAH open-finding above) — conflating the two overstates confidence
+exactly where an adapter has the least visibility.
+
+## D. Focus mode with batched notifications — extends Phase 6's per-project mute
+
+Phase 6 already ships notification filtering + per-project mute. Extend to
+"Focus on this project": batch ordinary Stop/completion nudges into one
+quiet digest, still let `WAITING_ON_YOU`-class events through per user
+choice, show a restrained background count, offer "review queued updates"
+on focus-off. Agents keep running — this changes when output reaches the
+human, not what agents do (invariant #4 untouched). Motivation: an
+interruption study found people compensate for interruptions by working
+faster while reporting more stress/frustration — faster notification is not
+itself evidence of a better experience (Mark, Gudith, Klocke, CHI 2008).
+
+## E. Lighter departure capture — alternative to the landing-note modal
+
+`LandingNoteModal.tsx` is a full modal with a 60s auto-skip, shown on
+switch-away. Prototype a smaller inline strip instead — "Leave a next step
+for <project>," optional draft, keyboard shortcut, preserves in-progress
+text — with the current modal ritual demoted to an opt-in preference rather
+than the default. Add a quick-capture affordance with an explicit
+destination ("Save thought to <project>") defaulting to the *previous*
+project, not silently inferred — misfiled notes are worse than no note.
+
+## F. Idea Board: add a small "Now" set — extends #6 above
+
+#6's board already has `status: planned`. Add one more concept on top: a
+human-selected, size-bounded "Now" subset (not just sorted-by-status) with
+an explicit "Return to this next" action, so switching to a different
+terminal doesn't silently change what the human intended to do next. Keep
+the board collapsed during execution (already a non-goal-respecting design
+in #6) — this is additive to the existing spec, not a new board shape.
+
+## Sequencing note from the review
+
+Suggested order: decisions cleanup + observation-clarity (item C's second
+half) → inbox (A/#4) → re-entry brief (B) + review queue (C) → focus mode
+(D) + departure capture (E) → board Now-set (F). Split panes, detached
+windows, mobile, usage dashboards named as lower-priority than all of the
+above — already reflected in ROADMAP's v1.x/v2 placement, no change needed
+there. Validation suggestion for whichever ships first: dogfood across
+several projects, track time-to-next-action, bounce-back switches,
+overlooked results, perceived overload — qualitative, not a metrics
+dashboard to build.

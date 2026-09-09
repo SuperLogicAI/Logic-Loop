@@ -94,6 +94,13 @@ export async function addEvent(sessionId: string, type: string, payloadJson: str
   );
 }
 
+/** Last path segment, for either separator. Agent payloads carry native paths,
+ * so a Windows `file_path` arrives backslashed — splitting on `/` alone returned
+ * the whole path and the Accomplished panel printed it verbatim. */
+export function basename(p: string): string {
+  return p.split(/[\\/]/).filter(Boolean).pop() ?? p;
+}
+
 /** Accomplished panel: recent tool uses for a project, straight off the events table. */
 export async function listToolEvents(cwd: string, limit = 50): Promise<ToolEvent[]> {
   const d = await getDb();
@@ -110,8 +117,15 @@ export async function listToolEvents(cwd: string, limit = 50): Promise<ToolEvent
     NotebookEdit: "Edited",
     Grep: "Searched",
     Glob: "Searched",
+    // Antigravity's own tool names (Phase 16) — tool_input's file_path/
+    // command/description are normalized in antigravity.rs's translate().
+    run_command: "Ran",
+    write_to_file: "Wrote",
+    replace_file_content: "Edited",
+    view_file: "Read",
+    grep_search: "Searched",
+    find_by_name: "Searched",
   };
-  const base = (p: string) => p.split("/").filter(Boolean).pop() ?? p;
   return rows.map((r) => {
     let tool = "?";
     let detail = "";
@@ -128,7 +142,7 @@ export async function listToolEvents(cwd: string, limit = 50): Promise<ToolEvent
       // else verb + filename, else the tool name.
       plain =
         description ||
-        (filePath ? `${VERB[tool] ?? tool} ${base(filePath)}` : "") ||
+        (filePath ? `${VERB[tool] ?? tool} ${basename(filePath)}` : "") ||
         (command ? `Ran ${command.slice(0, 60)}` : tool);
     } catch {
       // keep defaults
@@ -268,16 +282,70 @@ export async function decisionCounts(): Promise<Record<string, number>> {
   return Object.fromEntries(rows.map((r) => [r.cwd, r.n]));
 }
 
+export interface DecisionSessionGroup {
+  session_id: string;
+  n: number;
+  min_ts: number;
+  max_ts: number;
+}
+
+/** Per-session open-decision clusters for one project, newest first. */
+export async function decisionsBySession(cwd: string): Promise<DecisionSessionGroup[]> {
+  const d = await getDb();
+  return d.select<DecisionSessionGroup[]>(
+    `SELECT session_id, count(*) AS n, min(ts) AS min_ts, max(ts) AS max_ts
+     FROM decisions WHERE cwd = $1 AND status = 'open'
+     GROUP BY session_id ORDER BY max_ts DESC`,
+    [cwd]
+  );
+}
+
+/** Bulk-dismiss every open decision in one session — same "not a real
+ * decision" semantic as the per-row ✕ (`setDecisionStatus(id, "dismissed")`),
+ * just applied to a whole cluster at once. */
+export async function dismissSession(sessionId: string): Promise<void> {
+  const d = await getDb();
+  await d.execute("UPDATE decisions SET status = 'dismissed' WHERE session_id = $1 AND status = 'open'", [
+    sessionId,
+  ]);
+}
+
+/** Pure grouping step for the open-decisions list, newest cluster first.
+ * Exported for `decisions-check.ts` — no DB round trip needed since
+ * `listDecisions` already has everything. */
+export function groupDecisionsBySession(open: Decision[]): DecisionSessionGroup[] {
+  const bySession = new Map<string, Decision[]>();
+  for (const d of open) {
+    const list = bySession.get(d.session_id);
+    if (list) list.push(d);
+    else bySession.set(d.session_id, [d]);
+  }
+  return [...bySession.entries()]
+    .map(([session_id, ds]) => ({
+      session_id,
+      n: ds.length,
+      min_ts: Math.min(...ds.map((d) => d.ts)),
+      max_ts: Math.max(...ds.map((d) => d.ts)),
+    }))
+    .sort((a, b) => b.max_ts - a.max_ts);
+}
+
 export async function getExtractorSettings(): Promise<ExtractorSettings> {
   const d = await getDb();
   const rows = await d.select<{ key: string; value: string }[]>(
-    "SELECT key, value FROM settings WHERE key IN ('extractor_backend','lmstudio_url','lmstudio_model')"
+    "SELECT key, value FROM settings WHERE key IN ('extractor_backend','lmstudio_url','lmstudio_model','codex_model')"
   );
   const m = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   return {
-    backend: m["extractor_backend"] === "lmstudio" ? "lmstudio" : "claude",
+    backend:
+      m["extractor_backend"] === "lmstudio"
+        ? "lmstudio"
+        : m["extractor_backend"] === "codex"
+          ? "codex"
+          : "claude",
     lmstudioUrl: m["lmstudio_url"] ?? "http://127.0.0.1:1234",
     lmstudioModel: m["lmstudio_model"] ?? "",
+    codexModel: m["codex_model"] ?? "",
   };
 }
 
@@ -287,6 +355,7 @@ export async function setExtractorSettings(s: ExtractorSettings): Promise<void> 
     ["extractor_backend", s.backend],
     ["lmstudio_url", s.lmstudioUrl],
     ["lmstudio_model", s.lmstudioModel],
+    ["codex_model", s.codexModel],
   ];
   for (const [k, v] of pairs) {
     await d.execute(
@@ -314,6 +383,45 @@ export async function setProjectMuted(cwd: string, muted: boolean): Promise<void
   await d.execute(
     "INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $2",
     [MUTE_KEY_PREFIX + cwd, muted ? "1" : "0"]
+  );
+}
+
+// --- Idea Board (Phase 18): per-project collapsed/height, same settings-
+// table pattern as project mute above. ---
+
+const BOARD_COLLAPSED_PREFIX = "board_collapsed:";
+const BOARD_HEIGHT_PREFIX = "board_height:";
+
+export async function getBoardCollapsed(cwd: string): Promise<boolean> {
+  const d = await getDb();
+  const rows = await d.select<{ value: string }[]>("SELECT value FROM settings WHERE key = $1", [
+    BOARD_COLLAPSED_PREFIX + cwd,
+  ]);
+  return rows[0]?.value !== "0"; // collapsed by default until the user opens it once
+}
+
+export async function setBoardCollapsed(cwd: string, collapsed: boolean): Promise<void> {
+  const d = await getDb();
+  await d.execute(
+    "INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $2",
+    [BOARD_COLLAPSED_PREFIX + cwd, collapsed ? "1" : "0"]
+  );
+}
+
+export async function getBoardHeight(cwd: string): Promise<number | null> {
+  const d = await getDb();
+  const rows = await d.select<{ value: string }[]>("SELECT value FROM settings WHERE key = $1", [
+    BOARD_HEIGHT_PREFIX + cwd,
+  ]);
+  const n = rows[0] ? Number(rows[0].value) : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
+export async function setBoardHeight(cwd: string, height: number): Promise<void> {
+  const d = await getDb();
+  await d.execute(
+    "INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $2",
+    [BOARD_HEIGHT_PREFIX + cwd, String(Math.round(height))]
   );
 }
 
@@ -377,25 +485,77 @@ export async function recentTranscript(sessionId: string, limit = 20): Promise<s
   return rows.map((r) => r.payload_json).reverse();
 }
 
+// --- Since-you-left delta (Phase 14a): a `tab_left` event marks the anchor;
+// everything after it is the digest. Keyed by tab tether (survives
+// `--resume` whether or not session_id changes), with a session_id fallback
+// for rows that never carry a tab_id (outside-terminal sessions bound by cwd
+// fallback, and every `transcript` row, whose JSON has no tab_id key). ---
+
+/** Most recent moment the human left this tab, or null if never (first visit
+ * — the landing note's job, not this one). */
+export async function lastLeft(tether: string): Promise<number | null> {
+  const d = await getDb();
+  const rows = await d.select<{ ts: number | null }[]>(
+    `SELECT MAX(ts) AS ts FROM events WHERE type = 'tab_left' AND json_extract(payload_json, '$.tab_id') = $1`,
+    [tether]
+  );
+  return rows[0]?.ts ?? null;
+}
+
+/** Every event on this tab's own session since `since`, oldest first —
+ * the raw material `summarizeDelta` reduces. */
+export async function eventsSince(
+  tether: string,
+  sessionId: string | null,
+  since: number
+): Promise<{ id: number; ts: number; type: string; payload_json: string }[]> {
+  const d = await getDb();
+  return d.select<{ id: number; ts: number; type: string; payload_json: string }[]>(
+    `SELECT id, ts, type, payload_json FROM events
+     WHERE ts > $1
+       AND (
+         json_extract(payload_json, '$.tab_id') = $2
+         OR (json_extract(payload_json, '$.tab_id') IS NULL AND session_id = $3)
+       )
+     ORDER BY ts ASC`,
+    [since, tether, sessionId ?? ""]
+  );
+}
+
+/** Decisions opened on this project since `since` — scope to the tab's own
+ * session with `scopeBySession` at the call site, same as every other
+ * cwd-wide read. */
+export async function decisionsOpenedSince(cwd: string, since: number): Promise<Decision[]> {
+  const d = await getDb();
+  return d.select<Decision[]>(
+    `SELECT * FROM decisions WHERE cwd = $1 AND status = 'open' AND ts > $2 ORDER BY ts DESC`,
+    [cwd, since]
+  );
+}
+
 // --- Re-entry (Phase 6): one row per Claude session, keyed by the tab's own
 // tether uuid so a resumed session (new session_id) is still found under the
 // same tab. ---
 
-/** Written on every `SessionStart` for a tethered session. */
+/** Written on every `SessionStart` for a tethered session. `agent` is the
+ * adapter marker from the hook payload (see `types.ts`'s `HookPayload.agent`)
+ * — undefined for Claude and any adapter without one yet; stored as NULL,
+ * same as a legacy pre-adapter row. */
 export async function upsertSessionBinding(
   sessionId: string,
   tabTether: string,
   projectKey: string,
   cwd: string,
-  transcriptPath: string
+  transcriptPath: string,
+  agent?: string
 ): Promise<void> {
   const d = await getDb();
   await d.execute(
-    `INSERT INTO session_bindings (session_id, tab_tether, project_key, cwd, transcript_path, active, updated_at)
-     VALUES ($1, $2, $3, $4, $5, 1, $6)
+    `INSERT INTO session_bindings (session_id, tab_tether, project_key, cwd, transcript_path, agent, active, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, 1, $7)
      ON CONFLICT(session_id) DO UPDATE SET
-       tab_tether = $2, project_key = $3, cwd = $4, transcript_path = $5, active = 1, updated_at = $6`,
-    [sessionId, tabTether, projectKey, cwd, transcriptPath, Date.now()]
+       tab_tether = $2, project_key = $3, cwd = $4, transcript_path = $5, agent = $6, active = 1, updated_at = $7`,
+    [sessionId, tabTether, projectKey, cwd, transcriptPath, agent ?? null, Date.now()]
   );
 }
 
@@ -418,12 +578,13 @@ export function latestPerTether(rows: SessionBindingRow[]): ReentryCandidate[] {
     if (!cur || r.updated_at > cur.updated_at) byTether.set(r.tab_tether, r);
   }
   return [...byTether.values()].map(
-    ({ session_id, tab_tether, project_key, cwd, transcript_path }) => ({
+    ({ session_id, tab_tether, project_key, cwd, transcript_path, agent }) => ({
       session_id,
       tab_tether,
       project_key,
       cwd,
       transcript_path,
+      agent: agent ?? undefined,
     })
   );
 }
@@ -432,7 +593,7 @@ export function latestPerTether(rows: SessionBindingRow[]): ReentryCandidate[] {
 export async function reentryCandidates(): Promise<ReentryCandidate[]> {
   const d = await getDb();
   const rows = await d.select<SessionBindingRow[]>(
-    "SELECT session_id, tab_tether, project_key, cwd, transcript_path, updated_at FROM session_bindings WHERE active = 1"
+    "SELECT session_id, tab_tether, project_key, cwd, transcript_path, agent, updated_at FROM session_bindings WHERE active = 1"
   );
   return latestPerTether(rows);
 }
@@ -535,6 +696,17 @@ export async function allFanOutChildTabIds(): Promise<string[]> {
     "SELECT DISTINCT child_tab_id FROM spawn_group_members"
   );
   return rows.map((r) => r.child_tab_id);
+}
+
+/** Every tab that is a fan-out parent (origin) in any group — ties the glow
+ * back the other direction so the launching tab stays visually linked to its
+ * children after they spawn. */
+export async function allFanOutParentTabIds(): Promise<string[]> {
+  const d = await getDb();
+  const rows = await d.select<{ parent_tab_id: string }[]>(
+    "SELECT DISTINCT parent_tab_id FROM spawn_groups"
+  );
+  return rows.map((r) => r.parent_tab_id);
 }
 
 export async function groupMembers(groupId: string): Promise<SpawnGroupMember[]> {

@@ -4,6 +4,11 @@ import { ask } from "@tauri-apps/plugin-dialog";
 import * as repo from "../lib/repo";
 import { burst } from "../lib/confetti";
 import { generateCommitMessage } from "../lib/commitMessage";
+import { summarizeDelta, type Delta } from "../lib/delta";
+import { collapseNoopRuns, groupIterations, isLoopRun, type Iteration } from "../lib/loop";
+import { deriveClock, formatAge } from "../lib/ingest";
+import { parseBoard, readBoard, spliceCard, writeBoard, type Card } from "../lib/board";
+import { topPlannedCard } from "./IdeaBoard";
 import {
   gitAddAll,
   gitAddU,
@@ -17,15 +22,26 @@ import {
   gitPush,
   gitUntrackedFiles,
 } from "../lib/pty";
-import { RainbowText } from "./RainbowText";
-import type { Blocker, Commit, Decision, FanOutRollup, Note, ToolEvent } from "../types";
+import { HUES, RainbowText } from "./RainbowText";
+import type { AgentState, Blocker, Commit, Decision, FanOutRollup, Note, ToolEvent } from "../types";
+
+// Gradient border for the Next card when a landing note is waiting — the only
+// visual cue that it's a landing note, not a decision/blocker in the same slot.
+const RAINBOW_BORDER = `linear-gradient(90deg, ${[...HUES, HUES[0]].map((h) => `hsl(${h} 85% 62%)`).join(", ")})`;
 
 interface Props {
   cwd: string; // expanded absolute project dir of the active tab
   sessionId: string | null; // session currently bound to the active tab, for scoping decisions/tool events away from sibling tabs on the same cwd
+  tabTether: string; // active tab's own id — the since-you-left anchor key
+  agentState?: AgentState;
+  lastEventTs?: number; // Phase 14b clock
+  now: number; // Phase 14b tick
   accent: string | null; // matching bookmark's color, if the project is bookmarked
   refreshKey: number; // bump to force reload (new events / blocker changes)
   blindPaths: string[]; // transcripts that failed to open — panels are incomplete
+  adapterWarnings?: Array<{ agent: string; reason: string }>; // adapter setup warnings (e.g. foreign PostToolUse collision)
+  sessionBlind: boolean; // active tab's own session has no transcript — decisions may be missed, not confirmed absent
+  agent?: string; // active tab's adapter marker ("codex"/"opencode"/"antigravity"), undefined for plain Claude
   fanOut: FanOutRollup[]; // every fan-out group the active tab belongs to (as parent, possibly several; as child, at most one), oldest first
   onSelectTab: (id: string) => void; // jump to a fan-out child/parent tab
   onDismissMember: (groupId: string, childTabId: string) => void; // drop a lingering row from the fan-out rollup
@@ -60,6 +76,34 @@ function Chevron({ collapsed, className }: { collapsed: boolean; className?: str
   );
 }
 
+/** Format adapter setup warning messages for the side-panel warning strip. */
+export function adapterWarningMessage(w: { agent: string; reason: string }): string {
+  if (w.reason === "foreign_post_tool_use") {
+    return `${w.agent}: foreign PostToolUse hook detected in hooks.json — tool events may not fire in older agy releases`;
+  }
+  return `${w.agent}: adapter warning (${w.reason})`;
+}
+
+/** Why the Decisions section is showing zero open decisions — distinguishes
+ * a confirmed-empty session from one where decisions may simply have never
+ * been extracted, so the panel never overstates confidence (Phase 19). */
+export function decisionsEmptyReason(args: {
+  isUnboundFanOutChild: boolean;
+  sessionBlind: boolean;
+  agent?: string;
+}): string {
+  if (args.isUnboundFanOutChild) {
+    return "Can't tell — this tab isn't bound to a tracked session yet.";
+  }
+  if (args.sessionBlind) {
+    return "Can't tell — no transcript for this session (extraction never ran).";
+  }
+  if (args.agent && args.agent !== "codex") {
+    return "Decision tracking isn't available for this agent yet.";
+  }
+  return "Nothing waiting on you.";
+}
+
 function ago(ts: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
   if (s < 60) return `${s}s`;
@@ -71,9 +115,16 @@ function ago(ts: number): string {
 export function SidePanel({
   cwd,
   sessionId,
+  tabTether,
+  agentState,
+  lastEventTs,
+  now,
   accent,
   refreshKey,
   blindPaths,
+  adapterWarnings = [],
+  sessionBlind,
+  agent,
   fanOut,
   onSelectTab,
   onDismissMember,
@@ -88,9 +139,14 @@ export function SidePanel({
   const [commits, setCommits] = useState<Commit[]>([]);
   const [blockers, setBlockers] = useState<Blocker[]>([]);
   const [decisions, setDecisions] = useState<Decision[]>([]);
+  const [delta, setDelta] = useState<Delta | null>(null); // since-you-left digest (Phase 14a)
+  const [loopIterations, setLoopIterations] = useState<Iteration[] | null>(null); // loop digest (Phase 15), null = flat delta shape
   const [landing, setLanding] = useState<Note | null>(null); // active project, momentum
   const [notes, setNotes] = useState<Note[]>([]); // active project, open notes & reminders
   const [context, setContext] = useState<Decision | null>(null);
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
+  const [plannedCard, setPlannedCard] = useState<Card | null>(null);
+  const seededCwdRef = useRef<string | null>(null);
   const [draft, setDraft] = useState("");
   const [noteDraft, setNoteDraft] = useState("");
   const [showAllTools, setShowAllTools] = useState(false);
@@ -160,7 +216,7 @@ export function SidePanel({
   const hasStageable = gitDirty || untrackedFiles.length > 0;
 
   const reload = useCallback(async () => {
-    const [te, bl, gl, dc, ln, nt, uc, branch, dirty, untracked] = await Promise.all([
+    const [te, bl, gl, dc, ln, nt, uc, branch, dirty, untracked, boardMd] = await Promise.all([
       repo.listToolEvents(cwd).catch(() => []),
       repo.listBlockers(cwd).catch(() => []),
       invoke<Commit[]>("git_log", { cwd, limit: 15 }).catch(() => []),
@@ -171,18 +227,51 @@ export function SidePanel({
       gitCurrentBranch(cwd).catch(() => ""),
       gitHasChanges(cwd).catch(() => false),
       gitUntrackedFiles(cwd).catch(() => []),
+      readBoard(cwd).catch(() => ""),
     ]);
     setToolEvents(isUnboundFanOutChild ? [] : repo.scopeBySession(te, sessionId));
     setBlockers(bl);
     setCommits(gl);
-    setDecisions(isUnboundFanOutChild ? [] : repo.scopeBySession(dc, sessionId));
+    // Not scoped to sessionId, unlike toolEvents: Phase 17's clustering
+    // (decisionGroups below) exists specifically to show every session's
+    // open decisions for this project, not just the active tab's own.
+    setDecisions(isUnboundFanOutChild ? [] : dc);
     setLanding(ln);
     setNotes(nt.filter((n) => n.status === "open").slice(0, 3));
     setUnclaimed(uc);
     setGitBranch(branch);
     setGitDirty(dirty);
     setUntrackedFiles(untracked);
-  }, [cwd, sessionId, isUnboundFanOutChild]);
+    // Now (Phase 20) is an explicit human pick and outranks the plain
+    // top-of-column fallback; no Now cards → today's top-planned pick.
+    const boardCards = parseBoard(boardMd);
+    setPlannedCard(boardCards.find((c) => c.now) ?? topPlannedCard(boardCards));
+
+    // Since-you-left delta (Phase 14a): no anchor → no section (a tab never
+    // left has nothing to delta against — that's the landing note's job).
+    // Same fan-out isolation rule as toolEvents/decisions above.
+    if (isUnboundFanOutChild) {
+      setDelta(null);
+      setLoopIterations(null);
+    } else {
+      const since = await repo.lastLeft(tabTether).catch(() => null);
+      if (since == null) {
+        setDelta(null);
+        setLoopIterations(null);
+      } else {
+        const [rows, decisionsSince] = await Promise.all([
+          repo.eventsSince(tabTether, sessionId, since).catch(() => []),
+          repo.decisionsOpenedSince(cwd, since).catch(() => []),
+        ]);
+        const decisionsScoped = repo.scopeBySession(decisionsSince, sessionId);
+        setDelta(summarizeDelta(rows, decisionsScoped));
+        // Loop digest (Phase 15) takes over the section when the window
+        // contains a qualifying run; otherwise the flat delta above renders.
+        const iters = groupIterations(rows, decisionsScoped);
+        setLoopIterations(isLoopRun(iters) ? iters : null);
+      }
+    }
+  }, [cwd, sessionId, isUnboundFanOutChild, tabTether]);
 
   useEffect(() => {
     void reload();
@@ -363,7 +452,20 @@ export function SidePanel({
             text: oldestOpenBlocker.text,
             done: () => repo.setBlockerResolved(oldestOpenBlocker.id, true),
           }
-        : null;
+        : plannedCard
+          ? {
+              label: "planned",
+              text: plannedCard.next ?? plannedCard.title,
+              // Done advances the card into the next column rather than
+              // clearing it — the intent isn't finished, the work started.
+              // Also clears `now`: acted on, the slot frees up for the next pick.
+              done: async () => {
+                const fresh = await readBoard(cwd);
+                const match = parseBoard(fresh).find((c) => c.title === plannedCard.title) ?? plannedCard;
+                await writeBoard(cwd, spliceCard(fresh, { ...match, status: "building", now: false }));
+              },
+            }
+          : null;
 
   const finishMomentum = async () => {
     if (!momentum) return;
@@ -405,6 +507,23 @@ export function SidePanel({
   const done = blockers.filter((b) => b.resolved !== 0).slice(0, 10);
   const openDecisions = decisions.filter((d) => d.status === "open");
   const closedDecisions = decisions.filter((d) => d.status !== "open").slice(0, 10);
+  const decisionGroups = repo.groupDecisionsBySession(openDecisions);
+
+  // Most recent cluster expanded by default, older ones collapsed — reseed
+  // only when the active project changes, so a manual toggle survives a
+  // decisions refetch (new decision landing, a dismiss) within the same cwd.
+  useEffect(() => {
+    if (seededCwdRef.current === cwd) return;
+    if (decisionGroups.length === 0) return; // wait for the real fetch, not an empty first render
+    seededCwdRef.current = cwd;
+    setExpandedSessions(new Set([decisionGroups[0].session_id]));
+  }, [cwd, decisionGroups]);
+
+  const dismissSessionCluster = async (sessionId: string) => {
+    await repo.dismissSession(sessionId);
+    await reload();
+    onDecisionsChanged();
+  };
 
   // A tab is a member of at most one group (a child is only ever created by a
   // single launch), but can *parent* several — fan out again from a tab
@@ -453,6 +572,13 @@ export function SidePanel({
         >
           project: {cwd.split("/").filter(Boolean).pop() ?? cwd}
         </p>
+        <p className="shrink-0 text-[10px] text-zinc-600" title="Phase 14b clock">
+          {agentState ?? "no session"}
+          {" · "}
+          {lastEventTs !== undefined
+            ? `${formatAge(deriveClock({ agentState, lastEventTs }, now).quietMs)} ago`
+            : "no events yet"}
+        </p>
         <button
           className={`flex shrink-0 items-center gap-1 rounded px-1 leading-none ${muted ? "text-zinc-600 hover:text-zinc-400" : "text-zinc-400 hover:text-zinc-200"}`}
           title={muted ? "Notifications muted for this project — click to unmute" : "Mute notifications for this project"}
@@ -480,6 +606,15 @@ export function SidePanel({
           {muted ? "muted" : "notify"}
         </button>
       </div>
+      {/* Adapter warnings: e.g. foreign PostToolUse collision in older agy releases */}
+      {adapterWarnings.map((w, i) => (
+        <p
+          key={`${w.agent}-${w.reason}-${i}`}
+          className="flex shrink-0 items-start gap-1 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-[10px] text-amber-300"
+        >
+          <span>⚠ {adapterWarningMessage(w)}</span>
+        </p>
+      ))}
       {/* Blind sessions: hooks arrive but the transcript file will not open, so
           decisions and every transcript-fed panel are silently incomplete. This
           says so rather than looking like a quiet day. */}
@@ -517,12 +652,118 @@ export function SidePanel({
         </p>
       )}
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3">
+      {delta &&
+        (delta.files.length > 0 ||
+          delta.bashRuns > 0 ||
+          delta.turns > 0 ||
+          delta.stops > 0 ||
+          delta.decisions.length > 0 ||
+          delta.lastWords !== "") && (
+        <section className="rounded-lg border border-teal-500/30 bg-teal-400/5 p-3">
+          <h2
+            className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-teal-300 uppercase select-none"
+            onClick={() => toggleSection("since-left")}
+          >
+            <Chevron collapsed={collapsed.has("since-left")} className="text-teal-300/85" />
+            Since you left
+          </h2>
+          {!collapsed.has("since-left") &&
+            (loopIterations ? (
+              <ul className="flex flex-col gap-1 text-zinc-300">
+                <li className="flex gap-1.5 text-zinc-500">
+                  <span className="shrink-0 text-teal-500/60">•</span>
+                  <span>
+                    {loopIterations.length} iteration{loopIterations.length === 1 ? "" : "s"} while you were away
+                  </span>
+                </li>
+                {loopIterations.flatMap((it) => it.decisions).map((d) => (
+                  <li key={d.id} className="flex gap-1.5 text-orange-300">
+                    <span className="shrink-0 text-teal-500/60">•</span>
+                    <span>decision opened: {d.question}</span>
+                  </li>
+                ))}
+                {collapseNoopRuns(loopIterations).map((line, i) =>
+                  line.kind === "noop-run" ? (
+                    <li key={i} className="flex gap-1.5 text-zinc-600">
+                      <span className="shrink-0 text-teal-500/60">•</span>
+                      <span>
+                        ×{line.count} no change
+                      </span>
+                    </li>
+                  ) : (
+                    <li key={i} className="flex gap-1.5">
+                      <span className="shrink-0 text-teal-500/60">•</span>
+                      <span>
+                        {line.iteration.toolCount} tool{line.iteration.toolCount === 1 ? "" : "s"}
+                        {line.iteration.errorCount > 0 && (
+                          <span className="text-red-400"> ({line.iteration.errorCount} failed)</span>
+                        )}
+                        {line.iteration.endTs === null && <span className="text-zinc-500"> · running</span>}
+                        {line.iteration.firstAssistantText && (
+                          <span className="text-zinc-400"> — {line.iteration.firstAssistantText}</span>
+                        )}
+                      </span>
+                    </li>
+                  )
+                )}
+              </ul>
+            ) : (
+              <>
+                <ul className="flex flex-col gap-1 text-zinc-300">
+                  {delta.files.length > 0 && (
+                    <li className="flex gap-1.5">
+                      <span className="shrink-0 text-teal-500/60">•</span>
+                      <span>
+                        {delta.files.length} file{delta.files.length === 1 ? "" : "s"} changed:{" "}
+                        <span className="text-zinc-400">
+                          {delta.files.map((f) => f.split("/").filter(Boolean).pop()).join(", ")}
+                        </span>
+                      </span>
+                    </li>
+                  )}
+                  {delta.bashRuns > 0 && (
+                    <li className="flex gap-1.5">
+                      <span className="shrink-0 text-teal-500/60">•</span>
+                      <span>
+                        {delta.bashRuns} command{delta.bashRuns === 1 ? "" : "s"} run
+                        {delta.bashErrors > 0 && (
+                          <span className="text-red-400"> ({delta.bashErrors} failed)</span>
+                        )}
+                      </span>
+                    </li>
+                  )}
+                  <li className="flex gap-1.5 text-zinc-500">
+                    <span className="shrink-0 text-teal-500/60">•</span>
+                    <span>
+                      {delta.turns} turn{delta.turns === 1 ? "" : "s"} · {delta.stops} stop
+                      {delta.stops === 1 ? "" : "s"}
+                    </span>
+                  </li>
+                  {delta.decisions.length > 0 && (
+                    <li className="flex gap-1.5 text-orange-300">
+                      <span className="shrink-0 text-teal-500/60">•</span>
+                      <span>
+                        {delta.decisions.length} new decision{delta.decisions.length === 1 ? "" : "s"} opened
+                      </span>
+                    </li>
+                  )}
+                </ul>
+                {delta.lastWords && (
+                  <p className="mt-1.5 break-words rounded bg-black/20 p-1.5 text-zinc-400">
+                    <span className="text-zinc-600">agent's last words: </span>
+                    {delta.lastWords}
+                  </p>
+                )}
+              </>
+            ))}
+        </section>
+      )}
       <section className="border-b border-zinc-800 pb-3">
-        <h2 className="mb-1.5 font-semibold tracking-wide uppercase">
-          <RainbowText text="Notes and reminders" />
+        <h2 className="mb-1.5 font-semibold tracking-wide text-zinc-300 uppercase">
+          Notes and reminders
         </h2>
         <input
-          className="mb-2 w-full rounded bg-zinc-800 px-2 py-1 text-zinc-200 outline-none placeholder:text-zinc-600"
+          className="mb-2 w-full rounded border border-zinc-100 bg-zinc-800 px-2 py-1 text-zinc-200 outline-none placeholder:text-zinc-600"
           placeholder="Leave a note for this project…"
           value={noteDraft}
           onChange={(e) => setNoteDraft(e.target.value)}
@@ -614,10 +855,31 @@ export function SidePanel({
       </div>
       )}
       {momentum && (
-        <section className="rounded-lg border border-yellow-500/30 bg-yellow-400/5 p-3">
+        <section
+          className={
+            momentum.label === "landing note"
+              ? "rounded-lg p-3"
+              : "rounded-lg border border-yellow-500/30 bg-yellow-400/5 p-3"
+          }
+          style={
+            momentum.label === "landing note"
+              ? {
+                  border: "1px solid transparent",
+                  // Panel bg (zinc-900) pre-blended with the same 5% yellow tint the
+                  // other Next cards get — has to be opaque, or the gradient behind it
+                  // (clipped to border-box) bleeds through the whole card, not just the ring.
+                  backgroundImage: "linear-gradient(rgb(35, 33, 27), rgb(35, 33, 27)), " + RAINBOW_BORDER,
+                  backgroundOrigin: "border-box",
+                  backgroundClip: "padding-box, border-box",
+                }
+              : undefined
+          }
+        >
           <h2 className="mb-1 flex items-center gap-1.5 font-semibold tracking-wide text-yellow-300 uppercase">
-            ▸ Next
-            <span className="ml-auto font-normal text-[10px] normal-case text-zinc-500">{momentum.label}</span>
+            <Chevron collapsed={false} className="text-yellow-300" /> Next
+            <span className="ml-auto font-normal text-[10px] normal-case text-zinc-500">
+              {momentum.label === "landing note" ? <RainbowText text={momentum.label} /> : momentum.label}
+            </span>
           </h2>
           <p className="mb-2 break-words text-zinc-200">{momentum.text}</p>
           <button
@@ -640,36 +902,80 @@ export function SidePanel({
         </h2>
         {!collapsed.has("decisions") && (
           <>
-            {openDecisions.length === 0 && <p className="text-zinc-600">Nothing waiting on you.</p>}
-            <ul className="flex flex-col gap-2">
-              {openDecisions.map((d) => (
-                <li key={d.id} className="relative rounded border border-yellow-800/60 bg-yellow-950/20 p-2">
-                  <button
-                    className="absolute top-1 right-1 leading-none text-yellow-800 hover:text-yellow-500"
-                    title="Dismiss — not a real decision"
-                    onClick={() => void setStatus(d, "dismissed")}
-                  >
-                    ✕
-                  </button>
-                  <p className="break-words pr-5 text-orange-300">{d.question}</p>
-                  {d.assumption && (
-                    <p className="mt-1 text-zinc-400">agent assumed: {d.assumption}</p>
-                  )}
-                  <div className="mt-1.5 flex gap-2 text-zinc-400">
-                    <button className="text-red-400 hover:text-red-300" title="Prefill answer in terminal" onClick={() => onAnswerNow(d)}>
-                      ✎ answer
-                    </button>
-                    <button className="text-yellow-400 hover:text-yellow-300" title="Show surrounding conversation" onClick={() => setContext(d)}>
-                      ⌕ context
-                    </button>
-                    <button className="text-green-400 hover:text-green-300" title="Fine — agent's call" onClick={() => void setStatus(d, "delegated")}>
-                      ⤳ delegate
-                    </button>
-                    <span className="ml-auto text-zinc-600">{ago(d.ts)}</span>
+            {openDecisions.length === 0 && (
+              <p className="text-zinc-600">
+                {decisionsEmptyReason({ isUnboundFanOutChild, sessionBlind, agent })}
+              </p>
+            )}
+            <div className="flex flex-col gap-2">
+              {decisionGroups.map((g) => {
+                const rows = openDecisions.filter((d) => d.session_id === g.session_id);
+                const isExpanded = expandedSessions.has(g.session_id);
+                return (
+                  <div key={g.session_id}>
+                    <div
+                      className="flex cursor-pointer items-center gap-1.5 py-0.5 text-zinc-500 select-none"
+                      onClick={() =>
+                        setExpandedSessions((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(g.session_id)) next.delete(g.session_id);
+                          else next.add(g.session_id);
+                          return next;
+                        })
+                      }
+                    >
+                      <Chevron collapsed={!isExpanded} className="text-zinc-500" />
+                      <span>
+                        {ago(g.max_ts)} · {g.n} decision{g.n === 1 ? "" : "s"}
+                      </span>
+                      {g.n > 1 && (
+                        <button
+                          className="ml-auto text-yellow-700 hover:text-yellow-400"
+                          title="Dismiss all in this session — not real decisions"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void dismissSessionCluster(g.session_id);
+                          }}
+                        >
+                          dismiss all
+                        </button>
+                      )}
+                    </div>
+                    {isExpanded && (
+                      <ul className="flex flex-col gap-2">
+                        {rows.map((d) => (
+                          <li key={d.id} className="relative rounded border border-yellow-800/60 bg-yellow-950/20 p-2">
+                            <button
+                              className="absolute top-1 right-1 leading-none text-yellow-800 hover:text-yellow-500"
+                              title="Dismiss — not a real decision"
+                              onClick={() => void setStatus(d, "dismissed")}
+                            >
+                              ✕
+                            </button>
+                            <p className="break-words pr-5 text-orange-300">{d.question}</p>
+                            {d.assumption && (
+                              <p className="mt-1 text-zinc-400">agent assumed: {d.assumption}</p>
+                            )}
+                            <div className="mt-1.5 flex gap-2 text-zinc-400">
+                              <button className="text-red-400 hover:text-red-300" title="Prefill answer in terminal" onClick={() => onAnswerNow(d)}>
+                                ✎ answer
+                              </button>
+                              <button className="text-yellow-400 hover:text-yellow-300" title="Show surrounding conversation" onClick={() => setContext(d)}>
+                                ⌕ context
+                              </button>
+                              <button className="text-green-400 hover:text-green-300" title="Fine — agent's call" onClick={() => void setStatus(d, "delegated")}>
+                                ⤳ delegate
+                              </button>
+                              <span className="ml-auto text-zinc-600">{ago(d.ts)}</span>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
-                </li>
-              ))}
-            </ul>
+                );
+              })}
+            </div>
             {closedDecisions.length > 0 && (
               <ul className="mt-2 flex flex-col gap-1 border-t border-zinc-800 pt-2 text-zinc-600">
                 {closedDecisions.map((d) => (

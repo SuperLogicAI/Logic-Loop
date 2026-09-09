@@ -10,6 +10,7 @@
     "tauri": "tauri",
     "reinstall": "sh scripts/reinstall.sh",
     "golden": "tsx scripts/golden.ts",
+    "check": "npm run landing:check && npm run epoch:check && npm run bind:check && npm run dedupe:check && npm run reentry:check && npm run unclaimed:check && npm run notify:check && npm run spawn:check && npm run scope:check && npm run clock:check && npm run delta:check && npm run loop:check && npm run extractor-queue:check && npm run decisions:check && npm run codex-transcript:check && npm run board:check && npm run empty-state:check",
     "landing:check": "tsx scripts/landing-check.ts",
     "epoch:check": "tsx scripts/epoch-check.ts",
     "bind:check": "tsx scripts/bind-check.ts",
@@ -18,7 +19,15 @@
     "unclaimed:check": "tsx scripts/unclaimed-check.ts",
     "notify:check": "tsx scripts/notify-check.ts",
     "spawn:check": "tsx scripts/spawn-check.ts",
-    "scope:check": "tsx scripts/scope-check.ts"
+    "scope:check": "tsx scripts/scope-check.ts",
+    "clock:check": "tsx scripts/clock-check.ts",
+    "delta:check": "tsx scripts/delta-check.ts",
+    "loop:check": "tsx scripts/loop-check.ts",
+    "extractor-queue:check": "tsx scripts/extractor-queue-check.ts",
+    "decisions:check": "tsx scripts/decisions-check.ts",
+    "codex-transcript:check": "tsx scripts/codex-transcript-check.ts",
+    "board:check": "tsx scripts/board-check.ts",
+    "empty-state:check": "tsx scripts/empty-state-check.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

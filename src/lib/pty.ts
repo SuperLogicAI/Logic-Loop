@@ -1,15 +1,37 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
+// Turn provenance (Phase 15): module state, not React state, so a keystroke
+// never triggers a re-render — typing latency is the one thing this must not
+// touch. Keyed by tab id (== the LOGIC_LOOP_TAB_ID tether).
+const lastInputTs = new Map<string, number>();
+
+// A chunk that is *only* a bare CSI/SS3 escape sequence (arrow/home/end/
+// pgup/pgdn/function keys) carries no typed content. Anything else —
+// printable text, CR/LF, or a bracketed paste (which wraps real content in
+// its own escape pair and so never matches this exactly) — counts as input.
+const NAV_ONLY = /^\x1b(\[[0-9;]*[A-Za-z~]|O[A-Za-z])$/;
+
+/** Called from Terminal.tsx's onData, before the chunk reaches the PTY. */
+export function stampInput(tabId: string, data: string): void {
+  if (NAV_ONLY.test(data)) return;
+  lastInputTs.set(tabId, Date.now());
+}
+
+export function getLastInputTs(tabId: string): number | undefined {
+  return lastInputTs.get(tabId);
+}
+
 export function ptySpawn(
   cwd: string | null,
   cols: number,
   rows: number,
   tabId?: string,
   resumeSession?: string,
-  launchCmd?: string
+  launchCmd?: string,
+  resumeAgent?: string
 ): Promise<number> {
-  return invoke<number>("pty_spawn", { cwd, cols, rows, tabId, resumeSession, launchCmd });
+  return invoke<number>("pty_spawn", { cwd, cols, rows, tabId, resumeSession, launchCmd, resumeAgent });
 }
 
 /** Resolve `~` and case/symlinks to the real path. */

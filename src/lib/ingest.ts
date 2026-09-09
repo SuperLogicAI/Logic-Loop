@@ -85,6 +85,13 @@ export function onTailerFailed(
   return listen<{ session_id: string; path: string }>("ingest://tailer-failed", (e) => cb(e.payload));
 }
 
+/** Adapter setup warning (e.g. foreign PostToolUse hook collision in agy < 1.1.27). */
+export function onAdapterWarning(
+  cb: (p: { agent: string; reason: string }) => void
+): Promise<UnlistenFn> {
+  return listen<{ agent: string; reason: string }>("ingest://adapter-warning", (e) => cb(e.payload));
+}
+
 /** The subset of a tab this module needs to bind a session to it. */
 export interface BindCandidate {
   id: string;
@@ -115,10 +122,13 @@ export function bindSession(
   }
   const { boundTabIds, activeTabId, projectKey } = opts;
   if (!projectKey) return null;
-  // `/` is never a real project: it means the session was started somewhere with
-  // no meaningful cwd. Binding it would overwrite the tab's cwd with a key that
-  // matches nothing, blanking the panel. Untethered + rootless = not ours.
-  if (projectKey === "/") return null;
+  // A filesystem root is never a real project: it means the session was started
+  // somewhere with no meaningful cwd. Binding it would overwrite the tab's cwd
+  // with a key that matches nothing, blanking the panel. Untethered + rootless =
+  // not ours. A Windows drive root (`C:\`, `C:/`, bare `C:`) is the same hazard.
+  // Deliberately anchored and exact — a prefix test would reject `/Users/x` and
+  // `C:\dev\proj` too, which fails far more quietly than the bug it fixes.
+  if (/^(?:[/\\]|[A-Za-z]:[/\\]?)$/.test(projectKey)) return null;
   return (
     tabs.find((t) => t.cwd === projectKey && !boundTabIds.has(t.id))?.id ??
     tabs.find((t) => t.cwd === projectKey)?.id ??
@@ -176,6 +186,50 @@ export function shouldNotify(
   return !muted && shouldFlagUnclaimed(tabId, activeTabId, windowFocused);
 }
 
+// ponytail: constant; settings-table knob if real use disagrees
+export const STALL_MS = 3 * 60 * 1000;
+
+// ponytail: constant; tune from dogfood if human turns get misclassified auto
+export const PROVENANCE_WINDOW_MS = 5000;
+
+/** Was a `UserPromptSubmit` typed by the human, or fired by a loop/resubmit
+ * with no fresh keystrokes behind it? `tabId` is the tether (same uuid as
+ * `LOGIC_LOOP_TAB_ID` and `Tab.id`); `lastInputTs` comes from `pty.ts`'s
+ * per-tab keystroke clock. No tether (outside-terminal session) or no
+ * recorded input yet (fresh tab, spawn-time launch command) both default to
+ * `human` — `auto` is only assigned when we positively know the PTY input
+ * path went quiet. */
+export function computeProvenance(
+  tabId: string | undefined,
+  lastInputTs: number | undefined,
+  now: number
+): "human" | "auto" {
+  if (!tabId || lastInputTs === undefined) return "human";
+  return now - lastInputTs < PROVENANCE_WINDOW_MS ? "human" : "auto";
+}
+
+/** Derived, not stored — keeps every adapter, stateForHook, fan-out rollup
+ * and check script untouched. Only "working" stalls: "waiting" already has
+ * its own pulse meaning ("needs you now"); a long-idle waiting tab just
+ * gets an age badge, not a stall label. */
+export function deriveClock(
+  tab: { agentState?: AgentState; lastEventTs?: number },
+  now: number
+): { quietMs: number; stalled: boolean } {
+  const quietMs = tab.lastEventTs ? now - tab.lastEventTs : 0;
+  return { quietMs, stalled: tab.agentState === "working" && quietMs > STALL_MS };
+}
+
+/** `Xs`/`Xm`/`Xh`/`Xd` for a duration in ms — same buckets as SidePanel's
+ * `ago()`, but for an elapsed span rather than a distance from an absolute ts. */
+export function formatAge(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.floor(s / 86400)}d`;
+}
+
 /** Map a hook event to the tab's agent state; null = no state change. */
 export function stateForHook(p: HookPayload): AgentState | null {
   // Subagent events carry agent_id; they never drive tab state.
@@ -195,6 +249,12 @@ export function stateForHook(p: HookPayload): AgentState | null {
     case "PermissionRequest":
       return stoppedSessions.has(p.session_id) ? null : "waiting";
     case "Stop":
+    // Codex-only terminal events (Plan: Codex interruption/session-end
+    // lifecycle). Both are turn/session-terminal, same as Stop: close the
+    // epoch so a late out-of-order event from the closed turn can't revive
+    // the tab. Neither is a failure — an interrupted turn is not an error.
+    case "Interrupt":
+    case "SessionEnd":
       stoppedSessions.add(p.session_id);
       return "idle";
     default:

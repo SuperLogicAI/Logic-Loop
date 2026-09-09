@@ -1,6 +1,6 @@
-// Shared so the landing modal's heading and the side panel's "Notes and
-// reminders" stay identical — a second copy of the hue table is how they
-// drift apart.
+// Shared so the landing modal's heading and the side panel's landing-note
+// label stay identical — a second copy of the hue table is how they drift
+// apart.
 
 // Discrete ROYGBV for the old-school per-letter cycle: first letter red, one
 // hue per letter, wrapping back to red after violet. 62% lightness keeps
