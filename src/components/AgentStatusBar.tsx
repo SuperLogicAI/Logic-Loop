@@ -167,7 +167,7 @@ export function AgentStatusBar() {
               : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
           }`}
           onClick={() => void toggleAntigravityHooks()}
-          title="Toggle the Antigravity (agy) adapter hooks in ~/.gemini/config/hooks.json — shallower than Claude/Codex: no session-start or waiting signal, and tool activity shows without a tool name"
+          title="Toggle the Antigravity (agy) adapter hooks in ~/.gemini/config/hooks.json — shallower than Claude/Codex: no session-start (so no re-entry after a relaunch) or waiting signal for a question the agent asks"
         >
           {antigravityOn === null ? "antigravity ?" : antigravityOn ? "antigravity on" : "antigravity off"}
         </button>
@@ -194,11 +194,27 @@ export function AgentStatusBar() {
           <label className="flex items-center gap-2 text-zinc-300">
             <input
               type="radio"
+              checked={extractor.backend === "codex"}
+              onChange={() => saveExtractor({ ...extractor, backend: "codex" })}
+            />
+            Codex CLI
+          </label>
+          <label className="flex items-center gap-2 text-zinc-300">
+            <input
+              type="radio"
               checked={extractor.backend === "lmstudio"}
               onChange={() => saveExtractor({ ...extractor, backend: "lmstudio" })}
             />
             LM Studio (local)
           </label>
+          {extractor.backend === "codex" && (
+            <input
+              className="rounded bg-zinc-900 px-2 py-1 text-zinc-200 outline-none"
+              placeholder="Codex model override (optional)"
+              value={extractor.codexModel}
+              onChange={(e) => saveExtractor({ ...extractor, codexModel: e.target.value })}
+            />
+          )}
           {extractor.backend === "lmstudio" && (
             <>
               <input

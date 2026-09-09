@@ -31,6 +31,7 @@ export async function generateCommitMessage(diff: string): Promise<string> {
     backend: s.backend,
     lmstudioUrl: s.lmstudioUrl,
     lmstudioModel: s.lmstudioModel,
+    codexModel: s.codexModel,
   });
   return raw.trim();
 }

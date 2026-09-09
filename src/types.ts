@@ -25,6 +25,10 @@ export interface Tab {
    * keystrokes behind it (Phase 15 turn provenance). Not persisted — same
    * rule as `lastEventTs`. */
   lastTurnAuto?: boolean;
+  /** Adapter identity (e.g. "codex"), carried from the hook payload's
+   * `agent` field so a resumed/restarted tab can pick the right resume
+   * command. Undefined for Claude and any adapter with no marker yet. */
+  agent?: string;
 }
 
 export interface Blocker {
@@ -75,9 +79,10 @@ export interface Note {
 }
 
 export interface ExtractorSettings {
-  backend: "claude" | "lmstudio";
+  backend: "claude" | "codex" | "lmstudio";
   lmstudioUrl: string;
   lmstudioModel: string;
+  codexModel: string;
 }
 
 /** A tab-tether-keyed re-entry candidate: the latest session bound to a tab
@@ -88,6 +93,9 @@ export interface ReentryCandidate {
   project_key: string;
   cwd: string;
   transcript_path: string;
+  /** Adapter identity persisted with the binding; undefined for legacy rows
+   * and any adapter without a marker yet — treated as Claude for resume. */
+  agent?: string;
 }
 
 /** A fan-out group (Phase 7): one parent tab, N child tabs it spawned. */
@@ -146,6 +154,12 @@ export interface HookPayload {
   tab_id?: string;
   /** Payload shape version; 0 = pre-versioning. Recorded, not branched on yet. */
   hook_version?: number;
+  /** Ingestion-origin adapter marker (e.g. "codex"), stamped server-side from
+   * the `X-Logic-Loop-Agent` header. Absent for Claude and any adapter that
+   * hasn't wired up its own marker yet — never guessed from payload shape.
+   * Distinct from a payload's own `agent_id` field, which identifies a
+   * *subagent* within a session and is unrelated to adapter identity. */
+  agent?: "codex" | string;
   [key: string]: unknown;
 }
 

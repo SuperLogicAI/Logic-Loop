@@ -25,8 +25,15 @@ table below until one gets its own PLAN.md.
 | OpenCode adapter | DONE (Phase 8) | — | Versioned hook contract |
 | Isolated loops (worktrees) | Not started — Phase 9 shipped a different, narrower mechanism (branch-switch-in-place); this is still open | — | Tab tether |
 | Model traffic panel (Safe Router) | Phase 9 candidate | 1d | External: Safe Router v0 log |
-| Codex adapter | v2, next up | — | OpenCode adapter |
-| Remaining adapters (Antigravity, Gemini, Copilot) | v2, after Codex | — | Codex adapter |
+| Codex adapter | DONE (Phase 10) | — | OpenCode adapter |
+| Codex adapter follow-ups (identity marker, resume, Interrupt/SessionEnd) | DONE (Phase 16) | — | Codex adapter |
+| Antigravity adapter follow-ups (turn-epoch fix, tool-field normalization) | DONE (Phase 16, Agy 001-002) | — | Antigravity adapter |
+| Antigravity SessionStart/resume, waiting signal | Planned, unscheduled — see `plans/Antigravity_Implementation_Plans.md` Plans 003-004; 004 gated on live `PreToolUse` verification | — | Codex adapter follow-ups (marker/resume infra, DONE), Antigravity turn-epoch fix (DONE) |
+| Decisions cleanup (grouped by session, bulk-dismiss) | BUILT (Phase 17) — manual test docs/TESTING.md §27 pending | ~1d | — |
+| Idea Board | BUILT (Phase 18) — manual test docs/TESTING.md §28 pending | ~1.5d | Phase 17 |
+| Decisions empty-state clarity (IDEAS.md item C, second half) | BUILT (Phase 19) — manual test docs/TESTING.md §29 pending | a few hours | — |
+| Idea Board "Now" set (IDEAS.md item F) | BUILT (Phase 20) — manual test docs/TESTING.md §30 pending | a few hours | Phase 18 |
+| Remaining adapters (Gemini, Copilot) | v2 | — | Codex adapter |
 
 Phase boundaries still hard stops. Phase 5 items enter PLAN.md for approval
 before build, per process rules.

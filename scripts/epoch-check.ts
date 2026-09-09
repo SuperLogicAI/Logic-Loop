@@ -47,6 +47,28 @@ assert.equal(stateForHook(ev("PostToolUse", { agent_id: "sub1" })), null, "subag
 assert.equal(stateForHook(ev("Stop", { agent_id: "sub1" })), null, "subagent Stop drove state");
 assert.equal(stateForHook(ev("Stop")), "idle");
 
+// Codex Interrupt: closes the epoch like Stop; a late event after it must
+// not revive the tab; a fresh UserPromptSubmit opens a new epoch.
+resetEpochGuard();
+assert.equal(stateForHook(ev("UserPromptSubmit")), "working");
+assert.equal(stateForHook(ev("Interrupt")), "idle");
+assert.equal(stateForHook(ev("PostToolUse")), null, "late PostToolUse after Interrupt revived idle");
+assert.equal(stateForHook(ev("UserPromptSubmit")), "working", "new turn did not reopen after Interrupt");
+
+// Codex SessionEnd: same epoch-closing behavior, and it is not surfaced as
+// an error just because the session ended.
+resetEpochGuard();
+assert.equal(stateForHook(ev("UserPromptSubmit")), "working");
+assert.equal(stateForHook(ev("SessionEnd")), "idle");
+assert.equal(stateForHook(ev("PostToolUse")), null, "late PostToolUse after SessionEnd revived idle");
+
+// A subagent's Interrupt/SessionEnd must not drive the parent tab's state.
+resetEpochGuard();
+assert.equal(stateForHook(ev("UserPromptSubmit")), "working");
+assert.equal(stateForHook(ev("Interrupt", { agent_id: "sub1" })), null, "subagent Interrupt drove state");
+assert.equal(stateForHook(ev("SessionEnd", { agent_id: "sub1" })), null, "subagent SessionEnd drove state");
+assert.equal(stateForHook(ev("PostToolUse")), "working", "parent epoch was wrongly closed by a subagent event");
+
 // Sessions are independent.
 resetEpochGuard();
 assert.equal(stateForHook(ev("Stop")), "idle");

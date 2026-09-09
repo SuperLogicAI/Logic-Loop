@@ -1,7 +1,8 @@
+use crate::home::home_or_tmp;
 use std::collections::HashSet;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter};
 
@@ -14,16 +15,12 @@ pub(crate) const MARKER: &str = "context-terminal/ingest.env";
 /// extractor again — a self-amplifying loop. Dropped at the door.
 pub const EXTRACTOR_TETHER: &str = "__logic_loop_extractor__";
 
-fn home() -> String {
-    std::env::var("HOME").unwrap_or_else(|_| "/tmp".into())
-}
-
 fn config_dir() -> PathBuf {
-    PathBuf::from(home()).join(".context-terminal")
+    PathBuf::from(home_or_tmp()).join(".context-terminal")
 }
 
 fn settings_path() -> PathBuf {
-    PathBuf::from(home()).join(".claude/settings.json")
+    PathBuf::from(home_or_tmp()).join(".claude/settings.json")
 }
 
 /// Sessions with an active transcript tailer.
@@ -91,6 +88,7 @@ pub fn start(app: AppHandle) {
                 continue;
             }
             let hook_version = header_value(&request, "X-Logic-Loop-Hook");
+            let agent_header = header_value(&request, "X-Logic-Loop-Agent");
             let mut body = String::new();
             if request.as_reader().take(1_000_000).read_to_string(&mut body).is_err() {
                 let _ = request.respond(tiny_http::Response::empty(400));
@@ -98,7 +96,7 @@ pub fn start(app: AppHandle) {
             }
             if let Ok(mut payload) = serde_json::from_str::<serde_json::Value>(&body) {
                 if let Some(path) = payload.get("transcript_path").and_then(|v| v.as_str()) {
-                    if is_claude_transcript_path(path) {
+                    if is_transcript_path(path, recognized_agent(agent_header.as_deref())) {
                         if let Some(sid) = payload.get("session_id").and_then(|v| v.as_str()) {
                             ensure_tailer(&app, sid.to_string(), path.to_string());
                         }
@@ -122,6 +120,9 @@ pub fn start(app: AppHandle) {
                         "hook_version".into(),
                         hook_version.and_then(|v| v.parse::<u64>().ok()).unwrap_or(0).into(),
                     );
+                    if let Some(agent) = recognized_agent(agent_header.as_deref()) {
+                        obj.insert("agent".into(), agent.into());
+                    }
                 }
                 let _ = app.emit("ingest://hook", payload);
             }
@@ -130,14 +131,47 @@ pub fn start(app: AppHandle) {
     });
 }
 
-/// Claude's own transcripts always live under `~/.claude/projects/`; nothing
-/// else does. Codex's `SessionStart` carries a `transcript_path` too (its own
-/// rollout-*.jsonl) and this server is agent-agnostic — an ungated tailer
-/// call here would tail and persist Codex's raw transcript, which Phase 10
-/// explicitly ruled out (found live during the Phase 10 manual test,
-/// 2026-08-27).
-fn is_claude_transcript_path(path: &str) -> bool {
-    path.contains("/.claude/projects/")
+/// Transcript paths are agent-scoped. An ungated tailer call here would tail
+/// arbitrary files and can self-amplify through agent subprocesses.
+fn is_transcript_path(path: &str, agent: Option<&str>) -> bool {
+    match agent {
+        None => path.contains("/.claude/projects/"),
+        Some("codex") => crate::home::home()
+            .map(|home| is_codex_rollout_path(Path::new(path), Path::new(&home)))
+            .unwrap_or(false),
+        Some(_) => false,
+    }
+}
+
+fn is_codex_rollout_path(path: &Path, home: &Path) -> bool {
+    let Ok(relative) = path.strip_prefix(home.join(".codex").join("sessions")) else {
+        return false;
+    };
+    let mut components = relative.components().rev();
+    let Some(std::path::Component::Normal(file)) = components.next() else {
+        return false;
+    };
+    let file = file.to_string_lossy();
+    if !file.starts_with("rollout-") || !file.ends_with(".jsonl") {
+        return false;
+    }
+    let Some(std::path::Component::Normal(day)) = components.next() else {
+        return false;
+    };
+    let Some(std::path::Component::Normal(month)) = components.next() else {
+        return false;
+    };
+    let Some(std::path::Component::Normal(year)) = components.next() else {
+        return false;
+    };
+    components.next().is_none()
+        && is_fixed_digits(&year.to_string_lossy(), 4)
+        && is_fixed_digits(&month.to_string_lossy(), 2)
+        && is_fixed_digits(&day.to_string_lossy(), 2)
+}
+
+fn is_fixed_digits(value: &str, length: usize) -> bool {
+    value.len() == length && value.bytes().all(|b| b.is_ascii_digit())
 }
 
 fn header_value(request: &tiny_http::Request, name: &'static str) -> Option<String> {
@@ -243,9 +277,36 @@ const HOOK_VERSION: u32 = 1;
 /// `$LOGIC_LOOP_TAB_ID` comes from the PTY env (see `pty_spawn`) and is empty
 /// for sessions started outside the app — the frontend then falls back to cwd.
 pub(crate) fn hook_command() -> String {
+    hook_command_with_agent(None)
+}
+
+/// Adapter identity marker, sent as a header (never JSON body — an adapter's
+/// stdin is piped through this command unmodified). `agent` is always a
+/// fixed Rust-selected constant, never adapter-controlled input. Recognized
+/// values are the `RECOGNIZED_AGENTS` allowlist below; an unrecognized or
+/// absent header stays absent in the normalized payload rather than being
+/// guessed as Claude.
+pub(crate) fn hook_command_with_agent(agent: Option<&'static str>) -> String {
+    let agent_header = agent
+        .map(|a| format!(" -H \"X-Logic-Loop-Agent: {a}\""))
+        .unwrap_or_default();
     format!(
-        "sh -c '. \"$HOME/.{MARKER}\" 2>/dev/null && curl -sf -m 2 -H \"Authorization: Bearer $CT_TOKEN\" -H \"X-Logic-Loop-Tab: $LOGIC_LOOP_TAB_ID\" -H \"X-Logic-Loop-Hook: {HOOK_VERSION}\" --data-binary @- \"http://127.0.0.1:$CT_PORT/event\" >/dev/null 2>&1; exit 0'"
+        "sh -c '. \"$HOME/.{MARKER}\" 2>/dev/null && curl -sf -m 2 -H \"Authorization: Bearer $CT_TOKEN\" -H \"X-Logic-Loop-Tab: $LOGIC_LOOP_TAB_ID\" -H \"X-Logic-Loop-Hook: {HOOK_VERSION}\"{agent_header} --data-binary @- \"http://127.0.0.1:$CT_PORT/event\" >/dev/null 2>&1; exit 0'"
     )
+}
+
+/// Adapter identity is an ingestion-origin marker (which adapter's hook sent
+/// this event), distinct from Codex's own `agent_id` payload field (which
+/// identifies a *subagent* within a Codex session and is used by
+/// `stateForHook` to avoid driving the parent tab's state). Extend this list
+/// when a future adapter plan wires up its own marker.
+const RECOGNIZED_AGENTS: [&str; 1] = ["codex"];
+
+/// An unrecognized or absent header must stay absent rather than being
+/// guessed as Claude — pulled out as a pure function so the allowlist
+/// behavior is unit-testable without a live HTTP request.
+fn recognized_agent(header: Option<&str>) -> Option<&str> {
+    header.filter(|a| RECOGNIZED_AGENTS.contains(a))
 }
 
 const HOOK_EVENTS: [&str; 5] =
@@ -361,6 +422,23 @@ mod tests {
     }
 
     #[test]
+    fn default_hook_command_carries_no_agent_marker() {
+        assert!(!hook_command().contains("X-Logic-Loop-Agent"));
+        assert_eq!(hook_command(), hook_command_with_agent(None));
+    }
+
+    #[test]
+    fn agent_marked_command_carries_the_marker_and_is_otherwise_identical() {
+        let marked = hook_command_with_agent(Some("codex"));
+        assert!(marked.contains("X-Logic-Loop-Agent: codex"), "{marked}");
+        assert_eq!(
+            marked.replace(" -H \"X-Logic-Loop-Agent: codex\"", ""),
+            hook_command(),
+            "agent header must be the only difference from the default command"
+        );
+    }
+
+    #[test]
     fn setup_is_idempotent_and_preserves_foreign_hooks() {
         let mut s = foreign_settings();
         apply_setup(&mut s).unwrap();
@@ -398,13 +476,49 @@ mod tests {
     }
 
     #[test]
-    fn only_claude_transcript_paths_are_tailed() {
-        assert!(is_claude_transcript_path(
-            "/Users/x/.claude/projects/-foo/abc-123.jsonl"
+    fn recognized_agent_accepts_only_the_allowlist() {
+        assert_eq!(recognized_agent(Some("codex")), Some("codex"));
+        assert_eq!(recognized_agent(Some("antigravity")), None);
+        assert_eq!(recognized_agent(Some("")), None);
+        assert_eq!(recognized_agent(None), None);
+    }
+
+    #[test]
+    fn transcript_paths_are_agent_scoped() {
+        assert!(is_transcript_path(
+            "/Users/x/.claude/projects/-foo/abc-123.jsonl",
+            None
         ));
-        assert!(!is_claude_transcript_path(
-            "/Users/x/.codex/sessions/2026/08/27/rollout-2026-08-27T06-10-13-abc.jsonl"
+        let rollout =
+            "/Users/x/.codex/sessions/2026/08/27/rollout-2026-08-27T06-10-13-abc.jsonl";
+        assert!(is_codex_rollout_path(
+            std::path::Path::new(rollout),
+            std::path::Path::new("/Users/x")
         ));
-        assert!(!is_claude_transcript_path(""));
+        assert!(!is_transcript_path(rollout, None));
+        assert!(!is_transcript_path(rollout, Some("antigravity")));
+        assert!(!is_codex_rollout_path(
+            std::path::Path::new("/Users/x/.codex/sessions/2026/08/27/events.jsonl"),
+            std::path::Path::new("/Users/x")
+        ));
+        assert!(!is_codex_rollout_path(
+            std::path::Path::new(
+                "/Users/x/.codex/sessions/2026/8/27/rollout-2026-08-27T06-10-13-abc.jsonl"
+            ),
+            std::path::Path::new("/Users/x")
+        ));
+        assert!(!is_codex_rollout_path(
+            std::path::Path::new(
+                "/Users/x/.codex/sessions/2026/08/27/rollout-2026-08-27T06-10-13-abc.txt"
+            ),
+            std::path::Path::new("/Users/x")
+        ));
+        assert!(!is_codex_rollout_path(
+            std::path::Path::new(
+                "/Users/other/.codex/sessions/2026/08/27/rollout-2026-08-27T06-10-13-abc.jsonl"
+            ),
+            std::path::Path::new("/Users/x")
+        ));
+        assert!(!is_transcript_path("", None));
     }
 }

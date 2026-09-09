@@ -1088,25 +1088,358 @@ All passed 2026-09-05.
 
 ## 25. Turn provenance + loop digest (Phase 15)
 
-- [ ] Type a prompt by hand, hit Enter immediately → tagged `human`, no `⟳`
+- [x] Type a prompt by hand, hit Enter immediately → tagged `human`, no `⟳`
       on the tab, flat Since-you-left shape (unchanged from Phase 14a).
-- [ ] Run `/loop 30s /some-command` (or equivalent auto-resubmit) for 3+
+- [x] Run `/loop 30s /some-command` (or equivalent auto-resubmit) for 3+
       wakeups with no manual input in between → each wakeup's
       `UserPromptSubmit` tagged `auto`, TabBar shows `⟳`, Since-you-left
       switches to loop-digest shape with correct iteration count.
-- [ ] Mixed session: one human turn, then 2 auto loop turns → digest shows
-      the 2 auto turns collapsed into the loop shape.
-- [ ] A loop iteration whose closing message is a no-op phrase ("no
+- [x] Mixed session: one human turn, then 2 auto loop turns → digest shows
+      the 2 auto turns collapsed into the loop shape. *(verified 2026-09-06:
+      human turn preceded 3 auto iterations, digest showed "3 iterations
+      while you were away" excluding the human turn; post-stop the panel
+      correctly reverted to flat delta shape for the stop-message's own
+      human turn)*
+- [x] A loop iteration whose closing message is a no-op phrase ("no
       change", "nothing to do", "still waiting", "all good") → collapses
       into the `×N no change` line; a real-work iteration renders its own
-      line with tool/error counts and its first assistant line.
-- [ ] A decision opened mid-loop → shown pinned at the top of the digest,
-      not buried inside an iteration line.
-- [ ] Outside-terminal session (cwd-fallback, no tether) →
+      line with tool/error counts and its first assistant line. *(verified
+      2026-09-06, safe_router: a 1m cron replying exactly "no change" twice
+      collapsed into "×2 no change"; a separate cron tick running `ls` and
+      summarizing the actual listing rendered its own line with tool count
+      and first-assistant-line text, not folded into the collapsed run.)*
+- [x] A decision opened mid-loop → shown pinned at the top of the digest,
+      not buried inside an iteration line. *(found+fixed 2026-09-06: decision
+      extraction is async and its row always lands ~6-7s after the
+      iteration's own Stop — confirmed live via safe_router session
+      `4e8ea829`, decisions at 01:21:11/01:22:23 landing after Stops at
+      01:21:05/01:22:16. `groupIterations`' old `[startTs, endTs)` window
+      (`loop.ts:96`) never matched, so the decision silently attached to no
+      iteration and never rendered. Fixed: a decision now attaches to
+      whichever iteration has the latest `startTs` at or before the
+      decision's ts — that iteration owns the gap up to the next iteration's
+      start, not just up to its own Stop. Regression case added to
+      `loop-check.ts` (decision ts in the post-Stop gap). Re-verified live
+      2026-09-06 in safe_router: a repeating unanswered either/or question
+      fired across 2 auto cron ticks, producing 2 decisions — both rendered
+      pinned above the iteration lines in digest shape, not folded into
+      either iteration's own text.)*
+- [x] Outside-terminal session (cwd-fallback, no tether) →
       `UserPromptSubmit` always tagged `human`, never misclassified `auto`.
-- [ ] Human pastes a multi-line block via ⌘V into the prompt, submits
-      within 5s → tagged `human` (paste counts as input).
-- [ ] Terminals: throughout, typing latency and PTY output unaffected.
+      *(verified 2026-09-06, safe_router: a 1m cron run from a terminal
+      outside Logic Loop, bound via cwd-fallback — no `⟳` appeared on the
+      matching tab across 2+ auto-fired ticks.)*
+- [x] Human pastes a multi-line block via ⌘V into the prompt, submits
+      within 5s → tagged `human` (paste counts as input). *(verified
+      2026-09-06, safe_router: pasted while a "no change" cron was actively
+      running (`lastInputTs` guaranteed stale) — no `⟳` on the pasted turn,
+      rendered with the normal human `>` prompt marker, didn't fold into the
+      auto no-change streak.)*
+- [x] Terminals: throughout, typing latency and PTY output unaffected.
+      *(confirmed 2026-09-06 — no lag observed during §25 testing; separate,
+      pre-existing lag noted on tab-switch while the landing note
+      auto-generates, tracked as a follow-up, not a §25 regression.)*
+
+## 26. Phase 16 — Codex + Antigravity follow-up fixes
+
+Scope: `plans/Codex_Implementation_Plans.md` (Plans 001-003) and
+`plans/Antigravity_Implementation_Plans.md` (Plans 001-002). Agy 003/004
+deferred to a later phase (see PLAN.md).
+
+### Live verification performed during the build (not just unit tests)
+
+- [x] **Agy 001's live-verification gate** (mandatory per the plan before
+      registering any `Pre*` hook): built a scratch `.agents/hooks.json`
+      probe and temporarily swapped it into the real
+      `~/.gemini/config/hooks.json` (backed up first, restored byte-for-byte
+      after — confirmed via `diff`), then drove real `agy` 1.1.27 turns via
+      `--input-format stream-json` (non-interactive, multiple turns in one
+      long-lived process). Findings:
+      - A bare `{}` `PreInvocation` response never blocked, denied, or
+        errored a turn, across a trivial no-tool turn and a 2-tool-call
+        turn.
+      - A deliberately slow (2s sleep) + malformed (empty stdout) response
+        added exactly that latency and nothing worse — degraded to slow,
+        never stuck.
+      - **`PreInvocation` fires multiple times per top-level turn** (3
+        firings observed for one turn with 2 tool calls — once per
+        intra-turn model round-trip, not once per turn as the source review
+        assumed) — this would have inflated Since-you-left's turn count and
+        corrupted Phase 15 turn-provenance if translated naively.
+      - **`invocationNum` resets to `0` at the start of every new top-level
+        turn**, confirmed by resuming the same conversation for a second
+        turn in the same process and seeing `invocationNum: 0` again — this
+        is the reliable once-per-turn signal the fix actually uses (see
+        `antigravity.rs`'s `ANTIGRAVITY_HOOK_EVENTS` doc comment and
+        `translate()`'s `PreInvocation` branch).
+      - This changed the plan's implementation from the reviewed proposal
+        (map every `PreInvocation` → `UserPromptSubmit`) to the corrected
+        one (map only when `invocationNum == 0`) — recorded as a landmine in
+        CLAUDE.md.
+- [x] Manually exercised the real Antigravity turn-epoch fix end to end via
+      the same stream-json harness: turn 1 → `UserPromptSubmit`-mapped
+      `PreInvocation` (`invocationNum: 0`) → `working`; turn 2 (same
+      process, same conversation) → another `invocationNum: 0`
+      `PreInvocation` → epoch correctly reopens. This is the direct fix for
+      the bug (a real second Antigravity turn no longer gets silently
+      dropped by the `stoppedSessions` epoch guard).
+- [x] Codex 003's `Interrupt`/`SessionEnd` events, live-verified against
+      installed `codex-cli` 0.153.4 (temporarily swapped `~/.codex/hooks.json`
+      for a probe file, same backup/restore discipline): a plain `codex exec`
+      turn fired `SessionStart → UserPromptSubmit → Stop → SessionEnd`, all
+      with real `session_id`/`cwd`/`transcript_path`; `SIGINT`-ing a
+      long-running turn (proxy for interactive Esc) fired `Interrupt` (real
+      `turn_id`, no error field) immediately followed by `SessionEnd`
+      (`reason: "other"`) — exactly the event/field shapes Plan 003 assumed
+      from upstream source, and exactly what `stateForHook`'s new cases and
+      `App.tsx`'s `isTerminalResult` predicate already handle. Codex did not
+      reject the 7-event hooks.json (validates the STOP condition about an
+      unrecognized event key never triggered).
+- [x] Codex 002's resume syntax, live-verified: `codex resume --help`
+      confirms `codex resume [SESSION_ID] [PROMPT]` (matches `pty.rs`'s
+      `resume_command` exactly); a real resumed session
+      (`codex exec resume <sid>`) correctly recalled context from the prior
+      turn ("what word did I ask you to reply with?" → correctly answered
+      from the earlier turn, same `session_id`).
+- [x] Quality gates: `cargo test --lib` 49/49 (11 new — 2 ingest, 1 codex
+      marker, 2 codex lifecycle-adjacent already counted in setup loops, 2
+      pty resume-selection, 6 antigravity translate/normalize), `cargo
+      clippy --all-targets -- -D warnings` clean, `npx tsc --noEmit` clean,
+      `npm run check` 13/13 (unchanged script count — extended
+      `reentry-check.ts`, `epoch-check.ts`, `delta-check.ts` in place,
+      no new script needed), `npm run golden` 12/12 (unchanged — no
+      extraction-prompt files touched), `git diff --check` clean.
+
+### Still needs a human, live GUI pass (not verifiable headlessly)
+
+- [x] Toggle "codex on" in the real app → `~/.codex/hooks.json` gets all 7
+      events (5 existing + `Interrupt`/`SessionEnd`), each `command`
+      carrying `X-Logic-Loop-Agent: codex`; toggle off/on again → idempotent.
+      *(2026-09-07: confirmed live — hooks.json had all 7 events with the
+      header on every command, all 7 trust hashes present in config.toml.
+      Live testing surfaced a real timing gap, not a hooks.json bug: toggling
+      on while a Codex process from before the toggle is still running has
+      no effect — Codex reads hooks.json once at session start, so that
+      already-running session never fires hooks (session started 03:38:42,
+      hooks.json rewritten 03:40:51, zero events in the DB for it). A fresh
+      Codex session/turn started after the toggle picked up hooks correctly
+      — `session_bindings` bound `agent='codex'`, `UserPromptSubmit`→`Stop`
+      landed with real timestamps. Not a regression, just an undocumented
+      "toggle before starting the session, not mid-session" caveat.)*
+- [x] Run a real Codex session in a Logic Loop tab, quit/relaunch the app,
+      confirm a re-entry ghost tab appears, click Re-enter, confirm the
+      resumed prompt is the same Codex conversation (visually, not just via
+      the headless check above). *(2026-09-07: passed live.)*
+- [x] Interrupt a real interactive Codex turn with Esc (not `SIGINT` on
+      `exec`) in a Logic Loop tab → tab dot returns to idle, no stuck
+      "working" state, no spurious duplicate result. Esc in the real
+      interactive TUI is very likely the same underlying path as the
+      `SIGINT`-on-`exec` test above (same `Interrupt`/`SessionEnd` sequence
+      appeared), but this is the one part of Plan 003's manual test not
+      literally reproduced with the real interactive keypress.
+      *(2026-09-07: confirmed live — tab dot went blue (working) on run,
+      Esc brought it back to green (idle). DB showed `hook:Interrupt` fired,
+      no `SessionEnd` (fine — `isTerminalResult` in App.tsx already treats
+      `Interrupt` alone as terminal), and zero `result_landed`/
+      `result_claimed` rows — no stuck state, no spurious duplicate result.)*
+- [x] Run a real two-turn Antigravity session in a Logic Loop tab (not the
+      headless stream-json harness) → tab visibly returns to `working` on
+      turn 2 instead of staying `idle`. Record the `agy` version used.
+      *(2026-09-07: passed live, Antigravity CLI 1.1.27.)*
+- [ ] Antigravity Accomplished panel + Since-you-left digest: run
+      `run_command` and `write_to_file` in a real Antigravity tab, confirm
+      real detail text (not a bare tool name) and non-zero file/command
+      counts. **BLOCKED 2026-09-07**: hit account-level API quota
+      ("Individual quota reached") mid-session, unrelated to this app —
+      cooldown ~142h (~6 days), resets ~2026-09-13. Recheck then.
+- [ ] A failing Antigravity `run_command` still does not surface a blocker
+      (this is expected, not a regression — agy strips the failure signal
+      from command hooks, per the pinned tripwire test; confirm the app
+      doesn't crash or misbehave, just correctly shows nothing).
+      **BLOCKED 2026-09-07**: same quota cooldown as above, not yet
+      attempted — a real quota-exhaustion error *did* correctly surface as
+      a "Rate limited" blocker card during the item-1 test, but that's a
+      different signal (account-level API error, not a `run_command`
+      tool-call failure) and doesn't exercise this check. Recheck ~2026-09-13.
+
+## 27. Decisions cleanup — grouped by session, bulk-dismiss (Phase 17)
+
+- [x] Project with open decisions across 2+ sessions: Decisions section
+      shows one collapsible cluster per session, most-recent expanded,
+      older ones collapsed. Header reads relative age + count (e.g. "~2
+      months ago · 12 decisions"). **Found + fixed a real bug during this
+      check**: `SidePanel.tsx`'s `reload()` was passing decisions through
+      `scopeBySession(dc, sessionId)` before grouping — every tab could
+      only ever see its own session's cluster, so cross-session grouping
+      was dead on arrival. Surfaced live: tab badge showed 10 open
+      decisions for the project while the active tab's own Decisions
+      section read "Nothing waiting on you." Fixed by dropping the scoping
+      for `decisions` state only (tool events keep it — that scoping is
+      correct there). Passed after fix.
+- [x] Toggling a cluster's chevron expands/collapses just that cluster;
+      others unaffected.
+- [x] A session with exactly 1 open decision shows no "dismiss all" button
+      on its cluster header; a session with 2+ does.
+- [x] "dismiss all" on a cluster clears every open decision in that session
+      only — sibling clusters' counts and rows unchanged, badge count in the
+      section header (`Decisions (N)`) drops by exactly that cluster's
+      count.
+- [x] "dismiss all" on the only remaining cluster collapses the whole
+      section to "Nothing waiting on you."
+- [x] Per-row actions (answer/context/delegate/dismiss) inside an expanded
+      cluster behave exactly as before grouping was added.
+- [x] Switching project tabs re-seeds which cluster is expanded (newest for
+      the new project); a manual expand/collapse made earlier in the
+      previous project is not carried over. (Confirmed decisions persisting
+      across a new session start in the same project is correct by design —
+      decisions are cwd-scoped, not session-scoped, and only clear on
+      answer/dismiss.)
+- [x] Closed-decisions tail below the open clusters is unchanged in
+      appearance and behavior. Bonus check confirmed too: dismissing in one
+      tab is reflected in a second tab on the same project (shared DB, no
+      per-tab staleness).
+
+## 28. Idea Board (Phase 18)
+
+- [x] Collapsed dock strip shows under the terminal pane by default (first
+      run, no `.logic-loop/board.md` yet); clicking it expands to five
+      columns (Idea/Planned/Building/Later/Done), all empty, `+` quick-add
+      live.
+- [x] Quick-add with just text (no title) creates a card in Idea whose
+      title is the first line typed; `.logic-loop/board.md` now exists on
+      disk with that one `## ` card.
+- [x] Moving a card via its status dropdown updates the column it renders
+      in immediately, and the on-disk file's `status:` line for that card
+      changes — no other card's lines change.
+- [x] Hand-edit `.logic-loop/board.md` in an external editor (add a card,
+      change a `next:` line) while the app is open, switch tabs away and
+      back → the board picks up the external edit; then move a card in the
+      UI → confirm the hand-edited card and its edit are still there in the
+      file afterward (reload-before-write didn't clobber it).
+- [x] Click a card's title → expands in place showing body/next/link, no
+      markdown rendering (raw text only); click again collapses it. First
+      attempt read as a fail on a body/next/link-less quick-add card (nothing
+      to show is correct, not a bug); passed once retested against a card
+      with `body`/`next`/`link` lines added by hand.
+- [x] Drag the top resize handle → dock height changes; collapse the app
+      and relaunch (or switch away and back to the project tab) → collapsed
+      state and height both persisted per project.
+
+### Scope added mid-sprint (not in the original Phase 18 plan, built and
+### verified in this pass, ship with the same stamp as the rest of §28)
+
+- [x] Per-card delete (✕, far right of the title row) — removes the card
+      from the board and from `.logic-loop/board.md` permanently (`board.ts`
+      `deleteCard`, wired as `remove()` in `IdeaBoard.tsx`).
+- [x] Per-card accent color — grey dot with a rainbow-gradient ring next to
+      the star opens a swatch popover; picking a color tints the card's
+      border and title-row background and persists as a `color: #hex` line
+      (`board.ts` `Card.color` + `parseBoard`/`serializeCard`, `setColor()`
+      in `IdeaBoard.tsx`). "No color" swatch clears it.
+- [x] Row order finalized: chevron (expand) → star (Now) → color dot →
+      title → ✕ (delete), far right.
+- [x] All triangle glyphs (▸/▾/▼/▲) replaced with the same `Chevron` SVG
+      used by Decisions/Blockers, for visual consistency — per-card expand
+      toggle, the dock's own collapse/expand row, and the momentum "NEXT"
+      card header (`SidePanel.tsx`) all now share the one chevron style.
+- [x] `npx tsc --noEmit` and `npm run check` (incl. `board:check`) clean
+      after all of the above.
+- [x] Switch to a different project tab with its own (or no) board → shows
+      that project's own file, not the previous tab's cards.
+- [x] With no landing note, no open decision, and no open blocker, but a
+      `planned` card exists → SidePanel's momentum card shows that card's
+      `next:` (or title if no `next:`); clicking Done moves the card to
+      `building`, not `done`, and it disappears from momentum (blocker/
+      decision fallback resumes, or "nothing waiting" if truly empty).
+- [x] Terminals: opening/collapsing/resizing the board and adding/moving
+      cards while an agent is streaming output — typing latency and PTY
+      output unaffected, no input ever sent to the terminal session.
+
+## 29. Decisions empty-state clarity (Phase 19)
+
+- [x] Idle Claude project, transcript readable, zero open decisions →
+      Decisions section reads "Nothing waiting on you." (unchanged text,
+      now specifically meaning confirmed-empty).
+- [x] Simulate a blind session (kill/deny the tailer, or point a session's
+      transcript at a bad path) with zero open decisions → the Decisions
+      section itself (not just the top banner) reads "Can't tell — no
+      transcript for this session (extraction never ran)."
+- [x] An OpenCode/Antigravity tab with zero open decisions → "Decision
+      tracking isn't available for this agent yet." — never the
+      confirmed-empty text. Codex is covered by Phase 21 below and now uses
+      the confirmed-empty text when its transcript is readable.
+- [x] An unbound fan-out child tab → "Can't tell — this tab isn't bound to
+      a tracked session yet." — outranks both blind and non-Claude-agent
+      when more than one would apply.
+- [x] Blockers and notes empty states are unchanged — this phase touches
+      only the Decisions section's zero-state text.
+
+## 30. Idea Board "Now" set (Phase 20)
+
+- [x] Star (★) a card from any column → it appears in the collapsed dock
+      strip's title list (visible without expanding the board); un-starring
+      it removes it from that strip.
+- [x] Star 3 cards; attempt to star a 4th → inline "Now is full (3/3) —
+      remove one first" message, the 4th card's star does not fill in, and
+      the file's `now:` count stays at 3.
+- [x] Un-star one of the 3, then star a different card → succeeds (cap only
+      blocks adding, never removing).
+- [x] With a Now card starred and a different `planned` card that isn't
+      starred: SidePanel's momentum card shows the Now card's `next:` (or
+      title), not the top-planned one.
+- [x] Clicking Done on that momentum card moves it to `building` in the
+      board and un-stars it (frees the Now slot); momentum then falls back
+      correctly (another Now card if any, else top-planned, else "nothing
+      waiting").
+- [x] Un-star all cards → momentum reverts to the plain top-planned pick,
+      matching Phase 18 behavior.
+- [x] Hand-edit the board file to add `now: true` to a card externally,
+      switch tabs away and back → the star and collapsed-strip title
+      appear without any app-side toggle.
+
+## 31. Codex decision/blocker tracking (Phase 21)
+
+- [x] Enable Codex hooks before starting a fresh Codex session. Existing Codex
+      processes do not reload hooks after the toggle; if hook command text has
+      changed and trust is stale, follow the Codex trust-hash landmine in
+      `CLAUDE.md` and approve the fresh-session prompt.
+- [x] In a Logic Loop Codex tab, produce an assistant message containing an
+      explicit question and confirm a decision appears after the turn ends.
+- [x] Produce an unanswered Codex question and confirm it is stored as an
+      open decision; answer a later question and confirm it is stored as
+      answered.
+- [x] Confirm a Codex tab with a readable transcript and zero open decisions
+      says "Nothing waiting on you."; a blind Codex session still says it
+      cannot tell because no transcript was readable.
+- [x] Trigger a Codex tool failure and confirm the existing Bash-scoped
+      blocker path behaves as it does for Claude. Do not expect quoted
+      transcript prose to create a blocker.
+- [x] Relaunch and re-enter the Codex session; confirm the session remains
+      bound to the Codex tab and new transcript lines continue extracting.
+- [x] While extraction runs, confirm no second observed Codex session,
+      recursive extraction, cwd overwrite, or terminal impact appears. The
+      extractor child must remain covered by the
+      `LOGIC_LOOP_TAB_ID=__logic_loop_extractor__` tether.
+
+## 32. Codex CLI Sidebar LM backend (Phase 22)
+
+- [ ] Open Sidebar LM and select Codex CLI; close and reopen the settings
+      popover → Codex remains selected.
+- [ ] Leave the Codex model override blank and extract a decision, landing
+      note, and commit-message draft → all three use the configured Codex
+      default without changing the prompts or writing to the terminal.
+- [ ] Enter a model override, rerun one extraction, then clear it → the
+      setting persists and clearing returns to the CLI default.
+- [ ] Run `EXTRACTOR=codex npm run golden` → all 12 fixtures pass, including
+      the injection case.
+- [ ] Temporarily make Codex unavailable or use an invalid model → extraction
+      fails open; terminals and panels remain usable and no partial decision
+      row is written.
+- [ ] During a Codex-backed extraction, confirm no extractor child appears as
+      a Logic Loop session, no cwd changes to `/`, and no recursive decisions
+      are created.
+- [ ] Select Claude CLI and LM Studio afterward → both still work and their
+      existing settings remain intact.
 
 ## 26. Diff pop-out from Accomplished rows (issue #10)
 
@@ -1181,6 +1514,13 @@ and needs a Mac pass.
 - [x] `npm run reentry:check` — one row per tether, latest wins on resume. *(new, Phase 6)*
 - [x] `npm run unclaimed:check` — flag/claim predicate assertions pass. *(new, Phase 6)*
 - [x] `npm run notify:check` — nudge fire predicate assertions pass. *(new, Phase 6)*
+- [x] `npm run decisions:check` — session-grouping/sort assertions pass. *(new, Phase 17)*
+- [x] `npm run board:check` — parse/splice/append round-trip assertions pass. *(new, Phase 18)*
+- [x] `cargo test` — `board::tests` read/write/round-trip/error-path assertions pass. *(new, Phase 18)*
+- [x] `npm run empty-state:check` — decisions-empty-reason priority-order assertions pass. *(new, Phase 19)*
+- [x] `npm run board:check` — extended with Now-set round-trip/cap assertions. *(Phase 20)*
+- [x] `npm run codex-transcript:check` — redacted real-shape Codex JSONL
+      parser, ignored event types, and transcript-as-data assertions pass.
 - [x] `npm run diff:check` — per-file diff slicing assertions pass, including
       the same-basename-in-a-sibling-directory case that must NOT match.
       *(new, issue #10; run 2026-09-06 on Windows via `npm run check`)*

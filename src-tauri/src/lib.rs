@@ -1,6 +1,8 @@
+mod board;
 mod clipboard;
 mod extractor;
 mod codex;
+mod home;
 mod ingest;
 mod opencode;
 mod pty;
@@ -152,6 +154,16 @@ pub fn run() {
                 created_at INTEGER NOT NULL
               );",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 10,
+        description: "session binding adapter identity",
+        // NULL = a legacy row (or a session whose adapter never sent the
+        // X-Logic-Loop-Agent marker — see ingest.rs's recognized_agent) —
+        // treated as a legacy Claude resume candidate by pty.rs's
+        // resume_command, which is exactly what pre-adapter bindings are.
+        sql: "ALTER TABLE session_bindings ADD COLUMN agent TEXT;",
+        kind: MigrationKind::Up,
     }];
 
     tauri::Builder::default()
@@ -251,7 +263,9 @@ pub fn run() {
             antigravity::antigravity_hooks_status,
             extractor::run_extractor,
             clipboard::clipboard_text,
-            clipboard::clipboard_image_path
+            clipboard::clipboard_image_path,
+            board::read_board,
+            board::write_board
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {

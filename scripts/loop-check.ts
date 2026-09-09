@@ -50,9 +50,13 @@ assert.equal(iters[0].noop, false, "iteration 1 is not a no-op");
 assert.equal(iters[0].endTs, 4, "iteration 1 closed by its Stop");
 
 // Decision opened inside iteration 2's window attaches only to iteration 2.
+// Decision 3 lands at ts=4.5 — after iteration 1's own Stop (ts=4) but before
+// iteration 2 opens (ts=5): the async-extraction gap found 2026-09-06. It
+// must still attach to iteration 1, not fall through unattached.
 const decisions: DeltaDecision[] = [
   { id: 1, question: "in iter 2", ts: 6 },
   { id: 2, question: "in iter 1", ts: 2 },
+  { id: 3, question: "extracted after iter 1's Stop", ts: 4.5 },
 ];
 const withDecisions = groupIterations(threeLoop, decisions);
 assert.deepEqual(
@@ -62,15 +66,41 @@ assert.deepEqual(
 );
 assert.deepEqual(
   withDecisions[0].decisions.map((d) => d.id),
-  [2],
-  "iteration 1 should get the decision opened inside its own window"
+  [2, 3],
+  "iteration 1 should get its own decision plus one extracted after its Stop but before the next iteration opens"
 );
 assert.equal(withDecisions[2].decisions.length, 0, "iteration 3 gets no decisions");
 
 // Unterminated trailing auto open (no closing Stop) is marked incomplete, not dropped.
-const trailing = groupIterations([auto(1), tool(2)], []);
+// Includes a no-op-phrase assistant line to confirm noop is never finalized before a Stop
+// is actually seen, even if the trailing text would otherwise match.
+const trailing = groupIterations([auto(1), tool(2), assistantLine("still waiting", 3)], []);
 assert.equal(trailing.length, 1, "unterminated iteration must still appear");
 assert.equal(trailing[0].endTs, null, "unterminated iteration has no endTs");
+assert.equal(trailing[0].noop, false, "noop must not finalize before the iteration's own Stop is seen");
+
+// Race found live 2026-09-06: hook:Stop is a shell hook that fires the instant the model
+// finishes, while the transcript tailer reads the JSONL line independently and can land
+// after it — for a one-line no-tool-call reply, the closing text is the iteration's *only*
+// assistant line, so it must still count even though its row's ts is after the Stop row's ts.
+const raceLoop: EventRow[] = [auto(100), stop(101), assistantLine("no change", 102), auto(103), stop(104)];
+const raceIters = groupIterations(raceLoop, []);
+assert.equal(raceIters.length, 2, "race fixture should still group into 2 iterations");
+assert.equal(raceIters[0].endTs, 101, "endTs is set immediately at Stop despite the race");
+assert.equal(
+  raceIters[0].noop,
+  true,
+  "noop must still be detected from a closing assistant line whose row lands after the Stop row"
+);
+
+// Same race with no next UserPromptSubmit at all — end of the row stream must still finalize it.
+const trailingRace = groupIterations([auto(200), stop(201), assistantLine("still waiting", 202)], []);
+assert.equal(trailingRace.length, 1, "trailing race fixture should still group into 1 iteration");
+assert.equal(
+  trailingRace[0].noop,
+  true,
+  "noop must finalize at end of stream too, not just when a next UserPromptSubmit arrives"
+);
 
 // --- isLoopRun ---
 assert.equal(isLoopRun(groupIterations([auto(1), stop(2)], [])), false, "1 auto turn is not a loop run");

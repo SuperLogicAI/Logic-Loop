@@ -28,9 +28,10 @@ export function ptySpawn(
   rows: number,
   tabId?: string,
   resumeSession?: string,
-  launchCmd?: string
+  launchCmd?: string,
+  resumeAgent?: string
 ): Promise<number> {
-  return invoke<number>("pty_spawn", { cwd, cols, rows, tabId, resumeSession, launchCmd });
+  return invoke<number>("pty_spawn", { cwd, cols, rows, tabId, resumeSession, launchCmd, resumeAgent });
 }
 
 /** Resolve `~` and case/symlinks to the real path. */

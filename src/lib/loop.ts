@@ -40,9 +40,25 @@ function provenanceOf(r: EventRow): "human" | "auto" {
 /** Groups an ordered event stream into iterations: an iteration opens at an
  * `auto` UserPromptSubmit and closes at the next Stop. A human
  * UserPromptSubmit never opens one and drops any dangling reference to the
- * previous auto iteration (it's already closed by its own Stop, or left
- * open/incomplete). Decisions are attached by timestamp falling inside
- * `[startTs, endTs)` (or `[startTs, +inf)` while still open).
+ * previous auto iteration. Decision extraction is async and its row always
+ * lands *after* the iteration's own Stop (found 2026-09-06: extraction took
+ * 6-7s, consistently landing in the gap after `endTs` and before the next
+ * iteration's `startTs` — never inside `[startTs, endTs)`). So a decision is
+ * attached to whichever iteration has the latest `startTs` at or before the
+ * decision's timestamp — that iteration owns everything up to the next
+ * iteration's start, not just up to its own Stop.
+ *
+ * The same race hits the closing assistant message itself, not just
+ * decisions (found 2026-09-06, same session): `hook:Stop` is a shell hook
+ * that fires the instant the model finishes, while the transcript tailer
+ * reads the JSONL line off disk independently and can land ~300ms later —
+ * for a one-line reply with no tool calls (e.g. "no change"), that's the
+ * *only* assistant line the iteration has, and it was arriving after `open`
+ * had already been nulled at Stop, so it was silently dropped: noop
+ * detection saw stale/empty text and never fired. Fix: `open` keeps
+ * attributing rows (transcript, tools) past its own Stop — only the next
+ * `UserPromptSubmit` (or end of the row stream) actually closes it out for
+ * noop purposes. `endTs` itself still gets set the instant Stop is seen.
  *
  * ponytail: iterations aren't grouped into separate "runs" split by human
  * turns in between — `isLoopRun` just checks the total count. A session
@@ -55,6 +71,7 @@ export function groupIterations(rows: EventRow[], decisionRows: DeltaDecision[])
   let lastAssistantText = "";
   for (const r of rows) {
     if (r.type === "hook:UserPromptSubmit") {
+      if (open && open.endTs !== null) open.noop = isNoop(lastAssistantText);
       if (provenanceOf(r) === "auto") {
         open = {
           startTs: r.ts,
@@ -66,10 +83,10 @@ export function groupIterations(rows: EventRow[], decisionRows: DeltaDecision[])
           noop: false,
         };
         iterations.push(open);
-        lastAssistantText = "";
       } else {
         open = null;
       }
+      lastAssistantText = "";
       continue;
     }
     if (!open) continue;
@@ -88,12 +105,15 @@ export function groupIterations(rows: EventRow[], decisionRows: DeltaDecision[])
       }
     } else if (r.type === "hook:Stop") {
       open.endTs = r.ts;
-      open.noop = isNoop(lastAssistantText);
-      open = null;
     }
   }
+  if (open && open.endTs !== null) open.noop = isNoop(lastAssistantText);
   for (const d of decisionRows) {
-    const it = iterations.find((i) => d.ts >= i.startTs && (i.endTs === null || d.ts < i.endTs));
+    let it: Iteration | undefined;
+    for (const cand of iterations) {
+      if (d.ts >= cand.startTs) it = cand;
+      else break;
+    }
     if (it) it.decisions.push(d);
   }
   return iterations;

@@ -8,6 +8,7 @@ import {
   bindSession,
   computeProvenance,
   deriveClock,
+  onAdapterWarning,
   onHookEvent,
   onTailerFailed,
   onTranscriptLine,
@@ -19,6 +20,7 @@ import {
 import { detectBlockers } from "./lib/detectors";
 import * as decisions from "./lib/decisions";
 import { initNotifications, notify } from "./lib/notify";
+import { IdeaBoard } from "./components/IdeaBoard";
 import { SidePanel } from "./components/SidePanel";
 import { LandingNoteModal } from "./components/LandingNoteModal";
 import { FanOutModal } from "./components/FanOutModal";
@@ -71,6 +73,8 @@ export default function App() {
   // Sessions whose transcript file could not be opened — they emit hooks but no
   // transcript, so decisions never extract for them. Silent until surfaced.
   const [blindSessions, setBlindSessions] = useState<Record<string, string>>({});
+  // Adapter setup warnings (e.g. foreign PostToolUse hook collision in older agy).
+  const [adapterWarnings, setAdapterWarnings] = useState<Array<{ agent: string; reason: string }>>([]);
 
   // Nudges (Phase 6): muted project keys, cached so the hot ingestion path
   // never blocks on a DB read before deciding whether to notify.
@@ -253,11 +257,16 @@ export default function App() {
   // Tab-strip glow (all tabs, not just the active one) — same membership
   // data the rollup already tracks, just not scoped to `activeId`.
   const [fanOutChildIds, setFanOutChildIds] = useState<Set<string>>(new Set());
+  const [fanOutParentIds, setFanOutParentIds] = useState<Set<string>>(new Set());
   const [worktreeTabIds, setWorktreeTabIds] = useState<Set<string>>(new Set());
   useEffect(() => {
     void repo
       .allFanOutChildTabIds()
       .then((ids) => setFanOutChildIds(new Set(ids)))
+      .catch(() => undefined);
+    void repo
+      .allFanOutParentTabIds()
+      .then((ids) => setFanOutParentIds(new Set(ids)))
       .catch(() => undefined);
     void repo
       .allWorktreeTabIds()
@@ -449,7 +458,17 @@ export default function App() {
     if (!tab) return;
     // Same tether openTab already passes — without it a restarted tab respawns
     // untethered and its next session binds by cwd fallback instead of tether.
-    const ptyId = await ptySpawn(tab.cwd === "~" ? null : tab.cwd, 80, 24, tab.id, resumeSessionId);
+    // tab.agent (persisted with the binding for a ghost tab, tracked live
+    // otherwise) picks the resume syntax — see pty.rs's resume_command.
+    const ptyId = await ptySpawn(
+      tab.cwd === "~" ? null : tab.cwd,
+      80,
+      24,
+      tab.id,
+      resumeSessionId,
+      undefined,
+      tab.agent
+    );
     setTabs((prev) =>
       prev.map((t) => (t.id === tabId ? { ...t, ptyId, status: "live" as const } : t))
     );
@@ -482,6 +501,7 @@ export default function App() {
         color: PALETTE[7],
         status: "dead",
         sessionId: c.session_id,
+        agent: c.agent,
       }));
       // Seed the unclaimed flags before activating a tab: claimTab reads the
       // in-memory set, so a result that outlived the last quit is unclaimable
@@ -547,21 +567,29 @@ export default function App() {
       }
       // Re-entry write path: only tethered sessions (started by this app) are
       // ours to resume — an outside terminal's SessionStart carries no tab_id.
-      if (p.hook_event_name === "SessionStart" && p.tab_id && projectKey && p.cwd && p.transcript_path) {
+      // transcript_path is allowed to be absent (a Codex SessionStart can send
+      // none) — stored as an empty-string sentinel; resume never reads this
+      // column, only tail-worthiness (gated separately in ingest.rs) does.
+      if (p.hook_event_name === "SessionStart" && p.tab_id && projectKey && p.cwd) {
         void repo
-          .upsertSessionBinding(p.session_id, p.tab_id, projectKey, p.cwd, p.transcript_path)
+          .upsertSessionBinding(p.session_id, p.tab_id, projectKey, p.cwd, p.transcript_path ?? "", p.agent)
           .catch(() => undefined); // fail open, same as addEvent above
       }
       if (p.hook_event_name === "Stop") {
         decisions.onStop(p.session_id, sessionCwd.get(p.session_id), refreshDecisionCounts);
       }
-      const isStop = p.hook_event_name === "Stop";
+      // A completed or interrupted turn is a real result worth flagging when
+      // unseen; SessionEnd alone is session shutdown, not a new result — it
+      // only closes the epoch (via stateForHook), it doesn't land one here.
+      const isTerminalResult = p.hook_event_name === "Stop" || p.hook_event_name === "Interrupt";
       if (p.hook_event_name === "PostToolUse") {
-        // Scoped to Bash: Read/Grep/Glob tool_response is file/doc content, not
-        // command output — scanning it flags blockers on error strings quoted
-        // in comments or docs (e.g. this file's own landmine notes) rather than
-        // real failures.
-        if (p["tool_name"] === "Bash") {
+        // Scoped to Bash/run_command: Read/Grep/Glob tool_response is file/doc
+        // content, not command output — scanning it flags blockers on error
+        // strings quoted in comments or docs (e.g. this file's own landmine
+        // notes) rather than real failures. run_command is Antigravity's
+        // shell-command tool (Phase 16) — file-edit tools are deliberately
+        // not added here, this gate is for command *output*, not edit content.
+        if (p["tool_name"] === "Bash" || p["tool_name"] === "run_command") {
           const resp = p["tool_response"];
           const text =
             typeof resp === "string"
@@ -605,13 +633,14 @@ export default function App() {
           // query the right project even after an in-shell `cd`. A `cd` within
           // the same repo is now a no-op here — that's the fix.
           const next = cwd && expand(t.cwd) !== cwd ? { ...t, cwd } : t;
-          if (!state) return next;
+          const withAgent = p.agent && next.agent !== p.agent ? { ...next, agent: p.agent } : next;
+          if (!state) return withAgent;
           return {
-            ...next,
+            ...withAgent,
             sessionId: p.session_id,
             agentState: state,
             lastEventTs: Date.now(),
-            lastTurnAuto: isPromptSubmit ? provenance === "auto" : next.lastTurnAuto,
+            lastTurnAuto: isPromptSubmit ? provenance === "auto" : withAgent.lastTurnAuto,
           };
         })
       );
@@ -633,7 +662,7 @@ export default function App() {
       // agent finished on a tab the human isn't looking at right now — either
       // a background tab (app focused, different tab active) or the whole app
       // backgrounded. Flagged until claimTab (tab switch / window focus).
-      if (isStop && shouldFlagUnclaimed(tabId, activeIdRef.current, document.hasFocus())) {
+      if (isTerminalResult && shouldFlagUnclaimed(tabId, activeIdRef.current, document.hasFocus())) {
         const id = tabId;
         setUnseenStops((s) => new Set(s).add(id));
         // Without a cwd the row can never match unclaimedResults' cwd filter —
@@ -664,6 +693,13 @@ export default function App() {
 
     void onTailerFailed((p) => {
       setBlindSessions((s) => (s[p.session_id] === p.path ? s : { ...s, [p.session_id]: p.path }));
+    }).then(track);
+
+    void onAdapterWarning((w) => {
+      setAdapterWarnings((prev) => {
+        if (prev.some((x) => x.agent === w.agent && x.reason === w.reason)) return prev;
+        return [...prev, w];
+      });
     }).then(track);
 
     return () => {
@@ -921,6 +957,7 @@ export default function App() {
         decisionCount={(t) => decisionCountsByCwd[expand(t.cwd)] ?? 0}
         unclaimed={(t) => unseenStops.has(t.id)}
         isFanOutChild={(t) => fanOutChildIds.has(t.id)}
+        isFanOutParent={(t) => fanOutParentIds.has(t.id)}
         isWorktreeBound={(t) => worktreeTabIds.has(t.id)}
         now={now}
       />
@@ -949,6 +986,9 @@ export default function App() {
             accent={activeTab.color === PALETTE[7] ? null : activeTab.color}
             refreshKey={panelRefresh}
             blindPaths={Object.values(blindSessions)}
+            adapterWarnings={adapterWarnings}
+            sessionBlind={!!(activeTab.sessionId && blindSessions[activeTab.sessionId])}
+            agent={activeTab.agent}
             fanOut={fanOutRollups}
             onSelectTab={setActiveId}
             onDismissMember={dismissSpawnMember}
@@ -971,6 +1011,7 @@ export default function App() {
               />
             ))}
           </div>
+          {activeTab && <IdeaBoard cwd={expand(activeTab.cwd)} />}
         </div>
       </div>
       {landingPrompt && (

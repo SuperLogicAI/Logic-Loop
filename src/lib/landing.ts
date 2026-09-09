@@ -5,6 +5,7 @@
 // on it, only draft text a human then edits.
 import { invoke } from "@tauri-apps/api/core";
 import { textFromTranscriptLine } from "./decisions";
+import { serialize } from "./extractorQueue";
 import * as repo from "./repo";
 
 /** Build the draft prompt from recent turns (oldest first). Exported for tests. */
@@ -47,12 +48,15 @@ export async function draftLandingNote(sessionId: string): Promise<string> {
       .slice(-6);
     if (turns.length === 0) return "";
     const s = await repo.getExtractorSettings();
-    const raw = await invoke<string>("run_extractor", {
-      prompt: buildLandingPrompt(turns),
-      backend: s.backend,
-      lmstudioUrl: s.lmstudioUrl,
-      lmstudioModel: s.lmstudioModel,
-    });
+    const raw = await serialize(() =>
+      invoke<string>("run_extractor", {
+        prompt: buildLandingPrompt(turns),
+        backend: s.backend,
+        lmstudioUrl: s.lmstudioUrl,
+        lmstudioModel: s.lmstudioModel,
+        codexModel: s.codexModel,
+      })
+    );
     return parseLandingDraft(raw);
   } catch {
     return "";
