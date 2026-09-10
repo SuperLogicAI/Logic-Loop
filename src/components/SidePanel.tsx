@@ -25,18 +25,29 @@ import {
   gitUntrackedFiles,
 } from "../lib/pty";
 import { DiffModal } from "./DiffModal";
-import { HUES, RainbowText } from "./RainbowText";
+import { cycle, HUES, RainbowText } from "./RainbowText";
 import {
   PANEL_COMPACT_WIDTH,
   PANEL_DEFAULT_WIDTH,
   clampPanelWidth,
   type VisiblePanelMode,
 } from "../lib/panelLayout";
-import type { AgentState, Blocker, Commit, Decision, FanOutRollup, Note, PanelMode, ToolEvent } from "../types";
+import type {
+  AgentState,
+  Blocker,
+  Commit,
+  Decision,
+  FanOutRollup,
+  LandingNoteMode,
+  Note,
+  PanelMode,
+  ToolEvent,
+} from "../types";
 
-// Gradient border for the Next card when a landing note is waiting — the only
-// visual cue that it's a landing note, not a decision/blocker in the same slot.
+// Shared landing-note gradient: ties inline capture to the Next card that later
+// surfaces the saved landing note ahead of decisions and blockers.
 const RAINBOW_BORDER = `linear-gradient(90deg, ${[...HUES, HUES[0]].map((h) => `hsl(${h} 85% 62%)`).join(", ")})`;
+const SUBTLE_RAINBOW_BORDER = `linear-gradient(135deg, ${HUES.map((_, i) => cycle(i, 0.6)).join(", ")})`;
 
 interface Props {
   mode: PanelMode;
@@ -66,6 +77,8 @@ interface Props {
   attentionLoading: boolean;
   attentionStale: boolean;
   onOpenAttention: () => void;
+  landingNoteMode: LandingNoteMode;
+  onLandingNoteModeChange: (mode: LandingNoteMode) => Promise<void>;
 }
 
 // Long lists collapse to this many rows behind a full-width ＋ toggle.
@@ -215,6 +228,8 @@ export function SidePanel({
   attentionLoading,
   attentionStale,
   onOpenAttention,
+  landingNoteMode,
+  onLandingNoteModeChange,
 }: Props) {
   const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
   const [muted, setMuted] = useState(false);
@@ -233,6 +248,9 @@ export function SidePanel({
   const seededCwdRef = useRef<string | null>(null);
   const [draft, setDraft] = useState("");
   const [noteDraft, setNoteDraft] = useState("");
+  const [landingCapture, setLandingCapture] = useState(false);
+  const [landingModeSaving, setLandingModeSaving] = useState(false);
+  const [landingModeError, setLandingModeError] = useState(false);
   const [showAllTools, setShowAllTools] = useState(false);
   const [showAllCommits, setShowAllCommits] = useState(false);
   const [showAllFanOut, setShowAllFanOut] = useState(false);
@@ -258,6 +276,7 @@ export function SidePanel({
   const pendingSectionRef = useRef<RailSection | null>(null);
   const sinceLeftRef = useRef<HTMLElement>(null);
   const notesRef = useRef<HTMLElement>(null);
+  const noteInputRef = useRef<HTMLInputElement>(null);
   const fanOutRef = useRef<HTMLDivElement>(null);
   const nextRef = useRef<HTMLElement>(null);
   const decisionsRef = useRef<HTMLElement>(null);
@@ -556,14 +575,33 @@ export function SidePanel({
   const addQuickNote = async () => {
     const text = noteDraft.trim();
     if (!text) return;
-    await repo.addNote(cwd, "residue", text, sessionId);
+    await repo.addNote(cwd, landingCapture ? "landing" : "residue", text, sessionId);
     setNoteDraft("");
+    setLandingCapture(false);
     await reload();
+  };
+
+  const toggleLandingCapture = () => {
+    setLandingCapture((active) => !active);
+    requestAnimationFrame(() => noteInputRef.current?.focus());
   };
 
   const dismissNote = async (n: Note) => {
     await repo.setNoteStatus(n.id, "done");
     await reload();
+  };
+
+  const changeLandingMode = async (next: LandingNoteMode) => {
+    if (next === landingNoteMode || landingModeSaving) return;
+    setLandingModeSaving(true);
+    setLandingModeError(false);
+    try {
+      await onLandingNoteModeChange(next);
+    } catch {
+      setLandingModeError(true);
+    } finally {
+      setLandingModeSaving(false);
+    }
   };
 
   // Momentum: latest open landing note → oldest open decision → oldest open
@@ -1091,13 +1129,55 @@ export function SidePanel({
           <PanelIcon name="notes" className="h-4 w-4" />
           Notes and reminders
         </h2>
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <span className="text-zinc-500">Landing notes</span>
+          <div className="flex rounded border border-zinc-700 p-0.5" role="group" aria-label="Landing notes mode">
+            {(["auto", "manual"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={landingNoteMode === option}
+                disabled={landingModeSaving}
+                className={`rounded px-1.5 py-0.5 capitalize focus-visible:outline-2 focus-visible:outline-sky-400 disabled:opacity-50 ${
+                  landingNoteMode === option ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-200"
+                }`}
+                onClick={() => void changeLandingMode(option)}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            aria-pressed={landingCapture}
+            className="ml-auto rounded border-2 border-transparent px-1.5 py-0.5 text-zinc-200 hover:brightness-125 focus-visible:outline-2 focus-visible:outline-sky-400"
+            style={{
+              background: `linear-gradient(#18181b, #18181b) padding-box, ${SUBTLE_RAINBOW_BORDER} border-box`,
+            }}
+            onClick={toggleLandingCapture}
+          >
+            Set landing note
+          </button>
+        </div>
+        {landingModeError && <p className="mb-2 text-orange-300">Couldn’t save landing-note mode.</p>}
         <input
-          className="mb-2 w-full rounded border border-zinc-100 bg-zinc-800 px-2 py-1 text-zinc-200 outline-none placeholder:text-zinc-600"
-          placeholder="Leave a note for this project…"
+          ref={noteInputRef}
+          className={`w-full rounded px-2 py-1 text-zinc-200 outline-none placeholder:text-zinc-600 ${
+            landingCapture ? "mb-1 border-2 border-transparent" : "mb-2 border border-zinc-100 bg-zinc-800"
+          }`}
+          style={
+            landingCapture
+              ? { background: `linear-gradient(#27272a, #27272a) padding-box, ${SUBTLE_RAINBOW_BORDER} border-box` }
+              : undefined
+          }
+          placeholder={landingCapture ? "Leave a landing note for this project…" : "Leave a note for this project…"}
           value={noteDraft}
           onChange={(e) => setNoteDraft(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && void addQuickNote()}
         />
+        {landingCapture && (
+          <p className="mb-2 text-zinc-400">What's the next physical action here when you come back?</p>
+        )}
         {notes.length === 0 ? (
           <p className="text-zinc-600">Nothing parked here.</p>
         ) : (

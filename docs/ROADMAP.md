@@ -33,6 +33,7 @@ table below until one gets its own PLAN.md.
 | Idea Board | BUILT (Phase 18) — manual test docs/TESTING.md §28 pending | ~1.5d | Phase 17 |
 | Decisions empty-state clarity (IDEAS.md item C, second half) | BUILT (Phase 19) — manual test docs/TESTING.md §29 pending | a few hours | — |
 | Idea Board "Now" set (IDEAS.md item F) | BUILT (Phase 20) — manual test docs/TESTING.md §30 pending | a few hours | Phase 18 |
+| Landing-note manual/auto capture (IDEAS.md item E) | DONE (Phase 28) — automated + live matrices pass | ~1d | — |
 | Remaining adapters (Gemini, Copilot) | v2 | — | Codex adapter |
 
 Phase boundaries still hard stops. Phase 5 items enter PLAN.md for approval

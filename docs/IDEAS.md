@@ -471,6 +471,14 @@ itself evidence of a better experience (Mark, Gudith, Klocke, CHI 2008).
 
 ## E. Lighter departure capture — alternative to the landing-note modal
 
+**Manual/Auto capture DONE in Phase 28.** Automated and live matrices pass;
+the maintainer approved the phase on 2026-09-10. Phase 28 adds
+the global preference and an explicit, active-project **Set landing note**
+action inside **Notes and reminders**. The action and active shared Notes input
+use the landing rainbow; the inline prompt replaces a manual popup and performs
+no LLM work. The separate automatic-departure inline strip and preserved
+in-progress text proposed below remain deferred.
+
 `LandingNoteModal.tsx` is a full modal with a 60s auto-skip, shown on
 switch-away. Prototype a smaller inline strip instead — "Leave a next step
 for <project>," optional draft, keyboard shortcut, preserves in-progress

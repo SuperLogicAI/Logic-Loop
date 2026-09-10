@@ -7,6 +7,7 @@ import type {
   Bookmark,
   Decision,
   ExtractorSettings,
+  LandingNoteMode,
   Note,
   PanelMode,
   ReentryCandidate,
@@ -17,6 +18,7 @@ import type {
 } from "../types";
 import type { ExtractedDecision } from "./extractor";
 import { clampPanelWidth, parsePanelMode, type VisiblePanelMode } from "./panelLayout";
+import { parseLandingNoteMode } from "./landingMode";
 
 let db: Database | null = null;
 // Lifecycle hooks can arrive concurrently. Keep each raw-hook/derivative pair
@@ -735,6 +737,18 @@ export async function getPanelWidth(): Promise<number> {
 
 export async function setPanelWidth(width: number): Promise<void> {
   await setSetting(PANEL_WIDTH_KEY, String(Math.round(clampPanelWidth(width))));
+}
+
+// Landing-note capture is a global shell preference, like panel layout. Notes
+// themselves remain project-scoped in the notes table below.
+const LANDING_NOTE_MODE_KEY = "landing_note_mode";
+
+export async function getLandingNoteMode(): Promise<LandingNoteMode> {
+  return parseLandingNoteMode(await getSetting(LANDING_NOTE_MODE_KEY));
+}
+
+export async function setLandingNoteMode(mode: LandingNoteMode): Promise<void> {
+  await setSetting(LANDING_NOTE_MODE_KEY, mode);
 }
 
 // --- Per-project notification mute (Phase 6): reuses the settings

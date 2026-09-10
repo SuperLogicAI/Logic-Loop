@@ -137,6 +137,8 @@ export interface Note {
   ts: number;
 }
 
+export type LandingNoteMode = "auto" | "manual";
+
 export interface ExtractorSettings {
   backend: "claude" | "codex" | "lmstudio";
   lmstudioUrl: string;

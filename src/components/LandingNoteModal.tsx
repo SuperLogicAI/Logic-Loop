@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { draftLandingNote } from "../lib/landing";
-import { HUES, RainbowText, cycle } from "./RainbowText";
+import { HUES, cycle } from "./RainbowText";
 
 interface Props {
-  projectName: string;
   sessionId: string | null;
   onSave: (body: string) => void;
   onSkip: () => void;
@@ -18,10 +17,11 @@ const C = 2 * Math.PI * R;
 const roygbv = (t: number) => `hsl(${t * 270} 85% 62%)`;
 
 const RAINBOW_GRADIENT = `linear-gradient(135deg, ${HUES.map((_, i) => cycle(i, 0.6)).join(", ")})`;
+const CARD_GRADIENT = `linear-gradient(135deg, ${HUES.map((_, i) => cycle(i, 0.3)).join(", ")})`;
 
 /** Leaving a tab with recent agent activity → capture the next physical action.
  *  Never hostage: Esc skips, and the countdown auto-skips at zero. */
-export function LandingNoteModal({ projectName, sessionId, onSave, onSkip }: Props) {
+export function LandingNoteModal({ sessionId, onSave, onSkip }: Props) {
   const [body, setBody] = useState("");
   const [remaining, setRemaining] = useState(SECONDS);
   const [drafting, setDrafting] = useState(!!sessionId);
@@ -90,12 +90,15 @@ export function LandingNoteModal({ projectName, sessionId, onSave, onSkip }: Pro
   return (
     // top-7 keeps the titlebar drag region reachable under the overlay
     <div className="fixed inset-x-0 top-7 bottom-0 z-40 flex items-center justify-center bg-black/60">
-      <div className="w-[32rem] max-w-[90vw] rounded-lg border border-zinc-700 bg-zinc-900 p-4 shadow-xl">
+      <div
+        className="w-[32rem] max-w-[90vw] rounded-lg border-2 border-transparent p-4 shadow-xl"
+        style={{
+          background: `linear-gradient(#18181b, #18181b) padding-box, ${CARD_GRADIENT} border-box`,
+        }}
+      >
         <div className="mb-2 flex items-center gap-3">
           <div className="min-w-0 flex-1">
-            <h3 className="font-semibold">
-              <RainbowText text={`Landing note — ${projectName}`} />
-            </h3>
+            <h3 className="font-semibold text-zinc-100">Landing note</h3>
             <p className="text-xs text-white/85">
               What's the next physical action here when you come back?
             </p>

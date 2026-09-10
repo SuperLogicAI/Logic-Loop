@@ -34,6 +34,7 @@ test dependency is proposed for Phase 26.
 | [004](004-folded-side-rail.md) | Folded side rail | P1 | M (1–2d + live visual pass) | Phase 24 accepted and committed | DONE — Phase 25 accepted |
 | [005](005-lock-in-dnd-sidequest.md) | Lock-in / Do Not Disturb | P1 | S (bounded sidequest) | Explicit Phase 26 sequencing exception | DONE — live macOS matrix passed |
 | [006](006-lock-in-header-timer-polish.md) | Lock-in header + 60-minute timer polish | P1 | S (bounded sidequest follow-up) | Sidequest 005; explicit Phase 26 sequencing exception | BUILT — automated gates clean; live matrix pending |
+| [007](007-landing-note-manual-auto.md) | Landing-note manual/auto capture | P1 | M (~1d + live dogfood) | Phase 27 accepted | DONE — Phase 28 approved; automated and live matrices pass |
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
@@ -95,6 +96,10 @@ plan's originally-drafted `invocationNum == 1` assumption.
   changes, or duplicate read model. Phase 24 must land first because both
   phases touch `SidePanel.tsx`, `repo.ts`, `package.json`, and
   `docs/TESTING.md`.
+- Plan 007 is independent of adapter work. It reuses the existing global
+  settings table and `notes.kind='landing'` path, preserving Auto as the
+  compatibility default while making Manual departures extractor-free. The
+  maintainer approved its Phase 28 implementation gate on 2026-09-10.
 
 ## Findings considered and rejected
 

@@ -1078,8 +1078,9 @@ All passed 2026-09-05.
       shows the ROYGBV gradient ring (not the plain `yellow-500/30` border),
       and the corners stay rounded, not squared off underneath.
 - [x] The grey label in the card's top-right corner now reads `landing note`
-      in per-letter rainbow, matching the same hue cycle as the landing-note
-      modal's own heading.
+      in per-letter rainbow. Phase 28 intentionally supersedes the old modal
+      comparison: the modal heading is now solid and the gradient moved to its
+      card border; the Next-card label remains unchanged.
 - [x] Trigger a plain decision or blocker card afterward → confirm it still
       renders the solid yellow border and grey label — no gradient bleeding
       into the unrelated card.
@@ -1700,6 +1701,62 @@ Automated evidence (2026-09-09):
 - [x] `npx tsc --noEmit` — strict TypeScript clean.
 - [x] `npm run build` — production frontend build clean; only the existing
       chunk-size advisory is emitted.
+- [x] `cd src-tauri && cargo test --lib` — 57/57 pass.
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings` — clean.
+- [x] `git diff --check` — clean.
+
+## 40. Landing-note manual/auto capture (Phase 28)
+
+Implementation authorized with `PHASE 28 ACCEPTED` on 2026-09-10. Automated
+evidence is recorded below. The live macOS matrix passed and the maintainer
+wrote `PHASE 28 APPROVED` on 2026-09-10.
+
+- [x] On an existing database with no `landing_note_mode` key, confirm Auto is
+      selected. Create agent activity, switch away, and confirm the existing
+      drafted 60-second landing modal still appears.
+- [x] Select Manual, relaunch, and confirm Manual persists.
+- [x] In Manual, create agent activity and switch repeatedly. Confirm no modal
+      opens, no landing-draft extractor starts, switching stays responsive, and
+      no skipped landing row is written.
+- [x] Re-enable Auto without new activity and leave the project. Confirm no
+      stale prompt appears. Create new activity and leave again; exactly one
+      automatic prompt appears.
+- [x] Confirm **Set landing note** has the established rainbow-gradient border.
+      Click it and confirm the existing Notes input gains the same border,
+      receives focus, and shows “What's the next physical action here when you
+      come back?” beneath it. No popup or draft starts. Both borders should use
+      the same subtle opacity as the automatic popup's Save button, not the
+      brighter Next-card gradient.
+- [x] Click **Set landing note** again. Confirm the input returns to ordinary
+      note styling without writing a landing row or skip metric; typed text is
+      retained.
+- [x] Activate landing capture, type an action, and press Enter. Confirm it
+      becomes the rainbow-labeled first Momentum/Next item for that project and
+      the existing Done action clears it.
+- [x] Trigger the automatic landing popup. Confirm its 0.3-opacity gradient
+      border is quieter than the 0.6-opacity Save button, and the solid heading
+      reads only **Landing note** — no `context_terminal` suffix and no
+      per-letter rainbow title.
+- [x] Exercise tab close, fan-out, and isolate-loop switching in both modes.
+      Existing suppression remains correct and landing modals never stack.
+- [x] Exercise expanded, compact, and hidden panels plus Lock-in. Confirm the
+      Notes rail route, counts, resizing, terminal input, and shortcuts retain
+      prior behavior.
+- [x] Simulate preference read/write failure. Confirm terminals and tab changes
+      keep working and a failed write restores the prior displayed mode with a
+      concise error.
+
+Automated evidence (2026-09-10):
+
+- [x] `npm run landing:check` — draft parsing, persisted-mode fallback,
+      Auto/Manual departure policy, inline note-kind routing, prompt copy, and
+      rainbow wiring assertions pass.
+- [x] `npm run panel-layout:check`
+- [x] `npm run opencode:check`
+- [x] `npm run check` — all 23 configured checks pass.
+- [x] `npx tsc --noEmit` — strict TypeScript clean.
+- [x] `npm run build` — production build clean; existing chunk-size advisory
+      only.
 - [x] `cd src-tauri && cargo test --lib` — 57/57 pass.
 - [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings` — clean.
 - [x] `git diff --check` — clean.

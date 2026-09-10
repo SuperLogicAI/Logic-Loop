@@ -61,12 +61,14 @@ import type {
   AttentionSourceContext,
   Bookmark,
   FanOutRollup,
+  LandingNoteMode,
   PanelMode,
   SpawnGroup,
   SpawnGroupMember,
   Tab,
 } from "./types";
 import { PALETTE } from "./types";
+import { landingDepartureAction } from "./lib/landingMode";
 import {
   isLockInActive,
   shouldExpireTimedLockIn,
@@ -96,6 +98,11 @@ export default function App() {
   lastVisiblePanelModeRef.current = lastVisiblePanelMode;
   const panelLayoutTouchedRef = useRef(false);
   const [panelRefresh, setPanelRefresh] = useState(0);
+  const [landingNoteMode, setLandingNoteMode] = useState<LandingNoteMode>("auto");
+  const landingNoteModeRef = useRef<LandingNoteMode>(landingNoteMode);
+  landingNoteModeRef.current = landingNoteMode;
+  const landingNoteModeTouchedRef = useRef(false);
+  const landingNoteModeReadyRef = useRef(false);
   const [lockInMode, setLockInMode] = useState<LockInMode>("off");
   const lockIn = isLockInActive(lockInMode);
   const lockInModeRef = useRef<LockInMode>(lockInMode);
@@ -164,6 +171,22 @@ export default function App() {
     [applyPanelLayout]
   );
 
+  const changeLandingNoteMode = useCallback(async (next: LandingNoteMode) => {
+    const previous = landingNoteModeRef.current;
+    if (next === previous) return;
+    landingNoteModeTouchedRef.current = true;
+    landingNoteModeReadyRef.current = true;
+    landingNoteModeRef.current = next;
+    setLandingNoteMode(next);
+    try {
+      await repo.setLandingNoteMode(next);
+    } catch (error) {
+      landingNoteModeRef.current = previous;
+      setLandingNoteMode(previous);
+      throw error;
+    }
+  }, []);
+
   const clearLockInTimer = useCallback(() => {
     if (lockInTimerRef.current === null) return;
     window.clearTimeout(lockInTimerRef.current);
@@ -223,7 +246,6 @@ export default function App() {
   const tabPromptRef = useRef(new Map<string, number>()); // tab id -> last landing-prompt ts
   const [landingPrompt, setLandingPrompt] = useState<{
     cwd: string;
-    projectName: string;
     sessionId: string | null;
   } | null>(null);
   const landingPromptRef = useRef(landingPrompt);
@@ -293,16 +315,27 @@ export default function App() {
   // testing must not spam the ritual). Never stacks over an open modal.
   const maybePromptLanding = useCallback(
     (tab: Tab) => {
-      if (landingPromptRef.current) return;
+      // Do not surprise a stored-Manual user during the tiny startup window
+      // before the preference read completes.
+      if (!landingNoteModeReadyRef.current) return;
       const activity = tabActivityRef.current.get(tab.id);
       const lastPrompt = tabPromptRef.current.get(tab.id) ?? 0;
-      if (!activity || activity <= lastPrompt) return;
-      if (Date.now() - lastPrompt < 10 * 60 * 1000) return;
+      const action = landingDepartureAction({
+        mode: landingNoteModeRef.current,
+        activity,
+        lastPrompt,
+        now: Date.now(),
+        modalOpen: landingPromptRef.current !== null,
+      });
+      if (action === "consume") {
+        tabActivityRef.current.delete(tab.id);
+        return;
+      }
+      if (action !== "prompt") return;
       tabPromptRef.current.set(tab.id, Date.now());
       tabActivityRef.current.delete(tab.id);
       setLandingPrompt({
         cwd: expand(tab.cwd),
-        projectName: expand(tab.cwd).split("/").filter(Boolean).pop() ?? tab.cwd,
         sessionId: tab.sessionId ?? null,
       });
     },
@@ -692,6 +725,18 @@ export default function App() {
         setLastVisiblePanelMode(lastVisible);
       })
       .catch(() => undefined);
+    void repo
+      .getLandingNoteMode()
+      .then((mode) => {
+        if (!landingNoteModeTouchedRef.current) {
+          landingNoteModeRef.current = mode;
+          setLandingNoteMode(mode);
+        }
+        landingNoteModeReadyRef.current = true;
+      })
+      .catch(() => {
+        landingNoteModeReadyRef.current = true;
+      });
     // reap PTYs orphaned by a webview crash/reload, then start fresh
     void ptyKillAll().then(async () => {
       // Ghost tabs: sessions still active when the app last quit. Never
@@ -1269,6 +1314,8 @@ export default function App() {
             attentionLoading={attentionLoading}
             attentionStale={attentionStale}
             onOpenAttention={() => setAttentionOpen(true)}
+            landingNoteMode={landingNoteMode}
+            onLandingNoteModeChange={changeLandingNoteMode}
           />
         )}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -1296,7 +1343,6 @@ export default function App() {
       </div>
       {landingPrompt && (
         <LandingNoteModal
-          projectName={landingPrompt.projectName}
           sessionId={landingPrompt.sessionId}
           onSave={(text) => {
             void repo

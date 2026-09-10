@@ -35,7 +35,7 @@ switching:
 | **Accomplished** | *Progress blindness* — re-entry starts with "where was I?" instead of "what's next?" |
 | **Since You Left** | *Catch-up cost on a long unattended run* — a deterministic digest (files touched, bash runs/errors, turns, decisions opened) of everything that happened while a tab was out of view, loop ticks collapsed to `×N no change` so a long autonomous run reads as one line instead of a scrollback. |
 | **Blockers** | *Non-viable switches* — switching into a project only to find it's waiting on something external. |
-| **Landing Note** | *State reconstruction cost* — rebuilding mental state on return can take 15–25 min; a written next action collapses it. |
+| **Landing Note** | *State reconstruction cost* — rebuilding mental state on return can take 15–25 min; a written next action collapses it. Auto (default) drafts on departure; Manual, toggled from Notes and reminders, skips the popup/draft/countdown and lets a rainbow-bordered capture action save your own note inline. |
 | **Attention Residue** | *Attention residue* — part of your mind stays on the task you left; externalize the loop to return clean. |
 | **Momentum Builder** | *Re-entry friction* — surfaces the single lowest-friction next action to convert staring into motion. |
 | **Idea Board** | *Where did that idea go* — a per-project kanban dock (idea → planned → building → later → done) living in a git-committed `.logic-loop/board.md`; star up to 3 cards as "Now" and Momentum Builder prefers them over the plain top-of-column pick. |
