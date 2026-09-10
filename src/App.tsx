@@ -1258,7 +1258,7 @@ export default function App() {
           Left padding clears the macOS traffic lights; drag region keeps
           move + double-click-to-zoom working. */}
       <div
-        data-tauri-drag-region
+        data-tauri-drag-region="deep"
         className="flex h-7 shrink-0 items-center gap-1.5 bg-zinc-900 pl-[78px]"
       >
         <img src="/loop.png" alt="" className="pointer-events-none h-4 w-4" />

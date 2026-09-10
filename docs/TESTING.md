@@ -1802,6 +1802,64 @@ Automated evidence (2026-09-10):
 - [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings` — clean.
 - [x] `git diff --check` — clean.
 
+## 42. Repeatable window dragging (Phase 30)
+
+Implementation authorized with `PHASE 30 ACCEPTED` on 2026-09-10. Computer
+control of the running Logic Loop window was unavailable at implementation
+time, so the maintainer explicitly directed the build to proceed using the
+historical failure in section 14 as baseline evidence. The first rebuilt bundle
+still could not drag. Follow-up inspection confirmed that Tauri's injected
+script invokes `plugin:window|start_dragging`, while `core:window:default`
+explicitly excludes that command. The narrow fix therefore combines Tauri
+2.11.5's deep drag-region semantics with only
+`core:window:allow-start-dragging`; no broader window permission was added.
+
+Environment recorded before implementation: macOS 26.4.1 arm64, Tauri 2.11.5,
+`tauri-runtime-wry` 2.11.4, `@tauri-apps/api` 2.11.1,
+`@tauri-apps/cli` 2.11.4, and installed Logic Loop bundle 0.1.0.
+
+Partial live evidence after rebuilding with the narrow permission: computer
+control triggered native window movement from the dedicated titlebar, empty
+tab-row space, and empty bookmark-bar space on their first attempts. Each move
+invalidates the automation window handle, so the 20-consecutive-drag count and
+the complete interaction-regression matrix remain human-verified gates below.
+
+- [x] Drag the dedicated titlebar 20 consecutive times while Logic Loop remains
+      focused. Every attempt moves the window without focusing another app.
+- [x] Focus another app, then drag the titlebar once. Logic Loop activates and
+      moves on that same gesture.
+- [x] Repeat both tests from nested empty tab-strip padding, the outer tab-row
+      gap, and empty bookmark-bar space.
+- [ ] Click, close, middle-click, and reorder tabs; click/reorder bookmarks;
+      open bookmark context menus and add/edit forms. No interaction moves the
+      window or remains armed after pointer release.
+- [x] Double-click the dedicated titlebar. Native zoom/maximize toggles, and a
+      following single drag works immediately.
+- [ ] Open Landing Note and another overlay/modal. The visible titlebar still
+      drags repeatedly while modal content remains interactive.
+- [ ] Drop a file into the active terminal, select terminal text, resize the
+      side panel, and resize the native window edges. Existing gestures remain
+      intact.
+- [x] Repeat the matrix in the bundled dogfood app, not only the Vite dev build.
+
+Maintainer live result: PASS on the focused 20/20 count, inactive first drag,
+nested empty chrome, ordinary tab/bookmark click and reorder, titlebar zoom,
+and the following single drag. The expanded control variants and non-chrome
+regression gestures remain unchecked until exercised explicitly.
+
+Automated evidence (2026-09-10):
+
+- [x] `rg -n 'data-tauri-drag-region' src` — exactly three intended chrome
+      owners, each set to `="deep"`.
+- [x] `npm run opencode:check`
+- [x] `npm run check` — all 23 configured checks pass.
+- [x] `npx tsc --noEmit` — strict TypeScript clean.
+- [x] `npm run build` — production frontend build clean; existing chunk-size
+      advisory only.
+- [x] `cd src-tauri && cargo test --lib` — 57/57 pass.
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings` — clean.
+- [x] `git diff --check` — clean.
+
 ## 26. Diff pop-out from Accomplished rows (issue #10)
 
 Written on Windows, where the app can't run — every box below is unverified

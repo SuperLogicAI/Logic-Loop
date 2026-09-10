@@ -278,7 +278,6 @@ Record results in `docs/TESTING.md`:
    intact.
 8. Run the same matrix in the bundled app used for dogfooding, not only Vite
    dev mode. Record macOS and Tauri versions.
-
 ## Done criteria
 
 - [ ] A failing pre-change baseline is recorded on the locked build.
@@ -318,4 +317,3 @@ Stop and request a plan revision if:
 - If the phase stops on the `Overlay` caveat, the follow-up should present the
   visual/accessibility tradeoff of `Transparent` or native `Visible` titlebars
   to the maintainer before implementation.
-

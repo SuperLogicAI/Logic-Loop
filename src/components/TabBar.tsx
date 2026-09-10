@@ -73,11 +73,11 @@ export function TabBar({
 }: Props) {
   const [dragId, setDragId] = useState<string | null>(null);
   return (
-    // data-tauri-drag-region: empty strip space moves the window, Chrome-style
+    // Tauri drag region: empty strip space moves the window, Chrome-style
     // select-none: a pointer-drag starting here otherwise runs a DOM text
     // selection into the terminal below, which only paints on pointerup.
     <div
-      data-tauri-drag-region
+      data-tauri-drag-region="deep"
       // release outside a tab cancels the drag instead of leaving it armed
       onPointerUp={() => setDragId(null)}
       onPointerLeave={() => setDragId(null)}

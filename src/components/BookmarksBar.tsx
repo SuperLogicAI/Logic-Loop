@@ -36,9 +36,9 @@ export function BookmarksBar({ bookmarks, onOpen, onAdd, onUpdate, onDelete, onR
   };
 
   return (
-    // data-tauri-drag-region: empty bar space moves the window
+    // Tauri drag region: empty bar space moves the window
     <div
-      data-tauri-drag-region
+      data-tauri-drag-region="deep"
       onPointerUp={() => setDragId(null)}
       onPointerLeave={() => setDragId(null)}
       className="relative flex select-none items-center gap-1.5 border-b border-zinc-800 bg-zinc-900 px-2 py-1"
