@@ -11,5 +11,9 @@ assert.equal(shouldNotify("tab-1", "tab-1", true, false), false, "focused+active
 // Muted project: suppressed even though it would otherwise fire.
 assert.equal(shouldNotify("tab-2", "tab-1", true, true), false, "muted project should not notify");
 assert.equal(shouldNotify("tab-1", "tab-1", false, true), false, "muted project should not notify even backgrounded");
+// App-wide Lock-in suppresses all OS notifications without changing the
+// separate unclaimed-result predicate.
+assert.equal(shouldNotify("tab-2", "tab-1", true, false, true), false, "Lock-in should suppress background-tab nudges");
+assert.equal(shouldNotify("tab-1", "tab-1", false, false, true), false, "Lock-in should suppress background-app nudges");
 
 console.log("notify-check: all assertions passed");

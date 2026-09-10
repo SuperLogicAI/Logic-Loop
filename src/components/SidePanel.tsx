@@ -41,6 +41,7 @@ const RAINBOW_BORDER = `linear-gradient(90deg, ${[...HUES, HUES[0]].map((h) => `
 interface Props {
   mode: PanelMode;
   onModeChange: (mode: VisiblePanelMode) => void;
+  lockIn: boolean;
   cwd: string; // expanded absolute project dir of the active tab
   sessionId: string | null; // session currently bound to the active tab, for scoping decisions/tool events away from sibling tabs on the same cwd
   tabTether: string; // active tab's own id — the since-you-left anchor key
@@ -58,6 +59,7 @@ interface Props {
   onDismissMember: (groupId: string, childTabId: string) => void; // drop a lingering row from the fan-out rollup
   onBlockersChanged: () => void;
   onDecisionsChanged: () => void;
+  onAttentionChanged: () => void;
   onAnswerNow: (d: Decision) => void; // prefill terminal — user still hits Enter
   onMuteChanged: () => void; // App's notify-hot-path mute cache needs a refresh
   attentionCount: number;
@@ -71,7 +73,7 @@ const ROW_CAP = 5;
 const EXPAND_BTN =
   "mt-1.5 w-full rounded border border-zinc-800 py-0.5 text-center text-zinc-500 hover:border-zinc-700 hover:bg-zinc-800/50 hover:text-zinc-200";
 
-type RailSection = "since-left" | "notes" | "next" | "decisions" | "blockers" | "accomplished" | "gitlog";
+type RailSection = "since-left" | "notes" | "fan-out" | "next" | "decisions" | "blockers" | "accomplished" | "gitlog";
 
 function RailButton({
   label,
@@ -82,7 +84,7 @@ function RailButton({
   onClick,
 }: {
   label: string;
-  section: RailSection | "attention" | "warnings" | "expand";
+  section: RailSection | "attention" | "warnings";
   icon: ReactNode;
   count?: number;
   className?: string;
@@ -136,7 +138,13 @@ function WarningIcon({ className }: { className?: string }) {
       aria-hidden="true"
       focusable="false"
     >
-      <path d="M12 2.5 22 20.5H2L12 2.5Z" fill="currentColor" />
+      <path
+        d="M12 2.5 22 20.5H2L12 2.5Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
       <path d="M12 8v6" stroke="white" strokeWidth="2" strokeLinecap="round" />
       <circle cx="12" cy="17.25" r="1.15" fill="white" />
     </svg>
@@ -182,6 +190,7 @@ function ago(ts: number): string {
 export function SidePanel({
   mode,
   onModeChange,
+  lockIn,
   cwd,
   sessionId,
   tabTether,
@@ -199,6 +208,7 @@ export function SidePanel({
   onDismissMember,
   onBlockersChanged,
   onDecisionsChanged,
+  onAttentionChanged,
   onAnswerNow,
   onMuteChanged,
   attentionCount,
@@ -248,6 +258,7 @@ export function SidePanel({
   const pendingSectionRef = useRef<RailSection | null>(null);
   const sinceLeftRef = useRef<HTMLElement>(null);
   const notesRef = useRef<HTMLElement>(null);
+  const fanOutRef = useRef<HTMLDivElement>(null);
   const nextRef = useRef<HTMLElement>(null);
   const decisionsRef = useRef<HTMLElement>(null);
   const blockersRef = useRef<HTMLElement>(null);
@@ -272,6 +283,7 @@ export function SidePanel({
   const dismissUnclaimed = async (sessionId: string) => {
     await repo.addEvent(sessionId, "result_claimed", JSON.stringify({ v: 1, project_key: cwd }));
     await reload();
+    onAttentionChanged();
   };
 
   const toggleSection = (key: string) =>
@@ -285,9 +297,11 @@ export function SidePanel({
   const openRailSection = (section: RailSection) => {
     pendingSectionRef.current = section;
     setCollapsed((current) => {
-      if (!current.has(section)) return current;
+      const firstParentGroup = section === "fan-out" ? fanOut.find((group) => group.isParent) : undefined;
+      const collapseKey = firstParentGroup ? `fanout-${firstParentGroup.groupId}` : section;
+      if (!current.has(collapseKey)) return current;
       const next = new Set(current);
-      next.delete(section);
+      next.delete(collapseKey);
       return next;
     });
     onModeChange("expanded");
@@ -298,6 +312,7 @@ export function SidePanel({
     const refs: Record<RailSection, RefObject<HTMLElement | null>> = {
       "since-left": sinceLeftRef,
       notes: notesRef,
+      "fan-out": fanOutRef,
       next: nextRef,
       decisions: decisionsRef,
       blockers: blockersRef,
@@ -700,8 +715,9 @@ export function SidePanel({
         ? `, last event ${formatAge(deriveClock({ agentState, lastEventTs }, now).quietMs)} ago`
         : ", no events yet"
     }`;
-    const stateColor =
-      agentState === "working"
+    const stateColor = lockIn
+      ? "bg-zinc-500"
+      : agentState === "working"
         ? "bg-blue-400"
         : agentState === "waiting"
           ? "bg-yellow-400"
@@ -721,9 +737,10 @@ export function SidePanel({
 
     return (
       <aside
-        className="flex h-full shrink-0 flex-col overflow-hidden border-r border-zinc-800 bg-zinc-900 text-zinc-500"
+        className={`flex h-full shrink-0 flex-col overflow-hidden border-r border-zinc-800 bg-zinc-900 text-zinc-500 ${lockIn ? "lock-in-panel" : ""}`}
         style={{ width: PANEL_COMPACT_WIDTH }}
         aria-label="Compact project panel"
+        data-lock-in={lockIn}
       >
         <div
           className="flex h-10 w-full shrink-0 items-center justify-center"
@@ -732,8 +749,8 @@ export function SidePanel({
           title={stateLabel}
         >
           <span
-            className={`h-2.5 w-2.5 rounded-full ${stateColor}`}
-            style={accent ? { boxShadow: `0 0 0 2px rgb(24 24 27), 0 0 0 4px ${accent}` } : undefined}
+            className={`lock-in-state h-2.5 w-2.5 rounded-full ${stateColor}`}
+            style={!lockIn && accent ? { boxShadow: `0 0 0 2px rgb(24 24 27), 0 0 0 4px ${accent}` } : undefined}
           />
         </div>
         <div className="flex min-h-0 flex-1 flex-col items-center overflow-x-hidden overflow-y-auto px-1 py-1">
@@ -748,12 +765,12 @@ export function SidePanel({
             section="attention"
             icon={
               <PanelIcon
-                name={attentionCount > 0 ? "global-mail-unread" : "global-mail-read"}
+                name={!lockIn && attentionCount > 0 ? "global-mail-unread" : "global-mail-read"}
                 className="h-5 w-5"
               />
             }
-            count={attentionCount || undefined}
-            className={attentionStale ? "text-orange-300" : attentionCount > 0 ? "text-sky-300" : "text-zinc-600"}
+            count={!lockIn ? attentionCount || undefined : undefined}
+            className={lockIn ? "text-zinc-500" : attentionStale ? "text-orange-300" : attentionCount > 0 ? "text-sky-300" : "text-zinc-600"}
             onClick={onOpenAttention}
           />
           {hasWarnings && (
@@ -779,15 +796,24 @@ export function SidePanel({
             label={notes.length > 0 ? `Notes and Reminders: ${notes.length} open` : "Notes and Reminders: none open"}
             section="notes"
             icon={<PanelIcon name="notes" className="h-5 w-5" />}
-            count={notes.length || undefined}
+            count={!lockIn ? notes.length || undefined : undefined}
             className={notes.length > 0 ? "text-zinc-200" : "text-zinc-600"}
             onClick={() => openRailSection("notes")}
           />
+          {parentGroups.length > 0 && (
+            <RailButton
+              label={`Fan-out: ${parentGroups.length} group${parentGroups.length === 1 ? "" : "s"}`}
+              section="fan-out"
+              icon={<PanelIcon name="fan-out" className="h-5 w-5" />}
+              className="text-purple-400"
+              onClick={() => openRailSection("fan-out")}
+            />
+          )}
           {momentum && (
             <RailButton
               label={`Next: ${momentum.label}`}
               section="next"
-              icon={<PanelIcon name="next" className="h-5 w-5" rainbow={momentum.label === "landing note"} />}
+              icon={<PanelIcon name="next" className="h-5 w-5" rainbow={!lockIn && momentum.label === "landing note"} />}
               className="text-yellow-300"
               onClick={() => openRailSection("next")}
             />
@@ -796,7 +822,7 @@ export function SidePanel({
             label={openDecisions.length > 0 ? `Decisions: ${openDecisions.length} open` : "Decisions: none open"}
             section="decisions"
             icon={<PanelIcon name="decisions" className="h-[18px] w-[18px]" />}
-            count={openDecisions.length || undefined}
+            count={!lockIn ? openDecisions.length || undefined : undefined}
             className={openDecisions.length > 0 ? "text-orange-400" : "text-zinc-600"}
             onClick={() => openRailSection("decisions")}
           />
@@ -804,7 +830,7 @@ export function SidePanel({
             label={open.length > 0 ? `Blockers: ${open.length} open` : "Blockers: none open"}
             section="blockers"
             icon={<PanelIcon name="blockers" className="h-5 w-5" />}
-            count={open.length || undefined}
+            count={!lockIn ? open.length || undefined : undefined}
             className={open.length > 0 ? "text-red-400" : "text-zinc-600"}
             onClick={() => openRailSection("blockers")}
           />
@@ -812,7 +838,7 @@ export function SidePanel({
             label={unclaimed.length > 0 ? `Accomplished: ${unclaimed.length} unclaimed` : "Accomplished: no unclaimed results"}
             section="accomplished"
             icon={<PanelIcon name="accomplished" className="h-5 w-5" />}
-            count={unclaimed.length || undefined}
+            count={!lockIn ? unclaimed.length || undefined : undefined}
             className={unclaimed.length > 0 ? "text-emerald-400" : "text-zinc-600"}
             onClick={() => openRailSection("accomplished")}
           />
@@ -832,8 +858,9 @@ export function SidePanel({
 
   return (
     <div
-      className="relative flex h-full shrink-0 flex-col overflow-hidden border-r border-zinc-800 bg-zinc-900 text-xs text-zinc-300"
+      className={`relative flex h-full shrink-0 flex-col overflow-hidden border-r border-zinc-800 bg-zinc-900 text-xs text-zinc-300 ${lockIn ? "lock-in-panel" : ""}`}
       style={{ width: liveWidth }}
+      data-lock-in={lockIn}
     >
       <div
         className="absolute right-0 top-0 z-10 h-full w-1.5 -mr-0.5 cursor-col-resize hover:bg-zinc-600/60 active:bg-zinc-500"
@@ -845,7 +872,7 @@ export function SidePanel({
         <div className="min-w-0 flex-1">
           <p
             className="w-full truncate font-mono text-[10px] leading-none text-zinc-500"
-            style={accent ? { color: accent } : undefined}
+            style={!lockIn && accent ? { color: accent } : undefined}
             title={cwd}
           >
             project: {cwd.split("/").filter(Boolean).pop() ?? cwd}
@@ -862,11 +889,11 @@ export function SidePanel({
           type="button"
           aria-label={`Open Attention Inbox${attentionCount ? `, ${attentionCount} items` : ""}`}
           title={attentionStale ? "Open Attention Inbox (data may be stale)" : "Open Attention Inbox (⌘K)"}
-          className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-sky-400 ${attentionStale ? "text-orange-300" : attentionCount > 0 ? "text-sky-300" : "text-zinc-600"}`}
+          className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-sky-400 ${lockIn ? "text-zinc-500" : attentionStale ? "text-orange-300" : attentionCount > 0 ? "text-sky-300" : "text-zinc-600"}`}
           onClick={onOpenAttention}
         >
-          <PanelIcon name={attentionCount > 0 ? "global-mail-unread" : "global-mail-read"} className="h-4 w-4" />
-          {attentionCount > 0 && (
+          <PanelIcon name={!lockIn && attentionCount > 0 ? "global-mail-unread" : "global-mail-read"} className="h-4 w-4" />
+          {!lockIn && attentionCount > 0 && (
             <span className="absolute -right-1 -top-0.5 min-w-3 rounded-full bg-zinc-700 px-0.5 text-center font-mono text-[7px] leading-3 text-zinc-100">
               {attentionCount > 99 ? "99+" : attentionCount}
             </span>
@@ -1087,7 +1114,7 @@ export function SidePanel({
         )}
       </section>
       {parentGroups.length > 0 && (
-      <div className="flex flex-col gap-1.5">
+      <div ref={fanOutRef} className="flex scroll-mt-3 flex-col gap-1.5">
       {visibleParentGroups.map((f) => (
         <section key={f.groupId} className="rounded-lg border border-purple-500/30 bg-purple-400/5 p-3">
           <h2
@@ -1095,6 +1122,7 @@ export function SidePanel({
             onClick={() => toggleSection(`fanout-${f.groupId}`)}
           >
             <Chevron collapsed={collapsed.has(`fanout-${f.groupId}`)} className="text-purple-300/85" />
+            <PanelIcon name="fan-out" className="h-4 w-4" />
             Fan-out
             {f.label && (
               <span className="ml-auto font-normal text-[10px] normal-case text-zinc-500">{f.label}</span>
@@ -1165,7 +1193,7 @@ export function SidePanel({
               : "rounded-lg border border-yellow-500/30 bg-yellow-400/5 p-3"
           }
           style={
-            momentum.label === "landing note"
+            !lockIn && momentum.label === "landing note"
               ? {
                   border: "1px solid transparent",
                   // Panel bg (zinc-900) pre-blended with the same 5% yellow tint the
@@ -1180,9 +1208,9 @@ export function SidePanel({
         >
           <h2 className="mb-1 flex items-center gap-1.5 font-semibold tracking-wide text-yellow-300 uppercase">
             <Chevron collapsed={false} className="text-yellow-300" />
-            <PanelIcon name="next" className="h-4 w-4" rainbow={momentum.label === "landing note"} /> Next
+            <PanelIcon name="next" className="h-4 w-4" rainbow={!lockIn && momentum.label === "landing note"} /> Next
             <span className="ml-auto font-normal text-[10px] normal-case text-zinc-500">
-              {momentum.label === "landing note" ? <RainbowText text={momentum.label} /> : momentum.label}
+              {!lockIn && momentum.label === "landing note" ? <RainbowText text={momentum.label} /> : momentum.label}
             </span>
           </h2>
           <p className="mb-2 break-words text-zinc-200">{momentum.text}</p>

@@ -43,6 +43,16 @@ and `src/components/SidebarLmControl.tsx`, and supersedes the earlier rule that
 compact mode contains no Git affordance. It does not change Git operations,
 hook behavior, extractor settings behavior, or terminal input.
 
+### Accepted-phase visual follow-up — 2026-09-09
+
+At the operator's request, Fan-out is no longer excluded from the compact
+rail. When the active tab owns at least one fan-out group, show the existing
+fan-out logo in purple beside the expanded card heading and as a conditional
+compact-rail destination. The compact button expands the panel, opens the
+first visible fan-out group, and scrolls to it. Also render the shared warning
+triangle as an orange/pink outline with no fill while retaining its white
+exclamation mark. No fan-out, warning, ingestion, or terminal semantics change.
+
 ## Why this matters
 
 Logic Loop's side panel now contains re-entry context, notes, fan-out state,

@@ -176,14 +176,15 @@ export function seedUnclaimedTabs(
 }
 
 /** Whether a nudge (OS notification) should fire: same rule as
- * `shouldFlagUnclaimed`, plus the project's mute setting. */
+ * `shouldFlagUnclaimed`, plus project mute and app-wide Lock-in. */
 export function shouldNotify(
   tabId: string,
   activeTabId: string | null,
   windowFocused: boolean,
-  muted: boolean
+  muted: boolean,
+  lockIn = false
 ): boolean {
-  return !muted && shouldFlagUnclaimed(tabId, activeTabId, windowFocused);
+  return !lockIn && !muted && shouldFlagUnclaimed(tabId, activeTabId, windowFocused);
 }
 
 // ponytail: constant; settings-table knob if real use disagrees

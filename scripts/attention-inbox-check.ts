@@ -5,8 +5,10 @@ import { readFileSync } from "node:fs";
 import {
   buildAttentionItems,
   filterAttentionItems,
+  partitionAttentionItems,
   resolveAttentionRoute,
 } from "../src/lib/attention";
+import { attentionInteractionPayload } from "../src/lib/repo";
 import { STALL_MS } from "../src/lib/ingest";
 import type { AttentionEvidence } from "../src/types";
 
@@ -25,6 +27,7 @@ const base = (overrides: Partial<AttentionEvidence> = {}): AttentionEvidence => 
   evidenceId: 1,
   runId: null,
   observedState: null,
+  archived: false,
   ...overrides,
 });
 const tabs = [
@@ -115,16 +118,47 @@ assert.equal(filterAttentionItems(items, "BETA").length, 2);
 assert.equal(filterAttentionItems(items, "api shape").length, 6);
 assert.equal(filterAttentionItems(items, "").length, items.length);
 
+const triage = partitionAttentionItems([
+  ...items,
+  ...buildAttentionItems(
+    [
+      base({ id: "decision:unavailable", sessionId: "gone", tabId: "gone", createdAt: NOW - 60_000 }),
+      base({ id: "decision:archived", archived: true, createdAt: NOW - 70_000 }),
+      base({ id: "decision:recurrence", createdAt: NOW - 1_000 }),
+    ],
+    tabs,
+    "run-current",
+    NOW
+  ),
+]);
+assert.equal(triage.active.some((item) => item.id === "decision:archived"), false);
+assert.equal(triage.active.some((item) => item.id === "decision:recurrence"), true, "archived predecessor hid recurrence");
+assert.deepEqual(triage.backlog.map((item) => item.id), ["decision:unavailable"]);
+assert.deepEqual(triage.archived.map((item) => item.id), ["decision:archived"]);
+
+const archivePayload = JSON.parse(
+  attentionInteractionPayload(["decision:1", "blocker:2", "decision:1"], "operation-1")
+) as { operation_id: string; target_ids: string[] };
+assert.equal(archivePayload.operation_id, "operation-1");
+assert.deepEqual(archivePayload.target_ids, ["decision:1", "blocker:2"]);
+assert.throws(() => attentionInteractionPayload([], "operation-2"));
+
 const repoSource = readFileSync(new URL("../src/lib/repo.ts", import.meta.url), "utf8");
 assert.match(repoSource, /WITH valid_events AS/);
 assert.match(repoSource, /FROM decisions[\s\S]*status = 'open'/);
 assert.match(repoSource, /FROM blockers[\s\S]*resolved = 0/);
 assert.match(repoSource, /PARTITION BY l\.session_id/);
 assert.match(repoSource, /attention_state_observed/);
+assert.match(repoSource, /attention_archived/);
+assert.match(repoSource, /attention_unarchived/);
+assert.match(repoSource, /json_each\(e\.payload_json, '\$\.target_ids'\)/);
+assert.match(repoSource, /ORDER BY ts DESC, interaction_id DESC/);
+assert.match(repoSource, /crypto\.randomUUID\(\)/);
 assert.doesNotMatch(repoSource.match(/listAttentionEvidence[\s\S]*?\n}\n/)?.[0] ?? "", /LIMIT 100/);
 
 const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 const sidePanelSource = readFileSync(new URL("../src/components/SidePanel.tsx", import.meta.url), "utf8");
+const inboxSource = readFileSync(new URL("../src/components/AttentionInbox.tsx", import.meta.url), "utf8");
 const iconSource = readFileSync(new URL("../src/components/PanelIcon.tsx", import.meta.url), "utf8");
 assert.match(appSource, /listAttentionEvidence/);
 assert.equal(appSource.match(/\.listAttentionEvidence\(/g)?.length, 1, "Attention query is not App-owned once");
@@ -133,7 +167,13 @@ const navigation = appSource.match(/const openAttentionTab[\s\S]*?\n  }, \[\]\);
 assert.match(navigation, /setActiveId/);
 assert.doesNotMatch(navigation, /ptyWrite|addEvent|spawn|setDecision|setBlocker/);
 assert.doesNotMatch(sidePanelSource, /listAttentionEvidence/);
+assert.match(sidePanelSource, /onAttentionChanged\(\)/);
 assert.match(sidePanelSource, /section="attention"/);
+assert.match(inboxSource, /onKeyDownCapture=/);
+assert.doesNotMatch(inboxSource, /window\.addEventListener\("keydown"/);
+assert.match(inboxSource, /Archive all unavailable/);
+assert.match(inboxSource, /Restore to Attention/);
+assert.doesNotMatch(inboxSource, /ptyWrite|ptySpawn|result_claimed|setDecisionStatus|setBlockerResolved/);
 assert.match(iconSource, /global-mail-read/);
 assert.match(iconSource, /global-mail-unread/);
 
