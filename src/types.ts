@@ -38,6 +38,7 @@ export interface AttentionItem {
   actionability: "act" | "review" | "investigate" | "unknown";
   confidence: "explicit" | "inferred" | "unknown";
   route: "exact" | "session" | "project" | "unavailable";
+  archived: boolean;
 }
 
 /** Raw cross-project evidence returned by the repo query. Live eligibility,
@@ -56,6 +57,7 @@ export interface AttentionEvidence {
   evidenceId: number | null;
   runId: string | null;
   observedState: AgentState | null;
+  archived: boolean;
 }
 
 export interface Tab {

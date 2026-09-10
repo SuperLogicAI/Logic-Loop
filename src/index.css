@@ -23,3 +23,51 @@ body,
 .tab-strip::-webkit-scrollbar-thumb:hover {
   background: #a1a1aa;
 }
+
+/* Lock-in is presentation-only: neutralize attention colors inside the side
+   panel while leaving the top tab strip and all underlying state untouched. */
+.lock-in-panel [class*="text-teal-"],
+.lock-in-panel [class*="text-yellow-"],
+.lock-in-panel [class*="text-orange-"],
+.lock-in-panel [class*="text-red-"],
+.lock-in-panel [class*="text-emerald-"],
+.lock-in-panel [class*="text-purple-"],
+.lock-in-panel [class*="text-sky-"],
+.lock-in-panel [class*="text-blue-"],
+.lock-in-panel [class*="text-green-"] {
+  color: #a1a1aa !important;
+}
+
+.lock-in-panel [class*="border-teal-"],
+.lock-in-panel [class*="border-yellow-"],
+.lock-in-panel [class*="border-orange-"],
+.lock-in-panel [class*="border-red-"],
+.lock-in-panel [class*="border-emerald-"],
+.lock-in-panel [class*="border-purple-"],
+.lock-in-panel [class*="border-sky-"],
+.lock-in-panel [class*="border-blue-"],
+.lock-in-panel [class*="border-green-"] {
+  border-color: rgb(82 82 91 / 0.7) !important;
+}
+
+.lock-in-panel [class~="bg-blue-400"],
+.lock-in-panel [class~="bg-yellow-400"],
+.lock-in-panel [class~="bg-yellow-400/5"],
+.lock-in-panel [class~="bg-yellow-950/20"],
+.lock-in-panel [class~="bg-orange-400"],
+.lock-in-panel [class~="bg-red-500"],
+.lock-in-panel [class~="bg-red-950/20"],
+.lock-in-panel [class~="bg-emerald-400"],
+.lock-in-panel [class~="bg-emerald-500"],
+.lock-in-panel [class~="bg-emerald-700"],
+.lock-in-panel [class~="bg-purple-400/5"],
+.lock-in-panel [class~="bg-purple-400/[0.015]"],
+.lock-in-panel [class~="bg-rose-500/10"],
+.lock-in-panel [class~="bg-sky-900/40"] {
+  background-color: rgb(39 39 42 / 0.45) !important;
+}
+
+.lock-in-panel [class*="shadow-["],
+.lock-in-panel .lock-in-state {
+  box-shadow: none !important;
+}

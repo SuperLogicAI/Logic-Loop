@@ -1501,36 +1501,53 @@ LM and Notify occupy a second expanded-panel row.
 - [x] Confirm expanded headings reuse the compact section icons, and the pinned
       compact GitHub icon expands and routes to Git log without opening or
       triggering commit/push controls.
-- [x] Confirm the compact rail contains no Inbox, Lock-In, timed-lock,
-      commit/push, or fan-out controls.
+- [x] Confirm the compact rail contains no Inbox, Lock-In, timed-lock, or
+      commit/push controls. *(Fan-out was added in the follow-up below.)*
+
+Follow-up visual polish (2026-09-09):
+
+- [ ] With a fan-out group present, confirm the expanded Fan-out heading and
+      compact rail both show the purple fan-out icon; click the compact icon
+      and confirm it expands and scrolls to the first fan-out group.
+- [ ] Confirm warning triangles use an orange/pink outline with no fill and a
+      white exclamation mark in both compact and expanded panel warnings.
 
 ## 36. Cross-project Attention Inbox (Phase 26)
 
-Implementation built 2026-09-09 on top of the accepted Phase 25 working tree.
-The focused inbox check, aggregate frontend checks, strict TypeScript check,
-and production build are recorded clean below. Live macOS interaction and
-three-session dogfood remain pending; do not infer visual acceptance from the
-headless gates.
+Implementation built 2026-09-09 on top of the accepted Phase 25 working tree
+and accepted by the maintainer on 2026-09-09 after live six-tab dogfood. The
+dogfood populated all five kinds across two projects with correct labels,
+counts, ages, and ordering. Acceptance carries two findings into Phase 27:
+Claude required a repeated question before one decision appeared, and initial
+Up/Down navigation did not work until a row received mouse focus. Unrun checks
+remain unchecked below rather than being inferred from acceptance.
 
-- [ ] Open at least two projects and six tabs. Produce decisions, observed
+- [x] Open at least two projects and six tabs. Produce decisions, observed
       waiting, unclaimed results, unresolved blockers, and a quiet working
       session. Confirm cross-project presence, project labels, ages, count,
-      and actionability-first ordering.
+      and actionability-first ordering. *(live pass 2026-09-09; one Claude
+      decision required asking the agent to repeat its question before the
+      extractor populated it)*
 - [ ] Open Attention from terminal focus with `Cmd+K`, the compact mail icon,
       and the expanded-panel header control. Confirm no `k` or other bytes
       appear in the terminal.
 - [ ] Search, use Up/Down/Enter, select a row and use `Open tab`, then press
       Escape. Confirm preview behavior, empty-search copy, keyboard focus
-      trapping, and restoration to the previously focused control.
+      trapping, and restoration to the previously focused control. *(failed
+      initial-focus path 2026-09-09: the search field received focus, but
+      Up/Down began working only after clicking a result row; carried into
+      Phase 27)*
 - [ ] Preview an unclaimed result without navigating and confirm it remains
       unclaimed. Navigate to it and confirm the existing claim behavior runs
       once.
 - [ ] Create same-project sibling tabs, then close or retarget destinations.
       Confirm ambiguous, conflicting, dead, and stale routes show unavailable
       rather than selecting a guessed sibling.
-- [ ] Relaunch with durable decisions, blockers, and results. Confirm they
+- [x] Relaunch with durable decisions, blockers, and results. Confirm they
       remain, while prior-run waiting/stalled rows stay absent until fresh live
-      evidence arrives.
+      evidence arrives. *(live pass 2026-09-09: decisions persisted before
+      re-entry, blocker routes became available after re-entry, and an
+      unclaimed result persisted and was claimed by re-entering its tab)*
 - [ ] Let a working tab cross the real three-minute quiet boundary. Confirm the
       shared clock adds the quiet row after the boundary and fresh accepted
       activity removes it without per-row polling.
@@ -1551,6 +1568,135 @@ Automated evidence (2026-09-09):
       one global query shape, shortcut/UI wiring, and reserved icons pass.
 - [x] `npm run check` — all 22 configured checks pass, including the new
       `attention-inbox:check` aggregate entry.
+- [x] `npx tsc --noEmit` — strict TypeScript clean.
+- [x] `npm run build` — production frontend build clean; only the existing
+      chunk-size advisory is emitted.
+- [x] `cd src-tauri && cargo test --lib` — 57/57 pass.
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings` — clean.
+- [x] `git diff --check` — clean.
+
+## 37. Lock-in / Do Not Disturb sidequest
+
+Implementation built 2026-09-09 under the explicitly approved Phase 26
+sequencing exception. Phase 26 remains unaccepted and its dogfood matrix above
+is unchanged. Live macOS manual testing passed 2026-09-09.
+
+- [x] Enter Lock-in from expanded mode. Confirm the side panel becomes neutral
+      gray, Attention and section count badges disappear, and the locked icon
+      has a visible pressed treatment and accessible label.
+- [x] Fold, expand, hide, and restore the side panel while locked in. Confirm
+      Lock-in remains active and the prior panel width/mode preferences are not
+      overwritten. Exit Lock-in and confirm category colors and live counts
+      return from the unchanged state.
+- [x] While locked in, trigger waiting, finished, and three-minute-stalled
+      nudges from background tabs and with the app backgrounded. Confirm no OS
+      notifications appear and the macOS dock badge remains clear.
+- [x] During the same run, confirm hooks, tab state dots/ages/glows/badges,
+      Attention evidence, decisions, blockers, and unclaimed results continue
+      updating. Exit Lock-in and confirm the current dock count returns.
+- [x] In both compact and expanded modes, confirm the neutral Attention and
+      warning controls remain reachable and readable rather than appearing
+      absent.
+- [x] Add and clear a Note; add, resolve, reopen, and clear Blockers while
+      locked in. Confirm every action remains functional and sends no input to
+      the terminal.
+- [x] Relaunch after leaving Lock-in active. Confirm the app starts unlocked
+      and ordinary notification behavior resumes.
+
+Automated evidence (2026-09-09):
+
+- [x] `npm run lock-in:check` — notification suppression, unclaimed-state
+      independence, dock-badge derivation, App ownership, panel controls,
+      neutral styling, hidden compact counts, and lock icons pass.
+- [x] `npm run check` — all 23 configured checks pass.
+- [x] `npx tsc --noEmit` — strict TypeScript clean.
+- [x] `npm run build` — production frontend build clean; only the existing
+      chunk-size advisory is emitted.
+- [x] `cd src-tauri && cargo test --lib` — 57/57 pass.
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings` — clean.
+- [x] `git diff --check` — clean.
+
+## 38. Lock-in header + 60-minute timer polish sidequest
+
+Implementation built 2026-09-09 under the explicitly approved Phase 26
+sequencing exception. Phase 26 remains unaccepted and its dogfood matrix is
+unchanged.
+
+- [ ] In expanded, compact, and hidden panel modes, confirm the gray bordered
+      Lock-in pill stays immediately right of Fold/Expand and adapter pills
+      retain their established order.
+- [ ] While unlocked, keyboard-focus and activate each icon independently.
+      Confirm labels/tooltips distinguish indefinite Lock-in from 60-minute
+      Lock-in.
+- [ ] Activate indefinite Lock-in. Confirm the pill collapses to Unlock only,
+      existing suppression/neutral presentation works, and manual Unlock
+      restores live state.
+- [ ] Activate timed Lock-in. Confirm the pill collapses to Unlock only and its
+      accessible copy identifies the 60-minute mode. Manually unlock before a
+      shortened developer-timer expiry, start a new Lock-in session, and
+      confirm the stale timer cannot unlock it.
+- [ ] Confirm a timed Lock-in automatically unlocks once at the real 60-minute
+      boundary and restores future notification, dock-badge, and panel
+      presentation behavior from live underlying state.
+- [ ] Relaunch during indefinite and timed Lock-in. Confirm the app starts
+      unlocked and no previous timer resumes.
+
+Automated evidence (2026-09-09):
+
+- [x] `npm run lock-in:check` — 60-minute constant, mode policy, stale-timer
+      guard, header placement/wiring, accessible choices, collapsed Unlock,
+      side-panel de-duplication, and timed icon pass.
+- [x] `npm run notify:check`, `npm run panel-layout:check`, and
+      `npm run attention-inbox:check` — existing related contracts pass.
+- [x] `npm run check` — all 23 configured checks pass.
+- [x] `npx tsc --noEmit` — strict TypeScript clean.
+- [x] `npm run build` — production frontend build clean; only the existing
+      chunk-size advisory is emitted.
+- [x] `cd src-tauri && cargo test --lib` — 57/57 pass.
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings` — clean.
+- [x] `git diff --check` — clean.
+
+## 39. Attention triage and backlog control (Phase 27)
+
+Implementation built 2026-09-09 on top of accepted Phase 26. Automated
+Attention, aggregate frontend, TypeScript, production build, and Rust gates are
+clean. The live macOS matrix passed and Phase 27 was accepted by the operator
+on 2026-09-10.
+
+**Acceptance:** `PHASE 27 ACCEPTED`
+
+- [x] With Active above 99 and a mixture of routable and unavailable rows,
+      confirm the rail badge equals only Active while Backlog shows its own
+      count.
+- [x] Open with `Cmd+K`. Before clicking a row, use Up/Down/Enter from the
+      autofocus search field. Confirm selection and navigation work, no key
+      reaches the terminal, and Escape restores focus.
+- [x] Archive one Active decision, blocker, and result. Confirm each leaves
+      Active without changing the source decision/blocker status or claiming
+      the result.
+- [x] Restore each from Archived. Confirm it returns to Active or Backlog based
+      on its current safe route.
+- [x] Archive one unavailable Backlog row, then use `Archive all unavailable`.
+      Confirm the dialog states the exact count, underlying records are
+      retained, and Backlog becomes empty after the write succeeds.
+- [x] Create a new occurrence after archiving an older item with similar text.
+      Confirm the new occurrence appears normally.
+- [x] Dismiss an unclaimed result with the Accomplished-row `✕`. Confirm
+      Attention counts and views update immediately without relaunch.
+- [x] Relaunch and confirm archive state persists while underlying source
+      history remains unchanged and eligible archived rows can be restored.
+- [x] Temporarily fail the Attention query/write path. Confirm the last-good
+      list and `Attention may be stale` remain while terminals and panels work.
+- [x] Confirm compact/expanded/hidden modes, Lock-in, notifications, tab
+      badges, and safe unavailable routing retain their prior behavior.
+
+Automated evidence (2026-09-09):
+
+- [x] `npm run attention-inbox:check` — Active/Backlog/Archived partitioning,
+      occurrence-scoped interaction payloads, recurrence isolation, query
+      projection wiring, dialog-owned keys, bulk archive, restore, and shared
+      result-dismiss invalidation pass.
+- [x] `npm run check` — all 23 configured checks pass.
 - [x] `npx tsc --noEmit` — strict TypeScript clean.
 - [x] `npm run build` — production frontend build clean; only the existing
       chunk-size advisory is emitted.

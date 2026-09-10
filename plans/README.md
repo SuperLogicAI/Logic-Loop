@@ -29,9 +29,11 @@ test dependency is proposed for Phase 26.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| [001](001-cross-project-attention-inbox.md) | Cross-project attention inbox | P1 | L overall; bounded Phase 26 slice | Phase 22 foundation, Phase 25 rail | BUILT — Phase 26 awaiting live dogfood |
+| [001](001-cross-project-attention-inbox.md) | Cross-project attention inbox | P1 | L overall; Phase 26 read UI + Phase 27 triage | Phase 22 foundation, Phase 25 rail | DONE — PHASE 27 ACCEPTED |
 | [003](003-opencode-repo-contract-and-checks.md) | OpenCode repo contract and baseline checks | P1 | S (0.5–1d + manual pass) | Phase 22 accepted and committed | DONE — Phase 23 accepted |
 | [004](004-folded-side-rail.md) | Folded side rail | P1 | M (1–2d + live visual pass) | Phase 24 accepted and committed | DONE — Phase 25 accepted |
+| [005](005-lock-in-dnd-sidequest.md) | Lock-in / Do Not Disturb | P1 | S (bounded sidequest) | Explicit Phase 26 sequencing exception | DONE — live macOS matrix passed |
+| [006](006-lock-in-header-timer-polish.md) | Lock-in header + 60-minute timer polish | P1 | S (bounded sidequest follow-up) | Sidequest 005; explicit Phase 26 sequencing exception | BUILT — automated gates clean; live matrix pending |
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
