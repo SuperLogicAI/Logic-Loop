@@ -331,6 +331,21 @@ interface AttentionEvidenceRow {
   evidence_id: number | null;
   run_id: string | null;
   observed_state: AgentState | null;
+  archived: number;
+}
+
+const ATTENTION_INTERACTION_SESSION = "__logic_loop_attention__";
+
+export function attentionInteractionPayload(targetIds: string[], operationId: string): string {
+  const unique = [...new Set(targetIds.filter((id) => id.length > 0))];
+  if (unique.length === 0) throw new Error("Attention interaction requires at least one target");
+  return JSON.stringify({ v: 1, operation_id: operationId, target_ids: unique });
+}
+
+/** Archive state is separate from source obligation state and is occurrence-scoped. */
+export async function setAttentionArchived(targetIds: string[], archived: boolean): Promise<void> {
+  const payload = attentionInteractionPayload(targetIds, crypto.randomUUID());
+  await addEvent(ATTENTION_INTERACTION_SESSION, archived ? "attention_archived" : "attention_unarchived", payload);
 }
 
 /** One global read over durable obligations plus the latest lifecycle evidence
@@ -364,8 +379,9 @@ export async function listAttentionEvidence(runId: string): Promise<AttentionEvi
        FROM valid_events e
        WHERE e.type = 'attention_state_observed'
          AND json_extract(e.payload_json, '$.run_id') = $1
-     )
-     SELECT 'decision:' || id AS id,
+     ),
+     source_evidence AS (
+       SELECT 'decision:' || id AS id,
             'decision' AS kind,
             cwd AS project_key,
             session_id,
@@ -435,11 +451,34 @@ export async function listAttentionEvidence(runId: string): Promise<AttentionEvi
             CAST(json_extract(payload_json, '$.source_event_id') AS INTEGER),
             json_extract(payload_json, '$.run_id'),
             json_extract(payload_json, '$.state')
-     FROM run_observations
-     WHERE rn = 1
-       AND json_extract(payload_json, '$.project_key') IS NOT NULL
-       AND json_extract(payload_json, '$.source_event_id') IS NOT NULL
-       AND json_extract(payload_json, '$.state') IN ('waiting', 'working')`,
+       FROM run_observations
+       WHERE rn = 1
+         AND json_extract(payload_json, '$.project_key') IS NOT NULL
+         AND json_extract(payload_json, '$.source_event_id') IS NOT NULL
+         AND json_extract(payload_json, '$.state') IN ('waiting', 'working')
+     ),
+     interaction_targets AS (
+       SELECT e.id AS interaction_id,
+              e.ts,
+              target.value AS target_id,
+              CASE e.type WHEN 'attention_archived' THEN 1 ELSE 0 END AS archived
+       FROM valid_events e, json_each(e.payload_json, '$.target_ids') AS target
+       WHERE e.type IN ('attention_archived', 'attention_unarchived')
+         AND json_type(e.payload_json, '$.target_ids') = 'array'
+         AND typeof(target.value) = 'text'
+         AND target.value <> ''
+     ),
+     latest_interactions AS (
+       SELECT *,
+              ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY ts DESC, interaction_id DESC) AS rn
+       FROM interaction_targets
+     )
+     SELECT source_evidence.*,
+            CASE WHEN latest_interactions.archived = 1 THEN 1 ELSE 0 END AS archived
+     FROM source_evidence
+     LEFT JOIN latest_interactions
+       ON latest_interactions.target_id = source_evidence.id
+      AND latest_interactions.rn = 1`,
     [runId]
   );
   return rows.map((row) => ({
@@ -456,6 +495,7 @@ export async function listAttentionEvidence(runId: string): Promise<AttentionEvi
     evidenceId: row.evidence_id,
     runId: row.run_id,
     observedState: row.observed_state,
+    archived: row.archived === 1,
   }));
 }
 

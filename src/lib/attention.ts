@@ -9,6 +9,12 @@ export interface AttentionTabSnapshot {
   status: Tab["status"];
 }
 
+export interface AttentionViews {
+  active: AttentionItem[];
+  backlog: AttentionItem[];
+  archived: AttentionItem[];
+}
+
 const ACTIONABILITY_ORDER: Record<AttentionItem["actionability"], number> = {
   act: 0,
   review: 1,
@@ -114,9 +120,31 @@ export function buildAttentionItems(
       actionability: actionability(row.kind, resolved.route),
       confidence: row.kind === "waiting" || row.kind === "stalled" ? "inferred" : "explicit",
       route: resolved.route,
+      archived: row.archived,
     });
   }
   return items.sort(compareAttention);
+}
+
+function compareOldest(a: AttentionItem, b: AttentionItem): number {
+  return a.createdAt - b.createdAt || a.id.localeCompare(b.id);
+}
+
+/** Split the one global snapshot into mutually exclusive UI surfaces. */
+export function partitionAttentionItems(items: AttentionItem[]): AttentionViews {
+  const active: AttentionItem[] = [];
+  const backlog: AttentionItem[] = [];
+  const archived: AttentionItem[] = [];
+  for (const item of items) {
+    if (item.archived) archived.push(item);
+    else if (item.route === "unavailable") backlog.push(item);
+    else active.push(item);
+  }
+  return {
+    active,
+    backlog: backlog.sort(compareOldest),
+    archived: archived.sort(compareOldest),
+  };
 }
 
 export function attentionProjectLabel(projectKey: string): string {

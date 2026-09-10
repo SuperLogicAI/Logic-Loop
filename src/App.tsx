@@ -36,6 +36,7 @@ import { BookmarksBar } from "./components/BookmarksBar";
 import { Terminal } from "./components/Terminal";
 import {
   buildAttentionItems,
+  partitionAttentionItems,
   type AttentionTabSnapshot,
 } from "./lib/attention";
 import {
@@ -66,6 +67,13 @@ import type {
   Tab,
 } from "./types";
 import { PALETTE } from "./types";
+import {
+  isLockInActive,
+  shouldExpireTimedLockIn,
+  TIMED_LOCK_IN_MS,
+  visibleDockBadgeCount,
+  type LockInMode,
+} from "./lib/lockIn";
 
 export default function App() {
   const [tabs, setTabs] = useState<Tab[]>([]);
@@ -88,6 +96,14 @@ export default function App() {
   lastVisiblePanelModeRef.current = lastVisiblePanelMode;
   const panelLayoutTouchedRef = useRef(false);
   const [panelRefresh, setPanelRefresh] = useState(0);
+  const [lockInMode, setLockInMode] = useState<LockInMode>("off");
+  const lockIn = isLockInActive(lockInMode);
+  const lockInModeRef = useRef<LockInMode>(lockInMode);
+  lockInModeRef.current = lockInMode;
+  const lockInRef = useRef(lockIn);
+  lockInRef.current = lockIn;
+  const lockInTimerRef = useRef<number | null>(null);
+  const lockInGenerationRef = useRef(0);
   const [attentionEvidence, setAttentionEvidence] = useState<AttentionEvidence[]>([]);
   const [attentionLoading, setAttentionLoading] = useState(true);
   const [attentionStale, setAttentionStale] = useState(false);
@@ -146,6 +162,50 @@ export default function App() {
   const showPanelMode = useCallback(
     (mode: VisiblePanelMode) => applyPanelLayout({ mode, lastVisible: mode }),
     [applyPanelLayout]
+  );
+
+  const clearLockInTimer = useCallback(() => {
+    if (lockInTimerRef.current === null) return;
+    window.clearTimeout(lockInTimerRef.current);
+    lockInTimerRef.current = null;
+  }, []);
+
+  const unlockLockIn = useCallback(() => {
+    lockInGenerationRef.current += 1;
+    clearLockInTimer();
+    lockInModeRef.current = "off";
+    lockInRef.current = false;
+    setLockInMode("off");
+  }, [clearLockInTimer]);
+
+  const activateLockIn = useCallback(
+    (mode: Exclude<LockInMode, "off">) => {
+      lockInGenerationRef.current += 1;
+      const generation = lockInGenerationRef.current;
+      clearLockInTimer();
+      lockInModeRef.current = mode;
+      lockInRef.current = true;
+      setLockInMode(mode);
+
+      if (mode === "timed") {
+        lockInTimerRef.current = window.setTimeout(() => {
+          if (!shouldExpireTimedLockIn(lockInModeRef.current, lockInGenerationRef.current, generation)) return;
+          lockInTimerRef.current = null;
+          lockInModeRef.current = "off";
+          lockInRef.current = false;
+          setLockInMode("off");
+        }, TIMED_LOCK_IN_MS);
+      }
+    },
+    [clearLockInTimer]
+  );
+
+  useEffect(
+    () => () => {
+      lockInGenerationRef.current += 1;
+      clearLockInTimer();
+    },
+    [clearLockInTimer]
   );
 
   // Nudges (Phase 6): muted project keys, cached so the hot ingestion path
@@ -214,6 +274,19 @@ export default function App() {
     }));
     return buildAttentionItems(attentionEvidence, attentionTabs, attentionRunIdRef.current, now);
   }, [attentionEvidence, expand, now, tabs]);
+  const attentionViews = useMemo(() => partitionAttentionItems(attentionItems), [attentionItems]);
+  const setAttentionArchived = useCallback(
+    async (targetIds: string[], archived: boolean) => {
+      try {
+        await repo.setAttentionArchived(targetIds, archived);
+        scheduleAttentionRefresh();
+      } catch (error) {
+        setAttentionStale(true);
+        throw error;
+      }
+    },
+    [scheduleAttentionRefresh]
+  );
 
   // Prompt a landing note when leaving a tab that had agent activity since the
   // last prompt. Debounced to one prompt per tab per 10 min (tab-flipping while
@@ -812,7 +885,7 @@ export default function App() {
 
       const muted = cwd ? mutedProjectsRef.current.has(cwd) : false;
       const nudgeLabel = cwd ? (cwd.split("/").filter(Boolean).pop() ?? cwd) : "Logic Loop";
-      const canNotify = () => shouldNotify(tabId, activeIdRef.current, document.hasFocus(), muted);
+      const canNotify = () => shouldNotify(tabId, activeIdRef.current, document.hasFocus(), muted, lockInRef.current);
 
       // Waiting-edge only — a hook can re-fire (e.g. an idle reminder) while
       // already waiting, and that must not re-notify every time.
@@ -953,8 +1026,9 @@ export default function App() {
     (t) => t.status === "live" && (t.agentState === "waiting" || unseenStops.has(t.id))
   ).length;
   useEffect(() => {
-    void getCurrentWindow().setBadgeCount(waitingCount > 0 ? waitingCount : undefined);
-  }, [waitingCount]);
+    const visibleCount = visibleDockBadgeCount(waitingCount, lockIn);
+    void getCurrentWindow().setBadgeCount(visibleCount > 0 ? visibleCount : undefined);
+  }, [waitingCount, lockIn]);
 
   // Clock on state (Phase 14b): one interval, no per-tab timers. Also checks
   // every live tab for a fresh stall on each tick — a stall can start with no
@@ -969,7 +1043,7 @@ export default function App() {
         nudgedStallRef.current.add(tab.id);
         const cwd = expand(tab.cwd);
         const muted = mutedProjectsRef.current.has(cwd);
-        if (shouldNotify(tab.id, activeIdRef.current, document.hasFocus(), muted)) {
+        if (shouldNotify(tab.id, activeIdRef.current, document.hasFocus(), muted, lockInRef.current)) {
           notify("Agent quiet 3m", cwd.split("/").filter(Boolean).pop() ?? cwd);
         }
       }
@@ -1170,6 +1244,7 @@ export default function App() {
           <SidePanel
             mode={panelMode}
             onModeChange={showPanelMode}
+            lockIn={lockIn}
             cwd={expand(activeTab.cwd)}
             sessionId={activeTab.sessionId ?? null}
             tabTether={activeTab.id}
@@ -1187,16 +1262,24 @@ export default function App() {
             onDismissMember={dismissSpawnMember}
             onBlockersChanged={refreshBlockerCounts}
             onDecisionsChanged={refreshDecisionCounts}
+            onAttentionChanged={scheduleAttentionRefresh}
             onAnswerNow={answerNow}
             onMuteChanged={refreshMutedProjects}
-            attentionCount={attentionItems.length}
+            attentionCount={attentionViews.active.length}
             attentionLoading={attentionLoading}
             attentionStale={attentionStale}
             onOpenAttention={() => setAttentionOpen(true)}
           />
         )}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <AgentStatusBar panelMode={panelMode} onTogglePanel={togglePanel} />
+          <AgentStatusBar
+            panelMode={panelMode}
+            onTogglePanel={togglePanel}
+            lockInMode={lockInMode}
+            onLockIn={() => activateLockIn("indefinite")}
+            onTimedLockIn={() => activateLockIn("timed")}
+            onUnlock={unlockLockIn}
+          />
           <div className="min-h-0 flex-1">
             {tabs.map((tab) => (
               <Terminal
@@ -1259,6 +1342,7 @@ export default function App() {
           stale={attentionStale}
           onClose={() => setAttentionOpen(false)}
           onOpenTab={openAttentionTab}
+          onSetArchived={setAttentionArchived}
         />
       )}
     </div>

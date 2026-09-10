@@ -17,12 +17,29 @@ import {
   opencodeHooksStatus,
 } from "../lib/ingest";
 import type { PanelMode } from "../types";
+import type { LockInMode } from "../lib/lockIn";
 import { PanelIcon } from "./PanelIcon";
 
 /** Persistent header above the terminal pane. Panel fold/expand stays at its
  * left edge in every presentation mode; alphabetized adapter controls stay
  * aligned on the right. Sidebar LM moved into SidePanel's utility row. */
-export function AgentStatusBar({ panelMode, onTogglePanel }: { panelMode: PanelMode; onTogglePanel: () => void }) {
+interface Props {
+  panelMode: PanelMode;
+  onTogglePanel: () => void;
+  lockInMode: LockInMode;
+  onLockIn: () => void;
+  onTimedLockIn: () => void;
+  onUnlock: () => void;
+}
+
+export function AgentStatusBar({
+  panelMode,
+  onTogglePanel,
+  lockInMode,
+  onLockIn,
+  onTimedLockIn,
+  onUnlock,
+}: Props) {
   const [hooksOn, setHooksOn] = useState<boolean | null>(null);
   const [opencodeAvailable, setOpencodeAvailable] = useState(false);
   const [opencodeOn, setOpencodeOn] = useState<boolean | null>(null);
@@ -121,15 +138,62 @@ export function AgentStatusBar({ panelMode, onTogglePanel }: { panelMode: PanelM
 
   return (
     <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-zinc-800 px-1.5">
-      <button
-        type="button"
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-sky-400"
-        aria-label={panelMode === "expanded" ? "Fold project panel" : "Expand project panel"}
-        title={panelMode === "expanded" ? "Fold project panel" : "Expand project panel"}
-        onClick={onTogglePanel}
-      >
-        <PanelIcon name={panelMode === "expanded" ? "fold" : "expand"} className="h-5 w-5" />
-      </button>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <button
+          type="button"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-sky-400"
+          aria-label={panelMode === "expanded" ? "Fold project panel" : "Expand project panel"}
+          title={panelMode === "expanded" ? "Fold project panel" : "Expand project panel"}
+          onClick={onTogglePanel}
+        >
+          <PanelIcon name={panelMode === "expanded" ? "fold" : "expand"} className="h-5 w-5" />
+        </button>
+        <div
+          className="flex h-7 shrink-0 items-center overflow-hidden rounded-full border border-zinc-700 text-zinc-500"
+          data-lock-in-control
+          role="group"
+          aria-label="Lock-in controls"
+        >
+          {lockInMode === "off" ? (
+            <>
+              <button
+                type="button"
+                className="flex h-full w-7 items-center justify-center hover:bg-zinc-800 hover:text-zinc-200 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400"
+                aria-label="Enter Lock-in until manually unlocked"
+                title="Lock in — silence notifications and panel emphasis until manually unlocked"
+                onClick={onLockIn}
+              >
+                <PanelIcon name="lock-in" className="h-4 w-4" />
+              </button>
+              <span aria-hidden="true" className="h-4 border-l border-zinc-700" />
+              <button
+                type="button"
+                className="flex h-full w-7 items-center justify-center hover:bg-zinc-800 hover:text-zinc-200 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400"
+                aria-label="Enter Lock-in for 60 minutes"
+                title="Timed Lock-in — silence notifications and panel emphasis for 60 minutes"
+                onClick={onTimedLockIn}
+              >
+                <PanelIcon name="timed-lock" className="h-4 w-4" />
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="flex h-full w-8 items-center justify-center bg-zinc-800 text-zinc-200 hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400"
+              aria-pressed={true}
+              aria-label={lockInMode === "timed" ? "Exit 60-minute Lock-in" : "Exit Lock-in"}
+              title={
+                lockInMode === "timed"
+                  ? "Exit 60-minute Lock-in — restore notifications and panel emphasis"
+                  : "Exit Lock-in — restore notifications and panel emphasis"
+              }
+              onClick={onUnlock}
+            >
+              <PanelIcon name="unlock" className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      </div>
       <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 overflow-x-auto">
         {antigravityAvailable && (
           <button
