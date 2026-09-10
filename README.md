@@ -38,6 +38,15 @@ switching:
 | **Attention Residue** | *Attention residue* — part of your mind stays on the task you left; externalize the loop to return clean. |
 | **Momentum Builder** | *Re-entry friction* — surfaces the single lowest-friction next action to convert staring into motion. |
 | **Idea Board** | *Where did that idea go* — a per-project kanban dock (idea → planned → building → later → done) living in a git-committed `.logic-loop/board.md`; star up to 3 cards as "Now" and Momentum Builder prefers them over the plain top-of-column pick. |
+| **Attention Inbox** | *Which of my N projects needs me* — a cross-project, keyboard-driven (`Cmd/Ctrl+K`) rollup of every open decision, unclaimed result, unresolved blocker, and stalled-quiet session across all tabs, ranked actionability-first with searchable per-row jump-to-tab. |
+
+Two supporting controls round out re-entry and focus: a **folded/compact side
+rail** — collapse any expanded panel down to icon-only, click an icon to jump
+back to its section — for when screen space matters more than detail, and
+**Lock-in** (Do Not Disturb, indefinite or a 1-hour timer) — the side panel
+goes neutral and OS notifications/dock badge stay silent while every panel,
+hook, and background session keeps updating underneath, so nothing is missed,
+just not pushed at you.
 
 ## How it works
 
@@ -53,7 +62,10 @@ fails open — if extraction breaks, the terminals keep working.
 Every adapter normalizes to one wire shape, so a tab running any of them gets
 the same state dots, rollups and fan-out tracking. Each installs itself into
 that agent's own global config via a toggle in the app, and removes itself
-byte-identically when switched off.
+byte-identically when switched off. [AGENTS.md](AGENTS.md) is this repo's own
+shared contract for coding agents working on Logic Loop itself — repo map,
+verify commands, and invariants in one place, readable by OpenCode and Codex
+alongside Claude Code.
 
 ## Supported agents
 
@@ -113,6 +125,14 @@ Early, actively built, dogfooded daily. Shipped:
 - ✅ Decisions empty-state clarity — distinguishes confirmed-empty from
   blind/unbound/non-Claude-agent
 - ✅ Idea Board — per-project kanban dock with a starred "Now" set
+- ✅ Cross-project Attention Inbox — `Cmd/Ctrl+K` searchable rollup of
+  decisions, unclaimed results, blockers, and stalled sessions across all
+  open projects, with archive/backlog triage for unavailable rows
+- ✅ Folded/compact side rail — icon-only panel mode, width and mode persist
+- ✅ Blockers bulk clear — resolve every open blocker for a project in one
+  action
+- ✅ Lock-in (Do Not Disturb) — indefinite or 1-hour-timed, mutes
+  notifications/dock badge without pausing ingestion
 - ⏳ Crash recovery, onboarding, public release polish
 
 ## Stack
