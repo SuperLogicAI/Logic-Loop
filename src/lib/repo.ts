@@ -933,15 +933,29 @@ export async function upsertSessionBinding(
   projectKey: string,
   cwd: string,
   transcriptPath: string,
-  agent?: string
+  agent?: string,
+  tabTitle?: string,
+  tabColor?: string
 ): Promise<void> {
   const d = await getDb();
   await d.execute(
-    `INSERT INTO session_bindings (session_id, tab_tether, project_key, cwd, transcript_path, agent, active, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, 1, $7)
+    `INSERT INTO session_bindings
+       (session_id, tab_tether, project_key, cwd, transcript_path, agent, tab_title, tab_color, active, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, $9)
      ON CONFLICT(session_id) DO UPDATE SET
-       tab_tether = $2, project_key = $3, cwd = $4, transcript_path = $5, agent = $6, active = 1, updated_at = $7`,
-    [sessionId, tabTether, projectKey, cwd, transcriptPath, agent ?? null, Date.now()]
+       tab_tether = $2, project_key = $3, cwd = $4, transcript_path = $5, agent = $6,
+       tab_title = $7, tab_color = $8, active = 1, updated_at = $9`,
+    [
+      sessionId,
+      tabTether,
+      projectKey,
+      cwd,
+      transcriptPath,
+      agent ?? null,
+      tabTitle ?? null,
+      tabColor ?? null,
+      Date.now(),
+    ]
   );
 }
 
@@ -951,8 +965,16 @@ export async function deactivateSessionBinding(tabTether: string): Promise<void>
   await d.execute("UPDATE session_bindings SET active = 0 WHERE tab_tether = $1", [tabTether]);
 }
 
-interface SessionBindingRow extends ReentryCandidate {
+interface SessionBindingRow extends Omit<ReentryCandidate, "agent" | "tab_title" | "tab_color"> {
   updated_at: number;
+  agent?: string | null;
+  tab_title?: string | null;
+  tab_color?: string | null;
+}
+
+function nonBlank(value: string | null | undefined): string | undefined {
+  if (!value?.trim()) return undefined;
+  return value;
 }
 
 /** One row per tether: the most recently updated of its (possibly several,
@@ -964,12 +986,14 @@ export function latestPerTether(rows: SessionBindingRow[]): ReentryCandidate[] {
     if (!cur || r.updated_at > cur.updated_at) byTether.set(r.tab_tether, r);
   }
   return [...byTether.values()].map(
-    ({ session_id, tab_tether, project_key, cwd, transcript_path, agent }) => ({
+    ({ session_id, tab_tether, project_key, cwd, transcript_path, agent, tab_title, tab_color }) => ({
       session_id,
       tab_tether,
       project_key,
       cwd,
       transcript_path,
+      tab_title: nonBlank(tab_title),
+      tab_color: nonBlank(tab_color),
       agent: agent ?? undefined,
     })
   );
@@ -979,7 +1003,9 @@ export function latestPerTether(rows: SessionBindingRow[]): ReentryCandidate[] {
 export async function reentryCandidates(): Promise<ReentryCandidate[]> {
   const d = await getDb();
   const rows = await d.select<SessionBindingRow[]>(
-    "SELECT session_id, tab_tether, project_key, cwd, transcript_path, agent, updated_at FROM session_bindings WHERE active = 1"
+    `SELECT session_id, tab_tether, project_key, cwd, transcript_path, agent,
+            tab_title, tab_color, updated_at
+     FROM session_bindings WHERE active = 1`
   );
   return latestPerTether(rows);
 }

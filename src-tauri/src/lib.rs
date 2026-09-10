@@ -178,6 +178,16 @@ pub fn run() {
               ALTER TABLE decisions ADD COLUMN agent TEXT;
               ALTER TABLE decisions ADD COLUMN actor_id TEXT;",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 12,
+        description: "session binding tab presentation",
+        // Existing bindings stay NULL and use the established basename/gray
+        // fallback on re-entry. New SessionStart rows snapshot app-authored tab
+        // presentation so bookmark identity survives a relaunch.
+        sql: "ALTER TABLE session_bindings ADD COLUMN tab_title TEXT;
+              ALTER TABLE session_bindings ADD COLUMN tab_color TEXT;",
+        kind: MigrationKind::Up,
     }];
 
     tauri::Builder::default()

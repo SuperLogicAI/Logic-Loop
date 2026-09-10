@@ -751,9 +751,9 @@ export default function App() {
       const ghosts: Tab[] = candidates.map((c) => ({
         id: c.tab_tether,
         ptyId: -1,
-        title: c.project_key.split("/").filter(Boolean).pop() ?? c.project_key,
+        title: c.tab_title ?? c.project_key.split("/").filter(Boolean).pop() ?? c.project_key,
         cwd: c.project_key,
-        color: PALETTE[7],
+        color: c.tab_color ?? PALETTE[7],
         status: "dead",
         sessionId: c.session_id,
         agent: c.agent,
@@ -842,8 +842,18 @@ export default function App() {
       // none) — stored as an empty-string sentinel; resume never reads this
       // column, only tail-worthiness (gated separately in ingest.rs) does.
       if (p.hook_event_name === "SessionStart" && p.tab_id && projectKey && p.cwd) {
+        const bindingTab = tabsRef.current.find((tab) => tab.id === p.tab_id);
         void repo
-          .upsertSessionBinding(p.session_id, p.tab_id, projectKey, p.cwd, p.transcript_path ?? "", p.agent)
+          .upsertSessionBinding(
+            p.session_id,
+            p.tab_id,
+            projectKey,
+            p.cwd,
+            p.transcript_path ?? "",
+            p.agent,
+            bindingTab?.title,
+            bindingTab?.color
+          )
           .catch(() => undefined); // fail open, same as addEvent above
       }
       if (p.hook_event_name === "Stop") {

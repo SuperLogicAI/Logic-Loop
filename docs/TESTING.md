@@ -1761,6 +1761,47 @@ Automated evidence (2026-09-10):
 - [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings` — clean.
 - [x] `git diff --check` — clean.
 
+## 41. Bookmark tab presentation through re-entry (Phase 29)
+
+Implementation authorized with `PHASE 29 ACCEPTED` on 2026-09-10. Automated
+and live evidence is recorded below; after the relaunch matrix passed, the
+maintainer wrote `PHASE 29 APPROVED` on 2026-09-10.
+
+- [x] Create a bookmark with a distinctive custom name and non-gray color.
+      Open it, start a supported agent so the tab has a resumable binding, quit,
+      and relaunch. Before and after clicking **Re-enter**, confirm the ghost tab
+      keeps that exact displayed name and top-border color.
+- [x] Open two differently named/colored bookmarks targeting the same repository,
+      start separate agent sessions, quit, and relaunch. Confirm each tether
+      restores its own presentation and session; cwd does not merge them.
+- [x] Open a plain terminal tab, start an agent, quit, and relaunch. Confirm its
+      displayed title/color restore consistently without creating or changing a
+      bookmark.
+- [x] Relaunch an existing pre-Phase-29 database row with no `tab_title` or
+      `tab_color`. Confirm startup succeeds and the ghost uses the established
+      project-basename and gray fallback.
+- [x] Explicitly close a restored tab, relaunch again, and confirm it stays gone.
+- [x] Carry an unclaimed result through the same relaunch. Confirm the first
+      auto-active ghost still claims correctly; presentation hydration must not
+      disturb the Phase 6 seed-before-activation ordering.
+- [x] Confirm bookmark chips still persist, edit, delete, reorder, and open in
+      the expected cwd.
+
+Automated evidence (2026-09-10):
+
+- [x] `npm run reentry:check` — latest-per-tether selection, adapter identity,
+      presentation round-trip/newest-row precedence, and legacy null/blank
+      fallback assertions pass.
+- [x] `npx tsc --noEmit` — strict TypeScript clean.
+- [x] `cd src-tauri && cargo test --lib` — 57/57 pass, including compilation of
+      migration 12.
+- [x] `npm run opencode:check`
+- [x] `npm run check` — all 23 configured checks pass.
+- [x] `npm run build` — production build clean; existing chunk-size advisory
+      only.
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings` — clean.
+- [x] `git diff --check` — clean.
+
 ## 26. Diff pop-out from Accomplished rows (issue #10)
 
 Written on Windows, where the app can't run — every box below is unverified

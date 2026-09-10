@@ -154,6 +154,10 @@ export interface ReentryCandidate {
   project_key: string;
   cwd: string;
   transcript_path: string;
+  /** App-authored presentation snapshot. Absent on pre-Phase-29 rows, which
+   * restore with the established project-basename and neutral-color fallback. */
+  tab_title?: string;
+  tab_color?: string;
   /** Adapter identity persisted with the binding; undefined for legacy rows
    * and any adapter without a marker yet — treated as Claude for resume. */
   agent?: string;
