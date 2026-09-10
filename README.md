@@ -33,6 +33,7 @@ switching:
 |---|---|
 | **Decision Tracker** | *Missed forks* — the agent asks two questions, you answer one, the second silently dies and the agent decides for you. |
 | **Accomplished** | *Progress blindness* — re-entry starts with "where was I?" instead of "what's next?" |
+| **Since You Left** | *Catch-up cost on a long unattended run* — a deterministic digest (files touched, bash runs/errors, turns, decisions opened) of everything that happened while a tab was out of view, loop ticks collapsed to `×N no change` so a long autonomous run reads as one line instead of a scrollback. |
 | **Blockers** | *Non-viable switches* — switching into a project only to find it's waiting on something external. |
 | **Landing Note** | *State reconstruction cost* — rebuilding mental state on return can take 15–25 min; a written next action collapses it. |
 | **Attention Residue** | *Attention residue* — part of your mind stays on the task you left; externalize the loop to return clean. |
