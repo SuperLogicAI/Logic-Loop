@@ -163,8 +163,8 @@ const iconSource = readFileSync(new URL("../src/components/PanelIcon.tsx", impor
 assert.match(appSource, /listAttentionEvidence/);
 assert.equal(appSource.match(/\.listAttentionEvidence\(/g)?.length, 1, "Attention query is not App-owned once");
 assert.match(appSource, /key === "k"/);
-const navigation = appSource.match(/const openAttentionTab[\s\S]*?\n  }, \[\]\);/)?.[0] ?? "";
-assert.match(navigation, /setActiveId/);
+const navigation = appSource.match(/const openAttentionTab[\s\S]*?\n  }, \[[^\]]*\]\);/)?.[0] ?? "";
+assert.match(navigation, /focusTab/);
 assert.doesNotMatch(navigation, /ptyWrite|addEvent|spawn|setDecision|setBlocker/);
 assert.doesNotMatch(sidePanelSource, /listAttentionEvidence/);
 assert.match(sidePanelSource, /onAttentionChanged\(\)/);

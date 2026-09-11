@@ -24,6 +24,7 @@ function dotClass(tab: Tab, stalled: boolean): string {
 interface Props {
   tabs: Tab[];
   activeId: string | null;
+  visibleIds: Set<string>;
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
   onNew: () => void;
@@ -57,6 +58,7 @@ const ISOLATE_GLOW = groupGlow("59,130,246"); // blue
 export function TabBar({
   tabs,
   activeId,
+  visibleIds,
   onSelect,
   onClose,
   onNew,
@@ -114,10 +116,12 @@ export function TabBar({
             if (dragId && dragId !== tab.id) onReorder(dragId, tab.id);
           }}
           onPointerUp={() => setDragId(null)}
-          className={`group relative flex max-w-52 min-w-28 cursor-pointer items-center gap-2 rounded-t-md border-t-2 px-3 py-1.5 text-sm transition-[background-color,opacity] ${
+          className={`group relative flex max-w-52 min-w-28 cursor-pointer items-center gap-2 rounded-t-md border-t-2 px-3 py-1.5 text-sm transition-[background-color,opacity] after:pointer-events-none after:absolute after:inset-0 after:rounded-t-md after:border-x-2 after:border-b-2 after:border-t-0 ${
             tab.id === activeId
-              ? "bg-zinc-700 text-zinc-100"
-              : "bg-zinc-800/70 text-zinc-500 hover:bg-zinc-700/50 hover:text-zinc-300"
+              ? "bg-zinc-700 text-zinc-100 after:border-white"
+              : visibleIds.has(tab.id)
+                ? "bg-zinc-700/70 text-zinc-300 after:border-sky-700"
+                : "bg-zinc-800/70 text-zinc-500 after:border-transparent hover:bg-zinc-700/50 hover:text-zinc-300"
           } ${dragId === tab.id ? "opacity-60 ring-1 ring-zinc-500" : ""} ${
             isFanOutChild(tab) || isWorktreeBound(tab) ? "z-10" : "z-0"
           }`}

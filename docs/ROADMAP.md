@@ -34,6 +34,7 @@ table below until one gets its own PLAN.md.
 | Decisions empty-state clarity (IDEAS.md item C, second half) | BUILT (Phase 19) — manual test docs/TESTING.md §29 pending | a few hours | — |
 | Idea Board "Now" set (IDEAS.md item F) | BUILT (Phase 20) — manual test docs/TESTING.md §30 pending | a few hours | Phase 18 |
 | Landing-note manual/auto capture (IDEAS.md item E) | DONE (Phase 28) — automated + live matrices pass | ~1d | — |
+| Split-pane tabs | BUILT (Phase 32) — automated gates clean; live matrix pending | ~1d | — |
 | Remaining adapters (Gemini, Copilot) | v2 | — | Codex adapter |
 
 Phase boundaries still hard stops. Phase 5 items enter PLAN.md for approval
@@ -489,9 +490,10 @@ branch-switch approach further.
 ## Split-pane tabs — v1.x UI
 
 Chrome-style side-by-side panes inside one tab, so two agent CLIs are
-visible at once (e.g. Claude + Codex on the same project). Pure xterm.js
-layout work — no ingestion or schema changes. Note WebGL landmine: only one
-pane gets the WebGL addon; the other uses DOM renderer.
+visible at once (e.g. Claude + Codex on the same project). **BUILT as Phase
+32**: a bounded two-tab, vertical split over ordinary independently tethered
+PTYs, with focused-pane routing and no schema or persisted layout. Both panes
+use the established DOM renderer; the abandoned WebGL path remains disabled.
 
 ## Adapters — v2 (multi-agent observation)
 

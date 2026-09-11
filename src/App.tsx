@@ -71,6 +71,12 @@ import type {
 import { PALETTE } from "./types";
 import { landingDepartureAction } from "./lib/landingMode";
 import {
+  selectIntoSplit,
+  splitContains,
+  visibleTerminalIds,
+  type SplitPaneIds,
+} from "./lib/splitView";
+import {
   isLockInActive,
   shouldExpireTimedLockIn,
   TIMED_LOCK_IN_MS,
@@ -81,11 +87,21 @@ import {
 export default function App() {
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [splitPaneIds, setSplitPaneIds] = useState<SplitPaneIds | null>(null);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
   const activeIdRef = useRef(activeId);
   activeIdRef.current = activeId;
+  const splitPaneIdsRef = useRef(splitPaneIds);
+  splitPaneIdsRef.current = splitPaneIds;
+  const visibleTabIds = new Set(visibleTerminalIds(activeId, splitPaneIds));
+  const visibleTabIdsRef = useRef(visibleTabIds);
+  visibleTabIdsRef.current = visibleTabIds;
+  const focusTab = useCallback((tabId: string) => {
+    setSplitPaneIds((pair) => selectIntoSplit(pair, activeIdRef.current, tabId));
+    setActiveId(tabId);
+  }, []);
   const didInit = useRef(false);
   // One browser process is one Attention observation run. Later inbox queries
   // use it to avoid reviving a historical working state after relaunch.
@@ -389,9 +405,25 @@ export default function App() {
       status: "live",
     };
     setTabs((t) => [...t, tab]);
-    setActiveId(tab.id);
+    focusTab(tab.id);
     return tab.id;
-  }, []);
+  }, [focusTab]);
+
+  const toggleSplit = useCallback(() => {
+    if (splitPaneIdsRef.current) {
+      setSplitPaneIds(null);
+      return;
+    }
+    const source = tabsRef.current.find((tab) => tab.id === activeIdRef.current);
+    if (!source) return;
+    const sourceId = source.id;
+    suppressLandingRef.current = true;
+    void openTab({ cwd: expand(source.cwd) })
+      .then((newId) => setSplitPaneIds([sourceId, newId]))
+      .catch(() => {
+        suppressLandingRef.current = false;
+      });
+  }, [expand, openTab]);
 
   /** Fan out (Phase 7): spawn N child tabs under a new group, each via the
    * ordinary `openTab` path (invariant #4 — no second spawn code path, no
@@ -635,10 +667,14 @@ export default function App() {
     claimTab(tabId);
     tabActivityRef.current.delete(tabId);
     tabPromptRef.current.delete(tabId);
+    const pair = splitPaneIdsRef.current;
+    const survivingPaneId = pair?.[0] === tabId ? pair[1] : pair?.[1] === tabId ? pair[0] : null;
+    if (survivingPaneId) setSplitPaneIds(null);
     setTabs((prev) => {
       const next = prev.filter((t) => t.id !== tabId);
       setActiveId((a) => {
         if (a !== tabId) return a;
+        if (survivingPaneId && next.some((tab) => tab.id === survivingPaneId)) return survivingPaneId;
         const idx = prev.findIndex((t) => t.id === tabId);
         return next[Math.min(idx, next.length - 1)]?.id ?? null;
       });
@@ -956,7 +992,8 @@ export default function App() {
 
       const muted = cwd ? mutedProjectsRef.current.has(cwd) : false;
       const nudgeLabel = cwd ? (cwd.split("/").filter(Boolean).pop() ?? cwd) : "Logic Loop";
-      const canNotify = () => shouldNotify(tabId, activeIdRef.current, document.hasFocus(), muted, lockInRef.current);
+      const viewedId = () => visibleTabIdsRef.current.has(tabId) ? tabId : activeIdRef.current;
+      const canNotify = () => shouldNotify(tabId, viewedId(), document.hasFocus(), muted, lockInRef.current);
 
       // Waiting-edge only — a hook can re-fire (e.g. an idle reminder) while
       // already waiting, and that must not re-notify every time.
@@ -967,7 +1004,7 @@ export default function App() {
       // agent finished on a tab the human isn't looking at right now — either
       // a background tab (app focused, different tab active) or the whole app
       // backgrounded. Flagged until claimTab (tab switch / window focus).
-      if (terminalResult && shouldFlagUnclaimed(tabId, activeIdRef.current, document.hasFocus())) {
+      if (terminalResult && shouldFlagUnclaimed(tabId, viewedId(), document.hasFocus())) {
         const id = tabId;
         setUnseenStops((s) => new Set(s).add(id));
         // Without a cwd the row can never match unclaimedResults' cwd filter —
@@ -1083,12 +1120,11 @@ export default function App() {
   );
 
   // Dock badge = agents waiting on the user + agents that finished unseen.
-  // Refocusing the window claims only the active tab, not every flagged one —
-  // a background tab's result stays flagged until the human switches to it.
+  // Refocusing claims every visible pane. Background tabs stay flagged until
+  // the human switches to them, while both halves of a split count as viewed.
   useEffect(() => {
     const claim = () => {
-      const id = activeIdRef.current;
-      if (id) claimTab(id);
+      for (const id of visibleTabIdsRef.current) claimTab(id);
     };
     window.addEventListener("focus", claim);
     return () => window.removeEventListener("focus", claim);
@@ -1114,7 +1150,8 @@ export default function App() {
         nudgedStallRef.current.add(tab.id);
         const cwd = expand(tab.cwd);
         const muted = mutedProjectsRef.current.has(cwd);
-        if (shouldNotify(tab.id, activeIdRef.current, document.hasFocus(), muted, lockInRef.current)) {
+        const viewedId = visibleTabIdsRef.current.has(tab.id) ? tab.id : activeIdRef.current;
+        if (shouldNotify(tab.id, viewedId, document.hasFocus(), muted, lockInRef.current)) {
           notify("Agent quiet 3m", cwd.split("/").filter(Boolean).pop() ?? cwd);
         }
       }
@@ -1157,10 +1194,8 @@ export default function App() {
         void openTab();
       } else if (mod && key === "w") {
         e.preventDefault();
-        setActiveId((a) => {
-          if (a) closeTab(a);
-          return a;
-        });
+        const id = activeIdRef.current;
+        if (id) closeTab(id);
       } else if (mod && key === "v") {
         // The menu's Paste role was removed (it double-pasted into terminals),
         // so form inputs need a manual ⌘V. Terminals handle their own ⌘V via
@@ -1191,18 +1226,18 @@ export default function App() {
         }
       } else if (e.ctrlKey && e.key === "Tab") {
         e.preventDefault();
-        setActiveId((a) => {
-          const ts = tabsRef.current;
-          if (ts.length === 0) return a;
-          const idx = ts.findIndex((t) => t.id === a);
-          const dir = e.shiftKey ? -1 : 1;
-          return ts[(idx + dir + ts.length) % ts.length]?.id ?? a;
-        });
+        const ts = tabsRef.current;
+        if (ts.length === 0) return;
+        const current = activeIdRef.current;
+        const idx = ts.findIndex((t) => t.id === current);
+        const dir = e.shiftKey ? -1 : 1;
+        const nextId = ts[(idx + dir + ts.length) % ts.length]?.id;
+        if (nextId) focusTab(nextId);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [openTab, closeTab, toggleHiddenPanel, togglePanel]);
+  }, [openTab, closeTab, focusTab, toggleHiddenPanel, togglePanel]);
 
   // On tab switch: offer the landing prompt for the tab we left, and claim
   // the tab switched to. A closed tab is gone here — closeTab already
@@ -1212,7 +1247,9 @@ export default function App() {
     prevActiveRef.current = activeId;
     if (prevId && prevId !== activeId) {
       const prevTab = tabsRef.current.find((t) => t.id === prevId);
-      if (prevTab) {
+      const suppressed = suppressLandingRef.current;
+      if (suppressed) suppressLandingRef.current = false;
+      if (prevTab && !splitContains(splitPaneIdsRef.current, prevId)) {
         markTabLeft(prevTab);
         // Consumed here, not on a timer/await elsewhere — clearing the flag
         // from the spawn call site raced this effect's async scheduling
@@ -1220,9 +1257,7 @@ export default function App() {
         // single-await isolateLoop did not). The switch this flag was set
         // for is exactly the one this effect is handling right now, so
         // consuming it here is race-proof by construction.
-        if (suppressLandingRef.current) {
-          suppressLandingRef.current = false;
-        } else {
+        if (!suppressed) {
           maybePromptLanding(prevTab);
         }
       }
@@ -1251,8 +1286,8 @@ export default function App() {
     const tab = tabsRef.current.find((candidate) => candidate.id === tabId && candidate.status === "live");
     if (!tab) return;
     setAttentionOpen(false);
-    setActiveId(tab.id);
-  }, []);
+    focusTab(tab.id);
+  }, [focusTab]);
 
   // Answer-now prefill: writes a draft into the bound tab's terminal and marks
   // the decision answered. User edits and presses Enter — never sent by us.
@@ -1261,11 +1296,11 @@ export default function App() {
       const tabId = bindingsRef.current.get(d.session_id);
       const tab = tabsRef.current.find((t) => t.id === tabId && t.status === "live");
       if (!tab) return;
-      setActiveId(tab.id);
+      focusTab(tab.id);
       void ptyWrite(tab.ptyId, `Re: "${d.question}" — `);
       void repo.setDecisionStatus(d.id, "answered").then(refreshDecisionCounts);
     },
-    [refreshDecisionCounts]
+    [focusTab, refreshDecisionCounts]
   );
 
   return (
@@ -1283,7 +1318,8 @@ export default function App() {
       <TabBar
         tabs={tabs}
         activeId={activeId}
-        onSelect={setActiveId}
+        visibleIds={visibleTabIds}
+        onSelect={focusTab}
         onClose={closeTab}
         onNew={() => void openTab()}
         onFanOut={() => activeTab && setFanOutModalOpen(true)}
@@ -1329,7 +1365,7 @@ export default function App() {
             sessionBlind={!!(activeTab.sessionId && blindSessions[activeTab.sessionId])}
             agent={activeTab.agent}
             fanOut={fanOutRollups}
-            onSelectTab={setActiveId}
+            onSelectTab={focusTab}
             onDismissMember={dismissSpawnMember}
             onBlockersChanged={refreshBlockerCounts}
             onDecisionsChanged={refreshDecisionCounts}
@@ -1352,6 +1388,9 @@ export default function App() {
             onLockIn={() => activateLockIn("indefinite")}
             onTimedLockIn={() => activateLockIn("timed")}
             onUnlock={unlockLockIn}
+            splitActive={splitPaneIds !== null}
+            canSplit={activeTab !== null}
+            onToggleSplit={toggleSplit}
             observedAdapters={observedAdapters}
             notificationsEnabled={notificationsEnabled}
             onRequestNotifications={async () => {
@@ -1360,16 +1399,22 @@ export default function App() {
               return enabled;
             }}
           />
-          <div className="min-h-0 flex-1">
-            {tabs.map((tab) => (
-              <Terminal
-                key={tab.id}
-                tab={tab}
-                visible={tab.id === activeId}
-                onExit={markDead}
-                onRestart={(id, sid) => void restartTab(id, sid)}
-              />
-            ))}
+          <div className="flex min-h-0 flex-1">
+            {tabs.map((tab) => {
+              const paneOrder = splitPaneIds ? splitPaneIds.indexOf(tab.id) : tab.id === activeId ? 0 : -1;
+              return (
+                <Terminal
+                  key={tab.id}
+                  tab={tab}
+                  visible={visibleTabIds.has(tab.id)}
+                  focused={tab.id === activeId}
+                  paneOrder={paneOrder}
+                  onFocus={focusTab}
+                  onExit={markDead}
+                  onRestart={(id, sid) => void restartTab(id, sid)}
+                />
+              );
+            })}
           </div>
           {activeTab && <IdeaBoard cwd={expand(activeTab.cwd)} />}
         </div>

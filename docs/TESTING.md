@@ -1961,6 +1961,63 @@ Automated evidence (2026-09-10):
 
 `npm run golden` was not run; Phase 31 changes no extraction prompt.
 
+Maintainer disposition (2026-09-10): the Phase 31 clean-profile matrix above
+is intentionally deferred so Phase 32 can ship tonight. No unchecked item is
+claimed as passing; the maintainer explicitly authorized the bypass with
+`PHASE 32 ACCEPTED` and plans to return to this matrix soon.
+
+## 44. Two-terminal split view (Phase 32)
+
+Implementation authorized with `PHASE 32 ACCEPTED` on 2026-09-10. Phase 31's
+live checks remain open by explicit maintainer exception rather than being
+silently inherited or marked complete.
+
+- [ ] With one terminal focused, click the header **Split** pill. Confirm a
+      second ordinary terminal opens in the same project cwd, the supplied
+      split-screen icon is visible, and the two panes divide the available
+      terminal area evenly.
+- [ ] Type different commands in both panes while output streams concurrently.
+      Input reaches only the focused pane; each pane keeps independent output,
+      process lifetime, PTY size, and structured-hook tab tether.
+- [ ] Click between panes. Confirm the focus outline, active top tab, Idea
+      Board, and project side panel all follow the focused pane without opening
+      a Landing Note merely because the other pane remains visible. The focused
+      pane and matching top tab use white; the secondary pane/tab uses the
+      slightly softer blue. On both top tabs, the project/bookmark color remains
+      fully visible above the side-and-bottom selection outline.
+- [ ] Select a third top tab. It replaces only the focused pane. Selecting
+      either already-visible top tab focuses it without swapping pane position.
+- [ ] Reorder top tabs while split. Pane membership remains attached to tab
+      identity, and no tab drag moves the native window.
+- [ ] Finish an agent in the unfocused visible pane. It does not produce an
+      unseen-result flag, OS notification, or dock badge while Logic Loop is
+      focused; a genuinely hidden tab still does.
+- [ ] Close each side in separate runs, including Cmd/Ctrl+W on the focused
+      pane. The survivor becomes full width and its PTY remains live. A process
+      exit stays in its pane with the established Restart/Re-enter UI.
+- [ ] Toggle Split off. The focused terminal remains visible and the other tab
+      continues running normally in the background.
+- [ ] Exercise expanded, compact, and hidden project panels plus indefinite and
+      timed Lock-in. Split state and terminal input remain independent.
+- [ ] Paste multiline text, select terminal text, open links, and drop a file
+      into each pane. Resize the app repeatedly; both xterms refit without
+      clipping, stale columns, or input crossing panes.
+- [ ] Quit and relaunch. Split composition is not restored; resumable sessions
+      return through the existing ordinary-tab re-entry behavior.
+
+Automated evidence (2026-09-10):
+
+- [x] `npm run split-view:check`
+- [x] `npm run opencode:check`
+- [x] `npm run check` — all 25 configured checks pass.
+- [x] `npx tsc --noEmit`
+- [x] `npm run build` — existing chunk-size advisory only.
+- [x] `cd src-tauri && cargo test --lib` — 58/58 pass.
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings`
+- [x] `git diff --check`
+
+`npm run golden` was not run because Phase 32 changes no extraction prompt.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*
