@@ -273,6 +273,7 @@ pub fn run() {
             ingest::hooks_setup,
             ingest::hooks_remove,
             ingest::hooks_status,
+            ingest::claude_detect,
             opencode::opencode_detect,
             opencode::opencode_hooks_setup,
             opencode::opencode_hooks_remove,

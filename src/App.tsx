@@ -21,7 +21,8 @@ import {
 } from "./lib/ingest";
 import { detectBlockers } from "./lib/detectors";
 import * as decisions from "./lib/decisions";
-import { initNotifications, notify } from "./lib/notify";
+import { initNotifications, notify, requestNotifications } from "./lib/notify";
+import { adapterIdForHook, type AdapterId } from "./lib/onboarding";
 import { IdeaBoard } from "./components/IdeaBoard";
 import { SidePanel } from "./components/SidePanel";
 import { LandingNoteModal } from "./components/LandingNoteModal";
@@ -142,6 +143,8 @@ export default function App() {
   const [blindSessions, setBlindSessions] = useState<Record<string, string>>({});
   // Adapter setup warnings (e.g. foreign PostToolUse hook collision in older agy).
   const [adapterWarnings, setAdapterWarnings] = useState<Array<{ agent: string; reason: string }>>([]);
+  const [observedAdapters, setObservedAdapters] = useState<Set<AdapterId>>(new Set());
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
   const applyPanelLayout = useCallback(
     (next: { mode: PanelMode; lastVisible: VisiblePanelMode }) => {
@@ -359,7 +362,7 @@ export default function App() {
     void homeDir().then((h) => setHome(h.replace(/\/$/, "")));
     refreshBlockerCounts();
     refreshDecisionCounts();
-    void initNotifications();
+    void initNotifications().then(setNotificationsEnabled);
     refreshMutedProjects();
   }, [refreshBlockerCounts, refreshDecisionCounts, refreshMutedProjects]);
 
@@ -804,6 +807,19 @@ export default function App() {
       else unlisteners.push(u);
     };
     void onHookEvent((p) => {
+      // Onboarding confirmation is deliberately narrower than general hook
+      // ingestion: only a tethered event proves this app launched the agent.
+      if (p.tab_id) {
+        const adapterId = adapterIdForHook(p.agent);
+        if (adapterId) {
+          setObservedAdapters((current) => {
+            if (current.has(adapterId)) return current;
+            const next = new Set(current);
+            next.add(adapterId);
+            return next;
+          });
+        }
+      }
       // Turn provenance (Phase 15): only UserPromptSubmit carries it, stamped
       // onto a clone before the row is written — payload_json is append-only,
       // this is the one chance to record it.
@@ -1336,6 +1352,13 @@ export default function App() {
             onLockIn={() => activateLockIn("indefinite")}
             onTimedLockIn={() => activateLockIn("timed")}
             onUnlock={unlockLockIn}
+            observedAdapters={observedAdapters}
+            notificationsEnabled={notificationsEnabled}
+            onRequestNotifications={async () => {
+              const enabled = await requestNotifications();
+              setNotificationsEnabled(enabled);
+              return enabled;
+            }}
           />
           <div className="min-h-0 flex-1">
             {tabs.map((tab) => (

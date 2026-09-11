@@ -14,6 +14,10 @@ export function hooksStatus(): Promise<boolean> {
   return invoke<boolean>("hooks_status");
 }
 
+export function claudeDetect(): Promise<boolean> {
+  return invoke<boolean>("claude_detect");
+}
+
 export function opencodeDetect(): Promise<boolean> {
   return invoke<boolean>("opencode_detect");
 }
