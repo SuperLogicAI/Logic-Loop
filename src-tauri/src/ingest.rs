@@ -373,6 +373,38 @@ fn apply_setup(settings: &mut serde_json::Value) -> Result<(), String> {
     Ok(())
 }
 
+fn is_executable(candidate: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::metadata(candidate).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+    }
+    #[cfg(not(unix))]
+    {
+        candidate.is_file()
+    }
+}
+
+fn claude_candidates(home: &Path) -> [PathBuf; 4] {
+    [
+        home.join(".local/bin/claude"),
+        home.join("homebrew/bin/claude"),
+        PathBuf::from("/opt/homebrew/bin/claude"),
+        PathBuf::from("/usr/local/bin/claude"),
+    ]
+}
+
+#[tauri::command]
+pub fn claude_detect() -> bool {
+    let path_hit = std::env::var("PATH").is_ok_and(|path_var| {
+        std::env::split_paths(&path_var).any(|dir| is_executable(&dir.join("claude")))
+    });
+    path_hit
+        || claude_candidates(&PathBuf::from(home_or_tmp()))
+            .iter()
+            .any(|candidate| is_executable(candidate))
+}
+
 #[tauri::command]
 pub fn hooks_setup() -> Result<(), String> {
     let mut settings = read_settings()?;
@@ -425,6 +457,20 @@ mod tests {
     fn default_hook_command_carries_no_agent_marker() {
         assert!(!hook_command().contains("X-Logic-Loop-Agent"));
         assert_eq!(hook_command(), hook_command_with_agent(None));
+    }
+
+    #[test]
+    fn claude_candidates_cover_gui_app_install_locations() {
+        let home = Path::new("/example/home");
+        assert_eq!(
+            claude_candidates(home),
+            [
+                PathBuf::from("/example/home/.local/bin/claude"),
+                PathBuf::from("/example/home/homebrew/bin/claude"),
+                PathBuf::from("/opt/homebrew/bin/claude"),
+                PathBuf::from("/usr/local/bin/claude"),
+            ]
+        );
     }
 
     #[test]

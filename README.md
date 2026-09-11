@@ -62,8 +62,13 @@ fails open — if extraction breaks, the terminals keep working.
 
 Every adapter normalizes to one wire shape, so a tab running any of them gets
 the same state dots, rollups and fan-out tracking. Each installs itself into
-that agent's own global config via a toggle in the app, and removes itself
-byte-identically when switched off. [AGENTS.md](AGENTS.md) is this repo's own
+that agent's own global config only after an explicit click, and removes itself
+byte-identically when switched off. On first run, the **Setup** checklist shows
+which supported CLIs are detected, explains each adapter's actual depth, and
+waits for the first structured event before calling a connection live. Setup
+can be skipped and reopened from the header at any time. Notification permission
+is likewise requested only from the checklist after its purpose is explained.
+[AGENTS.md](AGENTS.md) is this repo's own
 shared contract for coding agents working on Logic Loop itself — repo map,
 verify commands, and invariants in one place, readable by OpenCode and Codex
 alongside Claude Code.
@@ -134,7 +139,9 @@ Early, actively built, dogfooded daily. Shipped:
   action
 - ✅ Lock-in (Do Not Disturb) — indefinite or 1-hour-timed, mutes
   notifications/dock badge without pausing ingestion
-- ⏳ Crash recovery, onboarding, public release polish
+- ✅ First-run agent setup — detection, capability depth, explicit hook install,
+  first-event confirmation, and contextual notification consent
+- ⏳ Crash recovery, public release polish
 
 ## Stack
 

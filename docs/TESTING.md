@@ -1906,6 +1906,61 @@ and needs a Mac pass.
       output — typing latency and PTY output unaffected, no input is ever sent
       to the session.
 
+## 43. First-run agent activation (Phase 31)
+
+Use a clean Logic Loop profile while keeping backups of any real agent config
+files. The checklist must validate the path without requiring this README.
+
+- [ ] Launch with no `onboarding_version` setting. The setup checklist opens
+      once, all four agents appear in the documented order, installed CLIs are
+      detected, and missing CLIs say **Not detected** with a disabled action.
+      The top bar shows the Logic Loop logo/name and subtle Super Logic AI
+      attribution; the footer CTA opens `https://superlogicai.com` externally.
+- [ ] Confirm Claude and Codex advertise activity, decisions, and re-entry;
+      OpenCode and Antigravity advertise activity but explicitly say decisions
+      and re-entry are not supported.
+- [ ] Close with Escape, the × button, backdrop click, and **Skip for now** on
+      separate clean runs. Each path persists version 2, changes no adapter,
+      and does not auto-open on the next launch. The header **Setup** button
+      always reopens it.
+- [ ] For one detected but disabled agent, click **Enable**. It progresses
+      through Enabling to **Waiting for first event**. Merely waiting or typing
+      unrelated terminal text never changes it to Connected.
+- [ ] Start that agent in a Logic Loop tab. Its first tethered structured event
+      changes only its row to **Connected — first event received**, while the
+      normal tab state and panels activate.
+- [ ] Generate an event for the same adapter from an outside terminal (no Logic
+      Loop tab tether). It may ingest normally, but it must not satisfy the
+      onboarding Connected state.
+- [ ] Back up an adapter config, replace it temporarily with invalid JSON, and
+      click Enable. The modal stays usable, shows **Setup failed**, the bounded
+      plain-text error and config location, and offers **Retry**. Existing
+      terminals continue accepting input and streaming output. Restore the
+      config and retry successfully.
+- [ ] Toggle an adapter from the header with the checklist closed. The header
+      and checklist reflect the same state. A forced write failure opens the
+      checklist on the visible error rather than only logging to the console.
+- [ ] On a profile without notification permission, verify startup shows no OS
+      prompt. Open Setup, read the nudge explanation, then click **Enable
+      notifications**: only that click prompts. Both Allow and Don't Allow are
+      nonblocking; denial leaves setup finishable and terminals unaffected.
+- [ ] While an agent streams output, repeatedly open, keyboard-navigate, and
+      close the checklist. No keystroke reaches the terminal and no terminal,
+      hook, panel, or ingest activity pauses.
+
+Automated evidence (2026-09-10):
+
+- [x] `npm run onboarding:check`
+- [x] `npm run opencode:check`
+- [x] `npm run check` — all 24 configured checks pass.
+- [x] `npx tsc --noEmit`
+- [x] `npm run build` — existing chunk-size advisory only.
+- [x] `cd src-tauri && cargo test --lib` — 58/58 pass.
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings`
+- [x] `git diff --check`
+
+`npm run golden` was not run; Phase 31 changes no extraction prompt.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*

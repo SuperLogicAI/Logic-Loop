@@ -16,6 +16,7 @@ import type {
   ToolEvent,
   WorktreeTab,
 } from "../types";
+import { parseOnboardingVersion } from "./onboarding";
 import type { ExtractedDecision } from "./extractor";
 import { clampPanelWidth, parsePanelMode, type VisiblePanelMode } from "./panelLayout";
 import { parseLandingNoteMode } from "./landingMode";
@@ -711,6 +712,17 @@ async function setSetting(key: string, value: string): Promise<void> {
     "INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $2",
     [key, value]
   );
+}
+
+const ONBOARDING_VERSION_KEY = "onboarding_version";
+
+export async function getOnboardingVersion(): Promise<number> {
+  return parseOnboardingVersion(await getSetting(ONBOARDING_VERSION_KEY));
+}
+
+export async function setOnboardingVersion(version: number): Promise<void> {
+  const safeVersion = Number.isSafeInteger(version) && version >= 0 ? version : 0;
+  await setSetting(ONBOARDING_VERSION_KEY, String(safeVersion));
 }
 
 export async function getPanelMode(): Promise<PanelMode> {

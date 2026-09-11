@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   antigravityDetect,
   antigravityHooksRemove,
   antigravityHooksSetup,
   antigravityHooksStatus,
+  claudeDetect,
   codexDetect,
   codexHooksRemove,
   codexHooksSetup,
@@ -16,13 +17,37 @@ import {
   opencodeHooksSetup,
   opencodeHooksStatus,
 } from "../lib/ingest";
-import type { PanelMode } from "../types";
 import type { LockInMode } from "../lib/lockIn";
+import {
+  ADAPTERS,
+  formatAdapterError,
+  ONBOARDING_VERSION,
+  type AdapterId,
+  type AdapterRuntimeState,
+} from "../lib/onboarding";
+import * as repo from "../lib/repo";
+import type { PanelMode } from "../types";
+import { OnboardingModal } from "./OnboardingModal";
 import { PanelIcon } from "./PanelIcon";
 
-/** Persistent header above the terminal pane. Panel fold/expand stays at its
- * left edge in every presentation mode; alphabetized adapter controls stay
- * aligned on the right. Sidebar LM moved into SidePanel's utility row. */
+interface AdapterActions {
+  detect: () => Promise<boolean>;
+  status: () => Promise<boolean>;
+  setup: () => Promise<void>;
+  remove: () => Promise<void>;
+}
+
+const ADAPTER_ACTIONS: Record<AdapterId, AdapterActions> = {
+  claude: { detect: claudeDetect, status: hooksStatus, setup: hooksSetup, remove: hooksRemove },
+  codex: { detect: codexDetect, status: codexHooksStatus, setup: codexHooksSetup, remove: codexHooksRemove },
+  opencode: { detect: opencodeDetect, status: opencodeHooksStatus, setup: opencodeHooksSetup, remove: opencodeHooksRemove },
+  antigravity: { detect: antigravityDetect, status: antigravityHooksStatus, setup: antigravityHooksSetup, remove: antigravityHooksRemove },
+};
+
+const initialAdapterStates = Object.fromEntries(
+  ADAPTERS.map((adapter) => [adapter.id, { available: null, enabled: null, operation: "checking", error: null }])
+) as Record<AdapterId, AdapterRuntimeState>;
+
 interface Props {
   panelMode: PanelMode;
   onTogglePanel: () => void;
@@ -30,6 +55,9 @@ interface Props {
   onLockIn: () => void;
   onTimedLockIn: () => void;
   onUnlock: () => void;
+  observedAdapters: Set<AdapterId>;
+  notificationsEnabled: boolean;
+  onRequestNotifications: () => Promise<boolean>;
 }
 
 export function AgentStatusBar({
@@ -39,93 +67,78 @@ export function AgentStatusBar({
   onLockIn,
   onTimedLockIn,
   onUnlock,
+  observedAdapters,
+  notificationsEnabled,
+  onRequestNotifications,
 }: Props) {
-  const [hooksOn, setHooksOn] = useState<boolean | null>(null);
-  const [opencodeAvailable, setOpencodeAvailable] = useState(false);
-  const [opencodeOn, setOpencodeOn] = useState<boolean | null>(null);
-  const [codexAvailable, setCodexAvailable] = useState(false);
-  const [codexOn, setCodexOn] = useState<boolean | null>(null);
-  const [antigravityAvailable, setAntigravityAvailable] = useState(false);
-  const [antigravityOn, setAntigravityOn] = useState<boolean | null>(null);
+  const [adapterStates, setAdapterStates] = useState(initialAdapterStates);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [persistenceError, setPersistenceError] = useState<string | null>(null);
 
   useEffect(() => {
-    void hooksStatus().then(setHooksOn).catch(() => setHooksOn(null));
-    void opencodeDetect()
-      .then((available) => {
-        setOpencodeAvailable(available);
-        if (available) void opencodeHooksStatus().then(setOpencodeOn).catch(() => setOpencodeOn(null));
-      })
-      .catch(() => setOpencodeAvailable(false));
-    void codexDetect()
-      .then((available) => {
-        setCodexAvailable(available);
-        if (available) void codexHooksStatus().then(setCodexOn).catch(() => setCodexOn(null));
-      })
-      .catch(() => setCodexAvailable(false));
-    void antigravityDetect()
-      .then((available) => {
-        setAntigravityAvailable(available);
-        if (available)
-          void antigravityHooksStatus().then(setAntigravityOn).catch(() => setAntigravityOn(null));
-      })
-      .catch(() => setAntigravityAvailable(false));
+    let cancelled = false;
+    for (const adapter of ADAPTERS) {
+      const actions = ADAPTER_ACTIONS[adapter.id];
+      void actions.detect().then(async (available) => ({
+        available,
+        enabled: available ? await actions.status() : false,
+      })).then(({ available, enabled }) => {
+        if (cancelled) return;
+        setAdapterStates((current) => ({
+          ...current,
+          [adapter.id]: { available, enabled, operation: null, error: null },
+        }));
+      }).catch((error: unknown) => {
+        if (cancelled) return;
+        setAdapterStates((current) => ({
+          ...current,
+          [adapter.id]: { available: true, enabled: false, operation: null, error: formatAdapterError(error) },
+        }));
+        setSetupOpen(true);
+      });
+    }
+
+    void repo.getOnboardingVersion().then((version) => {
+      if (!cancelled && version < ONBOARDING_VERSION) setSetupOpen(true);
+    }).catch((error: unknown) => {
+      if (cancelled) return;
+      setPersistenceError(formatAdapterError(error));
+      setSetupOpen(true);
+    });
+
+    return () => { cancelled = true; };
   }, []);
 
-  const toggleHooks = async () => {
+  const toggleAdapter = useCallback(async (id: AdapterId) => {
+    const before = adapterStates[id];
+    if (!before.available || before.operation) return;
+    const enabling = !before.enabled;
+    setAdapterStates((current) => ({
+      ...current,
+      [id]: { ...current[id], operation: enabling ? "enabling" : "disabling", error: null },
+    }));
     try {
-      if (hooksOn) {
-        await hooksRemove();
-        setHooksOn(false);
-      } else {
-        await hooksSetup();
-        setHooksOn(true);
-      }
-    } catch (e) {
-      console.error("hooks toggle failed:", e);
+      await (enabling ? ADAPTER_ACTIONS[id].setup() : ADAPTER_ACTIONS[id].remove());
+      setAdapterStates((current) => ({
+        ...current,
+        [id]: { ...current[id], enabled: enabling, operation: null, error: null },
+      }));
+    } catch (error: unknown) {
+      setAdapterStates((current) => ({
+        ...current,
+        [id]: { ...current[id], enabled: before.enabled, operation: null, error: formatAdapterError(error) },
+      }));
+      setSetupOpen(true);
     }
-  };
+  }, [adapterStates]);
 
-  const toggleOpencodeHooks = async () => {
-    try {
-      if (opencodeOn) {
-        await opencodeHooksRemove();
-        setOpencodeOn(false);
-      } else {
-        await opencodeHooksSetup();
-        setOpencodeOn(true);
-      }
-    } catch (e) {
-      console.error("opencode hooks toggle failed:", e);
-    }
-  };
-
-  const toggleCodexHooks = async () => {
-    try {
-      if (codexOn) {
-        await codexHooksRemove();
-        setCodexOn(false);
-      } else {
-        await codexHooksSetup();
-        setCodexOn(true);
-      }
-    } catch (e) {
-      console.error("codex hooks toggle failed:", e);
-    }
-  };
-
-  const toggleAntigravityHooks = async () => {
-    try {
-      if (antigravityOn) {
-        await antigravityHooksRemove();
-        setAntigravityOn(false);
-      } else {
-        await antigravityHooksSetup();
-        setAntigravityOn(true);
-      }
-    } catch (e) {
-      console.error("antigravity hooks toggle failed:", e);
-    }
-  };
+  const closeSetup = useCallback(() => {
+    setSetupOpen(false);
+    setPersistenceError(null);
+    void repo.setOnboardingVersion(ONBOARDING_VERSION).catch((error: unknown) => {
+      setPersistenceError(formatAdapterError(error));
+    });
+  }, []);
 
   const hookClass = (enabled: boolean | null, primary = false) =>
     `flex h-6 shrink-0 items-center rounded-full px-3 text-xs ${
@@ -137,99 +150,75 @@ export function AgentStatusBar({
     }`;
 
   return (
-    <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-zinc-800 px-1.5">
-      <div className="flex shrink-0 items-center gap-1.5">
-        <button
-          type="button"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-sky-400"
-          aria-label={panelMode === "expanded" ? "Fold project panel" : "Expand project panel"}
-          title={panelMode === "expanded" ? "Fold project panel" : "Expand project panel"}
-          onClick={onTogglePanel}
-        >
-          <PanelIcon name={panelMode === "expanded" ? "fold" : "expand"} className="h-5 w-5" />
-        </button>
-        <div
-          className="flex h-7 shrink-0 items-center overflow-hidden rounded-full border border-zinc-700 text-zinc-500"
-          data-lock-in-control
-          role="group"
-          aria-label="Lock-in controls"
-        >
-          {lockInMode === "off" ? (
-            <>
+    <>
+      <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-zinc-800 px-1.5">
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-sky-400"
+            aria-label={panelMode === "expanded" ? "Fold project panel" : "Expand project panel"}
+            title={panelMode === "expanded" ? "Fold project panel" : "Expand project panel"}
+            onClick={onTogglePanel}
+          >
+            <PanelIcon name={panelMode === "expanded" ? "fold" : "expand"} className="h-5 w-5" />
+          </button>
+          <div
+            className="flex h-7 shrink-0 items-center overflow-hidden rounded-full border border-zinc-700 text-zinc-500"
+            data-lock-in-control
+            role="group"
+            aria-label="Lock-in controls"
+          >
+            {lockInMode === "off" ? (
+              <>
+                <button type="button" className="flex h-full w-7 items-center justify-center hover:bg-zinc-800 hover:text-zinc-200 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400" aria-label="Enter Lock-in until manually unlocked" title="Lock in — silence notifications and panel emphasis until manually unlocked" onClick={onLockIn}>
+                  <PanelIcon name="lock-in" className="h-4 w-4" />
+                </button>
+                <span aria-hidden="true" className="h-4 border-l border-zinc-700" />
+                <button type="button" className="flex h-full w-7 items-center justify-center hover:bg-zinc-800 hover:text-zinc-200 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400" aria-label="Enter Lock-in for 60 minutes" title="Timed Lock-in — silence notifications and panel emphasis for 60 minutes" onClick={onTimedLockIn}>
+                  <PanelIcon name="timed-lock" className="h-4 w-4" />
+                </button>
+              </>
+            ) : (
               <button
                 type="button"
-                className="flex h-full w-7 items-center justify-center hover:bg-zinc-800 hover:text-zinc-200 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400"
-                aria-label="Enter Lock-in until manually unlocked"
-                title="Lock in — silence notifications and panel emphasis until manually unlocked"
-                onClick={onLockIn}
+                className="flex h-full w-8 items-center justify-center bg-zinc-800 text-zinc-200 hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400"
+                aria-pressed={true}
+                aria-label={lockInMode === "timed" ? "Exit 60-minute Lock-in" : "Exit Lock-in"}
+                title={lockInMode === "timed" ? "Exit 60-minute Lock-in — restore notifications and panel emphasis" : "Exit Lock-in — restore notifications and panel emphasis"}
+                onClick={onUnlock}
               >
-                <PanelIcon name="lock-in" className="h-4 w-4" />
+                <PanelIcon name="unlock" className="h-4 w-4" />
               </button>
-              <span aria-hidden="true" className="h-4 border-l border-zinc-700" />
-              <button
-                type="button"
-                className="flex h-full w-7 items-center justify-center hover:bg-zinc-800 hover:text-zinc-200 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400"
-                aria-label="Enter Lock-in for 60 minutes"
-                title="Timed Lock-in — silence notifications and panel emphasis for 60 minutes"
-                onClick={onTimedLockIn}
-              >
-                <PanelIcon name="timed-lock" className="h-4 w-4" />
+            )}
+          </div>
+        </div>
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 overflow-x-auto">
+          <button type="button" onClick={() => setSetupOpen(true)} className="flex h-6 shrink-0 items-center rounded-full border border-zinc-700 px-3 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-sky-400">
+            Setup
+          </button>
+          {(["antigravity", "claude", "codex", "opencode"] as const).map((id) => {
+            const state = adapterStates[id];
+            if (state.available === false) return null;
+            const label = ADAPTERS.find((adapter) => adapter.id === id)?.label ?? id;
+            return (
+              <button key={id} type="button" className={hookClass(state.enabled, id === "claude")} onClick={() => void toggleAdapter(id)} title={`Toggle ${label} structured hooks`}>
+                {id} {state.enabled === null ? "?" : state.enabled ? "on" : "off"}
               </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="flex h-full w-8 items-center justify-center bg-zinc-800 text-zinc-200 hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400"
-              aria-pressed={true}
-              aria-label={lockInMode === "timed" ? "Exit 60-minute Lock-in" : "Exit Lock-in"}
-              title={
-                lockInMode === "timed"
-                  ? "Exit 60-minute Lock-in — restore notifications and panel emphasis"
-                  : "Exit Lock-in — restore notifications and panel emphasis"
-              }
-              onClick={onUnlock}
-            >
-              <PanelIcon name="unlock" className="h-4 w-4" />
-            </button>
-          )}
+            );
+          })}
         </div>
       </div>
-      <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 overflow-x-auto">
-        {antigravityAvailable && (
-          <button
-            className={hookClass(antigravityOn)}
-            onClick={() => void toggleAntigravityHooks()}
-            title="Toggle the Antigravity (agy) adapter hooks in ~/.gemini/config/hooks.json — shallower than Claude/Codex: no session-start (so no re-entry after a relaunch) or waiting signal for a question the agent asks"
-          >
-            {antigravityOn === null ? "antigravity ?" : antigravityOn ? "antigravity on" : "antigravity off"}
-          </button>
-        )}
-        <button
-          className={hookClass(hooksOn, true)}
-          onClick={() => void toggleHooks()}
-          title="Toggle Claude Code hook ingestion in ~/.claude/settings.json"
-        >
-          {hooksOn === null ? "claude ?" : hooksOn ? "claude on" : "⚠ claude off — panels & dots inactive"}
-        </button>
-        {codexAvailable && (
-          <button
-            className={hookClass(codexOn)}
-            onClick={() => void toggleCodexHooks()}
-            title="Toggle the Codex adapter hooks in ~/.codex/hooks.json — Codex will ask you to trust the hook once in its own TUI on first use"
-          >
-            {codexOn === null ? "codex ?" : codexOn ? "codex on" : "codex off"}
-          </button>
-        )}
-        {opencodeAvailable && (
-          <button
-            className={hookClass(opencodeOn)}
-            onClick={() => void toggleOpencodeHooks()}
-            title="Toggle the OpenCode adapter plugin in ~/.config/opencode/opencode.json"
-          >
-            {opencodeOn === null ? "opencode ?" : opencodeOn ? "opencode on" : "opencode off"}
-          </button>
-        )}
-      </div>
-    </div>
+      {setupOpen && (
+        <OnboardingModal
+          adapterStates={adapterStates}
+          observedAdapters={observedAdapters}
+          notificationsEnabled={notificationsEnabled}
+          persistenceError={persistenceError}
+          onToggleAdapter={toggleAdapter}
+          onRequestNotifications={onRequestNotifications}
+          onClose={closeSetup}
+        />
+      )}
+    </>
   );
 }
