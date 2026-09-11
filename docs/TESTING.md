@@ -1813,6 +1813,8 @@ script invokes `plugin:window|start_dragging`, while `core:window:default`
 explicitly excludes that command. The narrow fix therefore combines Tauri
 2.11.5's deep drag-region semantics with only
 `core:window:allow-start-dragging`; no broader window permission was added.
+After the project-tab regression described below was fixed, the maintainer
+wrote `PHASE 30 APPROVED` on 2026-09-10.
 
 Environment recorded before implementation: macOS 26.4.1 arm64, Tauri 2.11.5,
 `tauri-runtime-wry` 2.11.4, `@tauri-apps/api` 2.11.1,
@@ -1830,27 +1832,38 @@ the complete interaction-regression matrix remain human-verified gates below.
       moves on that same gesture.
 - [x] Repeat both tests from nested empty tab-strip padding, the outer tab-row
       gap, and empty bookmark-bar space.
-- [ ] Click, close, middle-click, and reorder tabs; click/reorder bookmarks;
+- [x] Click, close, middle-click, and reorder tabs; click/reorder bookmarks;
       open bookmark context menus and add/edit forms. No interaction moves the
       window or remains armed after pointer release.
+      *(2026-09-10 follow-up: FAILED before the explicit tab boundary. Dragging
+      a project tab moved the whole window because tabs are interactive `div`s,
+      which Tauri's deep-region clickable-element check does not block
+      automatically. Added `data-tauri-drag-region="false"` to each tab;
+      the subsequent live retest passed.)*
 - [x] Double-click the dedicated titlebar. Native zoom/maximize toggles, and a
       following single drag works immediately.
-- [ ] Open Landing Note and another overlay/modal. The visible titlebar still
+- [-] Open Landing Note and another overlay/modal. The visible titlebar still
       drags repeatedly while modal content remains interactive.
-- [ ] Drop a file into the active terminal, select terminal text, resize the
+      *(Not separately rerun after the tab-boundary follow-up; accepted by the
+      maintainer with Phase 30 approval.)*
+- [-] Drop a file into the active terminal, select terminal text, resize the
       side panel, and resize the native window edges. Existing gestures remain
       intact.
+      *(Not separately rerun after the tab-boundary follow-up; accepted by the
+      maintainer with Phase 30 approval.)*
 - [x] Repeat the matrix in the bundled dogfood app, not only the Vite dev build.
 
 Maintainer live result: PASS on the focused 20/20 count, inactive first drag,
-nested empty chrome, ordinary tab/bookmark click and reorder, titlebar zoom,
-and the following single drag. The expanded control variants and non-chrome
-regression gestures remain unchecked until exercised explicitly.
+nested empty chrome, project-tab reorder after the explicit boundary fix,
+ordinary tab/bookmark controls, titlebar zoom, and the following single drag.
+The maintainer accepted the two separately-unrerun expanded regression groups
+and approved Phase 30.
 
 Automated evidence (2026-09-10):
 
-- [x] `rg -n 'data-tauri-drag-region' src` — exactly three intended chrome
-      owners, each set to `="deep"`.
+- [x] `rg -n 'data-tauri-drag-region="(deep|false)"' src` — exactly three
+      intended chrome owners set to `="deep"`, plus the explicit `="false"`
+      boundary on each project tab added after the reorder regression surfaced.
 - [x] `npm run opencode:check`
 - [x] `npm run check` — all 23 configured checks pass.
 - [x] `npx tsc --noEmit` — strict TypeScript clean.
@@ -1859,6 +1872,11 @@ Automated evidence (2026-09-10):
 - [x] `cd src-tauri && cargo test --lib` — 57/57 pass.
 - [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings` — clean.
 - [x] `git diff --check` — clean.
+
+Follow-up automated evidence after the project-tab boundary fix (2026-09-10):
+`npm run panel-layout:check`, `npx tsc --noEmit`, all 23 `npm run check`
+scripts, `npm run build`, `cargo test --lib` (57/57), and clippy all pass. The
+tab-reorder checkbox above passed in the rebuilt app before approval.
 
 ## 26. Diff pop-out from Accomplished rows (issue #10)
 

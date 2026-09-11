@@ -95,6 +95,11 @@ export function TabBar({
         return (
         <div
           key={tab.id}
+          // Tabs are interactive divs rather than buttons. Tauri's deep drag
+          // region only blocks native interactive elements automatically, so
+          // this explicit boundary keeps pointer-based reorder from becoming
+          // a window drag while the surrounding empty strip stays draggable.
+          data-tauri-drag-region="false"
           onClick={() => onSelect(tab.id)}
           onAuxClick={(e) => {
             if (e.button === 1) onClose(tab.id);

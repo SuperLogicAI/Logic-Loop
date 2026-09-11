@@ -1,5 +1,11 @@
 # Plan 009: Make window dragging repeatable from the app chrome
 
+> **Status**: DONE. The maintainer wrote `PHASE 30 APPROVED` on 2026-09-10
+> after the deep chrome regions restored repeatable window movement and the
+> explicit non-drag boundary restored project-tab pointer reordering. All
+> automated gates pass; see `docs/TESTING.md` §42 for the live evidence and
+> accepted residual manual coverage.
+
 > **Executor instructions**: Follow this plan step by step. Run every
 > verification command and confirm the expected result before moving on. Stop
 > at any condition in "STOP conditions" rather than substituting a broader
@@ -119,7 +125,7 @@ private macOS APIs, or shipping a cosmetic pass that does not fix the report.
 | Purpose | Command | Expected on success |
 |---|---|---|
 | Version baseline | `npm run tauri info` | Reports Tauri 2.11.x packages and macOS; exit 0 |
-| Markup audit | `rg -n 'data-tauri-drag-region' src` | Only the three intended chrome owners match |
+| Markup audit | `rg -n 'data-tauri-drag-region="(deep|false)"' src` | Three intended chrome owners use `deep`; each interactive non-native tab uses `false` |
 | Typecheck | `npx tsc --noEmit` | Exit 0, no TypeScript errors |
 | Frontend build | `npm run build` | Exit 0 |
 | Aggregate checks | `npm run check` | Every configured check exits 0 |
@@ -207,8 +213,9 @@ If the baseline logged an ACL denial, add only
 `core:window:allow-start-dragging` to the main-window capability. If there was no
 denial and dragging already works at least once, do not churn capabilities.
 
-**Verify**: `rg -n 'data-tauri-drag-region' src` returns exactly three matches,
-each with `="deep"`; `npx tsc --noEmit` and `npm run build` exit 0.
+**Verify**: `rg -n 'data-tauri-drag-region="deep"' src` returns exactly three
+chrome-owner matches; any interactive non-native descendant uses an explicit
+`="false"` boundary. `npx tsc --noEmit` and `npm run build` exit 0.
 
 ### Step 3: Run the interaction matrix before accepting the approach
 
@@ -282,7 +289,9 @@ Record results in `docs/TESTING.md`:
 
 - [ ] A failing pre-change baseline is recorded on the locked build.
 - [ ] Only the three intended chrome containers are deep drag regions.
-- [ ] Interactive descendants continue to block ancestor window dragging.
+- [ ] Interactive descendants continue to block ancestor window dragging;
+      non-native interactive containers such as project-tab `div`s use an
+      explicit `data-tauri-drag-region="false"` boundary.
 - [ ] Focused consecutive dragging passes 20/20 without leaving the app.
 - [ ] Unfocused first-attempt drag, double-click zoom, modal access, pointer
       reorder, file drop, terminal selection, and resize all pass.
@@ -312,6 +321,10 @@ Stop and request a plan revision if:
   Tauri 2.11.5. Any future nested chrome should live under one of these deep
   owners and use a native interactive element/role (or explicit
   `data-tauri-drag-region="false"`) when it must block dragging.
+- Tauri's clickable-element guard is semantic, not based on React handlers. A
+  `div` with `onClick`/pointer handlers is not automatically interactive to
+  the injected script; mark it with `role="tab"` or an explicit `false`
+  boundary before relying on pointer gestures beneath a deep region.
 - Keep the 20-consecutive-drag acceptance case. A single successful movement is
   insufficient and was the reason the July manual check understated the bug.
 - If the phase stops on the `Overlay` caveat, the follow-up should present the
