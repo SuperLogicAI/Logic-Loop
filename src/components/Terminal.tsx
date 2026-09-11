@@ -11,11 +11,14 @@ import type { Tab } from "../types";
 interface Props {
   tab: Tab;
   visible: boolean;
+  focused: boolean;
+  paneOrder: number;
   onExit: (tabId: string) => void;
   onRestart: (tabId: string, resumeSessionId?: string) => void;
+  onFocus: (tabId: string) => void;
 }
 
-export function Terminal({ tab, visible, onExit, onRestart }: Props) {
+export function Terminal({ tab, visible, focused, paneOrder, onExit, onRestart, onFocus }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -118,7 +121,7 @@ export function Terminal({ tab, visible, onExit, onRestart }: Props) {
       if (tab.status === "live") void ptyResize(tab.ptyId, term.cols, term.rows);
     };
     doFit();
-    termRef.current?.focus();
+    if (focused) termRef.current?.focus();
     // coalesce resize storms to one fit per frame
     const ro = new ResizeObserver(() => {
       cancelAnimationFrame(raf);
@@ -129,10 +132,22 @@ export function Terminal({ tab, visible, onExit, onRestart }: Props) {
       cancelAnimationFrame(raf);
       ro.disconnect();
     };
-  }, [visible, tab.ptyId, tab.status]);
+  }, [visible, focused, tab.ptyId, tab.status]);
 
   return (
-    <div className="relative h-full w-full" style={{ display: visible ? "block" : "none" }}>
+    <div
+      className={`relative h-full min-w-0 ${visible && paneOrder >= 0 ? "flex-1 basis-0" : "w-full"} ${
+        focused && paneOrder >= 0
+          ? "ring-2 ring-inset ring-white"
+          : visible && paneOrder >= 0
+            ? "ring-2 ring-inset ring-sky-700"
+            : ""
+      } ${visible && paneOrder === 1 ? "border-l border-zinc-700" : ""}`}
+      style={{ display: visible ? "block" : "none", order: paneOrder }}
+      onFocusCapture={() => onFocus(tab.id)}
+      onPointerDown={() => onFocus(tab.id)}
+      data-terminal-pane={visible ? (focused ? "focused" : "visible") : undefined}
+    >
       <div ref={containerRef} className="h-full w-full bg-[#1e2127] p-1" />
       {tab.status === "dead" && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/60">

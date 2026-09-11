@@ -55,6 +55,9 @@ interface Props {
   onLockIn: () => void;
   onTimedLockIn: () => void;
   onUnlock: () => void;
+  splitActive: boolean;
+  canSplit: boolean;
+  onToggleSplit: () => void;
   observedAdapters: Set<AdapterId>;
   notificationsEnabled: boolean;
   onRequestNotifications: () => Promise<boolean>;
@@ -67,6 +70,9 @@ export function AgentStatusBar({
   onLockIn,
   onTimedLockIn,
   onUnlock,
+  splitActive,
+  canSplit,
+  onToggleSplit,
   observedAdapters,
   notificationsEnabled,
   onRequestNotifications,
@@ -191,6 +197,22 @@ export function AgentStatusBar({
               </button>
             )}
           </div>
+          <button
+            type="button"
+            className={`flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-xs focus-visible:outline-2 focus-visible:outline-sky-400 disabled:cursor-not-allowed disabled:opacity-40 ${
+              splitActive
+                ? "border-sky-700 bg-sky-950/70 text-sky-300 hover:bg-sky-900/70"
+                : "border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+            }`}
+            aria-pressed={splitActive}
+            aria-label={splitActive ? "Exit split terminal view" : "Show two terminal tabs side by side"}
+            title={splitActive ? "Exit split view and keep the focused terminal" : "Show two terminal tabs side by side"}
+            disabled={!canSplit}
+            onClick={onToggleSplit}
+          >
+            <PanelIcon name="split-screen" className="h-4 w-4" />
+            Split
+          </button>
         </div>
         <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 overflow-x-auto">
           <button type="button" onClick={() => setSetupOpen(true)} className="flex h-6 shrink-0 items-center rounded-full border border-zinc-700 px-3 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-sky-400">

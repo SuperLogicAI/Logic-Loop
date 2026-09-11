@@ -47,7 +47,10 @@ back to its section — for when screen space matters more than detail, and
 **Lock-in** (Do Not Disturb, indefinite or a 1-hour timer) — the side panel
 goes neutral and OS notifications/dock badge stay silent while every panel,
 hook, and background session keeps updating underneath, so nothing is missed,
-just not pushed at you.
+just not pushed at you. A header **Split** control opens a second ordinary
+terminal in the focused project's directory and keeps two independently
+tethered tabs visible side by side; the project panel follows whichever pane
+has focus.
 
 ## How it works
 
