@@ -19,7 +19,7 @@ export type PanelIconName =
   | "fold"
   | "expand";
 
-const ICONS: Record<PanelIconName, { viewBox: string; path: string }> = {
+const ICONS: Record<Exclude<PanelIconName, "global-mail-read" | "global-mail-unread">, { viewBox: string; path: string }> = {
   "since-left": {
     viewBox: "0 -960 960 960",
     path: "M600-160q-134 0-227-93t-93-227q0-133 93-226.5T600-800q133 0 226.5 93.5T920-480q0 134-93.5 227T600-160Zm0-80q100 0 170-70t70-170q0-100-70-170t-170-70q-100 0-170 70t-70 170q0 100 70 170t170 70Zm91-91 57-57-108-108v-144h-80v177l131 132ZM80-600v-80h160v80H80ZM40-440v-80h200v80H40Zm40 160v-80h160v80H80Zm520-200Z",
@@ -51,14 +51,6 @@ const ICONS: Record<PanelIconName, { viewBox: string; path: string }> = {
   github: {
     viewBox: "0 0 16 16",
     path: "M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z",
-  },
-  "global-mail-read": {
-    viewBox: "0 -960 960 960",
-    path: "M638-80 468-250l56-56 114 114 226-226 56 56L638-80ZM480-520l320-200H160l320 200Zm0 80L160-640v400h206l80 80H160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h640q33 0 56.5 23.5T880-720v174l-80 80v-174L480-440Zm0 0Zm0-80Zm0 80Z",
-  },
-  "global-mail-unread": {
-    viewBox: "0 -960 960 960",
-    path: "M160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h404q-4 20-4 40t4 40H160l320 200 146-91q14 13 30.5 22.5T691-572L480-440 160-640v400h640v-324q23-5 43-14t37-22v360q0 33-23.5 56.5T800-160H160Zm0-560v480-480Zm515 45q-35-35-35-85t35-85q35-35 85-35t85 35q35 35 35 85t-35 85q-35 35-85 35t-85-35Z",
   },
   "idea-board": {
     viewBox: "0 -960 960 960",
@@ -95,8 +87,11 @@ export function PanelIcon({
   className?: string;
   rainbow?: boolean;
 }) {
-  const icon = ICONS[name];
   const gradientId = useId();
+  if (name === "global-mail-read" || name === "global-mail-unread") {
+    return <img src={`/${name}.svg`} alt="" className={className} />;
+  }
+  const icon = ICONS[name];
   return (
     <svg
       className={className}
