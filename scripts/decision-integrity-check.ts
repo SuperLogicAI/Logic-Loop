@@ -22,7 +22,16 @@ const candidates: ReconciliationCandidate[] = [
 assert.deepEqual(parseReconciliation('{"answered_ids":[9]}', [4, 9]), [9]);
 assert.deepEqual(parseReconciliation('{"answered_ids":[9,4,9]}', [4, 9]), [9, 4]);
 assert.deepEqual(parseReconciliation('{"answered_ids":[]}', []), []);
-assert.equal(parseReconciliation('```json\n{"answered_ids":[9]}\n```', [9]), null, "prose/fences rejected");
+assert.deepEqual(
+  parseReconciliation('```json\n{"answered_ids":[9]}\n```', [9]),
+  [9],
+  "code fences tolerated (Phase 33.1: haiku reliably fences this shape), same contract as parseExtraction"
+);
+assert.equal(
+  parseReconciliation('Sure, here you go: {"answered_ids":[9]}', [9]),
+  null,
+  "leading prose beyond a bare code fence is still rejected"
+);
 assert.equal(parseReconciliation('{"answered_ids":[7]}', [4, 9]), null, "unknown ID rejected");
 assert.equal(parseReconciliation('{"answered_ids":[9.5]}', [9]), null, "non-integer rejected");
 assert.equal(parseReconciliation('{"answered_ids":["9"]}', [9]), null, "string ID rejected");

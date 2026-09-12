@@ -204,9 +204,15 @@ export function parseReconciliation(
   raw: string,
   allowedIds: readonly number[]
 ): number[] | null {
+  // Tolerate accidental code fences, nothing else — same contract
+  // parseExtraction already applies. Phase 33.1: haiku reliably wraps this
+  // exact JSON shape in ```json fences even though the prompt forbids it;
+  // stripping them is a formatting fix, not a loosened schema — every field
+  // below is still validated exactly as strictly.
+  const text = raw.trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
   let value: unknown;
   try {
-    value = JSON.parse(raw.trim());
+    value = JSON.parse(text);
   } catch {
     return null;
   }

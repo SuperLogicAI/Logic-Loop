@@ -111,12 +111,10 @@ async function reconcile(sessionId: string, submittedReply: string): Promise<boo
     lmstudioUrl: s.lmstudioUrl,
     lmstudioModel: s.lmstudioModel,
     codexModel: s.codexModel,
-    // ponytail: haiku tried and reverted — it wraps reconciliation JSON in
-    // ```json fences that parseReconciliation's strict contract rejects
-    // (measured live, Phase 33.1: 5/6 real reconcile golden cases failed).
-    // sonnet doesn't. Revisit only if parseReconciliation grows fence
-    // tolerance deliberately, not as a side effect of a model swap.
-    model: "sonnet",
+    // Defaults to haiku (Phase 33.1 sidequest): parseReconciliation gained
+    // fence tolerance, and haiku then passed 3/3 full golden runs on
+    // reconciliation. User-overridable back to sonnet via ⚙ Sidebar LM.
+    model: s.reconcileModel,
   });
   const ids = parseReconciliation(
     raw,

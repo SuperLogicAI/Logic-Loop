@@ -2229,6 +2229,44 @@ Automated evidence (2026-09-12):
 - [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings`
 - [x] `git diff --check`
 
+## 47. Reconciliation defaults to haiku (Phase 33.1 sidequest)
+
+Directed live by the maintainer on `feat/phase33.1-haiku-default`, following
+`plans/014-reconciliation-haiku-default.md`. Not a formally gated numbered
+phase (sidequest precedent).
+
+`parseReconciliation` gained fence tolerance (it rejected haiku's
+` ```json `-wrapped replies; `parseExtraction` already tolerated this).
+`EXTRACTOR_MODEL=haiku npm run golden` then run **3 full times**: extraction
+2/3 clean (one run false-positived on `09-question-in-code`, the exact
+over-extraction case this project already treats as worse than
+under-extraction — confirmed a real ~1-in-7 rate across 7 total attempts,
+not a fluke), reconciliation 3/3 clean. Per plan: reconciliation now
+defaults to haiku; extraction stays sonnet.
+
+- [ ] Open ⚙ Sidebar LM with backend = claude. Confirm a "Reconciliation
+      model" control appears, defaults to haiku, and toggling to sonnet
+      persists across a reload.
+- [ ] With the default (haiku), answer an old open card in natural language.
+      Confirm it still closes correctly (no regression from the model
+      switch in real use, not just golden fixtures).
+- [ ] Switch to sonnet, repeat the same check, confirm it still works, then
+      switch back to haiku.
+
+Automated evidence (2026-09-12):
+
+- [x] `npx tsc --noEmit`
+- [x] `npm run decision-integrity:check`
+- [x] `npm run golden` — 21/21 (claude) with the shipped default mix
+      (sonnet extraction, haiku reconciliation), 19 spawns.
+- [x] `EXTRACTOR_MODEL=haiku npm run golden` — run 3x for flakiness: 1/3 at
+      20/21 (fixture 09), 2/3 at 21/21. Reconciliation alone: 3/3 clean.
+- [x] `npm run check` — all 26 configured checks pass.
+- [x] `npm run build`
+- [x] `cd src-tauri && cargo test` — 60/60, no Rust changes this sidequest.
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings`
+- [x] `git diff --check`
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*

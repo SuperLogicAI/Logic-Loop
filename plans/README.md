@@ -55,6 +55,7 @@ test dependency is proposed for Phase 26.
 | [011](011-two-terminal-split-view.md) | Two-terminal split view | P1 | M (1–2d + live terminal pass) | Phase 32 explicitly authorized with Phase 31 live bypass | BUILT — automated gates clean; live matrix pending |
 | [012](012-decision-tracker-integrity.md) | Decision Tracker reconciliation and truthful answer state | P0 | M (1–2d + live extractor/terminal pass) | Phase 32 accepted 2026-09-11 | APPROVED — Phase 33 implementation in progress |
 | [013](013-extractor-spend-emergency-sprint.md) | Extractor spend emergency sprint | P0 | S (~1 session, root cause + 6 fixes) | Phase 33 manual test passed 2026-09-11, showed ~60% session-limit burn | BUILT — automated gates clean (see `docs/TESTING.md` §46); live spend matrix pending |
+| [014](014-reconciliation-haiku-default.md) | Reconciliation defaults to haiku | P1 | S (fence-tolerance fix + 3x golden re-run + setting) | 013 committed on `feat/phase33-decision-integrity` | BUILT — golden 3/3 clean on reconciliation, extraction stays sonnet (flaky on haiku); automated gates clean; live Sidebar LM click pending (`docs/TESTING.md` §47) |
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|

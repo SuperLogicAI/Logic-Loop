@@ -144,6 +144,13 @@ export interface ExtractorSettings {
   lmstudioUrl: string;
   lmstudioModel: string;
   codexModel: string;
+  /** Model for the claude backend's reconciliation call only. Defaults to
+   * haiku (Phase 33.1 sidequest: golden 21/21 across 3 full runs once
+   * parseReconciliation gained fence tolerance). Extraction stays hardcoded
+   * to sonnet — haiku showed a ~1-in-7 false-positive rate extracting a
+   * decision from a question embedded in code, the exact over-extraction
+   * failure mode this project already treats as worse than under-extraction. */
+  reconcileModel: "haiku" | "sonnet";
 }
 
 /** A tab-tether-keyed re-entry candidate: the latest session bound to a tab

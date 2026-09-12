@@ -1,7 +1,9 @@
 // Golden test runner: node scripts via tsx. Runs every fixture in
 // tests/golden/ through the real extractor backend (claude CLI by default,
 // EXTRACTOR=codex for Codex CLI, EXTRACTOR=lmstudio for LM Studio) and checks
-// expectations.
+// expectations. EXTRACTOR_MODEL overrides the claude backend's model for
+// every fixture (e.g. EXTRACTOR_MODEL=haiku) — the judge for any future
+// model-default change, not intuition.
 // Usage: npm run golden
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
@@ -192,9 +194,14 @@ for (const file of files) {
     f.kind === "reconciliation"
       ? buildReconciliationPrompt(f.candidates, f.submitted_reply)
       : buildPrompt({ assistant: f.assistant, user: f.user });
-  // Mirrors decisions.ts's reconcile(): haiku was tried and reverted, see
-  // that file's comment — it fences its JSON and fails the strict contract.
-  const model = "sonnet";
+  // Phase 33.1 haiku-default experiment: EXTRACTOR_MODEL forces one model
+  // across every fixture (both extraction and reconciliation) so the golden
+  // set can judge a model swap before it ever reaches decisions.ts. Unset
+  // mirrors decisions.ts's shipped defaults: sonnet for extraction (haiku
+  // showed a ~1-in-7 false positive on 09-question-in-code across repeated
+  // runs), haiku for reconciliation (3/3 clean full runs once
+  // parseReconciliation gained fence tolerance).
+  const model = process.env.EXTRACTOR_MODEL ?? (f.kind === "reconciliation" ? "haiku" : "sonnet");
   let raw: string;
   try {
     spawns++;
