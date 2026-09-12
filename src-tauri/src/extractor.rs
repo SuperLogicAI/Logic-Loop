@@ -143,9 +143,34 @@ fn codex_final_message(stdout: &[u8]) -> Result<String, String> {
 }
 
 /// Run the extraction prompt against the chosen backend, return raw LLM text.
-/// Blocking is fine: Tauri runs commands off the main thread.
+/// Must stay `async fn` dispatching onto `spawn_blocking`, not just `async
+/// fn`: marking it async alone (tried 2026-09-12) only moves the call onto a
+/// tokio *cooperative* worker thread, which `wait_with_timeout`'s
+/// `std::thread::sleep` busy-poll (and lmstudio's blocking `ureq` call) then
+/// occupies synchronously for the CLI's full wall-clock time (~20-28s
+/// observed) with no `.await` yield point — Tauri's own docs warn this
+/// specifically freezes the app, because it starves every other cooperative
+/// task sharing that worker (PTY streaming, tailers, the ingest server) the
+/// same way blocking the main thread did before. `spawn_blocking` moves the
+/// whole synchronous body onto tokio's separate blocking-thread pool, which
+/// is never used for cooperative scheduling.
 #[tauri::command]
-pub fn run_extractor(
+pub async fn run_extractor(
+    prompt: String,
+    backend: String,
+    lmstudio_url: Option<String>,
+    lmstudio_model: Option<String>,
+    codex_model: Option<String>,
+    model: Option<String>,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        run_extractor_blocking(prompt, backend, lmstudio_url, lmstudio_model, codex_model, model)
+    })
+    .await
+    .map_err(|e| format!("extractor task panicked: {e}"))?
+}
+
+fn run_extractor_blocking(
     prompt: String,
     backend: String,
     lmstudio_url: Option<String>,
