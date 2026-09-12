@@ -1,0 +1,9 @@
+{
+  "kind": "reconciliation",
+  "candidates": [
+    { "id": 301, "question": "Should the chart use ECharts or Chart.js?", "assumption": null, "ts": 100 },
+    { "id": 302, "question": "Should the dashboard default to a seven-day range?", "assumption": null, "ts": 200 }
+  ],
+  "submitted_reply": "You decide which chart library to use; optimize for bundle size.",
+  "expect": { "answered_ids": [301] }
+}

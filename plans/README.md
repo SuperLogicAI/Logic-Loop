@@ -53,6 +53,7 @@ test dependency is proposed for Phase 26.
 | [009](009-make-window-dragging-repeatable.md) | Make window dragging repeatable from app chrome | P1 | S-M + live macOS matrix | 008 accepted and committed (phase sequencing only) | DONE — PHASE 30 APPROVED |
 | [010](010-first-run-agent-activation.md) | Guide first-run users to one verified agent connection | P1 | M (2–4d + clean-profile live pass) | Phase 30 committed and accepted | BUILT — automated gates clean; live acceptance pending |
 | [011](011-two-terminal-split-view.md) | Two-terminal split view | P1 | M (1–2d + live terminal pass) | Phase 32 explicitly authorized with Phase 31 live bypass | BUILT — automated gates clean; live matrix pending |
+| [012](012-decision-tracker-integrity.md) | Decision Tracker reconciliation and truthful answer state | P0 | M (1–2d + live extractor/terminal pass) | Phase 32 accepted 2026-09-11 | APPROVED — Phase 33 implementation in progress |
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|

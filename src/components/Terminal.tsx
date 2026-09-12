@@ -138,7 +138,7 @@ export function Terminal({ tab, visible, focused, paneOrder, onExit, onRestart, 
     <div
       className={`relative h-full min-w-0 ${visible && paneOrder >= 0 ? "flex-1 basis-0" : "w-full"} ${
         focused && paneOrder >= 0
-          ? "ring-2 ring-inset ring-white"
+          ? "ring-[1.5px] ring-inset ring-white"
           : visible && paneOrder >= 0
             ? "ring-2 ring-inset ring-sky-700"
             : ""

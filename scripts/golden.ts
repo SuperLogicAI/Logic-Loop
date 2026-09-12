@@ -7,8 +7,14 @@ import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildPrompt, parseExtraction, type ExtractedDecision } from "../src/lib/extractor";
+import {
+  buildReconciliationPrompt,
+  parseReconciliation,
+  type ReconciliationCandidate,
+} from "../src/lib/decisionReconciliation";
 
-interface Fixture {
+interface ExtractionFixture {
+  kind?: "extraction";
   assistant: string;
   user: string | null;
   expect: {
@@ -18,6 +24,15 @@ interface Fixture {
     must_not_contain?: string[];
   };
 }
+
+interface ReconciliationFixture {
+  kind: "reconciliation";
+  candidates: ReconciliationCandidate[];
+  submitted_reply: string;
+  expect: { answered_ids: number[] };
+}
+
+type Fixture = ExtractionFixture | ReconciliationFixture;
 
 // Same tether the app's own extractor.rs stamps on its `claude -p` child
 // (crate::ingest::EXTRACTOR_TETHER) — the ingest server drops any request
@@ -89,7 +104,7 @@ async function runLmStudio(prompt: string): Promise<string> {
   return body.choices?.[0]?.message.content ?? "";
 }
 
-function check(name: string, f: Fixture, raw: string): string[] {
+function checkExtraction(name: string, f: ExtractionFixture, raw: string): string[] {
   const errs: string[] = [];
   const decisions = parseExtraction(raw);
   if (decisions === null) return [`${name}: output violates strict JSON contract: ${raw.slice(0, 120)}`];
@@ -107,6 +122,22 @@ function check(name: string, f: Fixture, raw: string): string[] {
   return errs;
 }
 
+function checkReconciliation(name: string, f: ReconciliationFixture, raw: string): string[] {
+  const ids = parseReconciliation(
+    raw,
+    f.candidates.map((candidate) => candidate.id)
+  );
+  if (ids === null) return [`${name}: output violates strict reconciliation contract: ${raw.slice(0, 120)}`];
+  assertNeverDuplicate(ids);
+  return ids.join(",") === f.expect.answered_ids.join(",")
+    ? []
+    : [`${name}: answered IDs ${ids.join(",") || "(none)"} != expected ${f.expect.answered_ids.join(",") || "(none)"}`];
+}
+
+function assertNeverDuplicate(ids: number[]): void {
+  if (new Set(ids).size !== ids.length) throw new Error("parser returned duplicate reconciliation IDs");
+}
+
 const dir = join(import.meta.dirname, "../tests/golden");
 const files = readdirSync(dir).filter((f) => f.endsWith(".json")).sort();
 const backend = process.env.EXTRACTOR ?? "claude";
@@ -114,7 +145,10 @@ let failures = 0;
 
 for (const file of files) {
   const f = JSON.parse(readFileSync(join(dir, file), "utf8")) as Fixture;
-  const prompt = buildPrompt({ assistant: f.assistant, user: f.user });
+  const prompt =
+    f.kind === "reconciliation"
+      ? buildReconciliationPrompt(f.candidates, f.submitted_reply)
+      : buildPrompt({ assistant: f.assistant, user: f.user });
   let raw: string;
   try {
     raw = backend === "lmstudio" ? await runLmStudio(prompt) : backend === "codex" ? runCodex(prompt) : runClaude(prompt);
@@ -123,7 +157,10 @@ for (const file of files) {
     failures++;
     continue;
   }
-  const errs = check(file, f, raw);
+  const errs =
+    f.kind === "reconciliation"
+      ? checkReconciliation(file, f, raw)
+      : checkExtraction(file, f, raw);
   if (errs.length === 0) {
     console.log(`✓ ${file}`);
   } else {

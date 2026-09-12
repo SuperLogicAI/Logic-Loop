@@ -3,6 +3,7 @@
 // Every failure is swallowed: extraction breaking must never touch terminals.
 import { invoke } from "@tauri-apps/api/core";
 import { buildPrompt, parseExtraction, type TurnPair } from "./extractor";
+import { buildReconciliationPrompt, parseReconciliation } from "./decisionReconciliation";
 import { serialize } from "./extractorQueue";
 import * as repo from "./repo";
 import type { AttentionSourceContext } from "../types";
@@ -87,6 +88,35 @@ async function extract(
   }
 }
 
+async function reconcile(sessionId: string, submittedReply: string): Promise<boolean> {
+  // Load inside the shared queue: earlier Stop extraction must settle before
+  // we inspect the session's open rows.
+  const candidates = await repo.openDecisionsForSession(sessionId);
+  if (candidates.length === 0) return false;
+  const s = await repo.getExtractorSettings();
+  const raw = await invoke<string>("run_extractor", {
+    prompt: buildReconciliationPrompt(candidates, submittedReply),
+    backend: s.backend,
+    lmstudioUrl: s.lmstudioUrl,
+    lmstudioModel: s.lmstudioModel,
+    codexModel: s.codexModel,
+  });
+  const ids = parseReconciliation(
+    raw,
+    candidates.map((candidate) => candidate.id)
+  );
+  if (!ids || ids.length === 0) return false;
+  return (await repo.answerOpenDecisions(sessionId, ids, submittedReply)) > 0;
+}
+
+function enqueueReconciliation(sessionId: string, submittedReply: string, onDone: () => void): void {
+  void serialize(() => reconcile(sessionId, submittedReply))
+    .then((changed) => {
+      if (changed) onDone();
+    })
+    .catch(() => undefined);
+}
+
 function enqueue(
   sessionId: string,
   cwd: string,
@@ -122,6 +152,10 @@ export function onTranscript(
     });
     return;
   }
+  // Every structured submitted user message can answer an older open card.
+  // Queue this before fresh pair extraction so that the new pair's decisions
+  // cannot be reconsidered using its own reply.
+  enqueueReconciliation(sessionId, msg.text, onDone);
   // user reply closes the pending pair
   const assistant = assistantBuf.get(sessionId);
   assistantBuf.delete(sessionId);

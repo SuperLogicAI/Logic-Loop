@@ -35,6 +35,7 @@ table below until one gets its own PLAN.md.
 | Idea Board "Now" set (IDEAS.md item F) | BUILT (Phase 20) — manual test docs/TESTING.md §30 pending | a few hours | Phase 18 |
 | Landing-note manual/auto capture (IDEAS.md item E) | DONE (Phase 28) — automated + live matrices pass | ~1d | — |
 | Split-pane tabs | BUILT (Phase 32) — automated gates clean; live matrix pending | ~1d | — |
+| Decision Tracker reconciliation and truthful answer state | Phase 33 implementation in progress; live matrix pending | ~1–2d | Phase 32 accepted |
 | Remaining adapters (Gemini, Copilot) | v2 | — | Codex adapter |
 
 Phase boundaries still hard stops. Phase 5 items enter PLAN.md for approval

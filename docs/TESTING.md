@@ -220,6 +220,19 @@ app, which drives the colored status dot on each tab.
       under 30 seconds?
         *the git log is the only one that populates no historical Decisions, Blockers, or Accomplished loads from previous sessions*
 
+      Re-proof 2026-09-11: **still failed** on the active Logic Loop project
+      after a substantial testing/planning session. Since You Left exposed the
+      latest agent prose but reported only command counts (`4 commands`, `0
+      turns`, `0 stops`); Accomplished primarily listed raw command activity
+      plus an old generic “Agent finished” row, not the completed testing and
+      planning outcomes. Attention's two active items were detector noise from
+      command/document text (`EPERM` and an intentional missing-path `rg`
+      result), while Backlog contained 46 mostly unavailable historical items.
+      The rail was enough to identify that work was active, but not enough to
+      choose the next productive action confidently within 30 seconds without
+      reading terminal history. No week-long “zero unnoticed decisions” claim
+      can be made from this pass.
+
 ## 12. Phase 3 — Decision Tracker
 
 Background: when an agent asks you a question and moves on without an answer,
@@ -237,7 +250,13 @@ the app should surface it as an open "decision" so nothing slips by.
 - [-] Click ✎ — app switches to that tab and pre-types
       `Re: "<question>" — ` into the terminal WITHOUT sending it. You finish
       the sentence and press Enter yourself.
-        *unable to test*
+        *failed on 2026-09-11 with a labeled disposable database row bound to
+        the active Codex tab: clicking ✎ inserted the unsent draft but changed
+        the row from `open` to `answered` immediately with `user_answer =
+        NULL`. After focusing the terminal and clearing the entire draft
+        without submitting, the row remained `answered`. The synthetic row was
+        deleted after verification; no real decision was changed. This is the
+        Phase 33 truthful-answer-state bug.*
 - [-] Click ⤳ (delegate) — decision moves to the closed list marked delegated,
       badge count drops.
         *unable to test currently but in earlier tests I was clicking around and got this reaction*
@@ -1982,7 +2001,7 @@ silently inherited or marked complete.
 - [ ] Click between panes. Confirm the focus outline, active top tab, Idea
       Board, and project side panel all follow the focused pane without opening
       a Landing Note merely because the other pane remains visible. The focused
-      pane and matching top tab use white; the secondary pane/tab uses the
+      pane and matching top tab use a restrained 1.5px white outline; the secondary pane/tab uses the
       slightly softer blue. On both top tabs, the project/bookmark color remains
       fully visible above the side-and-bottom selection outline.
 - [ ] Select a third top tab. It replaces only the focused pane. Selecting
@@ -2017,6 +2036,138 @@ Automated evidence (2026-09-10):
 - [x] `git diff --check`
 
 `npm run golden` was not run because Phase 32 changes no extraction prompt.
+
+Partial live evidence (2026-09-11, current development profile; this is not a
+clean-profile or full acceptance disposition):
+
+- [x] Split activation opened a second ordinary shell in the active
+      `context_terminal` project, displayed the supplied icon, and rendered an
+      even two-pane layout.
+- [x] A marker command submitted in the new right pane produced output only in
+      that pane while the existing Codex pane continued streaming.
+- [x] Clicking between panes moved the active-tab treatment and the restrained
+      white/blue pane outlines without opening a Landing Note.
+- [x] Selecting a third top tab replaced only the focused pane; selecting the
+      already-visible secondary tab focused it without swapping pane position.
+- [x] Turning Split off kept the focused shell visible and live.
+- [x] Expanded, compact, and hidden panel modes remained independent of the
+      split. Entering and exiting indefinite Lock-in preserved both panes.
+- [x] Multiline paste executed only in the focused disposable shell. Maximizing
+      the window kept both panes fitted without visible clipping or stale
+      columns.
+- [x] Exiting the disposable shell left **Process exited** and **Restart** in
+      its pane while the other pane remained live.
+- [x] Drag-reordering a top tab moved the tab but preserved both visible pane
+      identities. The original tab and bookmark order was restored afterward.
+- [x] After the intervening app relaunch needed to recover macOS Desktop-folder
+      access, Split was off and surviving sessions appeared as ordinary tabs;
+      the prior split composition was not restored.
+- [ ] Independent typed input in both panes, structured-hook tether identity,
+      close/Cmd-W survivor behavior, background-result notification
+      suppression, timed Lock-in, file drop/link/selection in both panes, and
+      repeated manual edge-drag resize remain unverified in this pass.
+
+Phase 31 partial evidence from the same existing profile: Setup reopened the
+modal; all four agents appeared in the documented order; Claude/Codex showed
+activity, decisions, and re-entry while OpenCode/Antigravity explicitly showed
+those latter capabilities unsupported; keyboard Tab order stayed inside the
+modal; Escape closed it. This does not prove the clean-profile, adapter-config,
+outside-terminal, failure, or notification-consent paths in §43.
+
+An isolated clean-profile attempt used the disposable application identifier
+`com.vandershark.context-terminal.phase31-test` and successfully created a
+separate empty database without touching the production profile. With the
+production Logic Loop process still running, however, macOS accessibility
+exposed only the production window; reaching the disposable onboarding window
+would have required quitting the real app and risking its live terminal
+sessions. The disposable development process was stopped. Complete the §43
+clean-profile matrix in a maintenance window after all real sessions are
+closed; adapter enable/error cases still require backed-up real config files,
+and OS notification Allow/Don't Allow paths require human approval at the
+system prompt.
+
+Automated gates rerun 2026-09-11 against the current staged Phase 32 outline
+polish: `onboarding:check`, `split-view:check`, `opencode:check`, all 26
+aggregate frontend checks, strict TypeScript, production build, 58/58 Rust
+library tests, and clippy with warnings denied pass. The build emitted only the
+existing Vite chunk-size advisory. `npm run golden` was not run because these
+Phase 32 changes do not touch extraction prompts.
+
+## 45. Decision Tracker reconciliation and truthful answer state (Phase 33)
+
+Implementation authorized with `PHASE 32 ACCEPTED` on 2026-09-11. Phase 32's
+remaining manual checks stay open by explicit maintainer disposition.
+
+- [x] Ask two genuine questions, answer only one, and confirm the unanswered
+      card remains open. *(passed 2026-09-11, disposable `dt-scratch` repo)*
+- [x] Complete another turn, then naturally answer the old question. Confirm
+      the old card becomes answered, stores the submitted reply, and its
+      tab/project badge decrements without a reload. *(passed)*
+- [x] In two same-project sessions, submit a reply in session B and confirm it
+      cannot clear a similar open decision from session A. *(passed)*
+- [x] Click **Answer now**. Confirm the correct live tab focuses and receives
+      only the draft prefix while the card and badge remain open. *(passed —
+      verified together with the next Enter-triggered check in one live run)*
+- [x] Clear or cancel that draft, switch tabs, and wait through a refresh. The
+      decision remains open. *(passed)*
+- [x] Click **Answer now**, complete the draft, and press Enter manually. Only
+      the resulting structured user transcript event can close the card.
+      *(passed)*
+- [x] Submit an unrelated reply and an ambiguous bare affirmation. Old cards
+      remain open. *(passed — agent itself pushed back on the bare "yes"
+      rather than guessing, reconciliation left the card open)*
+- [x] Explicitly answer two old questions in one submitted message. Exactly
+      those two close and other open cards remain. *(passed)*
+- [x] Disable transcript delivery in a disposable setup. Answering does not
+      optimistically clear the card, terminal operation stays normal, and the
+      existing blind-session warning is visible. *(passed, on a fresh tab
+      spawned after toggling `claude on` off — an already-running session
+      keeps its existing hook, so blindness must be induced before spawn)*
+- [x] Quit/relaunch after a reconciled answer and after a cancelled draft.
+      Answered/open state survives accurately. *(passed on the surviving tab
+      — see tab-restore bug noted below, found during this check)*
+- [x] Repeat with Claude and Codex transcript-backed sessions. OpenCode and
+      Antigravity remain honestly labelled unsupported. *(passed)*
+
+Findings surfaced during this pass, both out of Phase 33's scope and not
+blocking its own done criteria:
+
+- **Decision dedup gap**: when the agent restates a still-open question in
+  its own reply (e.g. after a partial answer, or a rejected bare
+  affirmation), turn-pair extraction mints a second open card for the same
+  underlying question rather than recognizing the existing open one.
+  Reconciliation itself behaved correctly in every case (no false
+  positive/negative), but duplicate cards accumulated repeatedly
+  (`Logging: stdout, or file?` ×2, `Default port…`/`Port…` ×2, `Pin exact
+  versions…`/`Version pinning strategy…` ×2). No semantic dedup against
+  already-open candidates exists in the extraction path; only exact-ID
+  reconciliation does. Worth a follow-up plan, not a Phase 33 regression —
+  Plan 012 scoped no extraction-prompt dedup work.
+- **Tab-restore bug**: quit with one Logic Loop tab + two `dt-scratch` Test
+  tabs open; relaunch restored only one of the two `dt-scratch` tabs. The
+  surviving tab's decision state (open card) was accurate, so this looks
+  like a tab/session_bindings restore gap, not a data-loss issue — but
+  needs its own repro and fix outside this plan.
+
+Automated evidence (2026-09-11):
+
+- [x] `npm run decision-integrity:check`
+- [x] `npx tsc --noEmit`
+- [ ] `npm run golden` — attempt 1: all 14 existing extraction cases passed;
+      reconciliation passed 6/7 and exposed the bare-affirmation weakness.
+      After one prompt correction, attempt 2 passed all 7 reconciliation cases
+      but the unchanged legacy `08-delegation-answer` extraction fixture was
+      missed (it passed attempt 1), leaving the full gate at 20/21. Paused per
+      the plan's two-failure STOP condition. An authorized additional retry
+      then passed the legacy fixture and all other cases, but the prompt-
+      injection case returned explanatory prose before otherwise-correct JSON;
+      strict parsing correctly rejected it. No further retry was made.
+- [x] `npm run opencode:check` — included in the aggregate pass.
+- [x] `npm run check` — all 27 configured checks pass.
+- [ ] `npm run build`
+- [ ] `cd src-tauri && cargo test --lib`
+- [ ] `cd src-tauri && cargo clippy --all-targets -- -D warnings`
+- [ ] `git diff --check`
 
 ## Quality gates (machine-run, not manual)
 
