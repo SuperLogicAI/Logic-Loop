@@ -8,9 +8,13 @@ export interface ReconciliationCandidate {
   ts: number;
 }
 
-const MAX_CANDIDATES = 100;
-const MAX_QUESTION_CHARS = 2_000;
-const MAX_ASSUMPTION_CHARS = 2_000;
+// Session-scoped anyway (repo.openDecisionsForSession already caps at the
+// newest 20 open rows) — these are a second, defense-in-depth ceiling on
+// prompt size, cut from the original 100/2000/2000 as part of the Phase 33.1
+// spend sprint.
+const MAX_CANDIDATES = 20;
+const MAX_QUESTION_CHARS = 400;
+const MAX_ASSUMPTION_CHARS = 400;
 const MAX_REPLY_CHARS = 8_000;
 
 function bounded(text: string, maxChars: number): string {
@@ -53,6 +57,146 @@ Rules:
 <untrusted_data>
 ${data}
 </untrusted_data>`;
+}
+
+/** Answer-now (`App.tsx`'s `answerNow`) always writes the reply as
+ * `Re: "<question>" — <answer...>`. When the submitted reply carries that
+ * exact prefix for one of the session's open candidates, it deterministically
+ * names its own target — no model call needed. Returns the matched candidate
+ * id, or null when the reply isn't an Answer-now reply (or names no open
+ * candidate verbatim, e.g. the card was dismissed after the prompt was
+ * prefilled), in which case the caller falls through to the normal
+ * model-reconciliation path. */
+export function matchAnswerNowReply(
+  candidates: ReconciliationCandidate[],
+  submittedReply: string
+): number | null {
+  if (!submittedReply.startsWith('Re: "')) return null;
+  const match = candidates.find((c) => submittedReply.startsWith(`Re: "${c.question}" — `));
+  return match ? match.id : null;
+}
+
+// ponytail: English-only lexical gates. A paraphrase or synonym-only reply
+// with zero shared word falls through as "not answered" — Phase 33's own
+// conservative default, not a new failure mode. Upgrade to embeddings only if
+// that ceiling turns out to matter in practice.
+
+const BARE_AFFIRMATIONS = new Set([
+  "yes",
+  "yeah",
+  "yep",
+  "ok",
+  "okay",
+  "sure",
+  "do it",
+  "go",
+  "go ahead",
+  "sounds good",
+  "yes, do it",
+  "proceed",
+  "continue",
+  "k",
+  "y",
+]);
+
+const STOPWORDS = new Set([
+  "this",
+  "that",
+  "these",
+  "those",
+  "with",
+  "have",
+  "your",
+  "would",
+  "could",
+  "should",
+  "about",
+  "there",
+  "their",
+  "which",
+  "when",
+  "what",
+  "where",
+  "does",
+  "will",
+  "shall",
+  "must",
+  "very",
+  "just",
+  "only",
+  "also",
+  "then",
+  "than",
+  "from",
+  "into",
+  "onto",
+  "upon",
+  "were",
+  "been",
+  "being",
+  "having",
+  "each",
+  "every",
+  "some",
+  "such",
+  "same",
+  "other",
+  "more",
+  "most",
+  "much",
+  "many",
+  "less",
+  "here",
+  "make",
+  "made",
+  "like",
+]);
+
+function normalizeReply(text: string): string {
+  return text.trim().toLowerCase().replace(/[.,!?;:]+$/, "");
+}
+
+/** Exact-match only, after trimming trailing punctuation — deliberately not
+ * fuzzy, so it never swallows a reply that happens to start with "ok" and
+ * then goes on to say something specific. */
+export function isBareAffirmation(reply: string): boolean {
+  return BARE_AFFIRMATIONS.has(normalizeReply(reply));
+}
+
+function contentWords(text: string): Set<string> {
+  const words = text.toLowerCase().match(/[a-z']{4,}/g) ?? [];
+  return new Set(words.filter((w) => !STOPWORDS.has(w)));
+}
+
+/** True when the reply shares at least one content word (>=4 letters, not a
+ * stopword) with some candidate's question or assumption. */
+export function hasContentWordOverlap(
+  candidates: ReconciliationCandidate[],
+  reply: string
+): boolean {
+  const replyWords = contentWords(reply);
+  if (replyWords.size === 0) return false;
+  return candidates.some((c) => {
+    const candidateWords = contentWords(`${c.question} ${c.assumption ?? ""}`);
+    for (const w of replyWords) {
+      if (candidateWords.has(w)) return true;
+    }
+    return false;
+  });
+}
+
+/** Cheap pre-model gate: true when a reconciliation call is guaranteed
+ * unproductive and should be skipped entirely (no spawn, no spend). Checked
+ * after the Answer-now exact match, before `run_extractor`. */
+export function shouldSkipReconciliation(
+  candidates: ReconciliationCandidate[],
+  submittedReply: string
+): boolean {
+  const trimmed = submittedReply.trim();
+  if (trimmed.length < 12) return true;
+  if (isBareAffirmation(trimmed)) return true;
+  if (!hasContentWordOverlap(candidates, trimmed)) return true;
+  return false;
 }
 
 /** Strict parse: returns validated, de-duplicated IDs or null on any violation. */

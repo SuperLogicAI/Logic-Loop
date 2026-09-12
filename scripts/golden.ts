@@ -10,6 +10,7 @@ import { buildPrompt, parseExtraction, type ExtractedDecision } from "../src/lib
 import {
   buildReconciliationPrompt,
   parseReconciliation,
+  shouldSkipReconciliation,
   type ReconciliationCandidate,
 } from "../src/lib/decisionReconciliation";
 
@@ -45,13 +46,40 @@ type Fixture = ExtractionFixture | ReconciliationFixture;
 // 2026-07-19 self-ingest incident, different spawn site.
 const EXTRACTOR_TETHER = "__logic_loop_extractor__";
 
-function runClaude(prompt: string): string {
-  return execFileSync("claude", ["-p", "--output-format", "text", "--model", "sonnet"], {
-    input: prompt,
-    encoding: "utf8",
-    timeout: 120_000,
-    env: { ...process.env, LOGIC_LOOP_TAB_ID: EXTRACTOR_TETHER },
-  });
+// Mirrors extractor.rs's claude_args() exactly — same fixed-overhead cut, same
+// contract. Keep both in sync; a drift here makes golden stop measuring what
+// the app actually spends.
+const CLAUDE_SYSTEM_PROMPT =
+  "You output only the JSON object specified by the user prompt. No prose, no code fences, no explanation.";
+
+function runClaude(prompt: string, model: string): string {
+  const stdout = execFileSync(
+    "claude",
+    [
+      "-p",
+      "--output-format",
+      "json",
+      "--model",
+      model,
+      "--strict-mcp-config",
+      "--tools",
+      "",
+      "--setting-sources",
+      "",
+      "--no-session-persistence",
+      "--system-prompt",
+      CLAUDE_SYSTEM_PROMPT,
+    ],
+    {
+      input: prompt,
+      encoding: "utf8",
+      timeout: 120_000,
+      env: { ...process.env, LOGIC_LOOP_TAB_ID: EXTRACTOR_TETHER },
+    }
+  );
+  const parsed = JSON.parse(stdout) as { result?: string };
+  if (typeof parsed.result !== "string") throw new Error("claude: no result field in json output");
+  return parsed.result;
 }
 
 function runCodex(prompt: string): string {
@@ -142,16 +170,40 @@ const dir = join(import.meta.dirname, "../tests/golden");
 const files = readdirSync(dir).filter((f) => f.endsWith(".json")).sort();
 const backend = process.env.EXTRACTOR ?? "claude";
 let failures = 0;
+let spawns = 0;
 
 for (const file of files) {
   const f = JSON.parse(readFileSync(join(dir, file), "utf8")) as Fixture;
+
+  // The reconcile() skip gates run identically here: a reconciliation fixture
+  // the app would never spawn for must be asserted gated, not silently
+  // exercised through the model anyway.
+  if (f.kind === "reconciliation" && shouldSkipReconciliation(f.candidates, f.submitted_reply)) {
+    if (f.expect.answered_ids.length === 0) {
+      console.log(`✓ ${file} (gated, 0 spawns)`);
+    } else {
+      failures++;
+      console.error(`✗ ${file}: gate skipped a call that expected answered_ids ${f.expect.answered_ids.join(",")}`);
+    }
+    continue;
+  }
+
   const prompt =
     f.kind === "reconciliation"
       ? buildReconciliationPrompt(f.candidates, f.submitted_reply)
       : buildPrompt({ assistant: f.assistant, user: f.user });
+  // Mirrors decisions.ts's reconcile(): haiku was tried and reverted, see
+  // that file's comment — it fences its JSON and fails the strict contract.
+  const model = "sonnet";
   let raw: string;
   try {
-    raw = backend === "lmstudio" ? await runLmStudio(prompt) : backend === "codex" ? runCodex(prompt) : runClaude(prompt);
+    spawns++;
+    raw =
+      backend === "lmstudio"
+        ? await runLmStudio(prompt)
+        : backend === "codex"
+          ? runCodex(prompt)
+          : runClaude(prompt, model);
   } catch (e) {
     console.error(`✗ ${file}: backend error: ${String(e).slice(0, 200)}`);
     failures++;
@@ -162,12 +214,16 @@ for (const file of files) {
       ? checkReconciliation(file, f, raw)
       : checkExtraction(file, f, raw);
   if (errs.length === 0) {
-    console.log(`✓ ${file}`);
+    console.log(`✓ ${file} (1 spawn)`);
   } else {
     failures++;
     for (const e of errs) console.error(`✗ ${e}`);
   }
 }
 
-console.log(failures === 0 ? `\nALL ${files.length} GOLDEN CASES PASS (${backend})` : `\n${failures}/${files.length} FAILED (${backend})`);
+console.log(
+  failures === 0
+    ? `\nALL ${files.length} GOLDEN CASES PASS (${backend}, ${spawns} spawns)`
+    : `\n${failures}/${files.length} FAILED (${backend}, ${spawns} spawns)`
+);
 process.exit(failures === 0 ? 0 : 1);

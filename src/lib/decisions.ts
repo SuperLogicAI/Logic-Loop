@@ -3,7 +3,12 @@
 // Every failure is swallowed: extraction breaking must never touch terminals.
 import { invoke } from "@tauri-apps/api/core";
 import { buildPrompt, parseExtraction, type TurnPair } from "./extractor";
-import { buildReconciliationPrompt, parseReconciliation } from "./decisionReconciliation";
+import {
+  buildReconciliationPrompt,
+  matchAnswerNowReply,
+  parseReconciliation,
+  shouldSkipReconciliation,
+} from "./decisionReconciliation";
 import { serialize } from "./extractorQueue";
 import * as repo from "./repo";
 import type { AttentionSourceContext } from "../types";
@@ -80,6 +85,7 @@ async function extract(
     lmstudioUrl: s.lmstudioUrl,
     lmstudioModel: s.lmstudioModel,
     codexModel: s.codexModel,
+    model: "sonnet",
   });
   const decisions = parseExtraction(raw);
   if (!decisions) return; // contract violation → drop, fail open
@@ -93,6 +99,11 @@ async function reconcile(sessionId: string, submittedReply: string): Promise<boo
   // we inspect the session's open rows.
   const candidates = await repo.openDecisionsForSession(sessionId);
   if (candidates.length === 0) return false;
+  const answerNowId = matchAnswerNowReply(candidates, submittedReply);
+  if (answerNowId !== null) {
+    return (await repo.answerOpenDecisions(sessionId, [answerNowId], submittedReply)) > 0;
+  }
+  if (shouldSkipReconciliation(candidates, submittedReply)) return false;
   const s = await repo.getExtractorSettings();
   const raw = await invoke<string>("run_extractor", {
     prompt: buildReconciliationPrompt(candidates, submittedReply),
@@ -100,6 +111,12 @@ async function reconcile(sessionId: string, submittedReply: string): Promise<boo
     lmstudioUrl: s.lmstudioUrl,
     lmstudioModel: s.lmstudioModel,
     codexModel: s.codexModel,
+    // ponytail: haiku tried and reverted — it wraps reconciliation JSON in
+    // ```json fences that parseReconciliation's strict contract rejects
+    // (measured live, Phase 33.1: 5/6 real reconcile golden cases failed).
+    // sonnet doesn't. Revisit only if parseReconciliation grows fence
+    // tolerance deliberately, not as a side effect of a model swap.
+    model: "sonnet",
   });
   const ids = parseReconciliation(
     raw,

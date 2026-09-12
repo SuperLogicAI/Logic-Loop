@@ -2169,6 +2169,66 @@ Automated evidence (2026-09-11):
 - [ ] `cd src-tauri && cargo clippy --all-targets -- -D warnings`
 - [ ] `git diff --check`
 
+## 46. Extractor spend emergency sprint (Phase 33.1)
+
+Implementation authorized with `PHASE 33.1 ACCEPTED` on 2026-09-12, following
+`plans/013-extractor-spend-emergency-sprint.md`. (PLAN.md's own manual-test
+header names §45 — that number was already claimed by Phase 33's own live
+matrix above by the time this landed; §46 is the correct, current section.)
+
+Root cause confirmed by direct CLI measurement, `--output-format json`,
+before any code change:
+
+| call | before (fixed overhead) | after (Phase 33.1 spawn) | cut |
+|---|---|---|---|
+| extraction | 57,293 input-side tokens (2 input + 40,604 cache-creation + 16,687 cache-read) | 1,402 (2 + 1,400 + 0) | 41x |
+| reconciliation | 57,015 (2 + 34,960 + 22,053) | 1,124 (2 + 1,122 + 0) | 51x |
+
+`--strict-mcp-config --tools "" --setting-sources "" --no-session-persistence
+--system-prompt "<...>"` added to the `claude -p` child in
+`src-tauri/src/extractor.rs`'s `claude_args()` (mirrored in
+`scripts/golden.ts`'s `runClaude()`). `--bare` was not used — it forces
+API-key auth and breaks OAuth/Max-subscription logins. `--setting-sources ""`
+was accepted by the installed CLI without error; the plan's documented
+fallback (omit the flag) was not needed.
+
+Haiku was tried on the reconciliation call and reverted within this same
+sprint: it wraps its JSON reply in ` ```json ` fences that
+`parseReconciliation`'s strict contract rejects (measured live: 5 of 6
+non-gated reconciliation golden cases failed). Reconciliation stays on
+sonnet; the prompt-size caps (20 candidates, 400-char question/assumption)
+and the skip gates below still apply regardless of model.
+
+- [ ] Fresh session, ask the agent a question that makes it ask you one back.
+      Card appears. Reply "ok". Confirm the log shows **no** `extractor:
+      claude usage` line (reconcile skipped by the bare-affirmation gate).
+- [ ] Click **Answer now**, submit the prefilled line unedited. Card closes;
+      log shows no `extractor: claude usage` line (Answer-now exact match,
+      zero model calls).
+- [ ] Ask the agent to restate the same still-open question in a later turn.
+      Confirm no second card is created (insert-time dedup on the normalized
+      question).
+- [ ] Answer an older card in natural language that names it specifically.
+      Card closes via one real reconciliation call; log shows
+      `cache_creation_input_tokens` in the low thousands, not tens of
+      thousands.
+- [ ] Repeat Phase 33's own 11-step matrix (§45) once more and note
+      session-limit consumption next to that pass's ~60% figure.
+
+Automated evidence (2026-09-12):
+
+- [x] `npm run decision-integrity:check`
+- [x] `npx tsc --noEmit`
+- [x] `npm run golden` — 21/21 (claude), 19 spawns (was 21 before the skip
+      gates — fixtures 18/19 now gate at zero spawns).
+- [x] `npm run check` — all 26 configured checks pass.
+- [x] `npm run build`
+- [x] `cd src-tauri && cargo test` — 60/60 (2 new: `claude_args_are_stripped_
+      to_a_bare_json_completion`, `claude_result_extracts_result_field_and_
+      tolerates_missing_usage`).
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings`
+- [x] `git diff --check`
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*
