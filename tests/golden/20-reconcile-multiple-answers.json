@@ -1,0 +1,10 @@
+{
+  "kind": "reconciliation",
+  "candidates": [
+    { "id": 601, "question": "Which port should the local server use?", "assumption": "Use 4317", "ts": 100 },
+    { "id": 602, "question": "Should logs rotate daily or by size?", "assumption": null, "ts": 200 },
+    { "id": 603, "question": "Should debug logs be retained in production?", "assumption": "Do not retain them", "ts": 300 }
+  ],
+  "submitted_reply": "Use port 8080, and rotate logs daily. I haven't decided about retaining debug logs yet.",
+  "expect": { "answered_ids": [601, 602] }
+}

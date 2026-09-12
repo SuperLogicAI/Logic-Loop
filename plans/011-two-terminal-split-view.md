@@ -17,7 +17,7 @@ Lock-in and uses the maintainer-supplied `split_screen.svg` geometry.
 - Activating Split creates one ordinary terminal through `openTab` in the
   focused tab's project cwd and shows the original and new tabs 50/50.
 - At most two panes are visible. Both retain independent PTYs and tab tethers.
-- The focused pane and matching top tab use a white 2px outline. The secondary
+- The focused pane and matching top tab use a white 1.5px outline. The secondary
   pane/tab uses a softer blue 2px outline. Tab selection outlines omit the top
   edge so the project/bookmark color remains unobstructed above them. The side
   panel follows the focused pane.

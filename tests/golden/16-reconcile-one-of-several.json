@@ -1,0 +1,10 @@
+{
+  "kind": "reconciliation",
+  "candidates": [
+    { "id": 201, "question": "Should the export be CSV or JSON?", "assumption": null, "ts": 100 },
+    { "id": 202, "question": "Should archived rows be included in exports?", "assumption": "Exclude archived rows", "ts": 200 },
+    { "id": 203, "question": "Where should export files be saved?", "assumption": null, "ts": 300 }
+  ],
+  "submitted_reply": "Include archived rows in the export.",
+  "expect": { "answered_ids": [202] }
+}

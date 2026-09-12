@@ -1,0 +1,8 @@
+{
+  "kind": "reconciliation",
+  "candidates": [
+    { "id": 401, "question": "Should destructive actions require confirmation?", "assumption": null, "ts": 100 }
+  ],
+  "submitted_reply": "Yes, do it.",
+  "expect": { "answered_ids": [] }
+}

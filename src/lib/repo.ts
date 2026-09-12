@@ -18,6 +18,8 @@ import type {
 } from "../types";
 import { parseOnboardingVersion } from "./onboarding";
 import type { ExtractedDecision } from "./extractor";
+import type { ReconciliationCandidate } from "./decisionReconciliation";
+import { boundedSubmittedReply } from "./decisionReconciliation";
 import { clampPanelWidth, parsePanelMode, type VisiblePanelMode } from "./panelLayout";
 import { parseLandingNoteMode } from "./landingMode";
 
@@ -598,6 +600,37 @@ export async function listDecisions(cwd: string): Promise<Decision[]> {
 export async function setDecisionStatus(id: number, status: Decision["status"]): Promise<void> {
   const d = await getDb();
   await d.execute("UPDATE decisions SET status = $1 WHERE id = $2", [status, id]);
+}
+
+/** Oldest-first open candidates for one exact agent session. The prompt layer
+ * has the same 100-candidate ceiling, so no row can be validated without first
+ * being shown to the reconciler. */
+export async function openDecisionsForSession(sessionId: string): Promise<ReconciliationCandidate[]> {
+  const d = await getDb();
+  return d.select<ReconciliationCandidate[]>(
+    `SELECT id, question, assumption, ts FROM decisions
+     WHERE session_id = $1 AND status = 'open'
+     ORDER BY ts ASC, id ASC LIMIT 100`,
+    [sessionId]
+  );
+}
+
+/** Conditionally answer still-open rows from one session. Returns the number
+ * changed so callers refresh panels only after a real state transition. */
+export async function answerOpenDecisions(
+  sessionId: string,
+  ids: readonly number[],
+  submittedReply: string
+): Promise<number> {
+  if (ids.length === 0) return 0;
+  const d = await getDb();
+  const placeholders = ids.map((_, index) => `$${index + 3}`).join(", ");
+  const result = await d.execute(
+    `UPDATE decisions SET status = 'answered', user_answer = $2
+     WHERE session_id = $1 AND status = 'open' AND id IN (${placeholders})`,
+    [sessionId, boundedSubmittedReply(submittedReply), ...ids]
+  );
+  return result.rowsAffected;
 }
 
 /** Tab badges: open-decision count per project cwd. */

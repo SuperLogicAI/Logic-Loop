@@ -1,0 +1,9 @@
+{
+  "kind": "reconciliation",
+  "candidates": [
+    { "id": 101, "question": "How long should cached search results live?", "assumption": "Use five minutes", "ts": 100 },
+    { "id": 102, "question": "Should logout invalidate the cache?", "assumption": null, "ts": 200 }
+  ],
+  "submitted_reply": "For the cache lifetime question, make it ten minutes.",
+  "expect": { "answered_ids": [101] }
+}
