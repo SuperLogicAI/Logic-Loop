@@ -1040,7 +1040,14 @@ export default function App() {
         sessionCwd.get(p.session_id),
         p.line,
         refreshDecisionCounts,
-        sessionContexts.get(p.session_id) ?? { sessionId: p.session_id }
+        sessionContexts.get(p.session_id) ?? { sessionId: p.session_id },
+        (agent) => {
+          setAdapterWarnings((prev) =>
+            prev.some((w) => w.agent === agent && w.reason === "transcript_schema_unrecognized")
+              ? prev
+              : [...prev, { agent, reason: "transcript_schema_unrecognized" }]
+          );
+        }
       );
       // transcripts flowing again → clear any warning for this session
       setBlindSessions((s) => {

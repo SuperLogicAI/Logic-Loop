@@ -45,27 +45,6 @@ export function SidebarLmControl() {
             />
             Codex CLI
           </label>
-          {extractor.backend === "claude" && (
-            <div className="flex flex-col gap-1 border-t border-zinc-700 pt-2">
-              <span className="text-zinc-400">Reconciliation model</span>
-              <label className="flex items-center gap-2 text-zinc-300">
-                <input
-                  type="radio"
-                  checked={extractor.reconcileModel === "haiku"}
-                  onChange={() => saveExtractor({ ...extractor, reconcileModel: "haiku" })}
-                />
-                haiku (default, ~40x cheaper)
-              </label>
-              <label className="flex items-center gap-2 text-zinc-300">
-                <input
-                  type="radio"
-                  checked={extractor.reconcileModel === "sonnet"}
-                  onChange={() => saveExtractor({ ...extractor, reconcileModel: "sonnet" })}
-                />
-                sonnet
-              </label>
-            </div>
-          )}
           <label className="flex items-center gap-2 text-zinc-300">
             <input
               type="radio"

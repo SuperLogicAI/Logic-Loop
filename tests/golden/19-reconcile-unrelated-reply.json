@@ -1,8 +1,0 @@
-{
-  "kind": "reconciliation",
-  "candidates": [
-    { "id": 501, "question": "Should we migrate the database this release?", "assumption": "Defer it", "ts": 100 }
-  ],
-  "submitted_reply": "The header spacing looks good now.",
-  "expect": { "answered_ids": [] }
-}

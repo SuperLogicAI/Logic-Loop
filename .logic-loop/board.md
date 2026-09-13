@@ -38,6 +38,3 @@ Add a few style toggles, currently idea, planned, building, later, done; add on 
 status: building
 ## Deterministic modes for side panel
 status: building
-## Could python scripting resolve the sidepanel token burn issue?
-status: idea
-now: true

@@ -2098,11 +2098,19 @@ Phase 32 changes do not touch extraction prompts.
 Implementation authorized with `PHASE 32 ACCEPTED` on 2026-09-11. Phase 32's
 remaining manual checks stay open by explicit maintainer disposition.
 
+**Superseded by Plan 016 (2026-09-12):** the two items below exercised
+guessed natural-language reconciliation, which no longer exists — `reconcile()`
+now only checks the deterministic Answer-now match. Left as historical record
+of the removed behavior, not re-tested.
+
+- [x] ~~Complete another turn, then naturally answer the old question. Confirm
+      the old card becomes answered...~~ *(passed 2026-09-11 under the
+      now-removed guessed-reconciliation path)*
+- [x] ~~Submit an unrelated reply and an ambiguous bare affirmation. Old cards
+      remain open.~~ *(passed 2026-09-11 under the now-removed skip-gate path)*
+
 - [x] Ask two genuine questions, answer only one, and confirm the unanswered
       card remains open. *(passed 2026-09-11, disposable `dt-scratch` repo)*
-- [x] Complete another turn, then naturally answer the old question. Confirm
-      the old card becomes answered, stores the submitted reply, and its
-      tab/project badge decrements without a reload. *(passed)*
 - [x] In two same-project sessions, submit a reply in session B and confirm it
       cannot clear a similar open decision from session A. *(passed)*
 - [x] Click **Answer now**. Confirm the correct live tab focuses and receives
@@ -2113,11 +2121,10 @@ remaining manual checks stay open by explicit maintainer disposition.
 - [x] Click **Answer now**, complete the draft, and press Enter manually. Only
       the resulting structured user transcript event can close the card.
       *(passed)*
-- [x] Submit an unrelated reply and an ambiguous bare affirmation. Old cards
-      remain open. *(passed — agent itself pushed back on the bare "yes"
-      rather than guessing, reconciliation left the card open)*
 - [x] Explicitly answer two old questions in one submitted message. Exactly
-      those two close and other open cards remain. *(passed)*
+      those two close and other open cards remain. *(passed under the
+      now-removed guessed-reconciliation path — superseded, see note above;
+      Answer-now can still only close one card per click)*
 - [x] Disable transcript delivery in a disposable setup. Answering does not
       optimistically clear the card, terminal operation stays normal, and the
       existing blind-session warning is visible. *(passed, on a fresh tab
@@ -2244,14 +2251,18 @@ under-extraction — confirmed a real ~1-in-7 rate across 7 total attempts,
 not a fluke), reconciliation 3/3 clean. Per plan: reconciliation now
 defaults to haiku; extraction stays sonnet.
 
-- [ ] Open ⚙ Sidebar LM with backend = claude. Confirm a "Reconciliation
+**Superseded by Plan 016 (2026-09-12):** the "Reconciliation model" control
+and the guessed-reconciliation call it configured were both removed. These
+three items describe a feature that no longer exists; not re-tested.
+
+- [ ] ~~Open ⚙ Sidebar LM with backend = claude. Confirm a "Reconciliation
       model" control appears, defaults to haiku, and toggling to sonnet
-      persists across a reload.
-- [ ] With the default (haiku), answer an old open card in natural language.
+      persists across a reload.~~
+- [ ] ~~With the default (haiku), answer an old open card in natural language.
       Confirm it still closes correctly (no regression from the model
-      switch in real use, not just golden fixtures).
-- [ ] Switch to sonnet, repeat the same check, confirm it still works, then
-      switch back to haiku.
+      switch in real use, not just golden fixtures).~~
+- [ ] ~~Switch to sonnet, repeat the same check, confirm it still works, then
+      switch back to haiku.~~
 
 Automated evidence (2026-09-12):
 
@@ -2266,6 +2277,90 @@ Automated evidence (2026-09-12):
 - [x] `cd src-tauri && cargo test` — 60/60, no Rust changes this sidequest.
 - [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings`
 - [x] `git diff --check`
+
+## 48. Descope automatic reconciliation (Plan 016)
+
+Not a numbered phase — a partial rollback of Phase 33's guessed-reconciliation
+call, directed live by the maintainer following `plans/015-decision-panel-
+freeze-investigation.md`'s finding that it isn't load-bearing (Answer-Now +
+manual dismiss + notifications already cover staying aware of open
+decisions) and is the trigger for the duplicate-card and card-not-closing
+bugs. See `plans/016-descope-auto-reconciliation.md`.
+
+- [x] Open ⚙ Sidebar LM: confirm the "Reconciliation model" control is gone,
+      other controls (backend, extraction model info, lmstudio/codex)
+      unaffected.
+- [x] Create an open decision card, answer it in plain natural language
+      (not Answer-Now, not the exact question text). Confirm it does
+      **not** auto-close, and no `extractor: claude usage` log line
+      appears for that reply. Verified live: the log line fired only at
+      card creation (extraction), not on the plain-text reply —
+      reconciliation confirmed gone from the reply path.
+- [x] Click Answer-Now on an open card, submit the prefilled line
+      unedited. Confirm it still closes deterministically.
+- [x] Manually dismiss (×) an open card. Confirm it closes.
+- [x] Ask the agent to restate an already-open question. Confirm no
+      duplicate card (insert-time dedup still holds).
+
+Live matrix result (2026-09-12): all 5 manual steps pass. Tab-switch lag
+(~20-30s) observed during steps 1 and 4 reproduces the pre-existing,
+already-tracked freeze bug (see landmine "Extractor calls can freeze the
+whole app" in CLAUDE.md) — unrelated to this descope, not a new regression.
+
+Automated evidence (2026-09-12):
+
+- [x] `npx tsc --noEmit`
+- [x] `npm run decision-integrity:check` — updated contract-lock assertion
+      pins `reconcile()` contains `matchAnswerNowReply(` and does **not**
+      contain `run_extractor`.
+- [x] `npm run golden` — 14/14 (claude), extraction-only now (7 reconciliation
+      fixtures deleted).
+- [x] `npm run check` — all 26 configured checks pass.
+- [x] `npm run build`
+- [x] `cd src-tauri && cargo test` — 60/60, no Rust changes (plan scope).
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings`
+- [x] `git diff --check`
+
+## 49. Transcript schema-drift tripwire (Plan 018)
+
+Not a numbered phase — directed live by the maintainer 2026-09-12 after
+Plan 017's live testing found Claude Code CLI v2.1.270 adds several new
+preamble/metadata line types to its local transcript. **Correction, same
+day:** the first read only sampled a file's first 5 lines and wrongly
+concluded the whole format changed incompatibly; a later live test proved
+extraction still works fine (see below) — this ships as preemptive
+insurance, not a fix for an active break. See
+`plans/018-schema-drift-tripwire.md`.
+
+- [x] Real 3-turn Terminal.app session on v2.1.270 (mixed preamble + real
+      `assistant`/`user` lines): decision card extracted correctly, matched
+      the actual conversation, and the warning strip stayed silent — the
+      threshold correctly does not false-fire on this real-world shape.
+      *(passed 2026-09-12 — this doubles as the "healthy session" checklist
+      item below, done against a real case rather than a synthetic one)*
+- [ ] Manually append at least 20 lines whose `type` is something this
+      module has never recognized (a purely synthetic case now, since no
+      real Claude/Codex build currently produces one) to a session's
+      transcript file, and confirm the adapter-warning strip appears with a
+      message naming the agent and mentioning the transcript format — the
+      same strip used for the existing foreign-PostToolUse warning. Still
+      unverified live; only unit-tested so far.
+- [ ] Confirm the warning fires once per session, not once per line (no
+      strip spam as more unrecognized lines keep arriving after the first
+      20).
+
+Automated evidence (2026-09-12):
+
+- [x] `npx tsc --noEmit`
+- [x] `npm run decision-integrity:check` — `transcriptEnvelopeType` tested
+      against real old-format Claude/Codex lines (recognized), the actual
+      v2.1.270 preamble line types found live (unrecognized in isolation),
+      and malformed JSON (unparseable, not drift); source-shape assertion
+      pins `onTranscript` calling the tracker before text extraction.
+- [x] `npm run check` — all 26 configured checks pass.
+- [x] `npm run build`
+- No Rust changes (no `cargo test`/clippy rerun needed).
+- No extraction-prompt changes (no `npm run golden` rerun needed).
 
 ## Quality gates (machine-run, not manual)
 

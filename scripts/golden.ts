@@ -1,23 +1,17 @@
-// Golden test runner: node scripts via tsx. Runs every fixture in
+// Golden test runner: node scripts via tsx. Runs every extraction fixture in
 // tests/golden/ through the real extractor backend (claude CLI by default,
 // EXTRACTOR=codex for Codex CLI, EXTRACTOR=lmstudio for LM Studio) and checks
-// expectations. EXTRACTOR_MODEL overrides the claude backend's model for
-// every fixture (e.g. EXTRACTOR_MODEL=haiku) — the judge for any future
-// model-default change, not intuition.
+// expectations. EXTRACTOR_MODEL overrides the claude backend's model
+// (e.g. EXTRACTOR_MODEL=haiku) — the judge for any future model-default
+// change, not intuition. Reconciliation fixtures were removed with automatic
+// reconciliation itself (Plan 016).
 // Usage: npm run golden
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildPrompt, parseExtraction, type ExtractedDecision } from "../src/lib/extractor";
-import {
-  buildReconciliationPrompt,
-  parseReconciliation,
-  shouldSkipReconciliation,
-  type ReconciliationCandidate,
-} from "../src/lib/decisionReconciliation";
 
-interface ExtractionFixture {
-  kind?: "extraction";
+interface Fixture {
   assistant: string;
   user: string | null;
   expect: {
@@ -27,15 +21,6 @@ interface ExtractionFixture {
     must_not_contain?: string[];
   };
 }
-
-interface ReconciliationFixture {
-  kind: "reconciliation";
-  candidates: ReconciliationCandidate[];
-  submitted_reply: string;
-  expect: { answered_ids: number[] };
-}
-
-type Fixture = ExtractionFixture | ReconciliationFixture;
 
 // Same tether the app's own extractor.rs stamps on its `claude -p` child
 // (crate::ingest::EXTRACTOR_TETHER) — the ingest server drops any request
@@ -134,7 +119,7 @@ async function runLmStudio(prompt: string): Promise<string> {
   return body.choices?.[0]?.message.content ?? "";
 }
 
-function checkExtraction(name: string, f: ExtractionFixture, raw: string): string[] {
+function checkExtraction(name: string, f: Fixture, raw: string): string[] {
   const errs: string[] = [];
   const decisions = parseExtraction(raw);
   if (decisions === null) return [`${name}: output violates strict JSON contract: ${raw.slice(0, 120)}`];
@@ -152,22 +137,6 @@ function checkExtraction(name: string, f: ExtractionFixture, raw: string): strin
   return errs;
 }
 
-function checkReconciliation(name: string, f: ReconciliationFixture, raw: string): string[] {
-  const ids = parseReconciliation(
-    raw,
-    f.candidates.map((candidate) => candidate.id)
-  );
-  if (ids === null) return [`${name}: output violates strict reconciliation contract: ${raw.slice(0, 120)}`];
-  assertNeverDuplicate(ids);
-  return ids.join(",") === f.expect.answered_ids.join(",")
-    ? []
-    : [`${name}: answered IDs ${ids.join(",") || "(none)"} != expected ${f.expect.answered_ids.join(",") || "(none)"}`];
-}
-
-function assertNeverDuplicate(ids: number[]): void {
-  if (new Set(ids).size !== ids.length) throw new Error("parser returned duplicate reconciliation IDs");
-}
-
 const dir = join(import.meta.dirname, "../tests/golden");
 const files = readdirSync(dir).filter((f) => f.endsWith(".json")).sort();
 const backend = process.env.EXTRACTOR ?? "claude";
@@ -177,31 +146,11 @@ let spawns = 0;
 for (const file of files) {
   const f = JSON.parse(readFileSync(join(dir, file), "utf8")) as Fixture;
 
-  // The reconcile() skip gates run identically here: a reconciliation fixture
-  // the app would never spawn for must be asserted gated, not silently
-  // exercised through the model anyway.
-  if (f.kind === "reconciliation" && shouldSkipReconciliation(f.candidates, f.submitted_reply)) {
-    if (f.expect.answered_ids.length === 0) {
-      console.log(`✓ ${file} (gated, 0 spawns)`);
-    } else {
-      failures++;
-      console.error(`✗ ${file}: gate skipped a call that expected answered_ids ${f.expect.answered_ids.join(",")}`);
-    }
-    continue;
-  }
-
-  const prompt =
-    f.kind === "reconciliation"
-      ? buildReconciliationPrompt(f.candidates, f.submitted_reply)
-      : buildPrompt({ assistant: f.assistant, user: f.user });
-  // Phase 33.1 haiku-default experiment: EXTRACTOR_MODEL forces one model
-  // across every fixture (both extraction and reconciliation) so the golden
-  // set can judge a model swap before it ever reaches decisions.ts. Unset
-  // mirrors decisions.ts's shipped defaults: sonnet for extraction (haiku
-  // showed a ~1-in-7 false positive on 09-question-in-code across repeated
-  // runs), haiku for reconciliation (3/3 clean full runs once
-  // parseReconciliation gained fence tolerance).
-  const model = process.env.EXTRACTOR_MODEL ?? (f.kind === "reconciliation" ? "haiku" : "sonnet");
+  const prompt = buildPrompt({ assistant: f.assistant, user: f.user });
+  // EXTRACTOR_MODEL overrides; unset mirrors decisions.ts's shipped default
+  // (sonnet — haiku showed a ~1-in-7 false positive on 09-question-in-code
+  // across repeated runs).
+  const model = process.env.EXTRACTOR_MODEL ?? "sonnet";
   let raw: string;
   try {
     spawns++;
@@ -216,10 +165,7 @@ for (const file of files) {
     failures++;
     continue;
   }
-  const errs =
-    f.kind === "reconciliation"
-      ? checkReconciliation(file, f, raw)
-      : checkExtraction(file, f, raw);
+  const errs = checkExtraction(file, f, raw);
   if (errs.length === 0) {
     console.log(`✓ ${file} (1 spawn)`);
   } else {

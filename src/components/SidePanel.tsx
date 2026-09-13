@@ -169,6 +169,9 @@ export function adapterWarningMessage(w: { agent: string; reason: string }): str
   if (w.reason === "foreign_post_tool_use") {
     return `${w.agent}: foreign PostToolUse hook detected in hooks.json — tool events may not fire in older agy releases`;
   }
+  if (w.reason === "transcript_schema_unrecognized") {
+    return `${w.agent}: transcript format doesn't match what this build expects (a CLI update likely changed it) — decision tracking may be broken until Logic Loop is updated`;
+  }
   return `${w.agent}: adapter warning (${w.reason})`;
 }
 

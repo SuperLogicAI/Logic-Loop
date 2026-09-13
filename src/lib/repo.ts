@@ -719,7 +719,7 @@ export function groupDecisionsBySession(open: Decision[]): DecisionSessionGroup[
 export async function getExtractorSettings(): Promise<ExtractorSettings> {
   const d = await getDb();
   const rows = await d.select<{ key: string; value: string }[]>(
-    "SELECT key, value FROM settings WHERE key IN ('extractor_backend','lmstudio_url','lmstudio_model','codex_model','reconcile_model')"
+    "SELECT key, value FROM settings WHERE key IN ('extractor_backend','lmstudio_url','lmstudio_model','codex_model')"
   );
   const m = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   return {
@@ -732,7 +732,6 @@ export async function getExtractorSettings(): Promise<ExtractorSettings> {
     lmstudioUrl: m["lmstudio_url"] ?? "http://127.0.0.1:1234",
     lmstudioModel: m["lmstudio_model"] ?? "",
     codexModel: m["codex_model"] ?? "",
-    reconcileModel: m["reconcile_model"] === "sonnet" ? "sonnet" : "haiku",
   };
 }
 
@@ -743,7 +742,6 @@ export async function setExtractorSettings(s: ExtractorSettings): Promise<void> 
     ["lmstudio_url", s.lmstudioUrl],
     ["lmstudio_model", s.lmstudioModel],
     ["codex_model", s.codexModel],
-    ["reconcile_model", s.reconcileModel],
   ];
   for (const [k, v] of pairs) {
     await d.execute(

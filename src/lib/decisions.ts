@@ -3,12 +3,7 @@
 // Every failure is swallowed: extraction breaking must never touch terminals.
 import { invoke } from "@tauri-apps/api/core";
 import { buildPrompt, parseExtraction, type TurnPair } from "./extractor";
-import {
-  buildReconciliationPrompt,
-  matchAnswerNowReply,
-  parseReconciliation,
-  shouldSkipReconciliation,
-} from "./decisionReconciliation";
+import { matchAnswerNowReply } from "./decisionReconciliation";
 import { serialize } from "./extractorQueue";
 import * as repo from "./repo";
 import type { AttentionSourceContext } from "../types";
@@ -19,6 +14,62 @@ interface PendingAssistant {
 }
 
 const assistantBuf = new Map<string, PendingAssistant>(); // session_id -> pending assistant text
+
+// Schema-drift tripwire. Claude Code's own docs say the JSONL transcript
+// entry format "is internal to Claude Code and changes between versions, so
+// scripts that parse these files directly can break on any release" — found
+// 2026-09-12 chasing a live break on CLI v2.1.270's new "bridge session"
+// format, where every line's `type` became last-prompt/mode/permission-mode/
+// atis-latch/bridge-session, none of which this module has ever recognized.
+// Rather than watch changelogs for the next one, detect it directly: a real
+// session's lines are overwhelmingly `type: "assistant"`/`"user"` (Claude) or
+// `"response_item"` (Codex) even on a turn with no extractable text (a
+// tool-only exchange) — `textFromTranscriptLine` already treats that as a
+// normal, silent no-op. A long run of lines whose *envelope* type matches
+// none of those means the schema itself moved, not just a quiet turn.
+// THRESHOLD is generous enough to absorb a session's small number of
+// non-message lines (summaries, system prompts) at start without firing on a
+// healthy, unchanged transcript.
+const SCHEMA_DRIFT_THRESHOLD = 20;
+const unrecognizedStreak = new Map<string, number>(); // session_id -> consecutive unrecognized-envelope lines
+const driftWarned = new Set<string>(); // session_id already warned — fire once, not per line
+
+/** Whether a transcript line's own envelope is one this module knows how to
+ * read at all, independent of whether that particular line carries
+ * extractable text. A line that fails to parse as JSON at all (e.g. a
+ * partial line mid-flush) is neither — it must not reset or extend the
+ * streak, since that's ordinary tailing noise, not a schema signal. */
+export function transcriptEnvelopeType(line: string): "recognized" | "unrecognized" | "unparseable" {
+  let obj: { type?: unknown };
+  try {
+    obj = JSON.parse(line) as { type?: unknown };
+  } catch {
+    return "unparseable";
+  }
+  return obj.type === "assistant" || obj.type === "user" || obj.type === "response_item"
+    ? "recognized"
+    : "unrecognized";
+}
+
+function trackSchemaDrift(
+  sessionId: string,
+  line: string,
+  agent: string | undefined,
+  onSchemaDrift: ((agent: string) => void) | undefined
+): void {
+  const kind = transcriptEnvelopeType(line);
+  if (kind === "unparseable") return;
+  if (kind === "recognized") {
+    unrecognizedStreak.delete(sessionId);
+    return;
+  }
+  const streak = (unrecognizedStreak.get(sessionId) ?? 0) + 1;
+  unrecognizedStreak.set(sessionId, streak);
+  if (streak >= SCHEMA_DRIFT_THRESHOLD && !driftWarned.has(sessionId)) {
+    driftWarned.add(sessionId);
+    onSchemaDrift?.(agent ?? "claude");
+  }
+}
 
 export function textFromTranscriptLine(line: string): { role: string; text: string } | null {
   try {
@@ -100,28 +151,8 @@ async function reconcile(sessionId: string, submittedReply: string): Promise<boo
   const candidates = await repo.openDecisionsForSession(sessionId);
   if (candidates.length === 0) return false;
   const answerNowId = matchAnswerNowReply(candidates, submittedReply);
-  if (answerNowId !== null) {
-    return (await repo.answerOpenDecisions(sessionId, [answerNowId], submittedReply)) > 0;
-  }
-  if (shouldSkipReconciliation(candidates, submittedReply)) return false;
-  const s = await repo.getExtractorSettings();
-  const raw = await invoke<string>("run_extractor", {
-    prompt: buildReconciliationPrompt(candidates, submittedReply),
-    backend: s.backend,
-    lmstudioUrl: s.lmstudioUrl,
-    lmstudioModel: s.lmstudioModel,
-    codexModel: s.codexModel,
-    // Defaults to haiku (Phase 33.1 sidequest): parseReconciliation gained
-    // fence tolerance, and haiku then passed 3/3 full golden runs on
-    // reconciliation. User-overridable back to sonnet via ⚙ Sidebar LM.
-    model: s.reconcileModel,
-  });
-  const ids = parseReconciliation(
-    raw,
-    candidates.map((candidate) => candidate.id)
-  );
-  if (!ids || ids.length === 0) return false;
-  return (await repo.answerOpenDecisions(sessionId, ids, submittedReply)) > 0;
+  if (answerNowId === null) return false;
+  return (await repo.answerOpenDecisions(sessionId, [answerNowId], submittedReply)) > 0;
 }
 
 function enqueueReconciliation(sessionId: string, submittedReply: string, onDone: () => void): void {
@@ -153,8 +184,13 @@ export function onTranscript(
   cwd: string | undefined,
   line: string,
   onDone: () => void,
-  context: AttentionSourceContext = { sessionId }
+  context: AttentionSourceContext = { sessionId },
+  onSchemaDrift?: (agent: string) => void
 ): void {
+  // Tracked on every line, independent of whether this one parses into
+  // extractable text below — the drift signal is about the envelope shape,
+  // not any single turn's content.
+  trackSchemaDrift(sessionId, line, context.agent, onSchemaDrift);
   const msg = textFromTranscriptLine(line);
   if (!msg) return;
   if (msg.role === "assistant") {

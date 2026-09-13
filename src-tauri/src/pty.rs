@@ -6,6 +6,36 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
 
+/// Runs `f` on tokio's blocking-thread pool instead of the calling thread.
+/// Every plain `pub fn` Tauri command runs on the app's main/event-loop
+/// thread (Tauri v2 default); one that shells out to `git`/`gh` or does
+/// blocking file I/O was confirmed live (2026-09-12, a `sample` capture
+/// during a real freeze) to beachball the whole app for the subprocess's
+/// full wall-clock time — `git_untracked_files`'s `Command::output()` alone
+/// accounted for ~31 of ~31 samples across a ~31s stall, on the exact
+/// thread AppKit's window server watches for responsiveness. See CLAUDE.md's
+/// "Extractor calls can freeze the whole app" landmine and
+/// `plans/017-fix-extractor-freeze.md`. Mirrors `extractor.rs`'s
+/// `run_extractor`/`run_extractor_blocking` split, generalized for reuse.
+pub(crate) async fn spawn_blocking_or_default<T: Default + Send + 'static>(
+    f: impl FnOnce() -> T + Send + 'static,
+) -> T {
+    tauri::async_runtime::spawn_blocking(f).await.unwrap_or_default()
+}
+
+/// Same as `spawn_blocking_or_default`, for commands whose body already
+/// returns `Result<T, String>` — a spawn panic becomes an error string
+/// carrying `label`, rather than silently defaulting.
+pub(crate) async fn spawn_blocking_result<T: Send + 'static>(
+    label: &'static str,
+    f: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    match tauri::async_runtime::spawn_blocking(f).await {
+        Ok(result) => result,
+        Err(e) => Err(format!("{label} task panicked: {e}")),
+    }
+}
+
 pub struct PtySession {
     master: Box<dyn MasterPty + Send>,
     child: Box<dyn Child + Send + Sync>,
@@ -98,6 +128,40 @@ pub fn project_key(cwd: &str) -> String {
         match dir.parent() {
             Some(parent) => dir = parent,
             None => return resolved, // not in a repo: the dir is its own project
+        }
+    }
+}
+
+/// True when `cwd` has its own `.git` at or above it without crossing `$HOME`
+/// to find one — the exact same walk/boundary as `project_key`, kept as a
+/// separate bool-returning check because the git_* commands below need a
+/// yes/no gate, not a key string. Found necessary 2026-09-12: a stray,
+/// unintended `~/.git` (empty, no commits, origin unknown — not created by
+/// this codebase, `git init` doesn't appear anywhere in it) meant `git -C
+/// <cwd> ...` for a project with no `.git` of its own silently walked all the
+/// way up to `$HOME` and operated on the user's entire home directory —
+/// `git_untracked_files`'s `--untracked-files=all` enumerating every
+/// untracked file under `~` is what actually produced the ~31s stall this
+/// file's `spawn_blocking` fix (`plans/017-fix-extractor-freeze.md`) was
+/// built to get off the main thread; without this guard, moving the same
+/// call to a background thread would have simply moved a very slow
+/// unintended operation there instead of removing it. `project_key` already
+/// refuses to attribute a project to `$HOME`'s own repo for exactly this
+/// reason — every git_* command must refuse to *run against* it too.
+fn has_own_repo(cwd: &str) -> bool {
+    let resolved = canon(cwd);
+    let home = crate::home::home().map(|h| canon(&h)).unwrap_or_default();
+    let mut dir = std::path::Path::new(&resolved);
+    loop {
+        if !home.is_empty() && dir.as_os_str() == home.as_str() {
+            return false;
+        }
+        if dir.join(".git").exists() {
+            return true;
+        }
+        match dir.parent() {
+            Some(parent) => dir = parent,
+            None => return false,
         }
     }
 }
@@ -293,7 +357,14 @@ pub struct Commit {
 /// Recent git commits for a project dir. Not ANSI parsing — plain
 /// machine-format subprocess output. Empty vec if not a repo / no git.
 #[tauri::command]
-pub fn git_log(cwd: String, limit: Option<u32>) -> Vec<Commit> {
+pub async fn git_log(cwd: String, limit: Option<u32>) -> Vec<Commit> {
+    spawn_blocking_or_default(move || git_log_blocking(cwd, limit)).await
+}
+
+fn git_log_blocking(cwd: String, limit: Option<u32>) -> Vec<Commit> {
+    if !has_own_repo(&cwd) {
+        return vec![];
+    }
     let out = std::process::Command::new("git")
         .arg("-C")
         .arg(&cwd)
@@ -322,7 +393,14 @@ pub fn git_log(cwd: String, limit: Option<u32>) -> Vec<Commit> {
 /// picker, Phase 9). Empty vec if not a repo / no git, same fail-open shape
 /// as `git_log`.
 #[tauri::command]
-pub fn git_branches(cwd: String) -> Vec<String> {
+pub async fn git_branches(cwd: String) -> Vec<String> {
+    spawn_blocking_or_default(move || git_branches_blocking(cwd)).await
+}
+
+fn git_branches_blocking(cwd: String) -> Vec<String> {
+    if !has_own_repo(&cwd) {
+        return vec![];
+    }
     let out = std::process::Command::new("git")
         .arg("-C")
         .arg(&cwd)
@@ -344,7 +422,22 @@ pub fn git_branches(cwd: String) -> Vec<String> {
 /// This is a foreground, user-triggered action (invariant #2's carve-out) —
 /// failures surface git's real stderr rather than being swallowed.
 #[tauri::command]
-pub fn git_worktree_add(repo_cwd: String, path: String, branch: String, new_branch: bool) -> Result<(), String> {
+pub async fn git_worktree_add(
+    repo_cwd: String,
+    path: String,
+    branch: String,
+    new_branch: bool,
+) -> Result<(), String> {
+    spawn_blocking_result("git_worktree_add", move || {
+        git_worktree_add_blocking(repo_cwd, path, branch, new_branch)
+    })
+    .await
+}
+
+fn git_worktree_add_blocking(repo_cwd: String, path: String, branch: String, new_branch: bool) -> Result<(), String> {
+    if !has_own_repo(&repo_cwd) {
+        return Err("not a git repository".into());
+    }
     if let Some(parent) = std::path::Path::new(&path).parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -366,7 +459,17 @@ pub fn git_worktree_add(repo_cwd: String, path: String, branch: String, new_bran
 /// `force` only ever set by the caller after an explicit second confirm on a
 /// dirty worktree — never defaulted true silently.
 #[tauri::command]
-pub fn git_worktree_remove(repo_cwd: String, path: String, force: bool) -> Result<(), String> {
+pub async fn git_worktree_remove(repo_cwd: String, path: String, force: bool) -> Result<(), String> {
+    spawn_blocking_result("git_worktree_remove", move || {
+        git_worktree_remove_blocking(repo_cwd, path, force)
+    })
+    .await
+}
+
+fn git_worktree_remove_blocking(repo_cwd: String, path: String, force: bool) -> Result<(), String> {
+    if !has_own_repo(&repo_cwd) {
+        return Err("not a git repository".into());
+    }
     let mut cmd = std::process::Command::new("git");
     cmd.arg("-C").arg(&repo_cwd).arg("worktree").arg("remove");
     if force {
@@ -382,7 +485,14 @@ pub fn git_worktree_remove(repo_cwd: String, path: String, force: bool) -> Resul
 }
 
 #[tauri::command]
-pub fn git_current_branch(cwd: String) -> Result<String, String> {
+pub async fn git_current_branch(cwd: String) -> Result<String, String> {
+    spawn_blocking_result("git_current_branch", move || git_current_branch_blocking(cwd)).await
+}
+
+fn git_current_branch_blocking(cwd: String) -> Result<String, String> {
+    if !has_own_repo(&cwd) {
+        return Err("not a git repository".into());
+    }
     let out = std::process::Command::new("git")
         .arg("-C")
         .arg(&cwd)
@@ -400,7 +510,14 @@ pub fn git_current_branch(cwd: String) -> Result<String, String> {
 /// Tracked-file dirty check (staged or modified), no untracked files —
 /// gates whether the Commit & Push footer is active at all.
 #[tauri::command]
-pub fn git_has_changes(cwd: String) -> bool {
+pub async fn git_has_changes(cwd: String) -> bool {
+    spawn_blocking_or_default(move || git_has_changes_blocking(cwd)).await
+}
+
+fn git_has_changes_blocking(cwd: String) -> bool {
+    if !has_own_repo(&cwd) {
+        return false;
+    }
     let out = std::process::Command::new("git")
         .arg("-C")
         .arg(&cwd)
@@ -415,7 +532,14 @@ pub fn git_has_changes(cwd: String) -> bool {
 }
 
 #[tauri::command]
-pub fn git_add_u(cwd: String) -> Result<(), String> {
+pub async fn git_add_u(cwd: String) -> Result<(), String> {
+    spawn_blocking_result("git_add_u", move || git_add_u_blocking(cwd)).await
+}
+
+fn git_add_u_blocking(cwd: String) -> Result<(), String> {
+    if !has_own_repo(&cwd) {
+        return Err("not a git repository".into());
+    }
     let out = std::process::Command::new("git")
         .arg("-C")
         .arg(&cwd)
@@ -434,7 +558,14 @@ pub fn git_add_u(cwd: String) -> Result<(), String> {
 /// these so a commit doesn't silently ship a message describing a file it
 /// never actually included (see CLAUDE.md landmines, 2026-08-27).
 #[tauri::command]
-pub fn git_untracked_files(cwd: String) -> Vec<String> {
+pub async fn git_untracked_files(cwd: String) -> Vec<String> {
+    spawn_blocking_or_default(move || git_untracked_files_blocking(cwd)).await
+}
+
+fn git_untracked_files_blocking(cwd: String) -> Vec<String> {
+    if !has_own_repo(&cwd) {
+        return Vec::new();
+    }
     let out = std::process::Command::new("git")
         .arg("-C")
         .arg(&cwd)
@@ -455,7 +586,14 @@ pub fn git_untracked_files(cwd: String) -> Vec<String> {
 /// called when the user has explicitly acknowledged the untracked-files
 /// warning in the footer.
 #[tauri::command]
-pub fn git_add_all(cwd: String) -> Result<(), String> {
+pub async fn git_add_all(cwd: String) -> Result<(), String> {
+    spawn_blocking_result("git_add_all", move || git_add_all_blocking(cwd)).await
+}
+
+fn git_add_all_blocking(cwd: String) -> Result<(), String> {
+    if !has_own_repo(&cwd) {
+        return Err("not a git repository".into());
+    }
     let out = std::process::Command::new("git")
         .arg("-C")
         .arg(&cwd)
@@ -471,7 +609,14 @@ pub fn git_add_all(cwd: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn git_diff_cached(cwd: String) -> String {
+pub async fn git_diff_cached(cwd: String) -> String {
+    spawn_blocking_or_default(move || git_diff_cached_blocking(cwd)).await
+}
+
+fn git_diff_cached_blocking(cwd: String) -> String {
+    if !has_own_repo(&cwd) {
+        return String::new();
+    }
     let out = std::process::Command::new("git")
         .arg("-C")
         .arg(&cwd)
@@ -488,7 +633,14 @@ pub fn git_diff_cached(cwd: String) -> String {
 /// through a shell string — no injection surface even though the content is
 /// LLM-generated from repo data.
 #[tauri::command]
-pub fn git_commit(cwd: String, message: String) -> Result<(), String> {
+pub async fn git_commit(cwd: String, message: String) -> Result<(), String> {
+    spawn_blocking_result("git_commit", move || git_commit_blocking(cwd, message)).await
+}
+
+fn git_commit_blocking(cwd: String, message: String) -> Result<(), String> {
+    if !has_own_repo(&cwd) {
+        return Err("not a git repository".into());
+    }
     let out = std::process::Command::new("git")
         .arg("-C")
         .arg(&cwd)
@@ -507,7 +659,14 @@ pub fn git_commit(cwd: String, message: String) -> Result<(), String> {
 /// Distinct from `git_worktree_add`'s `-b` — same underlying git flag, kept
 /// as two commands so the two flows are never confused in review.
 #[tauri::command]
-pub fn git_create_branch(cwd: String, branch: String) -> Result<(), String> {
+pub async fn git_create_branch(cwd: String, branch: String) -> Result<(), String> {
+    spawn_blocking_result("git_create_branch", move || git_create_branch_blocking(cwd, branch)).await
+}
+
+fn git_create_branch_blocking(cwd: String, branch: String) -> Result<(), String> {
+    if !has_own_repo(&cwd) {
+        return Err("not a git repository".into());
+    }
     let out = std::process::Command::new("git")
         .arg("-C")
         .arg(&cwd)
@@ -528,7 +687,14 @@ pub fn git_create_branch(cwd: String, branch: String) -> Result<(), String> {
 /// in-place in the tab's live working directory and must switch back
 /// afterward rather than stranding the tab on the wip branch.
 #[tauri::command]
-pub fn git_checkout(cwd: String, branch: String) -> Result<(), String> {
+pub async fn git_checkout(cwd: String, branch: String) -> Result<(), String> {
+    spawn_blocking_result("git_checkout", move || git_checkout_blocking(cwd, branch)).await
+}
+
+fn git_checkout_blocking(cwd: String, branch: String) -> Result<(), String> {
+    if !has_own_repo(&cwd) {
+        return Err("not a git repository".into());
+    }
     let out = std::process::Command::new("git")
         .arg("-C")
         .arg(&cwd)
@@ -546,7 +712,14 @@ pub fn git_checkout(cwd: String, branch: String) -> Result<(), String> {
 /// Never a force-push — a rejected (diverged) push surfaces git's real error
 /// to the caller, no auto-rebase/auto-pull/silent retry-with-force.
 #[tauri::command]
-pub fn git_push(cwd: String, branch: String, set_upstream: bool) -> Result<(), String> {
+pub async fn git_push(cwd: String, branch: String, set_upstream: bool) -> Result<(), String> {
+    spawn_blocking_result("git_push", move || git_push_blocking(cwd, branch, set_upstream)).await
+}
+
+fn git_push_blocking(cwd: String, branch: String, set_upstream: bool) -> Result<(), String> {
+    if !has_own_repo(&cwd) {
+        return Err("not a git repository".into());
+    }
     let mut cmd = std::process::Command::new("git");
     cmd.arg("-C").arg(&cwd).arg("push");
     if set_upstream {
@@ -581,7 +754,14 @@ fn gh_binary() -> String {
 /// unauthenticated, PR already exists) surfaces as an error string; the
 /// caller must not treat it as undoing the commit/push that already landed.
 #[tauri::command]
-pub fn git_pr_create(cwd: String, title: String, body: String) -> Result<String, String> {
+pub async fn git_pr_create(cwd: String, title: String, body: String) -> Result<String, String> {
+    spawn_blocking_result("git_pr_create", move || git_pr_create_blocking(cwd, title, body)).await
+}
+
+fn git_pr_create_blocking(cwd: String, title: String, body: String) -> Result<String, String> {
+    if !has_own_repo(&cwd) {
+        return Err("not a git repository".into());
+    }
     let out = std::process::Command::new(gh_binary())
         .current_dir(&cwd)
         .arg("pr")
@@ -601,7 +781,7 @@ pub fn git_pr_create(cwd: String, title: String, body: String) -> Result<String,
 
 #[cfg(test)]
 mod tests {
-    use super::{canon, project_key, resume_command, valid_resume_id};
+    use super::{canon, has_own_repo, project_key, resume_command, valid_resume_id};
 
     #[test]
     fn resume_command_selects_codex_syntax() {
@@ -697,5 +877,41 @@ mod tests {
             project_key("~/definitely-not-a-real-dir-xyz"),
             format!("{home}/definitely-not-a-real-dir-xyz")
         );
+    }
+
+    #[test]
+    fn has_own_repo_refuses_a_home_directory_git_it_did_not_create() {
+        // Regression test for the 2026-09-12 finding: an unrelated, unintended
+        // `~/.git` (empty, no commits — not created by this codebase) meant
+        // `git -C <cwd> ...` for a project with no `.git` of its own silently
+        // walked up and operated on the whole home directory. A directory with
+        // no `.git` anywhere between it and `$HOME` must report false, even
+        // when `$HOME` itself has one.
+        let _guard = crate::home::ENV_LOCK.lock().unwrap();
+        let home = crate::home::home().unwrap();
+        let had_home_git = std::path::Path::new(&home).join(".git").exists();
+        if !had_home_git {
+            std::fs::create_dir(std::path::Path::new(&home).join(".git")).unwrap();
+        }
+
+        // Must live *inside* $HOME to actually exercise the boundary — a
+        // scratch dir under /tmp would hit the filesystem root without ever
+        // passing through $HOME, proving nothing about the crossing itself.
+        let scratch = std::path::Path::new(&home).join(format!("ll-horepo-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&scratch);
+        std::fs::create_dir_all(&scratch).unwrap();
+
+        assert!(
+            !has_own_repo(scratch.to_str().unwrap()),
+            "a dir under $HOME, with $HOME's own .git but none of its own, must refuse"
+        );
+
+        std::fs::create_dir_all(scratch.join(".git")).unwrap();
+        assert!(has_own_repo(scratch.to_str().unwrap()), "its own .git must be honored");
+
+        std::fs::remove_dir_all(&scratch).unwrap();
+        if !had_home_git {
+            std::fs::remove_dir(std::path::Path::new(&home).join(".git")).unwrap();
+        }
     }
 }
