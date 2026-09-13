@@ -2362,6 +2362,49 @@ Automated evidence (2026-09-12):
 - No Rust changes (no `cargo test`/clippy rerun needed).
 - No extraction-prompt changes (no `npm run golden` rerun needed).
 
+## 50. Codex extractor spend and transcript audit (Phase 34)
+
+Phase 34 was authorized with `PHASE 34 ACCEPTED` on 2026-09-12; see
+`plans/020-codex-extractor-spend-and-drift-audit.md` for the sanitized
+two-call usage table. On Codex CLI 0.154.0, the exact app arguments produced
+one valid, no-tool completed extraction turn in 5.36s with 16,756 input / 5,888
+cached-input / 52 output / 0 reasoning-output tokens. The paired
+`--ignore-user-config` run preserved `gpt-5.6-terra` and high reasoning
+explicitly, stayed valid/no-tool, and used 15,139 / 9,984 / 52 / 0 in 4.36s.
+Cached input is included in the input total, not added to it. No dollar or
+subscription-limit claim follows from these usage counts.
+
+- [x] `npm run codex-transcript:check` — old redacted rollout fixture still
+      parses correctly on the installed CLI baseline.
+- [x] One exact-argument and one paired-isolation extraction call each had one
+      completed turn, a nonempty final message, and strict-valid extraction.
+- [x] The output has no tool or MCP item in either measured run.
+- [x] Usage logging tolerates missing usage; failed/incomplete Codex turns
+      cannot return a prior agent message.
+- [x] Fresh `npm run tauri dev` Codex session: a real assistant choice prompt
+      created its card consistently, at about four seconds. Answering normally
+      left the card open as designed; Answer-Now closed its card immediately,
+      and manually dismissing another card worked. The card establishes that a
+      live Codex rollout reached the transcript/tailer/extraction path.
+- [x] The terminal and app stayed responsive throughout the interactive test.
+      The dev log printed exactly three Codex usage lines for the observed
+      extraction calls: `16744/5888/108/70`, `19262/5888/14/0`, and
+      `16741/5888/35/0` (input/cached-input/output/reasoning-output). No
+      recursive extractor behavior was observed. The warning strip was not
+      separately inspected during this pass.
+
+Automated evidence (2026-09-12):
+
+- [x] `cargo test --lib extractor::tests` — 7/7.
+- [x] `npm run opencode:check` and `npm run check` — all configured checks.
+- [x] `npx tsc --noEmit` and `npm run build`.
+- [x] `cd src-tauri && cargo test --lib` — 63/63. (The sandbox-only run
+      denied an existing home-path temporary-directory test; the required
+      permitted rerun passed.)
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings`.
+- [x] `git diff --check`.
+- [x] `npm run golden` deliberately not run: no extraction prompt changed.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*

@@ -79,12 +79,16 @@ function runCodex(prompt: string): string {
     env: { ...process.env, LOGIC_LOOP_TAB_ID: EXTRACTOR_TETHER },
   });
   let finalMessage = "";
+  let turnCompleted = false;
+  let turnFailed = false;
   for (const line of stdout.split("\n")) {
     try {
       const event = JSON.parse(line) as {
         type?: string;
         item?: { type?: string; text?: unknown };
       };
+      if (event.type === "turn.completed") turnCompleted = true;
+      if (event.type === "turn.failed" || event.type === "error") turnFailed = true;
       if (event.type === "item.completed" && event.item?.type === "agent_message" && typeof event.item.text === "string") {
         finalMessage = event.item.text;
       }
@@ -92,6 +96,8 @@ function runCodex(prompt: string): string {
       // Ignore non-JSON noise; the final agent_message remains authoritative.
     }
   }
+  if (turnFailed) throw new Error("codex: turn failed");
+  if (!turnCompleted) throw new Error("codex: turn did not complete");
   if (!finalMessage) throw new Error("codex: no final agent message");
   return finalMessage;
 }

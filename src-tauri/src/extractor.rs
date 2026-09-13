@@ -128,16 +128,39 @@ fn codex_args(model: Option<&str>) -> Vec<String> {
 
 fn codex_final_message(stdout: &[u8]) -> Result<String, String> {
     let mut final_text = None;
+    let mut completed = false;
+    let mut failed = false;
     for line in String::from_utf8_lossy(stdout).lines() {
         let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
             continue;
         };
+        if value["type"] == "turn.failed" || value["type"] == "error" {
+            failed = true;
+        }
+        if value["type"] == "turn.completed" {
+            completed = true;
+            if let Some(usage) = value.get("usage") {
+                eprintln!(
+                    "extractor: codex usage input_tokens={} cached_input_tokens={} output_tokens={} reasoning_output_tokens={}",
+                    usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+                    usage.get("cached_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+                    usage.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+                    usage.get("reasoning_output_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+                );
+            }
+        }
         if value["type"] == "item.completed"
             && value["item"]["type"] == "agent_message"
             && value["item"]["text"].is_string()
         {
             final_text = value["item"]["text"].as_str().map(String::from);
         }
+    }
+    if failed {
+        return Err("codex: turn failed".into());
+    }
+    if !completed {
+        return Err("codex: turn did not complete".into());
     }
     final_text.filter(|text| !text.is_empty()).ok_or_else(|| "codex: no final message".into())
 }
@@ -273,6 +296,22 @@ not json
     }
 
     #[test]
+    fn codex_output_rejects_a_failed_or_incomplete_turn() {
+        let failed = br#"{"type":"item.completed","item":{"type":"agent_message","text":"stale"}}
+{"type":"turn.failed"}"#;
+        let incomplete = br#"{"type":"item.completed","item":{"type":"agent_message","text":"stale"}}"#;
+        assert!(codex_final_message(failed).is_err());
+        assert!(codex_final_message(incomplete).is_err());
+    }
+
+    #[test]
+    fn codex_output_tolerates_missing_usage() {
+        let stdout = br#"{"type":"item.completed","item":{"type":"agent_message","text":"ok"}}
+{"type":"turn.completed"}"#;
+        assert_eq!(codex_final_message(stdout).unwrap(), "ok");
+    }
+
+    #[test]
     fn claude_args_are_stripped_to_a_bare_json_completion() {
         let args = claude_args("sonnet");
         assert_eq!(
@@ -315,6 +354,19 @@ not json
         let args = codex_args(None);
         assert_eq!(args, ["exec", "--ephemeral", "--sandbox", "read-only", "--skip-git-repo-check", "--json", "-"]);
         let with_model = codex_args(Some("configured-model"));
-        assert!(with_model.windows(2).any(|pair| pair == ["-m", "configured-model"]));
+        assert_eq!(
+            with_model,
+            [
+                "exec",
+                "--ephemeral",
+                "--sandbox",
+                "read-only",
+                "--skip-git-repo-check",
+                "--json",
+                "-m",
+                "configured-model",
+                "-",
+            ]
+        );
     }
 }
