@@ -144,6 +144,7 @@ export interface ExtractorSettings {
   lmstudioUrl: string;
   lmstudioModel: string;
   codexModel: string;
+  claudeModel: string;
 }
 
 /** A tab-tether-keyed re-entry candidate: the latest session bound to a tab

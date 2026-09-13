@@ -136,7 +136,7 @@ async function extract(
     lmstudioUrl: s.lmstudioUrl,
     lmstudioModel: s.lmstudioModel,
     codexModel: s.codexModel,
-    model: "sonnet",
+    model: s.claudeModel,
   });
   const decisions = parseExtraction(raw);
   if (!decisions) return; // contract violation → drop, fail open
