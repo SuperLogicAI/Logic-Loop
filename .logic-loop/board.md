@@ -33,3 +33,8 @@ color: #ef4444
 ## Add Idea Board Toggles
 status: idea
 Add a few style toggles, currently idea, planned, building, later, done; add on a brainstorm or braindump where it's all in one bucket and/or a kanban mode where it's simply Todo, In Process, Done etc
+
+## Built in side-panel agent
+status: building
+## Deterministic modes for side panel
+status: building

@@ -18,6 +18,8 @@ import type {
 } from "../types";
 import { parseOnboardingVersion } from "./onboarding";
 import type { ExtractedDecision } from "./extractor";
+import type { ReconciliationCandidate } from "./decisionReconciliation";
+import { boundedSubmittedReply } from "./decisionReconciliation";
 import { clampPanelWidth, parsePanelMode, type VisiblePanelMode } from "./panelLayout";
 import { parseLandingNoteMode } from "./landingMode";
 
@@ -559,6 +561,17 @@ export async function deleteBlocker(id: number): Promise<void> {
   await d.execute("DELETE FROM blockers WHERE id = $1", [id]);
 }
 
+/** Lowercase, collapse internal whitespace, drop trailing punctuation — cheap
+ * dedup key for two extraction passes phrasing the same open question
+ * slightly differently. Exported for `decision-integrity-check.ts`. */
+export function normalizeQuestion(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[.,!?;:]+$/, "");
+}
+
 export async function insertDecision(
   sessionId: string,
   cwd: string,
@@ -567,6 +580,16 @@ export async function insertDecision(
   context: AttentionSourceContext = {}
 ): Promise<void> {
   const db = await getDb();
+  // Same open question already on the board for this session (e.g. the
+  // agent restates its own pending question in a follow-up turn) — skip
+  // rather than grow a duplicate card. Open-only: once the original is
+  // answered or dismissed, a later occurrence of the same question is a new
+  // decision point and gets its own row.
+  const openQuestion = normalizeQuestion(d.question);
+  const alreadyOpen = (await openDecisionsForSession(sessionId)).some(
+    (candidate) => normalizeQuestion(candidate.question) === openQuestion
+  );
+  if (alreadyOpen) return;
   await db.execute(
     `INSERT INTO decisions (session_id, cwd, question, status, user_answer, assumption, context_json, ts, tab_id, agent, actor_id)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
@@ -598,6 +621,42 @@ export async function listDecisions(cwd: string): Promise<Decision[]> {
 export async function setDecisionStatus(id: number, status: Decision["status"]): Promise<void> {
   const d = await getDb();
   await d.execute("UPDATE decisions SET status = $1 WHERE id = $2", [status, id]);
+}
+
+/** Oldest-first open candidates for one exact agent session, newest 20 only.
+ * The prompt layer has the same 20-candidate ceiling, so no row can be
+ * validated without first being shown to the reconciler. A session-scoped
+ * open-decision backlog past 20 is already a UX problem the reconciler
+ * chasing it wouldn't fix — fetch the 20 most recent (they're the ones a
+ * fresh reply is actually likely to answer), then restore chronological
+ * order for the prompt. */
+export async function openDecisionsForSession(sessionId: string): Promise<ReconciliationCandidate[]> {
+  const d = await getDb();
+  const newestFirst = await d.select<ReconciliationCandidate[]>(
+    `SELECT id, question, assumption, ts FROM decisions
+     WHERE session_id = $1 AND status = 'open'
+     ORDER BY ts DESC, id DESC LIMIT 20`,
+    [sessionId]
+  );
+  return newestFirst.reverse();
+}
+
+/** Conditionally answer still-open rows from one session. Returns the number
+ * changed so callers refresh panels only after a real state transition. */
+export async function answerOpenDecisions(
+  sessionId: string,
+  ids: readonly number[],
+  submittedReply: string
+): Promise<number> {
+  if (ids.length === 0) return 0;
+  const d = await getDb();
+  const placeholders = ids.map((_, index) => `$${index + 3}`).join(", ");
+  const result = await d.execute(
+    `UPDATE decisions SET status = 'answered', user_answer = $2
+     WHERE session_id = $1 AND status = 'open' AND id IN (${placeholders})`,
+    [sessionId, boundedSubmittedReply(submittedReply), ...ids]
+  );
+  return result.rowsAffected;
 }
 
 /** Tab badges: open-decision count per project cwd. */
@@ -660,7 +719,7 @@ export function groupDecisionsBySession(open: Decision[]): DecisionSessionGroup[
 export async function getExtractorSettings(): Promise<ExtractorSettings> {
   const d = await getDb();
   const rows = await d.select<{ key: string; value: string }[]>(
-    "SELECT key, value FROM settings WHERE key IN ('extractor_backend','lmstudio_url','lmstudio_model','codex_model')"
+    "SELECT key, value FROM settings WHERE key IN ('extractor_backend','lmstudio_url','lmstudio_model','codex_model','claude_model')"
   );
   const m = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   return {
@@ -673,6 +732,7 @@ export async function getExtractorSettings(): Promise<ExtractorSettings> {
     lmstudioUrl: m["lmstudio_url"] ?? "http://127.0.0.1:1234",
     lmstudioModel: m["lmstudio_model"] ?? "",
     codexModel: m["codex_model"] ?? "",
+    claudeModel: m["claude_model"] ?? "",
   };
 }
 
@@ -683,6 +743,7 @@ export async function setExtractorSettings(s: ExtractorSettings): Promise<void> 
     ["lmstudio_url", s.lmstudioUrl],
     ["lmstudio_model", s.lmstudioModel],
     ["codex_model", s.codexModel],
+    ["claude_model", s.claudeModel],
   ];
   for (const [k, v] of pairs) {
     await d.execute(

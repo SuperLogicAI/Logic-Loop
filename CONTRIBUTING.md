@@ -30,7 +30,7 @@ npm run check
 `npm run golden` is the extraction golden set. It shells out to the `claude`
 CLI, so it costs money per run and stays local — run it if, and only if, you
 changed an extraction prompt (`src/lib/decisions.ts` and friends). It must
-pass 12/12.
+pass every extraction and reconciliation fixture.
 
 Manual checks a machine can't run live in [docs/TESTING.md](docs/TESTING.md),
 one section per phase. If your change touches ingestion, binding or the

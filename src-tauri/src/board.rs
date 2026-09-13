@@ -15,12 +15,20 @@ fn board_path(project_key: &str) -> PathBuf {
 /// a board panel must never affect terminals). The UI treats "" the same as
 /// a genuinely empty file: no cards, `+` still live.
 #[tauri::command]
-pub fn read_board(project_key: String) -> String {
+pub async fn read_board(project_key: String) -> String {
+    crate::pty::spawn_blocking_or_default(move || read_board_blocking(project_key)).await
+}
+
+fn read_board_blocking(project_key: String) -> String {
     std::fs::read_to_string(board_path(&project_key)).unwrap_or_default()
 }
 
 #[tauri::command]
-pub fn write_board(project_key: String, content: String) -> Result<(), String> {
+pub async fn write_board(project_key: String, content: String) -> Result<(), String> {
+    crate::pty::spawn_blocking_result("write_board", move || write_board_blocking(project_key, content)).await
+}
+
+fn write_board_blocking(project_key: String, content: String) -> Result<(), String> {
     let path = board_path(&project_key);
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
@@ -32,10 +40,15 @@ pub fn write_board(project_key: String, content: String) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    // Tests exercise the `_blocking` inner functions directly — same
+    // convention as `extractor.rs`'s tests — so they stay plain sync `#[test]`
+    // fns with no need for a tokio test runtime around the `pub async fn`
+    // command wrappers, which only add the `spawn_blocking` dispatch.
+
     #[test]
     fn read_missing_file_is_empty_not_an_error() {
         let dir = std::env::temp_dir().join(format!("logic-loop-board-test-{}", std::process::id()));
-        assert_eq!(read_board(dir.to_string_lossy().into_owned()), "");
+        assert_eq!(read_board_blocking(dir.to_string_lossy().into_owned()), "");
     }
 
     #[test]
@@ -44,8 +57,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         let key = dir.to_string_lossy().into_owned();
 
-        write_board(key.clone(), "## card one\nstatus: idea\n".into()).unwrap();
-        assert_eq!(read_board(key.clone()), "## card one\nstatus: idea\n");
+        write_board_blocking(key.clone(), "## card one\nstatus: idea\n".into()).unwrap();
+        assert_eq!(read_board_blocking(key.clone()), "## card one\nstatus: idea\n");
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -63,7 +76,7 @@ mod tests {
         std::fs::write(&dir, "not a directory").unwrap();
         let key = dir.to_string_lossy().into_owned();
 
-        assert!(write_board(key, "x".into()).is_err());
+        assert!(write_board_blocking(key, "x".into()).is_err());
 
         std::fs::remove_file(&dir).ok();
     }

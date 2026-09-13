@@ -220,6 +220,19 @@ app, which drives the colored status dot on each tab.
       under 30 seconds?
         *the git log is the only one that populates no historical Decisions, Blockers, or Accomplished loads from previous sessions*
 
+      Re-proof 2026-09-11: **still failed** on the active Logic Loop project
+      after a substantial testing/planning session. Since You Left exposed the
+      latest agent prose but reported only command counts (`4 commands`, `0
+      turns`, `0 stops`); Accomplished primarily listed raw command activity
+      plus an old generic “Agent finished” row, not the completed testing and
+      planning outcomes. Attention's two active items were detector noise from
+      command/document text (`EPERM` and an intentional missing-path `rg`
+      result), while Backlog contained 46 mostly unavailable historical items.
+      The rail was enough to identify that work was active, but not enough to
+      choose the next productive action confidently within 30 seconds without
+      reading terminal history. No week-long “zero unnoticed decisions” claim
+      can be made from this pass.
+
 ## 12. Phase 3 — Decision Tracker
 
 Background: when an agent asks you a question and moves on without an answer,
@@ -237,7 +250,13 @@ the app should surface it as an open "decision" so nothing slips by.
 - [-] Click ✎ — app switches to that tab and pre-types
       `Re: "<question>" — ` into the terminal WITHOUT sending it. You finish
       the sentence and press Enter yourself.
-        *unable to test*
+        *failed on 2026-09-11 with a labeled disposable database row bound to
+        the active Codex tab: clicking ✎ inserted the unsent draft but changed
+        the row from `open` to `answered` immediately with `user_answer =
+        NULL`. After focusing the terminal and clearing the entire draft
+        without submitting, the row remained `answered`. The synthetic row was
+        deleted after verification; no real decision was changed. This is the
+        Phase 33 truthful-answer-state bug.*
 - [-] Click ⤳ (delegate) — decision moves to the closed list marked delegated,
       badge count drops.
         *unable to test currently but in earlier tests I was clicking around and got this reaction*
@@ -1982,7 +2001,7 @@ silently inherited or marked complete.
 - [ ] Click between panes. Confirm the focus outline, active top tab, Idea
       Board, and project side panel all follow the focused pane without opening
       a Landing Note merely because the other pane remains visible. The focused
-      pane and matching top tab use white; the secondary pane/tab uses the
+      pane and matching top tab use a restrained 1.5px white outline; the secondary pane/tab uses the
       slightly softer blue. On both top tabs, the project/bookmark color remains
       fully visible above the side-and-bottom selection outline.
 - [ ] Select a third top tab. It replaces only the focused pane. Selecting
@@ -2017,6 +2036,374 @@ Automated evidence (2026-09-10):
 - [x] `git diff --check`
 
 `npm run golden` was not run because Phase 32 changes no extraction prompt.
+
+Partial live evidence (2026-09-11, current development profile; this is not a
+clean-profile or full acceptance disposition):
+
+- [x] Split activation opened a second ordinary shell in the active
+      `context_terminal` project, displayed the supplied icon, and rendered an
+      even two-pane layout.
+- [x] A marker command submitted in the new right pane produced output only in
+      that pane while the existing Codex pane continued streaming.
+- [x] Clicking between panes moved the active-tab treatment and the restrained
+      white/blue pane outlines without opening a Landing Note.
+- [x] Selecting a third top tab replaced only the focused pane; selecting the
+      already-visible secondary tab focused it without swapping pane position.
+- [x] Turning Split off kept the focused shell visible and live.
+- [x] Expanded, compact, and hidden panel modes remained independent of the
+      split. Entering and exiting indefinite Lock-in preserved both panes.
+- [x] Multiline paste executed only in the focused disposable shell. Maximizing
+      the window kept both panes fitted without visible clipping or stale
+      columns.
+- [x] Exiting the disposable shell left **Process exited** and **Restart** in
+      its pane while the other pane remained live.
+- [x] Drag-reordering a top tab moved the tab but preserved both visible pane
+      identities. The original tab and bookmark order was restored afterward.
+- [x] After the intervening app relaunch needed to recover macOS Desktop-folder
+      access, Split was off and surviving sessions appeared as ordinary tabs;
+      the prior split composition was not restored.
+- [ ] Independent typed input in both panes, structured-hook tether identity,
+      close/Cmd-W survivor behavior, background-result notification
+      suppression, timed Lock-in, file drop/link/selection in both panes, and
+      repeated manual edge-drag resize remain unverified in this pass.
+
+Phase 31 partial evidence from the same existing profile: Setup reopened the
+modal; all four agents appeared in the documented order; Claude/Codex showed
+activity, decisions, and re-entry while OpenCode/Antigravity explicitly showed
+those latter capabilities unsupported; keyboard Tab order stayed inside the
+modal; Escape closed it. This does not prove the clean-profile, adapter-config,
+outside-terminal, failure, or notification-consent paths in §43.
+
+An isolated clean-profile attempt used the disposable application identifier
+`com.vandershark.context-terminal.phase31-test` and successfully created a
+separate empty database without touching the production profile. With the
+production Logic Loop process still running, however, macOS accessibility
+exposed only the production window; reaching the disposable onboarding window
+would have required quitting the real app and risking its live terminal
+sessions. The disposable development process was stopped. Complete the §43
+clean-profile matrix in a maintenance window after all real sessions are
+closed; adapter enable/error cases still require backed-up real config files,
+and OS notification Allow/Don't Allow paths require human approval at the
+system prompt.
+
+Automated gates rerun 2026-09-11 against the current staged Phase 32 outline
+polish: `onboarding:check`, `split-view:check`, `opencode:check`, all 26
+aggregate frontend checks, strict TypeScript, production build, 58/58 Rust
+library tests, and clippy with warnings denied pass. The build emitted only the
+existing Vite chunk-size advisory. `npm run golden` was not run because these
+Phase 32 changes do not touch extraction prompts.
+
+## 45. Decision Tracker reconciliation and truthful answer state (Phase 33)
+
+Implementation authorized with `PHASE 32 ACCEPTED` on 2026-09-11. Phase 32's
+remaining manual checks stay open by explicit maintainer disposition.
+
+**Superseded by Plan 016 (2026-09-12):** the two items below exercised
+guessed natural-language reconciliation, which no longer exists — `reconcile()`
+now only checks the deterministic Answer-now match. Left as historical record
+of the removed behavior, not re-tested.
+
+- [x] ~~Complete another turn, then naturally answer the old question. Confirm
+      the old card becomes answered...~~ *(passed 2026-09-11 under the
+      now-removed guessed-reconciliation path)*
+- [x] ~~Submit an unrelated reply and an ambiguous bare affirmation. Old cards
+      remain open.~~ *(passed 2026-09-11 under the now-removed skip-gate path)*
+
+- [x] Ask two genuine questions, answer only one, and confirm the unanswered
+      card remains open. *(passed 2026-09-11, disposable `dt-scratch` repo)*
+- [x] In two same-project sessions, submit a reply in session B and confirm it
+      cannot clear a similar open decision from session A. *(passed)*
+- [x] Click **Answer now**. Confirm the correct live tab focuses and receives
+      only the draft prefix while the card and badge remain open. *(passed —
+      verified together with the next Enter-triggered check in one live run)*
+- [x] Clear or cancel that draft, switch tabs, and wait through a refresh. The
+      decision remains open. *(passed)*
+- [x] Click **Answer now**, complete the draft, and press Enter manually. Only
+      the resulting structured user transcript event can close the card.
+      *(passed)*
+- [x] Explicitly answer two old questions in one submitted message. Exactly
+      those two close and other open cards remain. *(passed under the
+      now-removed guessed-reconciliation path — superseded, see note above;
+      Answer-now can still only close one card per click)*
+- [x] Disable transcript delivery in a disposable setup. Answering does not
+      optimistically clear the card, terminal operation stays normal, and the
+      existing blind-session warning is visible. *(passed, on a fresh tab
+      spawned after toggling `claude on` off — an already-running session
+      keeps its existing hook, so blindness must be induced before spawn)*
+- [x] Quit/relaunch after a reconciled answer and after a cancelled draft.
+      Answered/open state survives accurately. *(passed on the surviving tab
+      — see tab-restore bug noted below, found during this check)*
+- [x] Repeat with Claude and Codex transcript-backed sessions. OpenCode and
+      Antigravity remain honestly labelled unsupported. *(passed)*
+
+Findings surfaced during this pass, both out of Phase 33's scope and not
+blocking its own done criteria:
+
+- **Decision dedup gap**: when the agent restates a still-open question in
+  its own reply (e.g. after a partial answer, or a rejected bare
+  affirmation), turn-pair extraction mints a second open card for the same
+  underlying question rather than recognizing the existing open one.
+  Reconciliation itself behaved correctly in every case (no false
+  positive/negative), but duplicate cards accumulated repeatedly
+  (`Logging: stdout, or file?` ×2, `Default port…`/`Port…` ×2, `Pin exact
+  versions…`/`Version pinning strategy…` ×2). No semantic dedup against
+  already-open candidates exists in the extraction path; only exact-ID
+  reconciliation does. Worth a follow-up plan, not a Phase 33 regression —
+  Plan 012 scoped no extraction-prompt dedup work.
+- **Tab-restore bug**: quit with one Logic Loop tab + two `dt-scratch` Test
+  tabs open; relaunch restored only one of the two `dt-scratch` tabs. The
+  surviving tab's decision state (open card) was accurate, so this looks
+  like a tab/session_bindings restore gap, not a data-loss issue — but
+  needs its own repro and fix outside this plan.
+
+Automated evidence (2026-09-11):
+
+- [x] `npm run decision-integrity:check`
+- [x] `npx tsc --noEmit`
+- [ ] `npm run golden` — attempt 1: all 14 existing extraction cases passed;
+      reconciliation passed 6/7 and exposed the bare-affirmation weakness.
+      After one prompt correction, attempt 2 passed all 7 reconciliation cases
+      but the unchanged legacy `08-delegation-answer` extraction fixture was
+      missed (it passed attempt 1), leaving the full gate at 20/21. Paused per
+      the plan's two-failure STOP condition. An authorized additional retry
+      then passed the legacy fixture and all other cases, but the prompt-
+      injection case returned explanatory prose before otherwise-correct JSON;
+      strict parsing correctly rejected it. No further retry was made.
+- [x] `npm run opencode:check` — included in the aggregate pass.
+- [x] `npm run check` — all 27 configured checks pass.
+- [ ] `npm run build`
+- [ ] `cd src-tauri && cargo test --lib`
+- [ ] `cd src-tauri && cargo clippy --all-targets -- -D warnings`
+- [ ] `git diff --check`
+
+## 46. Extractor spend emergency sprint (Phase 33.1)
+
+Implementation authorized with `PHASE 33.1 ACCEPTED` on 2026-09-12, following
+`plans/013-extractor-spend-emergency-sprint.md`. (PLAN.md's own manual-test
+header names §45 — that number was already claimed by Phase 33's own live
+matrix above by the time this landed; §46 is the correct, current section.)
+
+Root cause confirmed by direct CLI measurement, `--output-format json`,
+before any code change:
+
+| call | before (fixed overhead) | after (Phase 33.1 spawn) | cut |
+|---|---|---|---|
+| extraction | 57,293 input-side tokens (2 input + 40,604 cache-creation + 16,687 cache-read) | 1,402 (2 + 1,400 + 0) | 41x |
+| reconciliation | 57,015 (2 + 34,960 + 22,053) | 1,124 (2 + 1,122 + 0) | 51x |
+
+`--strict-mcp-config --tools "" --setting-sources "" --no-session-persistence
+--system-prompt "<...>"` added to the `claude -p` child in
+`src-tauri/src/extractor.rs`'s `claude_args()` (mirrored in
+`scripts/golden.ts`'s `runClaude()`). `--bare` was not used — it forces
+API-key auth and breaks OAuth/Max-subscription logins. `--setting-sources ""`
+was accepted by the installed CLI without error; the plan's documented
+fallback (omit the flag) was not needed.
+
+Haiku was tried on the reconciliation call and reverted within this same
+sprint: it wraps its JSON reply in ` ```json ` fences that
+`parseReconciliation`'s strict contract rejects (measured live: 5 of 6
+non-gated reconciliation golden cases failed). Reconciliation stays on
+sonnet; the prompt-size caps (20 candidates, 400-char question/assumption)
+and the skip gates below still apply regardless of model.
+
+- [ ] Fresh session, ask the agent a question that makes it ask you one back.
+      Card appears. Reply "ok". Confirm the log shows **no** `extractor:
+      claude usage` line (reconcile skipped by the bare-affirmation gate).
+- [ ] Click **Answer now**, submit the prefilled line unedited. Card closes;
+      log shows no `extractor: claude usage` line (Answer-now exact match,
+      zero model calls).
+- [ ] Ask the agent to restate the same still-open question in a later turn.
+      Confirm no second card is created (insert-time dedup on the normalized
+      question).
+- [ ] Answer an older card in natural language that names it specifically.
+      Card closes via one real reconciliation call; log shows
+      `cache_creation_input_tokens` in the low thousands, not tens of
+      thousands.
+- [ ] Repeat Phase 33's own 11-step matrix (§45) once more and note
+      session-limit consumption next to that pass's ~60% figure.
+
+Automated evidence (2026-09-12):
+
+- [x] `npm run decision-integrity:check`
+- [x] `npx tsc --noEmit`
+- [x] `npm run golden` — 21/21 (claude), 19 spawns (was 21 before the skip
+      gates — fixtures 18/19 now gate at zero spawns).
+- [x] `npm run check` — all 26 configured checks pass.
+- [x] `npm run build`
+- [x] `cd src-tauri && cargo test` — 60/60 (2 new: `claude_args_are_stripped_
+      to_a_bare_json_completion`, `claude_result_extracts_result_field_and_
+      tolerates_missing_usage`).
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings`
+- [x] `git diff --check`
+
+## 47. Reconciliation defaults to haiku (Phase 33.1 sidequest)
+
+Directed live by the maintainer on `feat/phase33.1-haiku-default`, following
+`plans/014-reconciliation-haiku-default.md`. Not a formally gated numbered
+phase (sidequest precedent).
+
+`parseReconciliation` gained fence tolerance (it rejected haiku's
+` ```json `-wrapped replies; `parseExtraction` already tolerated this).
+`EXTRACTOR_MODEL=haiku npm run golden` then run **3 full times**: extraction
+2/3 clean (one run false-positived on `09-question-in-code`, the exact
+over-extraction case this project already treats as worse than
+under-extraction — confirmed a real ~1-in-7 rate across 7 total attempts,
+not a fluke), reconciliation 3/3 clean. Per plan: reconciliation now
+defaults to haiku; extraction stays sonnet.
+
+**Superseded by Plan 016 (2026-09-12):** the "Reconciliation model" control
+and the guessed-reconciliation call it configured were both removed. These
+three items describe a feature that no longer exists; not re-tested.
+
+- [ ] ~~Open ⚙ Sidebar LM with backend = claude. Confirm a "Reconciliation
+      model" control appears, defaults to haiku, and toggling to sonnet
+      persists across a reload.~~
+- [ ] ~~With the default (haiku), answer an old open card in natural language.
+      Confirm it still closes correctly (no regression from the model
+      switch in real use, not just golden fixtures).~~
+- [ ] ~~Switch to sonnet, repeat the same check, confirm it still works, then
+      switch back to haiku.~~
+
+Automated evidence (2026-09-12):
+
+- [x] `npx tsc --noEmit`
+- [x] `npm run decision-integrity:check`
+- [x] `npm run golden` — 21/21 (claude) with the shipped default mix
+      (sonnet extraction, haiku reconciliation), 19 spawns.
+- [x] `EXTRACTOR_MODEL=haiku npm run golden` — run 3x for flakiness: 1/3 at
+      20/21 (fixture 09), 2/3 at 21/21. Reconciliation alone: 3/3 clean.
+- [x] `npm run check` — all 26 configured checks pass.
+- [x] `npm run build`
+- [x] `cd src-tauri && cargo test` — 60/60, no Rust changes this sidequest.
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings`
+- [x] `git diff --check`
+
+## 48. Descope automatic reconciliation (Plan 016)
+
+Not a numbered phase — a partial rollback of Phase 33's guessed-reconciliation
+call, directed live by the maintainer following `plans/015-decision-panel-
+freeze-investigation.md`'s finding that it isn't load-bearing (Answer-Now +
+manual dismiss + notifications already cover staying aware of open
+decisions) and is the trigger for the duplicate-card and card-not-closing
+bugs. See `plans/016-descope-auto-reconciliation.md`.
+
+- [x] Open ⚙ Sidebar LM: confirm the "Reconciliation model" control is gone,
+      other controls (backend, extraction model info, lmstudio/codex)
+      unaffected.
+- [x] Create an open decision card, answer it in plain natural language
+      (not Answer-Now, not the exact question text). Confirm it does
+      **not** auto-close, and no `extractor: claude usage` log line
+      appears for that reply. Verified live: the log line fired only at
+      card creation (extraction), not on the plain-text reply —
+      reconciliation confirmed gone from the reply path.
+- [x] Click Answer-Now on an open card, submit the prefilled line
+      unedited. Confirm it still closes deterministically.
+- [x] Manually dismiss (×) an open card. Confirm it closes.
+- [x] Ask the agent to restate an already-open question. Confirm no
+      duplicate card (insert-time dedup still holds).
+
+Live matrix result (2026-09-12): all 5 manual steps pass. Tab-switch lag
+(~20-30s) observed during steps 1 and 4 reproduces the pre-existing,
+already-tracked freeze bug (see landmine "Extractor calls can freeze the
+whole app" in CLAUDE.md) — unrelated to this descope, not a new regression.
+
+Automated evidence (2026-09-12):
+
+- [x] `npx tsc --noEmit`
+- [x] `npm run decision-integrity:check` — updated contract-lock assertion
+      pins `reconcile()` contains `matchAnswerNowReply(` and does **not**
+      contain `run_extractor`.
+- [x] `npm run golden` — 14/14 (claude), extraction-only now (7 reconciliation
+      fixtures deleted).
+- [x] `npm run check` — all 26 configured checks pass.
+- [x] `npm run build`
+- [x] `cd src-tauri && cargo test` — 60/60, no Rust changes (plan scope).
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings`
+- [x] `git diff --check`
+
+## 49. Transcript schema-drift tripwire (Plan 018)
+
+Not a numbered phase — directed live by the maintainer 2026-09-12 after
+Plan 017's live testing found Claude Code CLI v2.1.270 adds several new
+preamble/metadata line types to its local transcript. **Correction, same
+day:** the first read only sampled a file's first 5 lines and wrongly
+concluded the whole format changed incompatibly; a later live test proved
+extraction still works fine (see below) — this ships as preemptive
+insurance, not a fix for an active break. See
+`plans/018-schema-drift-tripwire.md`.
+
+- [x] Real 3-turn Terminal.app session on v2.1.270 (mixed preamble + real
+      `assistant`/`user` lines): decision card extracted correctly, matched
+      the actual conversation, and the warning strip stayed silent — the
+      threshold correctly does not false-fire on this real-world shape.
+      *(passed 2026-09-12 — this doubles as the "healthy session" checklist
+      item below, done against a real case rather than a synthetic one)*
+- [ ] Manually append at least 20 lines whose `type` is something this
+      module has never recognized (a purely synthetic case now, since no
+      real Claude/Codex build currently produces one) to a session's
+      transcript file, and confirm the adapter-warning strip appears with a
+      message naming the agent and mentioning the transcript format — the
+      same strip used for the existing foreign-PostToolUse warning. Still
+      unverified live; only unit-tested so far.
+- [ ] Confirm the warning fires once per session, not once per line (no
+      strip spam as more unrecognized lines keep arriving after the first
+      20).
+
+Automated evidence (2026-09-12):
+
+- [x] `npx tsc --noEmit`
+- [x] `npm run decision-integrity:check` — `transcriptEnvelopeType` tested
+      against real old-format Claude/Codex lines (recognized), the actual
+      v2.1.270 preamble line types found live (unrecognized in isolation),
+      and malformed JSON (unparseable, not drift); source-shape assertion
+      pins `onTranscript` calling the tracker before text extraction.
+- [x] `npm run check` — all 26 configured checks pass.
+- [x] `npm run build`
+- No Rust changes (no `cargo test`/clippy rerun needed).
+- No extraction-prompt changes (no `npm run golden` rerun needed).
+
+## 50. Codex extractor spend and transcript audit (Phase 34)
+
+Phase 34 was authorized with `PHASE 34 ACCEPTED` on 2026-09-12; see
+`plans/020-codex-extractor-spend-and-drift-audit.md` for the sanitized
+two-call usage table. On Codex CLI 0.154.0, the exact app arguments produced
+one valid, no-tool completed extraction turn in 5.36s with 16,756 input / 5,888
+cached-input / 52 output / 0 reasoning-output tokens. The paired
+`--ignore-user-config` run preserved `gpt-5.6-terra` and high reasoning
+explicitly, stayed valid/no-tool, and used 15,139 / 9,984 / 52 / 0 in 4.36s.
+Cached input is included in the input total, not added to it. No dollar or
+subscription-limit claim follows from these usage counts.
+
+- [x] `npm run codex-transcript:check` — old redacted rollout fixture still
+      parses correctly on the installed CLI baseline.
+- [x] One exact-argument and one paired-isolation extraction call each had one
+      completed turn, a nonempty final message, and strict-valid extraction.
+- [x] The output has no tool or MCP item in either measured run.
+- [x] Usage logging tolerates missing usage; failed/incomplete Codex turns
+      cannot return a prior agent message.
+- [x] Fresh `npm run tauri dev` Codex session: a real assistant choice prompt
+      created its card consistently, at about four seconds. Answering normally
+      left the card open as designed; Answer-Now closed its card immediately,
+      and manually dismissing another card worked. The card establishes that a
+      live Codex rollout reached the transcript/tailer/extraction path.
+- [x] The terminal and app stayed responsive throughout the interactive test.
+      The dev log printed exactly three Codex usage lines for the observed
+      extraction calls: `16744/5888/108/70`, `19262/5888/14/0`, and
+      `16741/5888/35/0` (input/cached-input/output/reasoning-output). No
+      recursive extractor behavior was observed. The warning strip was not
+      separately inspected during this pass.
+
+Automated evidence (2026-09-12):
+
+- [x] `cargo test --lib extractor::tests` — 7/7.
+- [x] `npm run opencode:check` and `npm run check` — all configured checks.
+- [x] `npx tsc --noEmit` and `npm run build`.
+- [x] `cd src-tauri && cargo test --lib` — 63/63. (The sandbox-only run
+      denied an existing home-path temporary-directory test; the required
+      permitted rerun passed.)
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings`.
+- [x] `git diff --check`.
+- [x] `npm run golden` deliberately not run: no extraction prompt changed.
 
 ## Quality gates (machine-run, not manual)
 

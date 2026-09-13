@@ -1040,7 +1040,14 @@ export default function App() {
         sessionCwd.get(p.session_id),
         p.line,
         refreshDecisionCounts,
-        sessionContexts.get(p.session_id) ?? { sessionId: p.session_id }
+        sessionContexts.get(p.session_id) ?? { sessionId: p.session_id },
+        (agent) => {
+          setAdapterWarnings((prev) =>
+            prev.some((w) => w.agent === agent && w.reason === "transcript_schema_unrecognized")
+              ? prev
+              : [...prev, { agent, reason: "transcript_schema_unrecognized" }]
+          );
+        }
       );
       // transcripts flowing again → clear any warning for this session
       setBlindSessions((s) => {
@@ -1289,8 +1296,9 @@ export default function App() {
     focusTab(tab.id);
   }, [focusTab]);
 
-  // Answer-now prefill: writes a draft into the bound tab's terminal and marks
-  // the decision answered. User edits and presses Enter — never sent by us.
+  // Answer-now prefill: writes only a draft into the bound tab's terminal.
+  // A structured submitted transcript reply is the sole automatic evidence
+  // that can mark the decision answered.
   const answerNow = useCallback(
     (d: Decision) => {
       const tabId = bindingsRef.current.get(d.session_id);
@@ -1298,9 +1306,8 @@ export default function App() {
       if (!tab) return;
       focusTab(tab.id);
       void ptyWrite(tab.ptyId, `Re: "${d.question}" — `);
-      void repo.setDecisionStatus(d.id, "answered").then(refreshDecisionCounts);
     },
-    [focusTab, refreshDecisionCounts]
+    [focusTab]
   );
 
   return (

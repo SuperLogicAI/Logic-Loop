@@ -88,7 +88,10 @@ alongside Claude Code.
 Decision and blocker extraction is available for Claude Code and Codex. The
 Sidebar LM chooser supports Claude CLI (default), Codex CLI, and LM Studio
 (local); Codex CLI uses its configured default model unless an optional model
-override is supplied. The Decisions panel groups open questions into
+override is supplied. A submitted Claude/Codex reply can conservatively close
+older open questions from that same session; **Answer now** only focuses and
+prefills the bound terminal, so cancelling the draft never creates false
+answer state. The Decisions panel groups open questions into
 per-session, collapsible clusters (newest expanded, one "dismiss all" per
 cluster) instead of one flat list, and its empty state now says *why* nothing's
 showing rather than one generic "nothing waiting" —

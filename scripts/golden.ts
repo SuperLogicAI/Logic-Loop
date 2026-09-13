@@ -1,7 +1,10 @@
-// Golden test runner: node scripts via tsx. Runs every fixture in
+// Golden test runner: node scripts via tsx. Runs every extraction fixture in
 // tests/golden/ through the real extractor backend (claude CLI by default,
 // EXTRACTOR=codex for Codex CLI, EXTRACTOR=lmstudio for LM Studio) and checks
-// expectations.
+// expectations. EXTRACTOR_MODEL overrides the claude backend's model
+// (e.g. EXTRACTOR_MODEL=haiku) — the judge for any future model-default
+// change, not intuition. Reconciliation fixtures were removed with automatic
+// reconciliation itself (Plan 016).
 // Usage: npm run golden
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
@@ -30,13 +33,40 @@ interface Fixture {
 // 2026-07-19 self-ingest incident, different spawn site.
 const EXTRACTOR_TETHER = "__logic_loop_extractor__";
 
-function runClaude(prompt: string): string {
-  return execFileSync("claude", ["-p", "--output-format", "text", "--model", "sonnet"], {
-    input: prompt,
-    encoding: "utf8",
-    timeout: 120_000,
-    env: { ...process.env, LOGIC_LOOP_TAB_ID: EXTRACTOR_TETHER },
-  });
+// Mirrors extractor.rs's claude_args() exactly — same fixed-overhead cut, same
+// contract. Keep both in sync; a drift here makes golden stop measuring what
+// the app actually spends.
+const CLAUDE_SYSTEM_PROMPT =
+  "You output only the JSON object specified by the user prompt. No prose, no code fences, no explanation.";
+
+function runClaude(prompt: string, model: string): string {
+  const stdout = execFileSync(
+    "claude",
+    [
+      "-p",
+      "--output-format",
+      "json",
+      "--model",
+      model,
+      "--strict-mcp-config",
+      "--tools",
+      "",
+      "--setting-sources",
+      "",
+      "--no-session-persistence",
+      "--system-prompt",
+      CLAUDE_SYSTEM_PROMPT,
+    ],
+    {
+      input: prompt,
+      encoding: "utf8",
+      timeout: 120_000,
+      env: { ...process.env, LOGIC_LOOP_TAB_ID: EXTRACTOR_TETHER },
+    }
+  );
+  const parsed = JSON.parse(stdout) as { result?: string };
+  if (typeof parsed.result !== "string") throw new Error("claude: no result field in json output");
+  return parsed.result;
 }
 
 function runCodex(prompt: string): string {
@@ -49,12 +79,16 @@ function runCodex(prompt: string): string {
     env: { ...process.env, LOGIC_LOOP_TAB_ID: EXTRACTOR_TETHER },
   });
   let finalMessage = "";
+  let turnCompleted = false;
+  let turnFailed = false;
   for (const line of stdout.split("\n")) {
     try {
       const event = JSON.parse(line) as {
         type?: string;
         item?: { type?: string; text?: unknown };
       };
+      if (event.type === "turn.completed") turnCompleted = true;
+      if (event.type === "turn.failed" || event.type === "error") turnFailed = true;
       if (event.type === "item.completed" && event.item?.type === "agent_message" && typeof event.item.text === "string") {
         finalMessage = event.item.text;
       }
@@ -62,6 +96,8 @@ function runCodex(prompt: string): string {
       // Ignore non-JSON noise; the final agent_message remains authoritative.
     }
   }
+  if (turnFailed) throw new Error("codex: turn failed");
+  if (!turnCompleted) throw new Error("codex: turn did not complete");
   if (!finalMessage) throw new Error("codex: no final agent message");
   return finalMessage;
 }
@@ -89,7 +125,7 @@ async function runLmStudio(prompt: string): Promise<string> {
   return body.choices?.[0]?.message.content ?? "";
 }
 
-function check(name: string, f: Fixture, raw: string): string[] {
+function checkExtraction(name: string, f: Fixture, raw: string): string[] {
   const errs: string[] = [];
   const decisions = parseExtraction(raw);
   if (decisions === null) return [`${name}: output violates strict JSON contract: ${raw.slice(0, 120)}`];
@@ -111,26 +147,42 @@ const dir = join(import.meta.dirname, "../tests/golden");
 const files = readdirSync(dir).filter((f) => f.endsWith(".json")).sort();
 const backend = process.env.EXTRACTOR ?? "claude";
 let failures = 0;
+let spawns = 0;
 
 for (const file of files) {
   const f = JSON.parse(readFileSync(join(dir, file), "utf8")) as Fixture;
+
   const prompt = buildPrompt({ assistant: f.assistant, user: f.user });
+  // EXTRACTOR_MODEL overrides; unset mirrors decisions.ts's shipped default
+  // (sonnet — haiku showed a ~1-in-7 false positive on 09-question-in-code
+  // across repeated runs).
+  const model = process.env.EXTRACTOR_MODEL ?? "sonnet";
   let raw: string;
   try {
-    raw = backend === "lmstudio" ? await runLmStudio(prompt) : backend === "codex" ? runCodex(prompt) : runClaude(prompt);
+    spawns++;
+    raw =
+      backend === "lmstudio"
+        ? await runLmStudio(prompt)
+        : backend === "codex"
+          ? runCodex(prompt)
+          : runClaude(prompt, model);
   } catch (e) {
     console.error(`✗ ${file}: backend error: ${String(e).slice(0, 200)}`);
     failures++;
     continue;
   }
-  const errs = check(file, f, raw);
+  const errs = checkExtraction(file, f, raw);
   if (errs.length === 0) {
-    console.log(`✓ ${file}`);
+    console.log(`✓ ${file} (1 spawn)`);
   } else {
     failures++;
     for (const e of errs) console.error(`✗ ${e}`);
   }
 }
 
-console.log(failures === 0 ? `\nALL ${files.length} GOLDEN CASES PASS (${backend})` : `\n${failures}/${files.length} FAILED (${backend})`);
+console.log(
+  failures === 0
+    ? `\nALL ${files.length} GOLDEN CASES PASS (${backend}, ${spawns} spawns)`
+    : `\n${failures}/${files.length} FAILED (${backend}, ${spawns} spawns)`
+);
 process.exit(failures === 0 ? 0 : 1);

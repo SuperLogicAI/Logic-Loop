@@ -35,8 +35,23 @@ export function SidebarLmControl() {
               checked={extractor.backend === "claude"}
               onChange={() => saveExtractor({ ...extractor, backend: "claude" })}
             />
-            claude CLI (default)
+            Claude CLI (default)
           </label>
+          {extractor.backend === "claude" && (
+            <>
+              <input
+                className="rounded bg-zinc-900 px-2 py-1 text-zinc-200 outline-none"
+                placeholder="Claude model override (optional, default sonnet)"
+                value={extractor.claudeModel}
+                onChange={(event) => saveExtractor({ ...extractor, claudeModel: event.target.value })}
+              />
+              {extractor.claudeModel && extractor.claudeModel !== "sonnet" && (
+                <span className="text-amber-400">
+                  Only sonnet is golden-set verified. Haiku missed ~1-in-7 decisions in testing.
+                </span>
+              )}
+            </>
+          )}
           <label className="flex items-center gap-2 text-zinc-300">
             <input
               type="radio"
