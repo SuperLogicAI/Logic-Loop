@@ -2409,6 +2409,42 @@ Automated evidence (2026-09-12):
 - [x] `git diff --check`.
 - [x] `npm run golden` deliberately not run: no extraction prompt changed.
 
+## 45. Contextual first-run project access (Plan 021)
+
+Pre-change provenance note (2026-09-13): the accepted baseline was inspected
+from this development checkout. Its first-run startup path would create a home
+PTY before Setup; exact macOS prompt requester/resource/action were not
+captured, so Music and Photos remain unexplained. The local home path resolves
+to a Git repository root; no home-file inventory was performed. A release-app
+launch from Finder on a disposable clean profile remains required before this
+manual matrix can be marked complete.
+
+- [ ] Fresh profile with no resumable tabs: Setup appears before a default PTY;
+      selecting a regular project folder opens exactly one terminal there.
+- [ ] Cancel the native picker: Setup remains open and no tab is created.
+- [ ] Select a protected folder, a missing folder, and a regular file where
+      selectable: any denial/failure stays in Setup with a usable home action.
+- [ ] Open home, Skip, and Finish each create at most one home terminal when
+      none exists; with a terminal open they create none.
+- [ ] Existing profile and ghost-tab restore retain their previous paths.
+- [ ] Deny any observed Music or Photos prompt and verify an ordinary terminal
+      still works. Record exact requester/resource/action if one appears.
+- [ ] Verify no Full Disk Access guidance or request appears, and notification
+      permission remains click-triggered through **Enable notifications**.
+
+Automated evidence (2026-09-13):
+
+- [x] `npm run onboarding:check`
+- [x] `npm run opencode:check`
+- [x] `npm run check`
+- [x] `npx tsc --noEmit`
+- [x] `npm run build` (existing chunk-size advisory only)
+- [x] `cd src-tauri && cargo test --lib` (59 tests)
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings`
+- [x] `git diff --check`
+
+`npm run golden` was not run; this sprint does not change extraction prompts.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*

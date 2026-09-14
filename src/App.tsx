@@ -22,7 +22,7 @@ import {
 import { detectBlockers } from "./lib/detectors";
 import * as decisions from "./lib/decisions";
 import { initNotifications, notify, requestNotifications } from "./lib/notify";
-import { adapterIdForHook, type AdapterId } from "./lib/onboarding";
+import { adapterIdForHook, formatAdapterError, startupAction, type AdapterId } from "./lib/onboarding";
 import { IdeaBoard } from "./components/IdeaBoard";
 import { SidePanel } from "./components/SidePanel";
 import { LandingNoteModal } from "./components/LandingNoteModal";
@@ -48,6 +48,7 @@ import {
   projectKeyOf,
   ptyKill,
   ptyKillAll,
+  preflightDirectory,
   ptySpawn,
 } from "./lib/pty";
 import { sanitizeSlug } from "./lib/worktree";
@@ -87,6 +88,8 @@ import {
 export default function App() {
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [setupError, setSetupError] = useState<string | null>(null);
   const [splitPaneIds, setSplitPaneIds] = useState<SplitPaneIds | null>(null);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const tabsRef = useRef(tabs);
@@ -408,6 +411,23 @@ export default function App() {
     focusTab(tab.id);
     return tab.id;
   }, [focusTab]);
+
+  const openProjectTerminal = useCallback(async (path: string) => {
+    const preflight = await preflightDirectory(path);
+    if (!preflight.ok) throw new Error(preflight.error ?? "Could not open that folder.");
+    await openTab({ cwd: path });
+  }, [openTab]);
+
+  const openHomeTerminal = useCallback(async () => {
+    await openTab();
+  }, [openTab]);
+
+  const finishSetup = useCallback(async () => {
+    if (tabsRef.current.length === 0) await openHomeTerminal();
+    await repo.setOnboardingVersion(2);
+    setSetupError(null);
+    setSetupOpen(false);
+  }, [openHomeTerminal]);
 
   const toggleSplit = useCallback(() => {
     if (splitPaneIdsRef.current) {
@@ -783,8 +803,23 @@ export default function App() {
       // is what actually opens the PTY, via the same resume path a mid-run
       // process death uses.
       const candidates = await repo.reentryCandidates().catch(() => []);
-      if (candidates.length === 0) {
-        void openTab();
+      if (startupAction(candidates.length, 0) === "show-setup") {
+        try {
+          const version = await repo.getOnboardingVersion();
+          const action = startupAction(candidates.length, version);
+          if (action === "show-setup") {
+            setSetupOpen(true);
+            return;
+          }
+          void openTab();
+        } catch (error: unknown) {
+          // A persistence failure must not strand someone in an empty window.
+          if (startupAction(candidates.length, null) === "open-home-with-setup-error") {
+            setSetupError(formatAdapterError(error));
+            setSetupOpen(true);
+            void openTab();
+          }
+        }
         return;
       }
       const ghosts: Tab[] = candidates.map((c) => ({
@@ -1405,6 +1440,12 @@ export default function App() {
               setNotificationsEnabled(enabled);
               return enabled;
             }}
+            setupOpen={setupOpen}
+            setupError={setupError}
+            onOpenProject={openProjectTerminal}
+            onOpenHome={openHomeTerminal}
+            onCloseSetup={finishSetup}
+            onShowSetup={() => setSetupOpen(true)}
           />
           <div className="flex min-h-0 flex-1">
             {tabs.map((tab) => {

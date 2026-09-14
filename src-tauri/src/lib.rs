@@ -250,6 +250,7 @@ pub fn run() {
             pty::pty_spawn,
             pty::canonicalize_cwd,
             pty::project_key_of,
+            pty::preflight_directory,
             pty::pty_write,
             pty::pty_resize,
             pty::pty_kill,

@@ -21,11 +21,9 @@ import type { LockInMode } from "../lib/lockIn";
 import {
   ADAPTERS,
   formatAdapterError,
-  ONBOARDING_VERSION,
   type AdapterId,
   type AdapterRuntimeState,
 } from "../lib/onboarding";
-import * as repo from "../lib/repo";
 import type { PanelMode } from "../types";
 import { OnboardingModal } from "./OnboardingModal";
 import { PanelIcon } from "./PanelIcon";
@@ -61,6 +59,12 @@ interface Props {
   observedAdapters: Set<AdapterId>;
   notificationsEnabled: boolean;
   onRequestNotifications: () => Promise<boolean>;
+  setupOpen: boolean;
+  setupError: string | null;
+  onOpenProject: (path: string) => Promise<void>;
+  onOpenHome: () => Promise<void>;
+  onCloseSetup: () => Promise<void>;
+  onShowSetup: () => void;
 }
 
 export function AgentStatusBar({
@@ -76,10 +80,14 @@ export function AgentStatusBar({
   observedAdapters,
   notificationsEnabled,
   onRequestNotifications,
+  setupOpen,
+  setupError,
+  onOpenProject,
+  onOpenHome,
+  onCloseSetup,
+  onShowSetup,
 }: Props) {
   const [adapterStates, setAdapterStates] = useState(initialAdapterStates);
-  const [setupOpen, setSetupOpen] = useState(false);
-  const [persistenceError, setPersistenceError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -100,17 +108,9 @@ export function AgentStatusBar({
           ...current,
           [adapter.id]: { available: true, enabled: false, operation: null, error: formatAdapterError(error) },
         }));
-        setSetupOpen(true);
+        onShowSetup();
       });
     }
-
-    void repo.getOnboardingVersion().then((version) => {
-      if (!cancelled && version < ONBOARDING_VERSION) setSetupOpen(true);
-    }).catch((error: unknown) => {
-      if (cancelled) return;
-      setPersistenceError(formatAdapterError(error));
-      setSetupOpen(true);
-    });
 
     return () => { cancelled = true; };
   }, []);
@@ -134,17 +134,9 @@ export function AgentStatusBar({
         ...current,
         [id]: { ...current[id], enabled: before.enabled, operation: null, error: formatAdapterError(error) },
       }));
-      setSetupOpen(true);
+      onShowSetup();
     }
   }, [adapterStates]);
-
-  const closeSetup = useCallback(() => {
-    setSetupOpen(false);
-    setPersistenceError(null);
-    void repo.setOnboardingVersion(ONBOARDING_VERSION).catch((error: unknown) => {
-      setPersistenceError(formatAdapterError(error));
-    });
-  }, []);
 
   const hookClass = (enabled: boolean | null, primary = false) =>
     `flex h-6 shrink-0 items-center rounded-full px-3 text-xs ${
@@ -215,7 +207,7 @@ export function AgentStatusBar({
           </button>
         </div>
         <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 overflow-x-auto">
-          <button type="button" onClick={() => setSetupOpen(true)} className="flex h-6 shrink-0 items-center rounded-full border border-zinc-700 px-3 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-sky-400">
+          <button type="button" onClick={onShowSetup} className="flex h-6 shrink-0 items-center rounded-full border border-zinc-700 px-3 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-sky-400">
             Setup
           </button>
           {(["antigravity", "claude", "codex", "opencode"] as const).map((id) => {
@@ -235,10 +227,12 @@ export function AgentStatusBar({
           adapterStates={adapterStates}
           observedAdapters={observedAdapters}
           notificationsEnabled={notificationsEnabled}
-          persistenceError={persistenceError}
+          persistenceError={setupError}
           onToggleAdapter={toggleAdapter}
           onRequestNotifications={onRequestNotifications}
-          onClose={closeSetup}
+          onOpenProject={onOpenProject}
+          onOpenHome={onOpenHome}
+          onClose={onCloseSetup}
         />
       )}
     </>

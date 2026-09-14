@@ -171,6 +171,34 @@ pub fn project_key_of(path: String) -> String {
     project_key(&path)
 }
 
+#[derive(serde::Serialize)]
+pub struct DirectoryPreflight {
+    pub ok: bool,
+    pub error: Option<String>,
+}
+
+/// Validate only the directory the person selected in the native panel. This
+/// deliberately does not recurse or read file contents: it prevents a failed
+/// cwd from silently becoming the shell's default directory.
+#[tauri::command]
+pub fn preflight_directory(path: String) -> DirectoryPreflight {
+    let target = std::path::Path::new(&path);
+    let result = std::fs::metadata(target)
+        .map_err(|_| "That folder is no longer available.".to_string())
+        .and_then(|metadata| {
+            if !metadata.is_dir() {
+                return Err("Choose a folder, not a file.".to_string());
+            }
+            std::fs::read_dir(target)
+                .map(|_| ())
+                .map_err(|_| "Logic Loop could not open that folder.".to_string())
+        });
+    match result {
+        Ok(()) => DirectoryPreflight { ok: true, error: None },
+        Err(error) => DirectoryPreflight { ok: false, error: Some(error) },
+    }
+}
+
 /// A resume session id reaches a shell `-c` argument as a raw string
 /// (`claude --resume <sid>; exec <shell> -l`) — anything outside this set
 /// could break out into arbitrary shell execution. Session ids are UUIDs we
@@ -781,7 +809,21 @@ fn git_pr_create_blocking(cwd: String, title: String, body: String) -> Result<St
 
 #[cfg(test)]
 mod tests {
-    use super::{canon, has_own_repo, project_key, resume_command, valid_resume_id};
+    use super::{canon, has_own_repo, preflight_directory, project_key, resume_command, valid_resume_id};
+
+    #[test]
+    fn directory_preflight_accepts_a_directory_and_rejects_missing_or_regular_paths() {
+        let tmp = std::env::temp_dir().join(format!("ll-preflight-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let file = tmp.join("file.txt");
+        std::fs::write(&file, "x").unwrap();
+
+        assert!(preflight_directory(tmp.to_string_lossy().into_owned()).ok);
+        assert!(!preflight_directory(file.to_string_lossy().into_owned()).ok);
+        assert!(!preflight_directory(tmp.join("missing").to_string_lossy().into_owned()).ok);
+
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
 
     #[test]
     fn resume_command_selects_codex_syntax() {

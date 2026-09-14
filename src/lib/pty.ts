@@ -44,6 +44,16 @@ export function projectKeyOf(path: string): Promise<string> {
   return invoke<string>("project_key_of", { path });
 }
 
+export interface DirectoryPreflight {
+  ok: boolean;
+  error: string | null;
+}
+
+/** Check a user-selected folder before representing it as a terminal cwd. */
+export function preflightDirectory(path: string): Promise<DirectoryPreflight> {
+  return invoke<DirectoryPreflight>("preflight_directory", { path });
+}
+
 export function ptyWrite(id: number, data: string): Promise<void> {
   return invoke("pty_write", { id, data });
 }

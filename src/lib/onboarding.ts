@@ -33,6 +33,18 @@ export type AdapterProgress =
 
 export const ONBOARDING_VERSION = 2;
 
+export type StartupAction = "restore" | "show-setup" | "open-home" | "open-home-with-setup-error";
+
+/** The first-run choice must be made before the default home PTY is spawned. */
+export function startupAction(
+  candidateCount: number,
+  onboardingVersion: number | null
+): StartupAction {
+  if (candidateCount > 0) return "restore";
+  if (onboardingVersion === null) return "open-home-with-setup-error";
+  return onboardingVersion < ONBOARDING_VERSION ? "show-setup" : "open-home";
+}
+
 export function parseOnboardingVersion(value: string | null): number {
   if (value === null || !/^\d+$/.test(value)) return 0;
   const parsed = Number(value);

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   ADAPTERS,
@@ -14,7 +15,9 @@ interface Props {
   persistenceError: string | null;
   onToggleAdapter: (id: AdapterId) => Promise<void>;
   onRequestNotifications: () => Promise<boolean>;
-  onClose: () => void;
+  onOpenProject: (path: string) => Promise<void>;
+  onOpenHome: () => Promise<void>;
+  onClose: () => Promise<void>;
 }
 
 const PROGRESS_LABELS = {
@@ -35,12 +38,16 @@ export function OnboardingModal({
   persistenceError,
   onToggleAdapter,
   onRequestNotifications,
+  onOpenProject,
+  onOpenHome,
   onClose,
 }: Props) {
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const [requestingNotifications, setRequestingNotifications] = useState(false);
   const [notificationAttempted, setNotificationAttempted] = useState(false);
+  const [openingTerminal, setOpeningTerminal] = useState<"project" | "home" | "closing" | null>(null);
+  const [terminalError, setTerminalError] = useState<string | null>(null);
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -48,7 +55,7 @@ export function OnboardingModal({
       if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();
-      onClose();
+      void closeSetup();
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
@@ -59,6 +66,49 @@ export function OnboardingModal({
     await onRequestNotifications();
     setNotificationAttempted(true);
     setRequestingNotifications(false);
+  };
+
+  const openProject = async () => {
+    if (openingTerminal) return;
+    setOpeningTerminal("project");
+    setTerminalError(null);
+    try {
+      const selected = await open({ directory: true, multiple: false });
+      if (typeof selected === "string") await onOpenProject(selected);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      setTerminalError(message.trim().slice(0, 240) || "Could not open that folder.");
+    } finally {
+      setOpeningTerminal(null);
+    }
+  };
+
+  const openHome = async () => {
+    if (openingTerminal) return;
+    setOpeningTerminal("home");
+    setTerminalError(null);
+    try {
+      await onOpenHome();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      setTerminalError(message.trim().slice(0, 240) || "Could not open a home terminal.");
+    } finally {
+      setOpeningTerminal(null);
+    }
+  };
+
+  const closeSetup = async () => {
+    if (openingTerminal) return;
+    setOpeningTerminal("closing");
+    setTerminalError(null);
+    try {
+      await onClose();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      setTerminalError(message.trim().slice(0, 240) || "Setup could not be finished.");
+    } finally {
+      setOpeningTerminal(null);
+    }
   };
 
   const containKeyboard = (event: ReactKeyboardEvent<HTMLElement>) => {
@@ -86,7 +136,7 @@ export function OnboardingModal({
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 px-3 py-3"
       role="presentation"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget) void closeSetup();
       }}
     >
       <section
@@ -109,7 +159,7 @@ export function OnboardingModal({
             <button
               ref={closeRef}
               type="button"
-              onClick={onClose}
+              onClick={() => void closeSetup()}
               aria-label="Skip setup for now"
               className="rounded px-2 py-1 text-lg text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-sky-400"
             >
@@ -128,6 +178,23 @@ export function OnboardingModal({
         </header>
 
         <div className="space-y-3 px-5 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2.5">
+            <div>
+              <div className="text-sm font-medium text-zinc-100">Open a terminal</div>
+              <p className="mt-0.5 max-w-xl text-xs text-zinc-400">
+                Choose a project folder to open one terminal there. macOS may ask for access to the folder you choose.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={openingTerminal !== null} onClick={() => void openProject()} className="h-8 rounded-md bg-zinc-100 px-3 text-xs font-medium text-zinc-950 hover:bg-white disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400">
+                {openingTerminal === "project" ? "Choosing…" : "Open project folder"}
+              </button>
+              <button type="button" disabled={openingTerminal !== null} onClick={() => void openHome()} className="h-8 rounded-md border border-zinc-700 px-3 text-xs text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:text-zinc-600 focus-visible:outline-2 focus-visible:outline-sky-400">
+                {openingTerminal === "home" ? "Opening…" : "Open home terminal"}
+              </button>
+            </div>
+          </div>
+          {terminalError && <p className="rounded bg-red-950/40 px-3 py-2 text-sm text-red-300">{terminalError}</p>}
           <div className="grid gap-2">
             {ADAPTERS.map((adapter) => {
               const state = adapterStates[adapter.id];
@@ -262,14 +329,16 @@ export function OnboardingModal({
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={onClose}
+              disabled={openingTerminal !== null}
+              onClick={() => void closeSetup()}
               className="rounded-md px-4 py-2 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-sky-400"
             >
               Skip for now
             </button>
             <button
               type="button"
-              onClick={onClose}
+              disabled={openingTerminal !== null}
+              onClick={() => void closeSetup()}
               className="rounded-md bg-sky-500 px-4 py-2 text-sm font-semibold text-sky-950 hover:bg-sky-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300"
             >
               Finish setup
