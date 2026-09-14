@@ -2067,6 +2067,10 @@ clean-profile or full acceptance disposition):
       suppression, timed Lock-in, file drop/link/selection in both panes, and
       repeated manual edge-drag resize remain unverified in this pass.
 
+`PHASE 32 APPROVED`. The maintainer approved on the evidence above; the last
+bullet's remaining items were not separately retested before approval —
+same precedent as Phase 30's residual §42 regression groups.
+
 Phase 31 partial evidence from the same existing profile: Setup reopened the
 modal; all four agents appeared in the documented order; Claude/Codex showed
 activity, decisions, and re-entry while OpenCode/Antigravity explicitly showed
