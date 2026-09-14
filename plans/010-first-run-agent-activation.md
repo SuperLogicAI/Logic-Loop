@@ -9,6 +9,14 @@
 > **Phase gate**: SATISFIED. Phase 30 was committed as `17d6a44`, and the
 > maintainer wrote `PHASE 31 ACCEPTED` on 2026-09-10.
 >
+> **Close-out disposition (2026-09-13)**: The remaining clean-profile matrix
+> tests a default-home-PTY first-run premise that Plan 021 replaces with an
+> explicit project-or-home choice. Its unchecked items are retained as
+> historical evidence and are not failing results. This plan becomes
+> **SUPERSEDED by Plan 021** only after that replacement's clean-profile live
+> matrix is accepted; until then, this plan remains BUILT with acceptance
+> pending.
+>
 > **Drift check (run first)**:
 > `git diff --stat 17d6a44..HEAD -- src/App.tsx src/components/AgentStatusBar.tsx src/components/OnboardingModal.tsx src/lib/ingest.ts src/lib/notify.ts src/lib/onboarding.ts src/lib/repo.ts src-tauri/src/ingest.rs src-tauri/src/lib.rs scripts/onboarding-check.ts package.json README.md docs/TESTING.md CLAUDE.md plans/README.md`
 > Compare every match with the current-state excerpts below and stop on an

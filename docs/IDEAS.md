@@ -309,10 +309,341 @@ larger-scope; parked for later review.
 ## Usage / rate-limit tracking + account hot-swap
 
 Validates the already-parked "Model traffic panel (Safe Router)" idea in
-`docs/ROADMAP.md`. Concrete detail worth carrying forward: surface each
-account's rate-limit reset countdown, not just current usage — and support
-hot-swapping accounts without re-authenticating. Same dependency as the
-existing item (external: Safe Router v0 log).
+`docs/ROADMAP.md`. The Codex-only meter below has a different source from
+Safe Router traffic: Codex's own account/usage interface. The router log
+does not establish Codex subscription quotas. Account hot-swap remains a
+separate, unplanned action feature; a read-only meter must not switch accounts.
+
+## Codex model and account-limit meters in the project sidebar — build brief
+
+**Status:** idea / planning only (2026-09-14). Promote to its own numbered
+plan, review against the accepted phase baseline, and obtain that plan's
+approval before implementation. Codex only; Claude, OpenCode, and
+Antigravity each need their own source proof and plan. Independent of
+candidate Plan 022 (`plans/022-safe-router-traffic-view.md`): this can work
+when Codex does not route through Safe Router, and it does not enable router
+`client_tag` attribution.
+
+**Failure mode and UI.** When several Codex tabs are running, the person can
+see their turn state but must enter Codex or leave Logic Loop to learn the
+active model and whether the shared Codex allowance is nearly exhausted.
+In the expanded `SidePanel` for the active, bound Codex tab, place a small
+"Codex" usage block immediately below the project/session heading, before
+event sections. Show the verified current session model (or "Model unknown")
+and, when supplied, two bars: "Codex account · short window" and "Codex
+account · weekly" with used percentage, remaining percentage, and reset
+time. "Session limit" here means Codex's rolling account allowance, not the
+tab's context-window fill. Use the actual `windowDurationMins` in the
+short-window label (do not hard-code five hours); call a window "weekly"
+only when its returned duration is seven days, otherwise label the
+returned duration. A tooltip/caption says
+"Shared across this Codex account, including activity outside this project."
+This is quota consumption, not dollar spend or tokens billed to this tab.
+Never put the account bar inside a session-labelled row or sum it across
+tabs. No meter for an unbound tab or an agent whose marker is not `codex`.
+The compact rail may have a quiet "Codex usage" entry that opens the
+expanded block, but no persistent alarm/badge. Respect Lock-in and narrow
+width; no new terminal overlay, PTY decoration, or autonomous input.
+
+**Codex sources to prove before building UI.** Official OpenAI documentation
+currently specifies `account/rateLimits/read` on the Codex app-server JSON-RPC
+interface. It returns `rateLimitsByLimitId` (or legacy `rateLimits`) with
+nullable primary/secondary windows, `usedPercent`, `windowDurationMins`, and
+`resetsAt`; it may not return a weekly window. It also documents
+`account/usage/read` token-activity summaries, `thread/read` by exact thread
+ID without resuming it, and `thread/tokenUsage/updated` for app-server-owned
+active threads. None proves that a separate app-server process can subscribe
+to a Codex CLI session already running inside our PTY. The installed CLI was
+`codex-cli 0.154.0` when this idea was drafted. Start with a read-only spike
+against that exact version: (a) compare a known Logic Loop-bound Codex
+`session_id` with an app-server `thread/read` result; (b) verify the model
+field and whether a second app-server can read a live CLI
+thread; (c) call `account/rateLimits/read` through a bounded local client
+using existing Codex auth, with no login, account mutation, config write, or
+model request. Record redacted response shapes, exact client version, window
+durations, and missing/null cases in the promoted plan. If the account call
+cannot work read-only on this installation, stop that part and show no quota
+bars. Do not scrape a web dashboard or Codex's rendered footer.
+
+For multiple `limitId` buckets, identify which applies to the active model
+from a documented field or live-verified mapping. If that link is absent,
+show each returned named bucket at account scope (bounded count) or an
+"Account limits available; model bucket unknown" state; never choose the
+most convenient percentage or combine buckets. A missing secondary window
+stays missing.
+
+**Session model fallback.** Logic Loop already tails Codex rollout JSONL
+through `src-tauri/src/ingest.rs` and receives lines at `onTranscriptLine` in
+`src/App.tsx`; those are structured agent data, while terminal bytes are not.
+If `thread/read` cannot report the active CLI model reliably, inspect the
+installed rollout's metadata/turn-context event shape (keys only in shared
+test artifacts), then add a narrowly validated Codex-only metadata parser
+in ingestion. Match by exact bound `session_id` and `tab_id` via the existing
+`bindSession` path; never infer from cwd, a router model name, or the Sidebar
+LM extractor setting (`codex_model` is a separate subprocess). Update the
+display when Codex changes model mid-session; an old observation must not
+survive a new session bound to the same tab. Rollout structure is an internal
+format, so unknown shape yields "Model unknown" plus a bounded adapter
+warning, not a guess. If an app-server and rollout disagree, report the
+source conflict in tests and prefer an explicit, documented per-thread
+field only after a live proof; do not silently pick one.
+
+**Implementation shape after the spike.** Add one bounded Rust command/module
+for the local Codex app-server read client, with fixed JSON-RPC method(s),
+timeouts, output-size limits, validated numeric ranges, and no caller-supplied
+method or arbitrary thread ID. It accepts only the currently bound Codex
+session ID supplied by the app; the existing binding remains the authority
+for which tab receives session data. Keep account snapshots in transient app
+state first (no migration needed); account polling runs only while a Codex
+sidebar is visible, at a conservative interval no faster than 60 seconds,
+with one request in flight, generation guards on tab/account change, and
+StrictMode-safe cleanup. `src/App.tsx` owns polling and passes a typed
+snapshot to `SidePanel`; database access, if later needed, goes through
+`src/lib/repo.ts`, never inline SQL in a component. Account data is global
+to the authenticated Codex account and must be invalidated when auth/account
+identity changes, rather than copied into project events. If the app-server
+reader itself would require persistent auth/config changes, state that scope
+change in the promoted plan and ask before making it.
+
+**States and proof.** Distinguish loading, available, unavailable (API-key
+only/unsupported auth), missing window, error, and stale last-good data.
+Clamp/reject malformed percentages rather than drawing an overfull bar;
+display reset times in the user's timezone and never manufacture a weekly
+zero or reset date. An account read failure cannot delay hook ingestion,
+decision extraction, terminals, or Safe Router Traffic. Test exact-session
+model binding with two Codex tabs in one project, model switch/resume, wrong
+or missing session ID, unknown rollout shape, no account auth, null secondary
+window, multiple `limitId` buckets, stale responses after tab switch, poll
+cleanup, and a hung app-server process. Record a manual macOS pass in
+`docs/TESTING.md`: compare the displayed model and quota windows with the
+same account's Codex UI, then exercise no-router, router-running, and
+non-Codex tabs. Run focused checks first, then the repository gates in
+`AGENTS.md`; no live model call is needed for automated verification.
+
+**Boundary with Traffic.** Plan 022's `v_requests_v2` rows remain a global
+router-only request audit. Codex account-limit snapshots neither contain a
+Safe Router request ID nor prove `X-Safe-Router-Tag` propagation, so do not
+join, add project labels, or calculate dollars from them. Any cross-source
+request-to-tab attribution still requires Plan 022's separate live Codex
+header experiment and approval.
+
+Sources checked 2026-09-14: [Codex app-server protocol](https://learn.chatgpt.com/docs/app-server),
+[Codex config reference](https://learn.chatgpt.com/docs/config-file/config-reference)
+(`tui.status_line` is a rendered TUI footer, not a data API), and local
+`src/lib/ingest.ts`, `src/App.tsx`, `src/components/SidePanel.tsx`.
+
+## Claude Code model and account-limit meters in the project sidebar — build brief
+
+**Status:** idea / planning only (2026-09-14), same standing as the Codex
+brief above. Promote to its own numbered plan, review against the accepted
+phase baseline, and get that plan's approval before implementation. Claude
+Code only — the Codex proof above does not transfer; OpenCode and Antigravity
+still each need their own. Independent of candidate Plan 022
+(`plans/022-safe-router-traffic-view.md`) for the same reasons as the Codex
+brief.
+
+**Same UI, same failure mode.** Same sidebar placement (below the
+project/session heading, before event sections), same Lock-in/width/no-
+autonomous-input constraints, same "Model unknown" language, same "shared
+across this account, including activity outside this project" caption
+pattern as the Codex brief above — do not respecify that here. This section
+covers only what differs for Claude Code as a source.
+
+**Model row: cheap, already have the data.** Unlike Codex, which needed a
+new rollout-metadata parser as a fallback, the active model is already
+sitting in every assistant transcript line: `message.model` on each
+`type: "assistant"` entry the existing tailer reads (`decisions.ts`'s
+`textFromTranscriptLine`; Plan 018's `transcriptEnvelopeType()` already
+classifies this exact line shape). No new parser, no spike needed — read the
+last assistant line's `message.model` for the bound session/tab, matched via
+the same `bindSession` path Codex uses. Update on a model change mid-session
+same as Codex; a stale value must not survive a new session bound to the
+same tab.
+
+**Correction (same day, 2026-09-14): a real source exists — the statusLine
+JSON contract.** The first Context7 pass above checked `/anthropics/claude-code`
+(GitHub-sourced docs/changelog/types) and missed the dedicated statusline.md
+page, which lives on the separate `/websites/code_claude` doc set
+(`https://code.claude.com/docs/en/statusline`) — confirmed live the same day
+once the maintainer reported having a working custom status bar. Claude Code
+v2.1.251+ feeds every `statusLine` command a `rate_limits` object on stdin:
+
+```
+rate_limits.five_hour.used_percentage   // 0-100
+rate_limits.five_hour.resets_at         // unix epoch seconds
+rate_limits.seven_day.used_percentage   // 0-100, the weekly window
+rate_limits.seven_day.resets_at
+rate_limits.spend_limit.{used_percentage,resets_at}  // gateway accounts only, can exceed 100
+```
+
+This is the Claude Code equivalent to Codex's `account/rateLimits/read` —
+documented, versioned, no spike needed to prove the schema exists. Also
+documented for anyone driving Claude outside the CLI: the Python Agent SDK's
+`RateLimitEvent`/`RateLimitInfo` (`status`, `resets_at`, `rate_limit_type` ∈
+`five_hour | seven_day | seven_day_opus | seven_day_sonnet | overage`,
+`utilization`) is the same underlying signal delivered as an SDK event
+instead of a stdin field — not this app's path (Logic Loop doesn't run
+sessions through the SDK), but confirms the source is a real, stable
+Anthropic contract, not a statusLine-only quirk.
+
+**Gating conditions.** `rate_limits` is present only for Pro/Max
+subscribers (or an account behind a Claude apps gateway with spend limits),
+and only *after the first API response of the session* — every session
+starts with the field absent, which is expected, not an error state. Below
+CLI v2.1.251 the field is simply absent too, so "field missing" collapses
+two different causes (old CLI vs. ineligible account); check `claude
+--version` separately if the plan needs to tell them apart in the UI copy.
+`spend_limit.used_percentage` can legitimately exceed 100 — clamp the bar
+fill, not the displayed number.
+
+**Single-slot conflict — the real design problem, not the data.**
+`statusLine` is one `{type, command}` field in `settings.json` (project
+overrides user, same precedence as everything else — see the SDK's
+`SettingSource` order above), not additive like `PostToolUse`'s named-hook
+merge. The maintainer already has a working custom status bar occupying
+that slot, and any Logic Loop user reading this brief may too. Overwriting
+it silently breaks their setup and is a worse landmine than anything in the
+Codex brief. `statusLine` is also a distinct settings key from "hook entries
+via the app's own toggle" — the one pre-approved exception in this file's
+process rules — so touching it does not inherit that exception and needs
+its own explicit ask/toggle in the promoted plan.
+
+**Decided: managed wrapper, for parity with Codex's brief (2026-09-14).**
+A copy-paste-snippet alternative was considered and rejected — it would make
+Claude the one adapter where the user hand-maintains the integration instead
+of Logic Loop owning it end-to-end, breaking parity with the Codex brief's
+shape (the app owns the read client; `src/App.tsx` polls and passes a typed
+snapshot to `SidePanel`, no user-maintained file). Same ownership model here:
+detect an existing `statusLine.command`, install a thin wrapper that execs
+the original command unchanged for stdout (so the visible bar stays
+byte-identical) and separately POSTs the same stdin JSON to the ingest
+server — same extractor-tether-style stamping this app already uses to keep
+its own spawned processes out of ingestion. Still gated behind its own
+explicit opt-in toggle, not the pre-approved hook-entries exception — that
+consent requirement is the one real asymmetry the promoted plan must carry
+versus Codex, which touches no file the user already owns. Idempotent,
+reversible install/uninstall (restore the original `statusLine.command`
+byte-for-byte), same standard this codebase already holds hook writes to.
+No statusLine change should be silently rolled out; the promoted plan needs
+the user's explicit opt-in before implementation, not just before merge.
+
+**Update cadence needs no polling.** The script reruns on session
+start/resume, each new assistant message, `/compact` finishing, a
+permission-mode change, vim-mode toggle, an optional `refreshInterval`
+(1s floor, for idle periods), and — usefully — automatically again the
+moment a previously-seen `resets_at` is reached, so a 5-hour/weekly boundary
+self-refreshes without Logic Loop tracking clock time itself. This is
+push-driven structured data, in the same spirit as invariant #1 (a real
+protocol, not us polling or parsing rendered output) — no account-client
+module, no 60-second poll loop, no generation-guard/in-flight-request design
+like the Codex brief needs.
+
+**Model row unaffected.** The transcript-`message.model` path above stays
+the recommended source regardless of the wrapper — it's already-flowing
+data with no settings.json touch at all, useful on its own if the wrapper
+gets deferred or declined.
+
+**States and proof.** Loading (session started, first response not yet
+seen), unavailable-ineligible (no `rate_limits`, CLI ≥ v2.1.251, non-
+Pro/Max), unavailable-old-CLI (CLI < v2.1.251), available, stale (script
+hasn't rerun since a stated cadence event was expected), and the
+spend-limit over-100 case. A statusLine/ingest failure must never touch the
+user's actual visible status bar or block session start — same fail-open
+invariant as every other ingestion path. Manual test matrix for the
+promoted plan: verify byte-identical status-bar output before/after wiring
+the wrapper, verify install/uninstall restores the original
+`statusLine.command` byte-for-byte, and compare displayed percentages
+against the same account's own terminal status line.
+
+**Boundary with Traffic.** Same as the Codex brief: no join with Plan 022's
+`v_requests_v2` rows, no dollar figures, no cross-source attribution without
+its own separate proof and approval.
+
+Sources checked 2026-09-14: [Context7](https://context7.com)
+`/websites/code_claude` (`docs/en/statusline`, `docs/en/agent-sdk/python`)
+for the corrected pass, `/anthropics/claude-code` for the initial (partial)
+pass, and local `src/lib/decisions.ts`, `src/lib/ingest.ts`.
+
+## Antigravity model and account-limit meters — compatibility check
+
+**Status:** compatibility investigation only (2026-09-14), prompted by the
+Claude statusLine finding above — not yet a build brief, and not promoted to
+a plan. `src-tauri/src/antigravity.rs` already manages a separate,
+unrelated file (`~/.gemini/config/hooks.json`, its lifecycle-hook
+registration under `HOOK_NAME = "logic-loop"`); nothing below touches that
+file or those hooks.
+
+**Real parity, verified against the locally installed CLI's own linked
+docs, not guessed.** `~/.gemini/antigravity-cli/builtin/skills/
+antigravity_guide/references/cli.md` points at
+`https://antigravity.google/docs/cli/statusline` as the authoritative page;
+fetched live 2026-09-14. Antigravity's `agy` CLI has the same mechanism as
+Claude Code, down to the same settings key name: a `statusLine.command`
+entry in `~/.gemini/antigravity-cli/settings.json` (distinct from the
+`hooks.json` this app already manages) receives a JSON payload on stdin
+whenever agent state changes, and renders whatever the script prints to
+stdout as the TUI's status bar. The payload documents a `quota` object,
+mapping model IDs to `remaining_fraction`, `reset_time`, and
+`reset_in_seconds`, alongside `model.{id,display_name}`,
+`context_window.{total_input_tokens,total_output_tokens,used_percentage,
+remaining_percentage}`, `agent_state` (`idle|thinking|working|tool_use|
+initializing`), and optional `plan_tier`/`email`. This is Antigravity's
+equivalent of Claude's `rate_limits` field — the same wrapper shape decided
+for Plan 023 (exec the original command unchanged for stdout, side-channel
+mirror the JSON to the ingest server, explicit opt-in, byte-identical
+install/uninstall) would transfer directly in outline. Confirmed live: this
+user has no existing `statusLine` configured in
+`~/.gemini/antigravity-cli/settings.json` today (checked directly), so a
+build here would hit the same "nothing to wrap yet" first-release scope
+limit Plan 023 already states for Claude, not a reason to build something
+different.
+
+**Real differences from Claude — do not copy Plan 023's code unmodified.**
+(1) `reset_time` is documented as ISO 8601 (`"2026-07-06T07:50:32Z"`), not
+Claude's unix-epoch seconds — display/formatting code is not shareable
+as-is between the two meters. (2) Quota is reported **per model ID**, not
+as one account-wide 5-hour/weekly pair — Antigravity's model-hot-swap
+support (`app.md`: "Model Selection") means a meter here needs a
+"which model is the bar for" decision Claude's single-account-window design
+never faces; showing every returned model bucket rather than guessing the
+"current" one is the same discipline the Codex brief already applies to
+Codex's multiple `limitId` buckets. (3) `plan_tier`/`email` presence is
+documented as optional with no enumerated value set (only one example,
+`"Pro"`) — treat as an opaque display string, don't branch UI logic on
+assumed values. (4) Antigravity also has G1 credits (`/credits`,
+`useG1Credits` settings key: "Uses personal AI credits for model calls once
+plan quotas are exhausted") — a second, separate allowance system with no
+stated presence in the `statusLine` JSON at all; if a future build wants to
+show credit balance too, that needs its own proof, not an assumption it
+rides along in `quota`.
+
+**Unverified — the doc excerpt fetched today does not state these, and
+Claude's equivalent facts are explicitly documented while Antigravity's are
+not:** whether `quota` requires a minimum CLI version (Claude's statusLine
+doc is explicit: v2.1.251+; no such version gate appears in what was
+fetched for Antigravity), whether the field is absent until the session's
+first model response the way Claude's `rate_limits` is (undocumented here),
+and whether a slow/hanging custom statusLine script can block the TUI (no
+performance/timeout guidance surfaced, unlike Claude's implicit contract
+via its documented debounce/cancel-in-flight behavior). Given this app's
+own live-tested history with Antigravity's hook contracts undershooting
+their own docs in the past (`PostToolUse` named-hook merge, `PreInvocation`
+lacking a `decision` field, `run_command`'s `is_error` blindness — all in
+CLAUDE.md's landmines), do not trust this doc excerpt alone before writing
+code: any future plan must include a live spike against the installed `agy`
+build (this Mac already has 1.1.27 or newer) proving the same three things
+the Claude plan proved from documentation alone — field presence timing,
+exact JSON shape on a real session, and that a slow mirror-POST script
+cannot visibly stall the TUI — before repeating Plan 023's shape here.
+
+Sources checked 2026-09-14: locally installed
+`~/.gemini/antigravity-cli/builtin/skills/antigravity_guide/references/
+cli.md`, `~/.gemini/antigravity-cli/settings.json` (this account's own,
+confirmed no `statusLine` set), and the live pages it links —
+`https://antigravity.google/docs/cli/reference` and
+`https://antigravity.google/docs/cli/statusline`. Local
+`src-tauri/src/antigravity.rs` (existing hooks.json ownership, kept
+separate from this).
 
 ## Annotate AI diffs
 

@@ -25,6 +25,13 @@ run the drift check at the top of the relevant plan file first — code will
 have moved since 2026-09-06 — then copy the relevant plan into that phase's
 `PLAN.md` per the repo's normal phase-gate process.
 
+Maintainer disposition (2026-09-12): Phase 33 branch results are intentionally
+not accepted. Rows 012-020 below preserve that branch's planning and test
+history; their DONE/BUILT labels are not mainline acceptance. Plan 021 is a
+candidate replacement Phase 33 sprint, planned against accepted `main` at
+`2a4c481`. Phase 32's literal acceptance is already recorded, but the new
+scope needs explicit maintainer approval before implementation.
+
 Two Antigravity plans (001, 004) gate on a live-verification step against an
 installed `agy` build before any code is written, because they rest on a
 claim about Antigravity's `Pre*` hook contract that contradicts a documented
@@ -52,7 +59,7 @@ test dependency is proposed for Phase 26.
 | [008](008-preserve-tab-presentation-on-reentry.md) | Preserve bookmark tab names and colors through re-entry | P1 | S (0.5d + live relaunch) | — | DONE — PHASE 29 APPROVED; automated and live matrices pass |
 | [009](009-make-window-dragging-repeatable.md) | Make window dragging repeatable from app chrome | P1 | S-M + live macOS matrix | 008 accepted and committed (phase sequencing only) | DONE — PHASE 30 APPROVED |
 | [010](010-first-run-agent-activation.md) | Guide first-run users to one verified agent connection | P1 | M (2–4d + clean-profile live pass) | Phase 30 committed and accepted | BUILT — automated gates clean; live acceptance pending |
-| [011](011-two-terminal-split-view.md) | Two-terminal split view | P1 | M (1–2d + live terminal pass) | Phase 32 explicitly authorized with Phase 31 live bypass | BUILT — automated gates clean; live matrix pending |
+| [011](011-two-terminal-split-view.md) | Two-terminal split view | P1 | M (1–2d + live terminal pass) | Phase 32 explicitly authorized with Phase 31 live bypass | DONE — PHASE 32 APPROVED; automated and live split-view matrices pass |
 | [012](012-decision-tracker-integrity.md) | Decision Tracker reconciliation and truthful answer state | P0 | M (1–2d + live extractor/terminal pass) | Phase 32 accepted 2026-09-11 | APPROVED — Phase 33 implementation in progress |
 | [013](013-extractor-spend-emergency-sprint.md) | Extractor spend emergency sprint | P0 | S (~1 session, root cause + 6 fixes) | Phase 33 manual test passed 2026-09-11, showed ~60% session-limit burn | BUILT — automated gates clean (see `docs/TESTING.md` §46); live spend matrix pending |
 | [014](014-reconciliation-haiku-default.md) | Reconciliation defaults to haiku | P1 | S (fence-tolerance fix + 3x golden re-run + setting) | 013 committed on `feat/phase33-decision-integrity` | BUILT — golden 3/3 clean on reconciliation, extraction stays sonnet (flaky on haiku); automated gates clean; live Sidebar LM click pending (`docs/TESTING.md` §47) |
@@ -62,6 +69,9 @@ test dependency is proposed for Phase 26.
 | [018](018-schema-drift-tripwire.md) | Transcript schema-drift tripwire | P2 (preemptive, not an active-break fix — see correction in the plan) | S (pure function + wiring into an existing warning strip, no new plumbing) | Plan 017's live discovery that Claude Code v2.1.270 adds new transcript preamble line types | DONE — `transcriptEnvelopeType()` detects a run of unrecognized-envelope transcript lines and surfaces it through the existing `adapterWarnings` strip; no Rust changes, no new Tauri event. Gates clean (`npm run check` 26/26, tsc, build). Live-confirmed it does not false-fire on a real v2.1.270 session; firing on an actual break is still unit-test-only. |
 | [019](019-codex-spend-audit-handoff.md) | Codex CLI backend spend/drift audit — handoff to GPT/Codex | P1 | Unknown — scoped as an audit, not a fix | Plans 013/017/018's findings, none independently verified on the Codex backend | HANDED OFF 2026-09-12 — briefing document for a GPT/Codex coding session to measure Codex CLI's own extraction-call overhead (never measured, unlike Claude's), verify its rollout format hasn't drifted, and check the PTY-transcript-file question on Codex's side. Nothing built yet; this is the brief, not the fix. |
 | [020](020-codex-extractor-spend-and-drift-audit.md) | Measure and, if warranted, isolate Codex extractor spend; verify live rollout/card path | P0 audit | S audit; M conditional fix | Plan 019; Phase 34 accepted | DONE — two-call Codex 0.154.0 audit found a 9.6% input reduction with isolated user config, but no Claude-like spend issue; did not ship isolation because a blank Sidebar override must keep honoring the user's configured model/effort. Usage logging and completed-turn validation shipped; automated gates and the fresh dev-app rollout/card pass are clean. |
+| [021](021-contextual-first-run-project-access.md) | Make first-run project access contextual | P1 | M (1-2 build days + macOS live pass) | Accepted main through Phase 32; replacement scope approval pending | CANDIDATE — planned against `main` at `2a4c481`; no implementation authorized; unrelated to unaccepted Phase 33 work on this branch. |
+| [022](022-safe-router-traffic-view.md) | Optional Safe Router model traffic view | P1 | M (read-only Rust reader + compact UI + macOS pass) | Accepted main through Phase 32; explicit approval of this plan; Safe Router v2 view for populated state | CANDIDATE — global recent-request view only; no implementation, agent reconfiguration, or live tag experiment authorized. |
+| [023](023-claude-statusline-limits-meter.md) | Claude Code statusLine rate-limit meter | P1 | M (Rust singleton-swap installer + new ingest endpoint + compact UI + macOS pass) | Accepted main through Phase 32; explicit approval of this plan | CANDIDATE — wraps an existing user `statusLine.command` only (no auto-create); no implementation authorized. |
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
