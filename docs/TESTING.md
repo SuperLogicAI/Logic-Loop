@@ -2942,6 +2942,40 @@ were disabled. After `36a67b3` added Homebrew-prefix detection and the app was
 rebuilt/relaunched, both adapters were detected and their hooks enabled
 successfully. This is a GUI-PATH check, not evidence from shell PATH alone.
 
+## 57. Optional Safe Router model traffic view (Plan 022)
+
+Plan 022 implementation was explicitly authorized while Phase 33 testing was
+paused. This matrix is pending a release-build macOS pass; no box is claimed
+as passed by automated tests. Do not change agent or router configuration to
+run it. Use temporary fixture profiles for older/broken-log cases and preserve
+the installed router log.
+
+Automated evidence (2026-09-13): focused model-traffic check, all repository
+checks, strict TypeScript, production UI build, 64 Rust library tests, clippy,
+and `git diff --check` passed in the isolated implementation worktree. A
+read-only probe of the installed router log found `user_version=2`, the v2
+view, and a latest row with `usage_state=complete`; no model call was made.
+
+- [ ] With no `~/.safe-router/log.db` in an isolated profile, open Traffic.
+      It says the log is missing; no file is created. Terminals, hooks,
+      Attention, and the project rail still work.
+- [ ] Use fixture v1, empty v2, and populated v2 logs in turn. The older,
+      empty, and populated states are distinct; the populated list shows the
+      latest 100 by ID with time, key ID, requested/served model, backend,
+      plane, disposition/status, counters, and usage state. NULL is “unknown”
+      and a recorded 0 is 0.
+- [ ] Use a malformed v2 view and an unreadable/locked fixture. The view
+      shows a bounded error and Retry; terminals and ingestion remain usable.
+      Restore a valid fixture, Retry, and confirm recovery.
+- [ ] Open/close Traffic repeatedly, including during a slow read, then leave
+      it open while the router writes to a WAL log. No duplicate refresh,
+      frozen UI, or accumulating activity appears.
+- [ ] In narrow/wide windows and with split terminals, compact/hidden project
+      rail, and Lock-in, the global overlay remains legible; Escape/Close
+      restore focus and normal work controls remain available.
+- [ ] A fixture with an HTML-like `client_tag` renders it literally and leaves
+      it unattributed. No project is inferred. Any future agent-specific tag
+      experiment needs separate client-setup authorization and its own record.
 
 ## Quality gates (machine-run, not manual)
 

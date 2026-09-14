@@ -32,6 +32,7 @@ import { LandingNoteModal } from "./components/LandingNoteModal";
 import { FanOutModal } from "./components/FanOutModal";
 import { IsolateLoopModal } from "./components/IsolateLoopModal";
 import { AttentionInbox } from "./components/AttentionInbox";
+import { ModelTraffic } from "./components/ModelTraffic";
 import type { ClaudeStatuslineSnapshot, Decision } from "./types";
 import { ptyWrite } from "./lib/pty";
 import { TabBar } from "./components/TabBar";
@@ -136,6 +137,7 @@ export default function App() {
   const [attentionStale, setAttentionStale] = useState(false);
   const [attentionRefresh, setAttentionRefresh] = useState(0);
   const [attentionOpen, setAttentionOpen] = useState(false);
+  const [trafficOpen, setTrafficOpen] = useState(false);
   const attentionRefreshPendingRef = useRef(false);
   const scheduleAttentionRefresh = useCallback(() => {
     if (attentionRefreshPendingRef.current) return;
@@ -1479,6 +1481,7 @@ export default function App() {
           <AgentStatusBar
             panelMode={panelMode}
             onTogglePanel={togglePanel}
+            onOpenTraffic={() => setTrafficOpen(true)}
             lockInMode={lockInMode}
             onLockIn={() => activateLockIn("indefinite")}
             onTimedLockIn={() => activateLockIn("timed")}
@@ -1564,6 +1567,7 @@ export default function App() {
           onSetArchived={setAttentionArchived}
         />
       )}
+      {trafficOpen && <ModelTraffic onClose={() => setTrafficOpen(false)} />}
     </div>
   );
 }

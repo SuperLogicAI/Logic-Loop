@@ -10,6 +10,7 @@ mod opencode;
 mod pi;
 mod pty;
 mod statusline;
+mod safe_router_traffic;
 // pub: main.rs calls antigravity::run_hook_mode directly, ahead of
 // app_lib::run(), to intercept `--antigravity-hook` before the GUI boots.
 pub mod antigravity;
@@ -306,7 +307,8 @@ pub fn run() {
             clipboard::clipboard_text,
             clipboard::clipboard_image_path,
             board::read_board,
-            board::write_board
+            board::write_board,
+            safe_router_traffic::read_safe_router_traffic
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {

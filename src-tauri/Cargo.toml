@@ -30,6 +30,7 @@ tiny_http = "0.12.0"
 getrandom = "0.4.3"
 ureq = { version = "3.3.0", features = ["json"] }
 tauri-plugin-notification = "2.3.3"
+sqlx = { version = "0.8.6", default-features = false, features = ["sqlite", "runtime-tokio"] }
 
 # Unix-only: kill_session's killpg. Not built on Windows at all.
 [target.'cfg(unix)'.dependencies]
