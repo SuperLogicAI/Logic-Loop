@@ -51,6 +51,7 @@ const initialAdapterStates = Object.fromEntries(
 interface Props {
   panelMode: PanelMode;
   onTogglePanel: () => void;
+  onOpenTraffic: () => void;
   lockInMode: LockInMode;
   onLockIn: () => void;
   onTimedLockIn: () => void;
@@ -66,6 +67,7 @@ interface Props {
 export function AgentStatusBar({
   panelMode,
   onTogglePanel,
+  onOpenTraffic,
   lockInMode,
   onLockIn,
   onTimedLockIn,
@@ -212,6 +214,9 @@ export function AgentStatusBar({
           >
             <PanelIcon name="split-screen" className="h-4 w-4" />
             Split
+          </button>
+          <button type="button" onClick={onOpenTraffic} className="flex h-7 shrink-0 items-center rounded-full border border-zinc-700 px-2.5 text-xs text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-sky-400" title="View recent Safe Router model traffic">
+            Traffic
           </button>
         </div>
         <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 overflow-x-auto">
