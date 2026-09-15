@@ -11,9 +11,11 @@
 - Effort: M (mostly mechanical; one real code merge in `board.rs`)
 - Depends on: none technically, but should run before any more feature work
   lands, since every current worktree is built on a stale base
-- Step A: DONE (PR #28, merged `aca6b50`). Step B: DONE (both worktrees
-  rebased and pushed, gates green, not merged — see below). Step C/D: not
-  started.
+- Step A: DONE (PR #28, merged `aca6b50`; local `main` fast-forwarded).
+  Step B: DONE (both worktrees rebased and pushed, gates green, not
+  merged — see below). Step D: DONE (PR #27 merged, PR #25 closed, 9 dead
+  branches deleted). Step C: not started — needs live app testing, no
+  further autonomous work possible.
 
 ## Why this matters
 
@@ -162,6 +164,34 @@ Suggested order, cheapest/most-isolated first:
     quit/relaunch cycles — cheap to watch for it).
 
 ### Step D — Housekeeping (any time, low risk, confirm before deleting)
+
+**Done (2026-09-15).** Items 16-18 complete:
+
+- PR #27 (`docs/plans-021-022-023`) squash-merged to `main` as `c344fff`
+  (CI green, docs-only) — not in the original Step D list but landed in
+  the same sitting.
+- PR #25 (`feat/phase33-decision-integrity`) closed with a comment pointing
+  at Plan 016/PR #26 as the superseding work.
+- Local `main`'s pointer fast-forwarded to `origin/main` (the maintainer
+  ran the `dcg`-gated command directly — Step A's last loose end).
+- All 9 verified-dead local branches deleted (maintainer ran the
+  `dcg`-gated `git branch -D`): `docs/contributor-onramp`,
+  `docs/screenshot-refresh`, `fix/clickable-links`, `loop/footer-test`,
+  `pr18-fix`, `pr19-fix`, `pr19-retrigger`, `pr19-retry2`,
+  `feat/phase33.1-haiku-default`. `pr18-fix`/`pr19-fix` verified safe via
+  `git diff --stat` against `origin/main` (17k+ lines of unrelated drift,
+  pre-Antigravity-era snapshots, nothing unique); `feat/phase33.1-haiku-
+  default` verified safe — its only unique content was the reconciliation
+  golden fixtures Plan 016 deliberately removed.
+
+Not deleted (out of the original list, left for a future pass if wanted):
+`fix/descope-auto-reconciliation` (PR #26 source, has one extra local
+`wip(docs)` commit already absorbed into PR #27/main), `feat/phase33-
+decision-integrity` (PR #25 source, now closed), and older merged-PR
+branches (`feat/diff-popout`, `feat/phase22-attention-foundation`,
+`fix/paste-encoding-and-links`, `loop/aggregate-check`, `pr-20`).
+
+Original list, for reference:
 
 16. Close PR #25 (`feat/phase33-decision-integrity`) with a comment
     pointing at Plan 016/PR #26 as the superseding work.
