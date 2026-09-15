@@ -158,12 +158,30 @@ xterm.js · SQLite (tauri-plugin-sql) · localhost hook-ingest server.
 
 - macOS (Apple Silicon) — primary, daily-dogfooded platform.
 - Windows — early testing build, see below.
-- [Rust](https://rustup.rs) + Node 18+
-- At least one supported agent CLI installed — [Claude Code](https://claude.com/claude-code),
+- A packaged app or installer does **not** require Rust or Node on the machine
+  where it runs. Building from source does; see the macOS steps below.
+- For agent activity, install at least one supported CLI: [Claude Code](https://claude.com/claude-code),
   [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex),
   or [Antigravity](https://github.com/google-antigravity/antigravity-cli)
   (`agy`). Each is detected independently — `PATH` plus the
-  usual install locations — and its toggle appears only once found.
+  usual install locations. You can open a plain terminal tab without an agent CLI.
+
+## macOS (build from source)
+
+The Windows installer workflow does not produce a macOS app. To build Logic Loop
+on an Apple Silicon Mac, install [Rust](https://rustup.rs) and Node 18+ first,
+then run:
+
+```bash
+git clone https://github.com/SuperLogicAI/Logic-Loop.git
+cd Logic-Loop
+npm ci
+npm run tauri build
+open "src-tauri/target/release/bundle/macos/Logic Loop.app"
+```
+
+The Rust installation prompt is expected for this build path, not when opening
+an already-built `.app`.
 
 ## Windows (early testing)
 
@@ -181,10 +199,18 @@ To get an installer:
 4. Run the installer. It's **unsigned**, so Windows SmartScreen will warn —
    click **More info → Run anyway**.
 
+The installer includes the app; Rust and Node are not needed on the test PC.
 No installer is published automatically; each run builds from whatever's on
-`main` at the time. Report issues (crashes, PTY/terminal quirks, missing
-agent detection) via GitHub Issues — include your Windows version and which
-agent CLI you were testing.
+`main` at the time.
+
+Before testing an agent, check the basic terminal flow: click **+** to open a
+tab, run `echo hello`, then add a bookmark for an existing folder and click the
+new bookmark to open another tab. A Windows tester has reported that **+** and
+bookmark opening did nothing; this has not yet been reproduced or fixed. If
+either action fails, report it via GitHub Issues with your Windows version, the
+workflow run or installer artifact used, what you clicked, and any visible
+error. Please also report crashes, PTY quirks, and missing agent detection;
+include the agent CLI and version when relevant.
 
 ## Development
 

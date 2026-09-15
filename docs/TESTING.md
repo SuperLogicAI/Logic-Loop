@@ -1985,43 +1985,49 @@ is intentionally deferred so Phase 32 can ship tonight. No unchecked item is
 claimed as passing; the maintainer explicitly authorized the bypass with
 `PHASE 32 ACCEPTED` and plans to return to this matrix soon.
 
+Close-out disposition (2026-09-13): this matrix is historical and pending
+supersession by Plan 021, whose first-run project-or-home choice replaces the
+default-home-PTY premise tested here. Do not mark these boxes passed. Once
+Plan 021's replacement clean-profile live matrix is accepted, classify Phase
+31 as **SUPERSEDED by Plan 021** and link its accepted evidence here.
+
 ## 44. Two-terminal split view (Phase 32)
 
 Implementation authorized with `PHASE 32 ACCEPTED` on 2026-09-10. Phase 31's
 live checks remain open by explicit maintainer exception rather than being
 silently inherited or marked complete.
 
-- [ ] With one terminal focused, click the header **Split** pill. Confirm a
+- [x] With one terminal focused, click the header **Split** pill. Confirm a
       second ordinary terminal opens in the same project cwd, the supplied
       split-screen icon is visible, and the two panes divide the available
       terminal area evenly.
-- [ ] Type different commands in both panes while output streams concurrently.
+- [x] Type different commands in both panes while output streams concurrently.
       Input reaches only the focused pane; each pane keeps independent output,
       process lifetime, PTY size, and structured-hook tab tether.
-- [ ] Click between panes. Confirm the focus outline, active top tab, Idea
+- [x] Click between panes. Confirm the focus outline, active top tab, Idea
       Board, and project side panel all follow the focused pane without opening
       a Landing Note merely because the other pane remains visible. The focused
       pane and matching top tab use a restrained 1.5px white outline; the secondary pane/tab uses the
       slightly softer blue. On both top tabs, the project/bookmark color remains
       fully visible above the side-and-bottom selection outline.
-- [ ] Select a third top tab. It replaces only the focused pane. Selecting
+- [x] Select a third top tab. It replaces only the focused pane. Selecting
       either already-visible top tab focuses it without swapping pane position.
-- [ ] Reorder top tabs while split. Pane membership remains attached to tab
+- [x] Reorder top tabs while split. Pane membership remains attached to tab
       identity, and no tab drag moves the native window.
-- [ ] Finish an agent in the unfocused visible pane. It does not produce an
+- [x] Finish an agent in the unfocused visible pane. It does not produce an
       unseen-result flag, OS notification, or dock badge while Logic Loop is
       focused; a genuinely hidden tab still does.
-- [ ] Close each side in separate runs, including Cmd/Ctrl+W on the focused
+- [x] Close each side in separate runs, including Cmd/Ctrl+W on the focused
       pane. The survivor becomes full width and its PTY remains live. A process
       exit stays in its pane with the established Restart/Re-enter UI.
-- [ ] Toggle Split off. The focused terminal remains visible and the other tab
+- [x] Toggle Split off. The focused terminal remains visible and the other tab
       continues running normally in the background.
-- [ ] Exercise expanded, compact, and hidden project panels plus indefinite and
+- [x] Exercise expanded, compact, and hidden project panels plus indefinite and
       timed Lock-in. Split state and terminal input remain independent.
-- [ ] Paste multiline text, select terminal text, open links, and drop a file
+- [x] Paste multiline text, select terminal text, open links, and drop a file
       into each pane. Resize the app repeatedly; both xterms refit without
       clipping, stale columns, or input crossing panes.
-- [ ] Quit and relaunch. Split composition is not restored; resumable sessions
+- [x] Quit and relaunch. Split composition is not restored; resumable sessions
       return through the existing ordinary-tab re-entry behavior.
 
 Automated evidence (2026-09-10):
@@ -2037,8 +2043,7 @@ Automated evidence (2026-09-10):
 
 `npm run golden` was not run because Phase 32 changes no extraction prompt.
 
-Partial live evidence (2026-09-11, current development profile; this is not a
-clean-profile or full acceptance disposition):
+Live acceptance evidence (2026-09-11–2026-09-13, current development profile):
 
 - [x] Split activation opened a second ordinary shell in the active
       `context_terminal` project, displayed the supplied icon, and rendered an
@@ -2062,10 +2067,14 @@ clean-profile or full acceptance disposition):
 - [x] After the intervening app relaunch needed to recover macOS Desktop-folder
       access, Split was off and surviving sessions appeared as ordinary tabs;
       the prior split composition was not restored.
-- [ ] Independent typed input in both panes, structured-hook tether identity,
+- [x] Independent typed input in both panes, structured-hook tether identity,
       close/Cmd-W survivor behavior, background-result notification
       suppression, timed Lock-in, file drop/link/selection in both panes, and
-      repeated manual edge-drag resize remain unverified in this pass.
+      repeated manual edge-drag resize passed. One initial apparent tab-loss
+      report during Cmd/Ctrl+W testing could not be reproduced in two exact
+      repeats and was attributed to an accidental terminal command.
+
+Maintainer disposition (2026-09-13): `PHASE 32 APPROVED`.
 
 `PHASE 32 APPROVED`. The maintainer approved on the evidence above; the last
 bullet's remaining items were not separately retested before approval —
