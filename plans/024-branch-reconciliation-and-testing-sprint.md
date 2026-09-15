@@ -163,7 +163,13 @@ Neither PR opened, per the instruction above.
 **Corrected (2026-09-14)** — see the inventory corrections above. Suggested
 order, cheapest/most-isolated first:
 
-10. Plan 018 tripwire synthetic checks (§49) — no dependency, ~15 min.
+10. **DONE (2026-09-14).** Plan 018 tripwire synthetic checks (§49) — both
+    live items confirmed: warning fires with the correct message on 20
+    synthetic unrecognized lines, and stays fired-once (no spam) through
+    10 more plus a real turn. See `docs/TESTING.md` §49's live evidence.
+    Side note: appending to a transcript file must be done by a human's own
+    hands — Claude Code's "Session Transcript Tampering" classifier blocks
+    any agent tool-call attempt, even against a disposable scratch file.
 11. **DONE (2026-09-14).** §26 diff pop-out Mac pass — all 8 items
     verified live (screenshots + cross-checked scratch-repo file/git
     state), replacing 8+ months of Windows-only-unverified status. See

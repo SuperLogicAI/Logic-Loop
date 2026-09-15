@@ -2385,16 +2385,42 @@ insurance, not a fix for an active break. See
       threshold correctly does not false-fire on this real-world shape.
       *(passed 2026-09-12 — this doubles as the "healthy session" checklist
       item below, done against a real case rather than a synthetic one)*
-- [ ] Manually append at least 20 lines whose `type` is something this
+- [x] Manually append at least 20 lines whose `type` is something this
       module has never recognized (a purely synthetic case now, since no
       real Claude/Codex build currently produces one) to a session's
       transcript file, and confirm the adapter-warning strip appears with a
       message naming the agent and mentioning the transcript format — the
-      same strip used for the existing foreign-PostToolUse warning. Still
-      unverified live; only unit-tested so far.
-- [ ] Confirm the warning fires once per session, not once per line (no
+      same strip used for the existing foreign-PostToolUse warning.
+- [x] Confirm the warning fires once per session, not once per line (no
       strip spam as more unrecognized lines keep arriving after the first
       20).
+
+Live evidence (2026-09-14), Plan 024 Step C item 10, on a fresh session
+(`~/.claude/projects/-Users-vandershark-Desktop-dev-dt-scratch-diffpopout/
+cafb3397-...jsonl`) started after the `CLAUDE_CODE_CHILD_SESSION` fix above
+— confirmed healthy first (real `user`/`assistant` lines present, one
+stretch already at 18 consecutive unrecognized preamble lines without
+firing, just under threshold):
+
+- Appended 20 synthetic `{"type":"synthetic-drift-test"}` lines (36 → 56
+  total). Warning strip appeared: "claude: transcript format doesn't match
+  what this build expects (a CLI update likely changed it) — decision
+  tracking may be broken until Logic Loop is updated" (screenshot
+  evidence) — names the agent, mentions the transcript format, matches
+  spec exactly.
+- Appended 10 more (56 → 66) and sent one more real turn ("Thanks").
+  Screenshot confirms exactly one warning line, no duplicate/stacked
+  entries — fires-once behavior holds. The strip has no dismiss control by
+  design (`driftWarned` never clears for the session), so it correctly
+  stayed visible through the extra turn rather than auto-clearing — this
+  is intended persistence, not a bug.
+- Appending directly from a Bash tool call was blocked twice by Claude
+  Code's own "Session Transcript Tampering" classifier — fired for both
+  this session and a separate one the maintainer tried it from. Worked
+  around by having the maintainer type the append command directly into a
+  plain terminal prompt (no AI tool-call involved). Worth knowing for any
+  future manual transcript-editing test: it needs a human's own hands, not
+  an agent, even for a disposable scratch file.
 
 Automated evidence (2026-09-12):
 
