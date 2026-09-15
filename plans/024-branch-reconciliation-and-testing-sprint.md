@@ -11,7 +11,9 @@
 - Effort: M (mostly mechanical; one real code merge in `board.rs`)
 - Depends on: none technically, but should run before any more feature work
   lands, since every current worktree is built on a stale base
-- Nothing in this plan is authorized yet. This is the plan for approval.
+- Step A: DONE (PR #28, merged `aca6b50`). Step B: DONE (both worktrees
+  rebased and pushed, gates green, not merged — see below). Step C/D: not
+  started.
 
 ## Why this matters
 
@@ -124,6 +126,25 @@ idea/plan-only, no code — nothing to test yet.
 9. Push both rebased branches. **Do not open/merge PRs for these yet** —
    plans 021 and 022 are still marked CANDIDATE in `plans/README.md`; that
    needs an explicit maintainer decision, separate from this plan.
+
+**Done (2026-09-15).** Both branches rebased `--onto origin/main` (past the
+now-duplicated `e11e468`/`2a4c481`), pushed with `--force-with-lease`:
+
+- `feat/safe-router-traffic` → `489ea6a`. Conflicts: `package.json` (merged
+  both `check` script additions — `decision-integrity:check` from PR #26,
+  `model-traffic:check` from this branch), `plans/README.md` (kept PR #26's
+  rows 012-020, appended this branch's own row 022 unchanged — did not pull
+  in today's CANDIDATE reframing from PR #27, out of scope for a rebase).
+  Gates: 69/69 Rust tests, clippy clean, 27/27 frontend checks (new
+  `model-traffic:check` included), tsc, build, diff-check.
+- `phase33-contextual-first-run` → `575c26a`. One real code conflict in
+  `src-tauri/src/pty.rs`'s test-module import list (`has_own_repo` from
+  PR #26's freeze fix vs. `preflight_directory` from this branch, plus its
+  new test) — merged both imports, kept the new test. Gates: 64/64 Rust
+  tests (including the merged `directory_preflight_...` test), clippy
+  clean, 26/26 frontend checks, tsc, build, diff-check.
+
+Neither PR opened, per the instruction above.
 
 ### Step C — Testing sprint (after Step A; Step B only blocks items 5-6)
 
