@@ -1899,31 +1899,65 @@ tab-reorder checkbox above passed in the rebuilt app before approval.
 
 ## 26. Diff pop-out from Accomplished rows (issue #10)
 
-Written on Windows, where the app can't run — every box below is unverified
-and needs a Mac pass.
+Written on Windows, where the app can't run — every box below was
+unverified for over eight months (PR #20, 2026-09-06) until this Mac pass.
 
-- [ ] Have an agent edit a tracked file in the tab's repo, then `git add` that
+- [x] Have an agent edit a tracked file in the tab's repo, then `git add` that
       file (the pop-out reads `git diff --cached` only). The Accomplished row
       "Edited `<file>`" underlines on hover; clicking it opens the pop-out with
       that file's unified diff, monospace, and **only** that file's section —
       no other staged file bleeds in.
-- [ ] Esc closes it; so does clicking the dimmed overlay and the Close button.
+- [x] Esc closes it; so does clicking the dimmed overlay and the Close button.
       Clicking inside the diff (e.g. selecting text) does not close it.
-- [ ] Stage a second file too → each row opens its own section, not the other's.
-- [ ] Unstaged edit: agent edits a file, nothing staged → row still clicks,
+- [x] Stage a second file too → each row opens its own section, not the other's.
+- [x] Unstaged edit: agent edits a file, nothing staged → row still clicks,
       pop-out shows the "No staged diff for this file" empty state, no crash
       and no blank panel behind it.
-- [ ] Row for a file outside the tab's repo (e.g. agent edits a file in another
+- [x] Row for a file outside the tab's repo (e.g. agent edits a file in another
       checkout): staged there → its diff shows; unstaged → empty state. Either
       way the tab's own panel is unchanged after closing.
-- [ ] Non-file rows ("Ran …", Read/Grep rows) are **not** clickable — plain
+- [x] Non-file rows ("Ran …", Read/Grep rows) are **not** clickable — plain
       text, no hover underline.
-- [ ] Delete the file's directory (or prune the worktree) with the row still on
+- [x] Delete the file's directory (or prune the worktree) with the row still on
       screen → clicking it falls back to the tab's repo and either shows the
       diff or the empty state; never an unhandled error.
-- [ ] Terminals: open/close the pop-out repeatedly while an agent is streaming
+- [x] Terminals: open/close the pop-out repeatedly while an agent is streaming
       output — typing latency and PTY output unaffected, no input is ever sent
       to the session.
+
+Live evidence (2026-09-14), disposable scratch repos (`~/dt-scratch-
+diffpopout-outside` plus the maintainer's own pre-existing `~/Desktop/dev/
+dt-scratch-diffpopout`), Plan 024 Step C item 11:
+
+- Basic pop-out, dismiss paths, second-file isolation, and non-clickable
+  rows verified live in-app (screenshot evidence) and cross-checked against
+  the scratch repos' actual `git status`/file content, which matched the
+  agent's instructed edits exactly.
+- Outside-repo case verified both staged (diff shown, screenshot evidence)
+  and the deleted-directory fallback (moved the outside repo to Trash,
+  re-clicked the row, got the "No staged diff for this file" empty state
+  cleanly — screenshot evidence, no crash).
+- Streaming test carried over from an interrupted first attempt (the app
+  was restarted mid-stream for an unrelated fix, see below) — accepted on
+  the maintainer's report from that partial run rather than a clean full
+  redo.
+- One real methodology snag, not an app bug: the maintainer's tab bound to
+  a pre-existing `~/Desktop/dev/dt-scratch-diffpopout` instead of the
+  freshly-created `~/dt-scratch-diffpopout`, which had no `.git` of its
+  own — every `git` command there silently resolved up to a stray `~/.git`
+  (see the landmine below). Confirmed via `session_bindings` in
+  `context-terminal.db` before it caused any real harm; the stray repo has
+  since been deleted.
+- Separately found and fixed mid-session: the dev server had been launched
+  from inside a Claude Code CLI shell that itself carried
+  `CLAUDE_CODE_CHILD_SESSION=1`, which every spawned tab's PTY inherited —
+  disabling transcript saving for 2 live sessions ("no transcript for 2
+  sessions" warning strip, screenshot evidence) and explaining a previously
+  unresolved mystery from Plan 017's addendum. Fixed by relaunching with
+  `env -u CLAUDE_CODE_CHILD_SESSION`; see the landmine below. Unrelated to
+  the diff pop-out feature itself — the Accomplished rows it reads come
+  from `PostToolUse` hook events, not the transcript, so this did not
+  invalidate any of the above.
 
 ## 43. First-run agent activation (Phase 31)
 

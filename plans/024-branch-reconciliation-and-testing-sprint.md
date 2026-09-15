@@ -69,13 +69,13 @@ those live tests are partly meant to exercise.
 this list — items move):
 
 1. ~~**Phase 31 (§43) clean-profile live matrix**~~ — **correction
-   (2026-09-15): not runnable standalone.** §43's own 2026-09-13 close-out
+   (2026-09-14): not runnable standalone.** §43's own 2026-09-13 close-out
    note says explicitly: do not mark these boxes passed; this matrix is
    superseded by Plan 021's own clean-profile matrix once that plan is
    accepted (Plan 021's first-run project-or-home choice replaces the
    default-home-PTY premise this one tests). Folded into item 5 below.
 2. ~~**Phase 30 (§42) residual regression groups**~~ — **correction
-   (2026-09-15): not open debt.** Every §42 item is already `[x]` or `[-]`;
+   (2026-09-14): not open debt.** Every §42 item is already `[x]` or `[-]`;
    the two `[-]` groups (Landing Note/modal drag-through, file-drop/
    text-select/panel-resize/native-edge resize) were explicitly
    maintainer-accepted without rerun under `PHASE 30 APPROVED`. Nothing to
@@ -139,7 +139,7 @@ idea/plan-only, no code — nothing to test yet.
    plans 021 and 022 are still marked CANDIDATE in `plans/README.md`; that
    needs an explicit maintainer decision, separate from this plan.
 
-**Done (2026-09-15).** Both branches rebased `--onto origin/main` (past the
+**Done (2026-09-14).** Both branches rebased `--onto origin/main` (past the
 now-duplicated `e11e468`/`2a4c481`), pushed with `--force-with-lease`:
 
 - `feat/safe-router-traffic` → `489ea6a`. Conflicts: `package.json` (merged
@@ -160,13 +160,23 @@ Neither PR opened, per the instruction above.
 
 ### Step C — Testing sprint (after Step A; Step B only blocks items 5-6)
 
-**Corrected (2026-09-15)** — see the inventory corrections above. Suggested
+**Corrected (2026-09-14)** — see the inventory corrections above. Suggested
 order, cheapest/most-isolated first:
 
 10. Plan 018 tripwire synthetic checks (§49) — no dependency, ~15 min.
-11. §26 diff pop-out Mac pass — no dependency, standalone, ~15-20 min.
-    Replaces the old item 11 (Phase 31 §43, now correctly deferred to
-    item 13 below instead of run standalone).
+11. **DONE (2026-09-14).** §26 diff pop-out Mac pass — all 8 items
+    verified live (screenshots + cross-checked scratch-repo file/git
+    state), replacing 8+ months of Windows-only-unverified status. See
+    `docs/TESTING.md` §26's live evidence note. Two real side-findings
+    surfaced and fixed during this pass, both written up as new/updated
+    `CLAUDE.md` landmines: the stray `~/.git` landmine recurred (found and
+    actually deleted this time, not just defended against again), and a
+    new one — launching the dev server from inside a Claude Code CLI shell
+    leaks `CLAUDE_CODE_CHILD_SESSION` to every spawned tab, silently
+    disabling transcript saving. Neither invalidates the §26 verdict
+    itself (Accomplished rows read hook events, not transcripts). Replaces
+    the old item 11 (Phase 31 §43, now correctly deferred to item 13 below
+    instead of run standalone).
 12. ~~Phase 30 §42 residual regressions~~ — removed, already closed (see
     correction above).
 13. Plan 021 live matrix, including its own replacement clean-profile
@@ -180,7 +190,7 @@ order, cheapest/most-isolated first:
 
 ### Step D — Housekeeping (any time, low risk, confirm before deleting)
 
-**Done (2026-09-15).** Items 16-18 complete:
+**Done (2026-09-14).** Items 16-18 complete:
 
 - PR #27 (`docs/plans-021-022-023`) squash-merged to `main` as `c344fff`
   (CI green, docs-only) — not in the original Step D list but landed in
