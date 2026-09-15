@@ -124,6 +124,21 @@ export function OnboardingModal({
               Logic Loop reads structured agent events to activate tab state and panels. It never
               interprets terminal output, and hooks never block your terminal sessions.
             </p>
+            <ul className="mt-2 max-w-2xl list-disc space-y-1 pl-4 text-[11px] leading-5 text-zinc-500">
+              <li>
+                Shows "Not detected" but you know it's installed? Confirm it's on PATH (e.g.{" "}
+                <span className="font-mono">which claude</span>) and fully quit + relaunch Logic Loop —
+                a shell config change made after Logic Loop started won't be picked up otherwise.
+              </li>
+              <li>
+                "On" means hooks are installed — it doesn't confirm the CLI actually runs in your shell.
+                Verify with <span className="font-mono">&lt;command&gt; --version</span> in a terminal tab.
+              </li>
+              <li>
+                A decision card only appears when the agent asks <em>you</em> something — casual chat
+                won't produce one.
+              </li>
+            </ul>
           </div>
         </header>
 
@@ -186,6 +201,14 @@ export function OnboardingModal({
                         {adapter.configLocation}
                       </span>
                     </div>
+                    {adapter.id === "codex" && (
+                      <p className="mt-1 text-[11px] text-zinc-500">
+                        Launch <span className="font-mono">codex</span> from the project directory you want to
+                        track — Logic Loop reads the session's reported working directory as-is. First session
+                        may also show Codex's own "Hooks need review" trust prompt — choose Trust all and
+                        continue.
+                      </p>
+                    )}
                     {state.error && (
                       <p className="mt-2 break-words rounded bg-red-950/40 px-2 py-1.5 text-xs text-red-300">
                         {state.error}

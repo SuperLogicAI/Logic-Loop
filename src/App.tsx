@@ -909,7 +909,11 @@ export default function App() {
           .catch(() => undefined); // fail open, same as addEvent above
       }
       if (p.hook_event_name === "Stop") {
-        decisions.onStop(p.session_id, sessionCwd.get(p.session_id), refreshDecisionCounts, sourceContext);
+        decisions.onStop(p.session_id, sessionCwd.get(p.session_id), refreshDecisionCounts, sourceContext, (agent, reason) => {
+          setAdapterWarnings((prev) =>
+            prev.some((w) => w.agent === agent && w.reason === reason) ? prev : [...prev, { agent, reason }]
+          );
+        });
       }
       // A completed or interrupted turn is a real result worth flagging when
       // unseen; SessionEnd alone is session shutdown, not a new result — it
@@ -1046,6 +1050,11 @@ export default function App() {
             prev.some((w) => w.agent === agent && w.reason === "transcript_schema_unrecognized")
               ? prev
               : [...prev, { agent, reason: "transcript_schema_unrecognized" }]
+          );
+        },
+        (agent, reason) => {
+          setAdapterWarnings((prev) =>
+            prev.some((w) => w.agent === agent && w.reason === reason) ? prev : [...prev, { agent, reason }]
           );
         }
       );

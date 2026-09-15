@@ -127,17 +127,29 @@ async function extract(
   sessionId: string,
   cwd: string,
   pair: TurnPair,
-  context: AttentionSourceContext
+  context: AttentionSourceContext,
+  onExtractionFailed?: (agent: string, reason: string) => void
 ): Promise<void> {
   const s = await repo.getExtractorSettings();
-  const raw = await invoke<string>("run_extractor", {
-    prompt: buildPrompt(pair),
-    backend: s.backend,
-    lmstudioUrl: s.lmstudioUrl,
-    lmstudioModel: s.lmstudioModel,
-    codexModel: s.codexModel,
-    model: s.claudeModel,
-  });
+  let raw: string;
+  try {
+    raw = await invoke<string>("run_extractor", {
+      prompt: buildPrompt(pair),
+      backend: s.backend,
+      lmstudioUrl: s.lmstudioUrl,
+      lmstudioModel: s.lmstudioModel,
+      codexModel: s.codexModel,
+      model: s.claudeModel,
+    });
+  } catch (error) {
+    // The extraction call itself failed (spawn error, non-JSON reply, CLI
+    // exited non-zero, etc). Stays fail-open — no card, no throw — but no
+    // longer invisible: logged, and surfaced once via the same adapter-
+    // warning strip transcript schema drift already uses.
+    console.error("decision extraction failed:", error);
+    onExtractionFailed?.(s.backend, "extraction_failed");
+    return;
+  }
   const decisions = parseExtraction(raw);
   if (!decisions) return; // contract violation → drop, fail open
   for (const d of decisions) {
@@ -168,12 +180,13 @@ function enqueue(
   cwd: string,
   pair: TurnPair,
   context: AttentionSourceContext,
-  onDone: () => void
+  onDone: () => void,
+  onExtractionFailed?: (agent: string, reason: string) => void
 ): void {
   // ponytail: cheap prefilter — no question mark and no assumption language
   // means nothing to extract; saves an LLM call on most turns.
   if (!/\?|assum/i.test(pair.assistant)) return;
-  void serialize(() => extract(sessionId, cwd, pair, context))
+  void serialize(() => extract(sessionId, cwd, pair, context, onExtractionFailed))
     .then(onDone)
     .catch(() => undefined);
 }
@@ -185,7 +198,8 @@ export function onTranscript(
   line: string,
   onDone: () => void,
   context: AttentionSourceContext = { sessionId },
-  onSchemaDrift?: (agent: string) => void
+  onSchemaDrift?: (agent: string) => void,
+  onExtractionFailed?: (agent: string, reason: string) => void
 ): void {
   // Tracked on every line, independent of whether this one parses into
   // extractable text below — the drift signal is about the envelope shape,
@@ -210,7 +224,8 @@ export function onTranscript(
   // user reply closes the pending pair
   const assistant = assistantBuf.get(sessionId);
   assistantBuf.delete(sessionId);
-  if (assistant && cwd) enqueue(sessionId, cwd, { assistant: assistant.text, user: msg.text }, assistant.context, onDone);
+  if (assistant && cwd)
+    enqueue(sessionId, cwd, { assistant: assistant.text, user: msg.text }, assistant.context, onDone, onExtractionFailed);
 }
 
 /** Feed Stop hooks here: turn ended with no user reply. Delayed so the
@@ -219,13 +234,21 @@ export function onStop(
   sessionId: string,
   cwd: string | undefined,
   onDone: () => void,
-  context: AttentionSourceContext = { sessionId }
+  context: AttentionSourceContext = { sessionId },
+  onExtractionFailed?: (agent: string, reason: string) => void
 ): void {
   setTimeout(() => {
     const assistant = assistantBuf.get(sessionId);
     assistantBuf.delete(sessionId);
     if (assistant && cwd) {
-      enqueue(sessionId, cwd, { assistant: assistant.text, user: null }, assistant.context ?? { ...context }, onDone);
+      enqueue(
+        sessionId,
+        cwd,
+        { assistant: assistant.text, user: null },
+        assistant.context ?? { ...context },
+        onDone,
+        onExtractionFailed
+      );
     }
   }, 2000);
 }
