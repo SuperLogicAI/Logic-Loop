@@ -66,14 +66,24 @@ those live tests are partly meant to exercise.
 **Testing backlog** (grep `docs/TESTING.md` for `^- \[ \]` before trusting
 this list — items move):
 
-1. **Phase 31 (§43) clean-profile live matrix** — explicitly deferred twice
-   (once to ship Phase 32, once implicitly since). Real, standalone, no
-   code dependency. Needs a maintenance window (quit the real app first).
-2. **Phase 30 (§42) residual regression groups** — tab reorder/close/
-   context-menu non-drag, Landing Note/modal drag-through, file-drop/
-   text-select/panel-resize/native-edge resize. Maintainer already accepted
-   Phase 30 without these; cheap to fold into the next live pass rather
-   than opening a dedicated session.
+1. ~~**Phase 31 (§43) clean-profile live matrix**~~ — **correction
+   (2026-09-15): not runnable standalone.** §43's own 2026-09-13 close-out
+   note says explicitly: do not mark these boxes passed; this matrix is
+   superseded by Plan 021's own clean-profile matrix once that plan is
+   accepted (Plan 021's first-run project-or-home choice replaces the
+   default-home-PTY premise this one tests). Folded into item 5 below.
+2. ~~**Phase 30 (§42) residual regression groups**~~ — **correction
+   (2026-09-15): not open debt.** Every §42 item is already `[x]` or `[-]`;
+   the two `[-]` groups (Landing Note/modal drag-through, file-drop/
+   text-select/panel-resize/native-edge resize) were explicitly
+   maintainer-accepted without rerun under `PHASE 30 APPROVED`. Nothing to
+   test here — removed from the backlog.
+2b. **§26 diff pop-out from Accomplished rows (issue #10) — newly found,
+   was missing from this plan's original inventory.** Shipped in PR #20
+   (2026-09-06), written and tested on Windows only — the section header
+   reads "every box below is unverified and needs a Mac pass," 8 unchecked
+   items, no later closure note anywhere in `docs/TESTING.md`, `CLAUDE.md`,
+   or `plans/README.md`. Real standalone debt, no code dependency.
 3. **Plan 018 (§49) schema-drift tripwire** — two items unverified live:
    simulate 20 unrecognized transcript lines and confirm the warning fires
    once (not per-line). Synthetic-only, low priority, quick to run.
@@ -148,17 +158,22 @@ Neither PR opened, per the instruction above.
 
 ### Step C — Testing sprint (after Step A; Step B only blocks items 5-6)
 
-Suggested order, cheapest/most-isolated first:
+**Corrected (2026-09-15)** — see the inventory corrections above. Suggested
+order, cheapest/most-isolated first:
 
 10. Plan 018 tripwire synthetic checks (§49) — no dependency, ~15 min.
-11. Phase 31 clean-profile live matrix (§43) — needs the maintenance
-    window (quit prod app). Do this in the same sitting as item 12 since
-    both want a clean/quiet app state.
-12. Phase 30 §42 residual regressions — fold into the same live sitting.
-13. Plan 021 live matrix (needs Step B done, plan approved for testing).
-14. Plan 022 live matrix (needs Step B done, plan approved for testing).
+11. §26 diff pop-out Mac pass — no dependency, standalone, ~15-20 min.
+    Replaces the old item 11 (Phase 31 §43, now correctly deferred to
+    item 13 below instead of run standalone).
+12. ~~Phase 30 §42 residual regressions~~ — removed, already closed (see
+    correction above).
+13. Plan 021 live matrix, including its own replacement clean-profile
+    matrix (supersedes Phase 31 §43) — needs Step B done (already is) and
+    a maintainer approval decision on Plan 021 first.
+14. Plan 022 live matrix (needs Step B done — already is — and a
+    maintainer approval decision on Plan 022 first).
 15. Re-attempt repro on the tab-restore-loses-a-tab landmine while other
-    multi-tab live testing is already happening (items 11-14 all involve
+    multi-tab live testing is already happening (items 13-14 involve
     quit/relaunch cycles — cheap to watch for it).
 
 ### Step D — Housekeeping (any time, low risk, confirm before deleting)
