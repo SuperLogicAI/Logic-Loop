@@ -1,7 +1,7 @@
 # Plan 011: Two-terminal split view
 
-> **Status**: BUILT for Phase 32; automated gates pass and the live matrix is
-> pending. The maintainer explicitly bypassed the
+> **Status**: DONE — Phase 32 approved on 2026-09-13; automated gates and the
+> live split-view matrix pass. The maintainer explicitly bypassed the
 > still-unrun Phase 31 live matrix and wrote `PHASE 32 ACCEPTED` on 2026-09-10.
 > Phase 31 checks remain unmarked and must not be represented as passing.
 

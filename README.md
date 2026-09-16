@@ -52,6 +52,50 @@ terminal in the focused project's directory and keeps two independently
 tethered tabs visible side by side; the project panel follows whichever pane
 has focus.
 
+## Decision debt
+
+The failure mode Logic Loop was built around, and the one no amount of agent
+visibility fixes: an agent hits a fork, and the fork never reaches you.
+
+It looks like this. You ask for a change. The agent has two reasonable ways to
+do it, mentions both in passing, picks one, and keeps going. Or it asks two
+questions in one message, you answer the first, and the second quietly
+becomes whatever the model assumed. Or you say "ask me before editing" and it
+answers the question itself, because it was confident. The terminal shows a
+finished task. Nothing shows the choice that was made for you.
+
+Every one of those is a small debt. Each is cheap to repay in the moment
+(one line from you) and expensive later, when the assumed answer has been
+built on for twenty turns and you find out at review, or in production. Run
+four agents in parallel and the debt compounds faster than you can read.
+
+Logic Loop's answer is the **Decision Tracker**, and the design rule behind
+it matters more than the panel:
+
+- **Forks are observed, not self-reported.** Asking the agent to flag when it
+  needs you only catches the forks it noticed. The ones it resolved silently
+  are exactly the ones it did not notice. So the tracker reads the agent's
+  own transcript after each turn and extracts open questions from what was
+  actually said, including questions the agent raised and then answered for
+  itself, and questions embedded in a paragraph you skimmed past.
+- **Extraction leans conservative.** A card for a question that was never a
+  real fork wastes your attention. A missed fork costs a rework. The prompt,
+  the model choice, and the golden test set are all tuned toward fewer
+  cards, higher precision. Over-extraction is treated as the worse bug.
+- **Answering is one action, not a context switch.** Each card carries the
+  question and an *Answer now* control that lands your reply in the right
+  tab. Answering closes the card deterministically. Dismissing is one click.
+  Stale clusters bulk-dismiss by session.
+- **Debt is visible across projects.** Open decisions roll up into the
+  Attention Inbox with unclaimed results and blockers, so "which of my
+  projects is waiting on a choice I never made" is one keystroke.
+- **The app never answers for you.** It observes and displays. It never
+  writes into a running session on its own. That is an architectural
+  invariant, not a setting.
+
+The rest of the side panel exists to make coming back cheap. This panel
+exists so that when you come back, the decisions are still yours.
+
 ## How it works
 
 Logic Loop never scrapes the terminal screen. Semantic events come from
@@ -158,12 +202,30 @@ xterm.js · SQLite (tauri-plugin-sql) · localhost hook-ingest server.
 
 - macOS (Apple Silicon) — primary, daily-dogfooded platform.
 - Windows — early testing build, see below.
-- [Rust](https://rustup.rs) + Node 18+
-- At least one supported agent CLI installed — [Claude Code](https://claude.com/claude-code),
+- A packaged app or installer does **not** require Rust or Node on the machine
+  where it runs. Building from source does; see the macOS steps below.
+- For agent activity, install at least one supported CLI: [Claude Code](https://claude.com/claude-code),
   [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex),
   or [Antigravity](https://github.com/google-antigravity/antigravity-cli)
   (`agy`). Each is detected independently — `PATH` plus the
-  usual install locations — and its toggle appears only once found.
+  usual install locations. You can open a plain terminal tab without an agent CLI.
+
+## macOS (build from source)
+
+The Windows installer workflow does not produce a macOS app. To build Logic Loop
+on an Apple Silicon Mac, install [Rust](https://rustup.rs) and Node 18+ first,
+then run:
+
+```bash
+git clone https://github.com/SuperLogicAI/Logic-Loop.git
+cd Logic-Loop
+npm ci
+npm run tauri build
+open "src-tauri/target/release/bundle/macos/Logic Loop.app"
+```
+
+The Rust installation prompt is expected for this build path, not when opening
+an already-built `.app`.
 
 ## Windows (early testing)
 
@@ -181,10 +243,18 @@ To get an installer:
 4. Run the installer. It's **unsigned**, so Windows SmartScreen will warn —
    click **More info → Run anyway**.
 
+The installer includes the app; Rust and Node are not needed on the test PC.
 No installer is published automatically; each run builds from whatever's on
-`main` at the time. Report issues (crashes, PTY/terminal quirks, missing
-agent detection) via GitHub Issues — include your Windows version and which
-agent CLI you were testing.
+`main` at the time.
+
+Before testing an agent, check the basic terminal flow: click **+** to open a
+tab, run `echo hello`, then add a bookmark for an existing folder and click the
+new bookmark to open another tab. A Windows tester has reported that **+** and
+bookmark opening did nothing; this has not yet been reproduced or fixed. If
+either action fails, report it via GitHub Issues with your Windows version, the
+workflow run or installer artifact used, what you clicked, and any visible
+error. Please also report crashes, PTY quirks, and missing agent detection;
+include the agent CLI and version when relevant.
 
 ## Development
 
