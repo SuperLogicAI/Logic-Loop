@@ -52,6 +52,50 @@ terminal in the focused project's directory and keeps two independently
 tethered tabs visible side by side; the project panel follows whichever pane
 has focus.
 
+## Decision debt
+
+The failure mode Logic Loop was built around, and the one no amount of agent
+visibility fixes: an agent hits a fork, and the fork never reaches you.
+
+It looks like this. You ask for a change. The agent has two reasonable ways to
+do it, mentions both in passing, picks one, and keeps going. Or it asks two
+questions in one message, you answer the first, and the second quietly
+becomes whatever the model assumed. Or you say "ask me before editing" and it
+answers the question itself, because it was confident. The terminal shows a
+finished task. Nothing shows the choice that was made for you.
+
+Every one of those is a small debt. Each is cheap to repay in the moment
+(one line from you) and expensive later, when the assumed answer has been
+built on for twenty turns and you find out at review, or in production. Run
+four agents in parallel and the debt compounds faster than you can read.
+
+Logic Loop's answer is the **Decision Tracker**, and the design rule behind
+it matters more than the panel:
+
+- **Forks are observed, not self-reported.** Asking the agent to flag when it
+  needs you only catches the forks it noticed. The ones it resolved silently
+  are exactly the ones it did not notice. So the tracker reads the agent's
+  own transcript after each turn and extracts open questions from what was
+  actually said, including questions the agent raised and then answered for
+  itself, and questions embedded in a paragraph you skimmed past.
+- **Extraction leans conservative.** A card for a question that was never a
+  real fork wastes your attention. A missed fork costs a rework. The prompt,
+  the model choice, and the golden test set are all tuned toward fewer
+  cards, higher precision. Over-extraction is treated as the worse bug.
+- **Answering is one action, not a context switch.** Each card carries the
+  question and an *Answer now* control that lands your reply in the right
+  tab. Answering closes the card deterministically. Dismissing is one click.
+  Stale clusters bulk-dismiss by session.
+- **Debt is visible across projects.** Open decisions roll up into the
+  Attention Inbox with unclaimed results and blockers, so "which of my
+  projects is waiting on a choice I never made" is one keystroke.
+- **The app never answers for you.** It observes and displays. It never
+  writes into a running session on its own. That is an architectural
+  invariant, not a setting.
+
+The rest of the side panel exists to make coming back cheap. This panel
+exists so that when you come back, the decisions are still yours.
+
 ## How it works
 
 Logic Loop never scrapes the terminal screen. Semantic events come from

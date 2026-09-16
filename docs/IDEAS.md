@@ -1211,3 +1211,34 @@ API verbatim, smaller/younger project, share pi's extension body per the
 note above), **Hermes third** (real structured surfaces but the
 project-directory mismatch and confirmed active internal churn make it
 the highest-effort, least drop-in of the three).
+
+---
+
+## Mid-September Idea Runway (2026-09)
+
+1. **`--json-schema` for the extractor.** idea is forcing every agent reply
+   through a JSON schema on the CLI instead of parsing prose. Our
+   `parseExtraction` still strips ` ```json ` fences by hand. Check whether
+   `run_extractor` can pass `--json-schema` and drop the fence tolerance
+   entirely; likely also removes the haiku fence-wrapping class of bug
+   from Phase 33.1 for good.
+2. **Usage runway moved up.** Other projects ship remaining-usage and reset
+   time inline in the agent picker. Validates Plan 023 (Claude statusline
+   limits meter) as table-stakes, not polish.
+3. **"Potential next actions" as suggestion buttons.** Up to three
+   or four standalone prompts in the user's voice, shown only on a completed turn.
+   Cheap UI value; could ride the extraction call we already make if the
+   cost model tolerates one extra field. Must stay human-triggered
+   (invariant #4): a button the user clicks is fine, auto-send is not. Toggle
+    on/off if token spend is increased for lean ops.
+4. **Scheduled prompts: demand signal only.** Saved prompts run
+   on demand or on cron by the app's own scheduler. Real user demand, hard
+   no under invariant #4. If it ever comes up, the only admissible shape
+   is spawn-time process configuration (like fan-out `cmd`), never a write
+   into a live PTY.
+5. **Headless stream-json is a different product, not a shortcut.**
+   Driving `claude --print --input-format stream-json` gives full UI
+   ownership (and a paid-SaaS look) at the cost of the agent's own TUI,
+   permissions flow, and hooks (Comes with setting `disableAllHooks`). Our
+   observation model can't coexist with that spawn shape. Not a direction;
+   noted so the tradeoff is explicit next time it's proposed.
