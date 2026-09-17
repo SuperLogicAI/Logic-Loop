@@ -3,7 +3,7 @@
 Runs the unmodified Logic Loop desktop app in a container on one EC2 host and
 shows it in your browser through noVNC. No inbound AWS ports are open. Access is
 an SSM port-forward and, optionally, a public HTTPS URL through Tailscale Funnel
-behind a password. Anyone who gets in can use the app and every terminal in it.
+behind a sign-in page. Anyone who gets in can use the app and every terminal in it.
 Everyone who connects shares one desktop, one shell user, and one set of agent logins.
 
 Requires the AWS CLI, the Session Manager plugin, and a default VPC in the region.
@@ -35,14 +35,17 @@ aws ssm put-parameter --name /logic-loop/tailscale-auth-key --type SecureString 
 ```
 
 When that parameter exists, the deploy also joins the tailnet as `logic-loop`,
-puts Caddy basic auth in front of noVNC, and turns on Funnel. The stack only
-completes if the URL returns 401 without the password and 200 with it. The
-password is generated on first boot and stored in SSM; print it with the
-`WebPasswordCommand` output. Then open `https://logic-loop.<tailnet>.ts.net`
-and sign in as `logicloop`.
+puts the L3 sign-in page (`deploy/l3`) in front of noVNC, and turns on Funnel.
+The stack only completes if the app redirects to sign-in without a session and
+loads after signing in. The password is generated on first boot and stored in
+SSM; print it with the `WebPasswordCommand` output. Then open
+`https://logic-loop.<tailnet>.ts.net` and sign in as `logicloop`.
 
+Sessions last 12 hours; restarting the `l3-auth` container signs everyone out.
 To rotate the password, delete `/logic-loop/web-password` and redeploy. To turn
 the public URL off, run `sudo tailscale funnel --https=443 off` on the instance.
+
+Check the sign-in service locally with `python deploy/l3/test_auth.py`.
 
 Debug a failed build (delete the stack before redeploying):
 

@@ -1,0 +1,15 @@
+:8080 {
+	bind 127.0.0.1
+
+	handle /l3/* {
+		reverse_proxy 127.0.0.1:9091
+	}
+
+	handle {
+		forward_auth 127.0.0.1:9091 {
+			uri /l3/verify
+		}
+		redir / /vnc.html?autoconnect=1&resize=scale
+		reverse_proxy 127.0.0.1:6080
+	}
+}

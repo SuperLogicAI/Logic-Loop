@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Sign in to L3 | Super Logic AI</title>
+<link rel="icon" href="/l3/logic-loop.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1a1a1a;
+    --ink-2: #262626;
+    --sand: #e7e2da;
+    --cream: #fef9f1;
+    --mint: #00d09b;
+    --mint-deep: #006c4f;
+    --orange: #ff7e1b;
+    --muted: #a3a3a3;
+    --body: #5f5e5e;
+    --error: #9a3f00;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--cream);
+    color: var(--ink);
+    font: 400 1rem/1.5 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  }
+
+  .brand {
+    background: var(--ink);
+    color: #fff;
+    padding: clamp(1.5rem, 4vw, 3.5rem);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 3rem;
+  }
+  .brand .wordmark { width: min(13rem, 60%); height: auto; display: block; }
+  .mark { margin: 0; }
+  .mark .l3 {
+    display: block;
+    font-weight: 800;
+    font-size: clamp(7rem, 22vw, 17rem);
+    line-height: .8;
+    letter-spacing: -.06em;
+    margin-left: -.04em;
+  }
+  .stripes { display: flex; gap: .45rem; margin: 1.6rem 0 1.4rem; }
+  .stripes span {
+    width: 3.2rem; height: .55rem;
+    transform: skewX(-24deg);
+    background: var(--mint);
+  }
+  .stripes span + span { background: var(--orange); }
+  .mark .name {
+    display: block;
+    font-weight: 500;
+    font-size: clamp(1.25rem, 2.2vw, 1.75rem);
+    letter-spacing: -.01em;
+  }
+  .mark .desc {
+    display: block;
+    margin-top: .4rem;
+    color: var(--muted);
+    max-width: 30ch;
+  }
+
+  .panel {
+    display: grid;
+    place-items: center;
+    padding: clamp(1.5rem, 5vw, 4rem);
+    background: var(--cream);
+  }
+  form { width: min(100%, 22rem); }
+  h1 { font-size: 1.75rem; font-weight: 600; letter-spacing: -.02em; line-height: 1.2; margin: 0 0 .35rem; }
+  .lede { color: var(--body); margin: 0 0 2rem; }
+  label { display: block; font-weight: 500; font-size: .9375rem; margin-bottom: .4rem; }
+  input {
+    width: 100%;
+    font: inherit;
+    color: var(--ink);
+    background: #fff;
+    border: 1px solid #cfc8bc;
+    border-radius: .5rem;
+    padding: .75rem .875rem;
+    margin-bottom: 1.25rem;
+  }
+  input:focus-visible { outline: 3px solid var(--mint); outline-offset: 1px; border-color: var(--mint-deep); }
+  button {
+    width: 100%;
+    font: inherit;
+    font-weight: 600;
+    color: #fff;
+    background: var(--ink);
+    border: 0;
+    border-radius: .5rem;
+    padding: .85rem 1rem;
+    margin-top: .25rem;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+  }
+  button::after {
+    content: "";
+    position: absolute;
+    right: 1rem; top: 50%;
+    width: 1.1rem; height: .3rem;
+    margin-top: -.15rem;
+    transform: skewX(-24deg);
+    background: linear-gradient(90deg, var(--mint) 0 45%, transparent 45% 55%, var(--orange) 55%);
+  }
+  button:hover { background: var(--ink-2); }
+  button:focus-visible { outline: 3px solid var(--mint); outline-offset: 2px; }
+  .error {
+    color: var(--error);
+    background: #fdebdc;
+    border-radius: .5rem;
+    padding: .7rem .875rem;
+    margin: 0 0 1.5rem;
+    font-size: .9375rem;
+  }
+  .foot { margin: 2rem 0 0; font-size: .875rem; color: var(--body); }
+  .foot a { color: var(--ink); text-underline-offset: .2em; }
+  .foot a:focus-visible { outline: 2px solid var(--mint-deep); outline-offset: 2px; }
+
+  @media (max-width: 760px) {
+    body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    .brand { gap: 1.75rem; }
+    .mark .l3 { font-size: 6.5rem; }
+    .stripes { margin: 1rem 0 .9rem; }
+    .panel { place-items: start center; }
+  }
+</style>
+</head>
+<body>
+  <section class="brand">
+    <a href="https://superlogicai.com"><img class="wordmark" src="/l3/superlogicai.png" alt="Super Logic AI"></a>
+    <p class="mark">
+      <span class="l3" aria-hidden="true">L3</span>
+      <span class="stripes" aria-hidden="true"><span></span><span></span></span>
+      <span class="name">Logic Loop on Linux</span>
+      <span class="desc">Your agent terminal sessions, running in the cloud.</span>
+    </p>
+  </section>
+
+  <main class="panel">
+    <form method="post" action="/l3/login">
+      <h1>Sign in to L3</h1>
+      <p class="lede">Use the login details you were sent.</p>
+      <p class="error" role="alert" {{error_hidden}}>{{error}}</p>
+      <input type="hidden" name="next" value="{{next}}">
+      <label for="username">Username</label>
+      <input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <button type="submit">Sign in</button>
+      <p class="foot">Built by <a href="https://superlogicai.com">Super Logic AI</a></p>
+    </form>
+  </main>
+</body>
+</html>
