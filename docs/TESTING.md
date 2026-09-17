@@ -2544,6 +2544,34 @@ Automated evidence (2026-09-16, sprint branch):
       warnings denied all passed. `git diff --check` passed.
 - [x] `npm run golden` intentionally not run; no extraction prompt changed.
 
+## 52. Antigravity `ask_question` waiting indicator (Agy Plan 004)
+
+**Status: PASS.** Agy 004 is limited to surfacing Antigravity's
+interactive `ask_question` pause as Logic Loop's existing waiting state.
+The maintainer-provided review for `agy` 1.2.4 verified the hook contract:
+register `PreToolUse` only for matcher `ask_question`, translate it to the
+canonical `PermissionRequest` event, and answer the blocking hook with
+`{"decision":"allow"}` so Antigravity proceeds to its own prompt.
+
+- [x] Adapter setup includes a grouped `PreToolUse` hook with matcher
+      `ask_question`, while `PostToolUse` remains matcher `*`.
+- [x] `PreToolUse` translation emits `hook_event_name: "PermissionRequest"`
+      and preserves `tool_name: "ask_question"` without ingesting prompt text.
+- [x] `epoch:check` covers `UserPromptSubmit` → `PermissionRequest` →
+      `PostToolUse` as working → waiting → working.
+- [x] Stale pre-Plan-004 Antigravity setup no longer reports as enabled:
+      `antigravity_hooks_status` now requires the `PreToolUse` registration
+      and the `ask_question` matcher, so users are prompted to re-run setup.
+- [x] Live Logic Loop tab manual check with `agy` 1.2.4: ask Antigravity a
+      prompt that triggers `ask_question`; confirm the tab dot turns amber
+      and pulses while the terminal waits for the answer, returns blue after
+      the answer is submitted, and returns green on `Stop`. First attempt on
+      2026-09-16 failed because `~/.gemini/config/hooks.json` still had the
+      old four-event registration with no `PreToolUse`; rebuild/relaunch and
+      run Antigravity setup again before repeating this check. Retest on
+      2026-09-16 passed: Antigravity setup showed on, `ask_question` blocked
+      in the terminal, and the active tab showed the amber waiting state.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*

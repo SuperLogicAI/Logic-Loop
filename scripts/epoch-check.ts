@@ -25,6 +25,14 @@ assert.equal(
   "late error PostToolUse revived idle"
 );
 
+// Antigravity ask_question: PreToolUse is translated to PermissionRequest
+// while the interactive prompt is waiting for a human answer; PostToolUse
+// returns the tab to working once the answer is submitted.
+resetEpochGuard();
+assert.equal(stateForHook(ev("UserPromptSubmit")), "working");
+assert.equal(stateForHook(ev("PermissionRequest", { tool_name: "ask_question" })), "waiting");
+assert.equal(stateForHook(ev("PostToolUse", { tool_name: "ask_question" })), "working");
+
 // A new human-initiated turn reopens the epoch.
 assert.equal(stateForHook(ev("UserPromptSubmit")), "working");
 assert.equal(stateForHook(ev("PostToolUse")), "working");
