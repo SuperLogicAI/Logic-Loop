@@ -2478,6 +2478,54 @@ Automated evidence (2026-09-12):
 - [x] `git diff --check`.
 - [x] `npm run golden` deliberately not run: no extraction prompt changed.
 
+## 51. Antigravity session re-entry sprint (Plan 025)
+
+**Status: automated build complete; app live acceptance pending.** The maintainer
+explicitly authorized a 2026-09-16 sprint bypass of the normal phase and
+pre-code live-continuity gates while Antigravity quota may be unavailable.
+This is not a `PHASE N ACCEPTED` record. The sprint branch is
+`feat/antigravity-session-reentry`, based on `d95a7c7`. Installed `agy`
+1.2.4 exposes `--conversation <id>` in `--help`. On 2026-09-16 a disposable
+print-mode process was asked to remember a harmless three-word phrase,
+then exited. A second process using `agy --conversation <id>` returned the
+exact phrase and reported the same conversation ID with two turns. This
+proves CLI continuity, but not the Logic Loop ghost-tab path. An installed
+Logic Loop instance was already running with active tabs, so the sprint did
+not start a second dev instance that would compete for the shared ingest
+file or disrupt those sessions. Do not mark re-entry supported or change
+onboarding capability until the remaining app checks pass.
+
+| Check | Status / evidence |
+|---|---|
+| A new `agy --conversation <id>` process recalls a distinctive fact from a prior process | PASS — agy 1.2.4, 2026-09-16; second process returned the exact phrase and same ID, with `num_turns: 2` |
+| First tethered turn creates a binding with `agent = antigravity`, exact tether, and project key | PENDING |
+| Second turn refreshes that binding and returns the tab to working without an extra counted turn | PENDING |
+| Empty `workspacePaths` uses only the exact live tab's project; stale/untethered events write no binding | PENDING |
+| Rename/recolor, quit, relaunch: one ghost tab retains project, title, color, and Re-enter | PENDING |
+| Re-enter launches the verified CLI command and retains prior conversation context | PENDING |
+| Dead ingest still yields hook stdout `{}`, exit 0, and usable terminal; record elapsed time for two posts | PENDING |
+| Claude/Codex resume and OpenCode's unsupported label remain correct | PENDING |
+
+When executing the matrix, record the app commit, OS, `agy` version, a
+sanitized conversation ID, measured timing, and observations here. Keep
+private transcripts and account details out of git.
+
+Automated evidence (2026-09-16, sprint branch):
+
+- [x] `cargo test --lib antigravity::tests` — 28/28; ordered synthetic
+      SessionStart and turn-open payloads, absent cwd/transcript, and
+      no synthetic start for mid-turn calls or missing IDs.
+- [x] `cargo test --lib resume_command_selects_antigravity_syntax` — 1/1;
+      the unchanged ID validator is covered in the full Rust suite.
+- [x] `npm run check` — all 27 configured frontend checks, including new
+      binding fallback and Antigravity re-entry row assertions.
+- [x] `npx tsc --noEmit`, `npm run build`,
+      `cd src-tauri && cargo test --lib` (67/67),
+      `cd src-tauri && cargo clippy --all-targets -- -D warnings`, and
+      `git diff --check` passed.
+- [ ] App quit/relaunch and dead-ingest timing remain live-only checks above.
+- [x] `npm run golden` intentionally not run; no extraction prompt changed.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*

@@ -104,6 +104,23 @@ export interface BindCandidate {
   agentState?: AgentState;
 }
 
+/** Location to persist for a tethered SessionStart. Agy can omit
+ * workspacePaths; only its exact, live tab may supply the missing project. */
+export function sessionBindingLocation(
+  p: HookPayload,
+  projectKey: string | undefined,
+  tab?: { id: string; cwd: string; status: string }
+): { cwd: string; projectKey: string } | null {
+  if (!p.tab_id) return null;
+  // A late hook from a closed agy tab must not reactivate its binding.
+  if (p.agent === "antigravity" && (tab?.id !== p.tab_id || tab.status !== "live")) return null;
+  if (p.cwd && projectKey) return { cwd: p.cwd, projectKey };
+  if (p.agent === "antigravity" && tab?.cwd) {
+    return { cwd: tab.cwd, projectKey: tab.cwd };
+  }
+  return null;
+}
+
 /**
  * Session→tab binding. This is the ONE place binding is decided.
  *

@@ -270,6 +270,24 @@ fn translate(event: &str, input: &serde_json::Value) -> serde_json::Value {
     out
 }
 
+/// Agy has no SessionStart hook. Its invocation counter resets on every new
+/// turn, so this intentionally refreshes the same session binding each turn.
+/// Keep the existing turn-open event second; neither event depends on the
+/// frontend having committed the other to SQLite yet.
+fn translate_payloads(event: &str, input: &serde_json::Value) -> Vec<serde_json::Value> {
+    let translated = translate(event, input);
+    if event == "PreInvocation"
+        && translated["hook_event_name"] == "UserPromptSubmit"
+        && translated["session_id"].as_str().is_some_and(|s| !s.is_empty())
+    {
+        let mut start = translated.clone();
+        start["hook_event_name"] = "SessionStart".into();
+        vec![start, translated]
+    } else {
+        vec![translated]
+    }
+}
+
 /// Antigravity's own PascalCase tool arg field names, added under the shared
 /// lowercase keys `repo.ts`'s Accomplished panel, `delta.ts`'s Since-you-left
 /// digest, and `App.tsx`'s blocker-detection gate already look for — without
@@ -305,25 +323,30 @@ fn normalize_tool_args(args: &mut serde_json::Value) {
 /// timeout handling rather than duplicating it. Always exits 0: a
 /// translation or delivery failure must never surface to Antigravity as a
 /// bad `command` result on a Post* event.
+fn post_payload(translated: &serde_json::Value) {
+    if translated.get("session_id").and_then(|v| v.as_str()).is_some_and(|s| !s.is_empty()) {
+        if let Ok(mut child) = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(crate::ingest::hook_command_with_agent(Some("antigravity")))
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+        {
+            if let Some(mut stdin) = child.stdin.take() {
+                let _ = stdin.write_all(translated.to_string().as_bytes());
+            }
+            let _ = child.wait();
+        }
+    }
+}
+
 pub fn run_hook_mode(event_name: &str) -> ! {
     let mut raw = String::new();
     let _ = std::io::stdin().read_to_string(&mut raw);
     if let Ok(input) = serde_json::from_str::<serde_json::Value>(&raw) {
-        let translated = translate(event_name, &input);
-        if translated.get("session_id").and_then(|v| v.as_str()).is_some_and(|s| !s.is_empty()) {
-            if let Ok(mut child) = std::process::Command::new("sh")
-                .arg("-c")
-                .arg(crate::ingest::hook_command_with_agent(Some("antigravity")))
-                .stdin(std::process::Stdio::piped())
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .spawn()
-            {
-                if let Some(mut stdin) = child.stdin.take() {
-                    let _ = stdin.write_all(translated.to_string().as_bytes());
-                }
-                let _ = child.wait();
-            }
+        for translated in translate_payloads(event_name, &input) {
+            post_payload(&translated);
         }
     }
     // Antigravity expects a JSON object on our stdout for every hook type
@@ -556,6 +579,54 @@ mod tests {
         let out = translate("PreInvocation", &input);
         assert_eq!(out["hook_event_name"], "UserPromptSubmit");
         assert_eq!(out["session_id"], "abc-123");
+    }
+
+    #[test]
+    fn turn_start_emits_session_start_before_prompt_submit() {
+        let input = serde_json::json!({
+            "conversationId": "abc-123",
+            "workspacePaths": ["/tmp/proj"],
+            "transcriptPath": "/tmp/agy.jsonl",
+            "invocationNum": 0
+        });
+        let payloads = translate_payloads("PreInvocation", &input);
+        assert_eq!(payloads.len(), 2);
+        assert_eq!(payloads[0]["hook_event_name"], "SessionStart");
+        assert_eq!(payloads[1]["hook_event_name"], "UserPromptSubmit");
+        for payload in payloads {
+            assert_eq!(payload["session_id"], "abc-123");
+            assert_eq!(payload["cwd"], "/tmp/proj");
+            assert_eq!(payload["transcript_path"], "/tmp/agy.jsonl");
+        }
+    }
+
+    #[test]
+    fn turn_start_missing_optional_fields_still_emits_both_events() {
+        let payloads = translate_payloads("PreInvocation", &serde_json::json!({
+            "conversationId": "abc-123", "workspacePaths": []
+        }));
+        assert_eq!(payloads.len(), 2);
+        assert!(payloads[0].get("cwd").is_none());
+        assert!(payloads[0].get("transcript_path").is_none());
+        assert_eq!(payloads[1]["hook_event_name"], "UserPromptSubmit");
+    }
+
+    #[test]
+    fn later_invocations_and_missing_ids_do_not_emit_session_start() {
+        let later = translate_payloads("PreInvocation", &serde_json::json!({
+            "conversationId": "abc-123", "invocationNum": 1
+        }));
+        assert_eq!(later.len(), 1);
+        assert_eq!(later[0]["hook_event_name"], "PreInvocation");
+        for input in [serde_json::json!({}), serde_json::json!({ "conversationId": "" })] {
+            let payloads = translate_payloads("PreInvocation", &input);
+            assert_eq!(payloads.len(), 1);
+            assert_eq!(payloads[0]["hook_event_name"], "UserPromptSubmit");
+        }
+        assert_eq!(
+            translate_payloads("Stop", &serde_json::json!({ "conversationId": "abc-123" })).len(),
+            1
+        );
     }
 
     #[test]

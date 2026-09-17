@@ -127,7 +127,7 @@ alongside Claude Code.
 | **Claude Code** | ✅ | ✅ | Hooks + JSONL transcript tailing. The reference adapter. Resume/re-entry supported. |
 | **OpenCode** | ✅ | — | In-process plugin translating native events; no transcript file to tail. |
 | **Codex** | ✅ | ✅ | Hook contract is near-identical to Claude's; registers into `~/.codex/hooks.json`. Carries its own adapter marker, resumes via `codex resume`, handles `Interrupt`/`SessionEnd` lifecycle events, and can back the Sidebar LM extractor. |
-| **[Antigravity](https://github.com/google-antigravity/antigravity-cli)** (`agy`) | ✅ | — | See caveats below. |
+| **[Antigravity](https://github.com/google-antigravity/antigravity-cli)** (`agy`) | ✅ | — | Re-entry wiring is built on the sprint branch; app quit/relaunch is still unverified. See caveats below. |
 
 Decision and blocker extraction is available for Claude Code and Codex. The
 Sidebar LM chooser supports Claude CLI (default), Codex CLI, and LM Studio
@@ -146,6 +146,12 @@ Antigravity's tool activity (file edits, commands run) now shows real detail
 in the Accomplished panel and Since-you-left digest, and a second turn in the
 same session correctly returns the tab to "working" instead of freezing on
 "idle" — both were Logic Loop-side gaps, now fixed.
+
+Antigravity session re-entry is being built in [Plan 025](plans/025-antigravity-session-reentry.md).
+`agy` 1.2.4 restored a disposable conversation in a new CLI process, and the
+branch has automated coverage for binding and resume selection. The full app
+quit/relaunch/Re-enter flow remains untested; Setup still labels re-entry
+unsupported until that live check passes.
 
 One Antigravity-specific limit remains, upstream in `agy` and not fixable
 from this side (full derivation in [docs/TESTING.md](docs/TESTING.md) §21):

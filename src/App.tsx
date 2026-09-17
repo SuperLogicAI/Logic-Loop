@@ -13,6 +13,7 @@ import {
   onTailerFailed,
   onTranscriptLine,
   seedUnclaimedTabs,
+  sessionBindingLocation,
   shouldFlagUnclaimed,
   shouldNotify,
   sourceContextForHook,
@@ -893,20 +894,27 @@ export default function App() {
       // transcript_path is allowed to be absent (a Codex SessionStart can send
       // none) — stored as an empty-string sentinel; resume never reads this
       // column, only tail-worthiness (gated separately in ingest.rs) does.
-      if (p.hook_event_name === "SessionStart" && p.tab_id && projectKey && p.cwd) {
+      if (p.hook_event_name === "SessionStart" && p.tab_id) {
         const bindingTab = tabsRef.current.find((tab) => tab.id === p.tab_id);
-        void repo
-          .upsertSessionBinding(
-            p.session_id,
-            p.tab_id,
-            projectKey,
-            p.cwd,
-            p.transcript_path ?? "",
-            p.agent,
-            bindingTab?.title,
-            bindingTab?.color
-          )
-          .catch(() => undefined); // fail open, same as addEvent above
+        const location = sessionBindingLocation(
+          p,
+          projectKey,
+          bindingTab ? { id: bindingTab.id, cwd: expand(bindingTab.cwd), status: bindingTab.status } : undefined
+        );
+        if (location) {
+          void repo
+            .upsertSessionBinding(
+              p.session_id,
+              p.tab_id,
+              location.projectKey,
+              location.cwd,
+              p.transcript_path ?? "",
+              p.agent,
+              bindingTab?.title,
+              bindingTab?.color
+            )
+            .catch(() => undefined); // fail open, same as addEvent above
+        }
       }
       if (p.hook_event_name === "Stop") {
         decisions.onStop(p.session_id, sessionCwd.get(p.session_id), refreshDecisionCounts, sourceContext, (agent, reason) => {
