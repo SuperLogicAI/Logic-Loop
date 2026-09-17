@@ -23,7 +23,7 @@
 - **Depends on:** Existing Codex marker, migration 10, and resume-selector
   infrastructure; Antigravity turn-epoch fix from Phase 16. All are present
   at the planned commit. A real `agy` 1.2.4 continuity probe passed on
-  2026-09-16; the app's ghost-tab flow is still unverified.
+  2026-09-16; the app's ghost-tab flow and context recall subsequently passed.
 - **Category:** adapter correctness and product capability.
 - **Planned at:** `d95a7c7`, 2026-09-16.
 - **Sprint authorization:** On 2026-09-16 the maintainer explicitly asked to
@@ -33,12 +33,15 @@
   the real continuity and app-reentry checks pass. This exception applies to
   this sprint only and is not the literal phase acceptance for other work.
 - **Phase:** unassigned. Build authorized by the sprint exception above;
-  live acceptance remains pending.
+  maintainer approved this Plan 025 sprint on 2026-09-16 with
+  `CURRENT PHASE APPROVED`. That wording does not assign a phase number or grant a literal
+  `PHASE N ACCEPTED` for unrelated work.
 - **Build result:** Rust/TypeScript implementation is built on the sprint
-  branch. Agy 1.2.4 continuity passed in a new CLI process; all automated
-  gates passed. The Logic Loop quit/relaunch/Re-enter matrix in
-  `docs/TESTING.md` §51 remains pending, so onboarding still reports
-  `reentry: false` and the branch is not accepted for merge.
+  branch. Agy 1.2.4 continuity passed in a new CLI process; Logic Loop
+  quit/relaunch/Re-enter and prior-context recall passed in the dev app.
+  The maintainer reports all remaining live checks in `docs/TESTING.md` §51
+  passed. Onboarding now reports `reentry: true`. Final automated gates are
+  recorded there; this branch remains isolated until separately merged.
 - **Supersedes:** Agy 003 in `plans/Antigravity_Implementation_Plans.md`.
   That 2026-09-06 plan predates the live finding that `invocationNum == 0`
   starts **each turn**, not just the first conversation turn. Agy 001/002
@@ -330,33 +333,33 @@ the live run. Keep private transcripts and account details out of git.
 | Case | Required observation | Result / evidence |
 |---|---|---|
 | CLI continuity gate | Fresh `agy --conversation <id>` process recalls a unique prior-turn fact | PASS — agy 1.2.4, 2026-09-16; see `docs/TESTING.md` §51 |
-| Initial binding | Tethered first turn creates `session_bindings` row with correct agent, tether, project key, cwd | PENDING |
-| Repeated turn | Second turn refreshes the same row; tab returns to working; no false turn count from synthetic starts | PENDING |
-| Projectless payload | Missing `workspacePaths` uses the current live tab's project key; stale/untethered payload writes no binding | PENDING |
-| Presentation | Renamed/recolored tab persists title and color after another turn | PENDING |
-| Relaunch | Quit and reopen app; exactly one ghost tab per tether shows the correct project/title/color and Re-enter | PENDING |
-| Re-enter | Re-enter launches the verified command and recalls prior context | PENDING |
-| Outside session | No tethered `SessionStart` binding or ghost is created for an outside-terminal session | PENDING |
-| Dead ingest | Hook returns `{}` and exit 0, with measured elapsed time; terminal remains usable | PENDING |
-| Other adapters | Claude and Codex re-entry still use their own command; OpenCode remains unsupported | PENDING |
+| Initial binding | Tethered first turn creates `session_bindings` row with correct agent, tether, project key, cwd | PASS — §51 SQLite observation |
+| Repeated turn | Second turn refreshes the same row; tab returns to working; no false turn count from synthetic starts | PASS — §51 UI report and real-event digest |
+| Projectless payload | Missing `workspacePaths` uses the current live tab's project key; stale/untethered payload writes no binding | PASS — §51 native-shaped live-app probe report and focused checks |
+| Presentation | Renamed/recolored tab persists title and color after another turn | PASS — §51 maintainer report |
+| Relaunch | Quit and reopen app; exactly one ghost tab per tether shows the correct project/title/color and Re-enter | PASS — §51 maintainer report |
+| Re-enter | Re-enter launches the verified command and recalls prior context | PASS — §51 maintainer report |
+| Outside session | No tethered `SessionStart` binding or ghost is created for an outside-terminal session | PASS — §51 no-tether live-app probe report |
+| Dead ingest | Hook returns `{}` and exit 0, with measured elapsed time; terminal remains usable | PASS — §51 measured hook and maintainer Agy prompt report |
+| Other adapters | Claude and Codex re-entry still use their own command; OpenCode remains unsupported | PASS — §51 maintainer UI report and focused checks |
 
 ## Done criteria
 
-- [ ] Sprint exception and drift audit are recorded; real CLI continuity
+- [x] Sprint exception and drift audit are recorded; real CLI continuity
   is proven before the feature is marked accepted or merged.
-- [ ] `PreInvocation` with invocation zero yields ordered synthetic
+- [x] `PreInvocation` with invocation zero yields ordered synthetic
   `SessionStart` and `UserPromptSubmit`; later invocations retain old
   behavior; hooks always exit 0 with `{}`.
-- [ ] Repeated starts are documented as per-turn and create/refresh only
+- [x] Repeated starts are documented as per-turn and create/refresh only
   the correct tether's binding; no session is inferred from PTY bytes.
-- [ ] Missing native cwd is recovered only from a live, exact Antigravity
+- [x] Missing native cwd is recovered only from a live, exact Antigravity
   tether; unknown/untethered sessions do not gain a re-entry binding.
-- [ ] A real Antigravity session creates a ghost tab and Re-enter restores
+- [x] A real Antigravity session creates a ghost tab and Re-enter restores
   the correct prior conversation with its title/color and context.
-- [ ] Onboarding advertises Antigravity re-entry only after that live pass.
-- [ ] All focused and full gates in Step 7 pass; manual observations are
+- [x] Onboarding advertises Antigravity re-entry only after that live pass.
+- [x] All focused and full gates in Step 7 pass; manual observations are
   recorded under a new `docs/TESTING.md` section.
-- [ ] No global config, generated adapter, migration, extraction prompt,
+- [x] No global config, generated adapter, migration, extraction prompt,
   or unrelated adapter behavior changed.
 
 ## STOP conditions

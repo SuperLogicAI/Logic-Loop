@@ -2480,35 +2480,40 @@ Automated evidence (2026-09-12):
 
 ## 51. Antigravity session re-entry sprint (Plan 025)
 
-**Status: automated build complete; app live acceptance pending.** The maintainer
+**Status: PASS — Plan 025 sprint approved by the maintainer.** The maintainer
 explicitly authorized a 2026-09-16 sprint bypass of the normal phase and
 pre-code live-continuity gates while Antigravity quota may be unavailable.
-This is not a `PHASE N ACCEPTED` record. The sprint branch is
+The approval wording was `CURRENT PHASE APPROVED`; Plan 025 has no assigned
+phase number, so this does not assert a literal `PHASE N ACCEPTED` for another
+phase. The sprint branch is
 `feat/antigravity-session-reentry`, based on `d95a7c7`. Installed `agy`
 1.2.4 exposes `--conversation <id>` in `--help`. On 2026-09-16 a disposable
 print-mode process was asked to remember a harmless three-word phrase,
 then exited. A second process using `agy --conversation <id>` returned the
 exact phrase and reported the same conversation ID with two turns. This
-proves CLI continuity, but not the Logic Loop ghost-tab path. An installed
-Logic Loop instance was already running with active tabs, so the sprint did
-not start a second dev instance that would compete for the shared ingest
-file or disrupt those sessions. Do not mark re-entry supported or change
-onboarding capability until the remaining app checks pass.
+proves CLI continuity. The maintainer subsequently verified the Logic Loop
+ghost-tab and Re-enter path in the dev app. During the original build an
+installed Logic Loop instance was already running with active tabs, so that
+build did not start a competing dev instance. The maintainer subsequently
+reported that the remaining manual matrix passed as expected. The individual
+prompt replies and probe console output were not supplied, so those rows are
+identified below as maintainer-reported rather than independently captured.
 
 | Check | Status / evidence |
 |---|---|
 | A new `agy --conversation <id>` process recalls a distinctive fact from a prior process | PASS — agy 1.2.4, 2026-09-16; second process returned the exact phrase and same ID, with `num_turns: 2` |
-| First tethered turn creates a binding with `agent = antigravity`, exact tether, and project key | PENDING |
-| Second turn refreshes that binding and returns the tab to working without an extra counted turn | PENDING |
-| Empty `workspacePaths` uses only the exact live tab's project; stale/untethered events write no binding | PENDING |
-| Rename/recolor, quit, relaunch: one ghost tab retains project, title, color, and Re-enter | PENDING |
-| Re-enter launches the verified CLI command and retains prior conversation context | PENDING |
-| Dead ingest still yields hook stdout `{}`, exit 0, and usable terminal; record elapsed time for two posts | PENDING |
-| Claude/Codex resume and OpenCode's unsupported label remain correct | PENDING |
+| First tethered turn creates a binding with `agent = antigravity`, exact tether, and project key | PASS — maintainer's dev-app SQLite read on 2026-09-16 found one active row for tether `d97aebfa…`: agent `antigravity`, session `5d8cfdd7…`, project key and cwd both `/Users/vandershark/Desktop/dev/context_terminal`, title `Agy reentry test`, color `#56b6c2` |
+| Second turn refreshes that binding and returns the tab to working without an extra counted turn | PASS — read-only SQLite on 2026-09-16 found one binding for the tether and, after re-entry, 3 `hook:SessionStart`, 3 `hook:UserPromptSubmit`, and 3 `hook:Stop` rows for the same session. Running `summarizeDelta` over all 27 real session events returned `turns: 3`, so synthetic starts did not inflate the digest. The maintainer also confirmed the tab visibly changed to working during an Agy turn and resolved green afterward. |
+| Empty `workspacePaths` uses only the exact live tab's project; stale/untethered events write no binding | PASS — maintainer reports the disposable live-app native-shaped payload probe passed, including exact live-tether binding. `bind-check` covers native cwd priority and rejection of missing, mismatched, or dead tethers; `antigravity::tests` covers absent/empty workspace paths. This was an injected native-shaped payload, not an observed CLI-generated projectless event. |
+| Rename/recolor, quit, relaunch: one ghost tab retains project, title, color, and Re-enter | PASS — maintainer reported the dev-app ghost tab retained its `Agy reentry test` title and `#56b6c2` color, with Re-enter available after quit/relaunch (2026-09-16) |
+| Re-enter launches the verified CLI command and retains prior conversation context | PASS — maintainer used Re-enter and reported that Agy recalled the pre-quit codeword `opal falcon 731` (2026-09-16) |
+| Outside-terminal Antigravity session creates no tethered binding or ghost | PASS — maintainer reports the no-tether live-app native-shaped payload probe passed with no session binding. `sessionBindingLocation` also rejects a missing `tab_id`. This was an injected payload rather than a separate interactive Agy process. |
+| Dead ingest still yields hook stdout `{}`, exit 0, and usable terminal; record elapsed time for two posts | PASS — 2026-09-16, with the app's saved ingest port confirmed closed, a valid turn-0 `PreInvocation` payload to the dev binary returned stdout `{}`, empty stderr, exit 0 in 0.028 s. The maintainer subsequently reports that Agy answered both prompts in the same outside-terminal session while Logic Loop was closed. The earlier shell attempt with a missing input file was not counted as a valid-payload test. |
+| Claude/Codex resume and OpenCode's unsupported label remain correct | PASS — maintainer reports fresh Claude and Codex ghost-tab Re-enter tests recalled their distinct pre-quit codewords and Setup showed OpenCode `Re-entry not supported`. All 8 `pty::tests` passed, including Claude fallback, Codex command, Antigravity command, and unsafe-ID rejection. |
 
-When executing the matrix, record the app commit, OS, `agy` version, a
-sanitized conversation ID, measured timing, and observations here. Keep
-private transcripts and account details out of git.
+Live setup: macOS 26.4.1, `agy` 1.2.4, app branch commit `01f82a6`,
+sanitized conversation ID `5d8cfdd7…`. Keep private transcripts and account
+details out of git.
 
 Automated evidence (2026-09-16, sprint branch):
 
@@ -2523,7 +2528,20 @@ Automated evidence (2026-09-16, sprint branch):
       `cd src-tauri && cargo test --lib` (67/67),
       `cd src-tauri && cargo clippy --all-targets -- -D warnings`, and
       `git diff --check` passed.
-- [ ] App quit/relaunch and dead-ingest timing remain live-only checks above.
+- [x] App quit/relaunch, visible turn state, and dead-ingest hook timing were
+      observed as above. The maintainer reported that the remaining
+      projectless/outside-terminal probes, terminal-usability check, and
+      other-adapter live regression passed; raw outputs were not supplied.
+- [x] 2026-09-16 rerun: focused `bind:check`, `reentry:check`, `epoch:check`,
+      `delta:check`, `onboarding:check`, 28 Antigravity Rust tests, and 8 PTY
+      Rust tests; then `npm run opencode:check`, all 27 `npm run check`
+      scripts, `npx tsc --noEmit`, `npm run build`, `cargo test --lib`
+      (67/67), and clippy with warnings denied all passed.
+- [x] After the approved `reentry: true` onboarding change, Step 7 was rerun
+      in order: `onboarding:check`, 28 Antigravity Rust tests, 8 PTY Rust
+      tests, `reentry:check`, `opencode:check`, all 27 frontend checks,
+      `tsc --noEmit`, production build, 67 Rust tests, and clippy with
+      warnings denied all passed. `git diff --check` passed.
 - [x] `npm run golden` intentionally not run; no extraction prompt changed.
 
 ## Quality gates (machine-run, not manual)
