@@ -828,7 +828,8 @@ mod tests {
     // Still gated after the home() helper: the case-fold assertion needs
     // `~/Library` to exist on a case-insensitive filesystem, and where it does
     // not both spellings fall through canon unchanged and compare unequal.
-    #[cfg(unix)]
+    // macOS-only, not unix in general — Linux is case-sensitive.
+    #[cfg(target_os = "macos")]
     fn canon_resolves_case_and_tilde_to_one_key() {
         let _guard = crate::home::ENV_LOCK.lock().unwrap();
         let home = crate::home::home().unwrap();
