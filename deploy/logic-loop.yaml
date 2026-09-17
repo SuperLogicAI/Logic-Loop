@@ -98,9 +98,11 @@ Resources:
           USER app
           WORKDIR /home/app
           EXPOSE 6080
+          # Stale X locks survive a container restart and stop Xvfb from starting; if Xvfb
+          # exits anyway, the loop ends and Docker restarts the container.
           # x11vnc has no password: it listens on container loopback only, and the
           # host publishes 6080 on 127.0.0.1 only, so the SSM session is the auth.
-          CMD ["bash", "-c", "Xvfb :0 -screen 0 1600x900x24 & sleep 2; matchbox-window-manager -use_titlebar no & x11vnc -display :0 -localhost -forever -shared -nopw -quiet & websockify --web /usr/share/novnc 6080 localhost:5900 & while true; do dbus-run-session logic-loop; sleep 2; done"]
+          CMD ["bash", "-c", "rm -f /tmp/.X0-lock /tmp/.X11-unix/X0; Xvfb :0 -screen 0 1600x900x24 & sleep 2; matchbox-window-manager -use_titlebar no & x11vnc -display :0 -localhost -forever -shared -nopw -quiet & websockify --web /usr/share/novnc 6080 localhost:5900 & while pgrep -x Xvfb >/dev/null; do dbus-run-session logic-loop; sleep 2; done"]
           EOF
 
           docker build -t logic-loop -f /opt/Dockerfile /opt/logic-loop
