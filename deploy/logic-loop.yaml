@@ -1,0 +1,126 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Logic Loop desktop app in a container on one EC2 host, viewed in a browser
+  through noVNC over SSM port forwarding. No inbound ports are opened.
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: m6i.large
+    Description: 8 GB RAM is the floor for the Rust build; non-burstable so the build does not run out of CPU credits.
+  RepoUrl:
+    Type: String
+    Default: https://github.com/SuperLogicAI/Logic-Loop.git
+  RepoRef:
+    Type: String
+    Default: main
+    Description: Branch or tag to build.
+  LatestAmi:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+Resources:
+  Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  Profile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref Role]
+
+  # No ingress rules: the only way in is an SSM session, gated by IAM.
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Logic Loop host, egress only
+
+  Instance:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT90M
+    Properties:
+      ImageId: !Ref LatestAmi
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref Profile
+      SecurityGroupIds: [!GetAtt SecurityGroup.GroupId]
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: { VolumeSize: 40, VolumeType: gp3, Encrypted: true }
+      Tags:
+        - { Key: Name, Value: logic-loop }
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+          dnf install -y aws-cfn-bootstrap
+          signal() { /opt/aws/bin/cfn-signal -e "$1" --stack ${AWS::StackName} --resource Instance --region ${AWS::Region}; }
+          trap 'signal 1' ERR
+          dnf install -y docker git
+          systemctl enable --now docker
+
+          rm -rf /opt/logic-loop
+          git clone --depth 1 --branch ${RepoRef} ${RepoUrl} /opt/logic-loop
+
+          cat > /opt/Dockerfile <<'EOF'
+          FROM rust:1-bookworm AS build
+          RUN apt-get update && apt-get install -y --no-install-recommends \
+                libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+                libssl-dev libxdo-dev librsvg2-dev libayatana-appindicator3-dev \
+              && rm -rf /var/lib/apt/lists/*
+          COPY --from=node:22-bookworm-slim /usr/local /usr/local
+          WORKDIR /src
+          COPY . .
+          RUN npm ci && npx tauri build --no-bundle && ls -l src-tauri/target/release/app
+
+          FROM debian:bookworm-slim
+          RUN apt-get update && apt-get install -y --no-install-recommends \
+                libwebkit2gtk-4.1-0 libxdo3 libayatana-appindicator3-1 librsvg2-common \
+                xvfb x11vnc novnc websockify matchbox-window-manager dbus-x11 \
+                fonts-dejavu x11-utils git curl ca-certificates procps \
+              && rm -rf /var/lib/apt/lists/*
+          COPY --from=node:22-bookworm-slim /usr/local /usr/local
+          RUN npm install -g @anthropic-ai/claude-code && useradd -m -s /bin/bash app
+          COPY --from=build /src/src-tauri/target/release/app /usr/local/bin/logic-loop
+          ENV HOME=/home/app SHELL=/bin/bash DISPLAY=:0 GDK_BACKEND=x11 \
+              WEBKIT_DISABLE_COMPOSITING_MODE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1 \
+              NPM_CONFIG_PREFIX=/home/app/.npm-global \
+              PATH=/home/app/.npm-global/bin:/home/app/.local/bin:/usr/local/bin:/usr/bin:/bin
+          USER app
+          WORKDIR /home/app
+          EXPOSE 6080
+          # x11vnc has no password: it listens on container loopback only, and the
+          # host publishes 6080 on 127.0.0.1 only, so the SSM session is the auth.
+          CMD ["bash", "-c", "Xvfb :0 -screen 0 1600x900x24 & sleep 2; matchbox-window-manager -use_titlebar no & x11vnc -display :0 -localhost -forever -shared -nopw -quiet & websockify --web /usr/share/novnc 6080 localhost:5900 & while true; do dbus-run-session logic-loop; sleep 2; done"]
+          EOF
+
+          docker build -t logic-loop -f /opt/Dockerfile /opt/logic-loop
+          docker rm -f logic-loop || true
+          docker run -d --name logic-loop --restart unless-stopped --shm-size 1g \
+            -p 127.0.0.1:6080:6080 -v logic-loop-home:/home/app logic-loop
+          sleep 20
+          curl -sf -o /dev/null http://127.0.0.1:6080/vnc.html
+          docker exec logic-loop bash -c 'xwininfo -root -tree | grep -q "Logic Loop"'
+          signal 0
+
+Outputs:
+  InstanceId:
+    Value: !Ref Instance
+  ConnectCommand:
+    Description: Run locally (needs the Session Manager plugin), keep it open.
+    Value: !Sub >-
+      aws ssm start-session --region ${AWS::Region} --target ${Instance}
+      --document-name AWS-StartPortForwardingSession
+      --parameters portNumber=6080,localPortNumber=6080
+  Url:
+    Description: Open while ConnectCommand is running.
+    Value: http://localhost:6080/vnc.html?autoconnect=1&resize=scale
