@@ -1,7 +1,8 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
   Logic Loop desktop app in a container on one EC2 host, viewed in a browser
-  through noVNC over SSM port forwarding. No inbound ports are opened.
+  through noVNC. Reached over SSM port forwarding, and optionally over a public
+  Tailscale Funnel URL behind a password. No inbound AWS ports are opened.
 
 Parameters:
   InstanceType:
@@ -18,6 +19,14 @@ Parameters:
   LatestAmi:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+  TailscaleAuthKeyParameter:
+    Type: String
+    Default: /logic-loop/tailscale-auth-key
+    Description: SSM SecureString holding a Tailscale auth key. If it does not exist, Tailscale and the public URL are skipped.
+  WebPasswordParameter:
+    Type: String
+    Default: /logic-loop/web-password
+    Description: SSM SecureString with the public URL password. Generated on first boot if it does not exist.
 
 Resources:
   Role:
@@ -31,6 +40,16 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: logic-loop-secrets
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [ssm:GetParameter, ssm:PutParameter]
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${TailscaleAuthKeyParameter}
+                  - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${WebPasswordParameter}
 
   Profile:
     Type: AWS::IAM::InstanceProfile
@@ -110,6 +129,34 @@ Resources:
           sleep 20
           curl -sf -o /dev/null http://127.0.0.1:6080/vnc.html
           docker exec logic-loop bash -c 'xwininfo -root -tree | grep -q "Logic Loop"'
+
+          # Public URL: Tailscale Funnel -> Caddy (password) -> noVNC. Only when an auth key exists.
+          set +x  # keep the key and password out of cloud-init-output.log
+          TS_KEY=$(aws ssm get-parameter --region ${AWS::Region} --name ${TailscaleAuthKeyParameter} --with-decryption --query Parameter.Value --output text 2>/dev/null || true)
+          if [ -n "$TS_KEY" ]; then
+            if ! PW=$(aws ssm get-parameter --region ${AWS::Region} --name ${WebPasswordParameter} --with-decryption --query Parameter.Value --output text 2>/dev/null); then
+              PW=$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)
+              aws ssm put-parameter --region ${AWS::Region} --name ${WebPasswordParameter} --type SecureString --value "$PW" >/dev/null
+            fi
+            HASH=$(echo "$PW" | docker run --rm -i caddy:2 caddy hash-password)
+            case "$HASH" in '$2'*) ;; *) echo "password hash failed"; false;; esac
+            mkdir -p /opt/caddy
+            for line in ':8080 {' 'bind 127.0.0.1' 'basic_auth {' "logicloop $HASH" '}' 'reverse_proxy 127.0.0.1:6080' '}'; do
+              echo "$line"
+            done > /opt/caddy/Caddyfile
+            docker rm -f caddy || true
+            docker run -d --name caddy --restart unless-stopped --network host -v /opt/caddy/Caddyfile:/etc/caddy/Caddyfile:ro caddy:2
+
+            curl -fsSL https://tailscale.com/install.sh | sh
+            systemctl enable --now tailscaled
+            tailscale up --auth-key="$TS_KEY" --hostname logic-loop
+            timeout 60 tailscale funnel --bg --https=443 http://127.0.0.1:8080
+            TS_HOST=$(tailscale status --json | python3 -c 'import sys, json; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')
+            sleep 5
+            test "$(curl -s -o /dev/null -w '%{http_code}' --max-time 90 https://$TS_HOST/vnc.html)" = 401
+            test "$(curl -s -o /dev/null -w '%{http_code}' --max-time 90 -u "logicloop:$PW" https://$TS_HOST/vnc.html)" = 200
+            set -x
+          fi
           signal 0
 
 Outputs:
@@ -124,3 +171,6 @@ Outputs:
   Url:
     Description: Open while ConnectCommand is running.
     Value: http://localhost:6080/vnc.html?autoconnect=1&resize=scale
+  WebPasswordCommand:
+    Description: Prints the public URL password (user logicloop). The URL is https://logic-loop.<tailnet>.ts.net/vnc.html
+    Value: !Sub aws ssm get-parameter --region ${AWS::Region} --name ${WebPasswordParameter} --with-decryption --query Parameter.Value --output text
