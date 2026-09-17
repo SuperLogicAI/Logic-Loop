@@ -66,7 +66,7 @@ export const ADAPTERS: readonly AdapterMetadata[] = [
     label: "Antigravity",
     command: "agy",
     configLocation: "~/.gemini/config/hooks.json",
-    capabilities: { activity: true, decisions: false, reentry: false },
+    capabilities: { activity: true, decisions: false, reentry: true },
   },
 ] as const;
 

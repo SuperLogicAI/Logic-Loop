@@ -2478,6 +2478,100 @@ Automated evidence (2026-09-12):
 - [x] `git diff --check`.
 - [x] `npm run golden` deliberately not run: no extraction prompt changed.
 
+## 51. Antigravity session re-entry sprint (Plan 025)
+
+**Status: PASS — Plan 025 sprint approved by the maintainer.** The maintainer
+explicitly authorized a 2026-09-16 sprint bypass of the normal phase and
+pre-code live-continuity gates while Antigravity quota may be unavailable.
+The approval wording was `CURRENT PHASE APPROVED`; Plan 025 has no assigned
+phase number, so this does not assert a literal `PHASE N ACCEPTED` for another
+phase. The sprint branch is
+`feat/antigravity-session-reentry`, based on `d95a7c7`. Installed `agy`
+1.2.4 exposes `--conversation <id>` in `--help`. On 2026-09-16 a disposable
+print-mode process was asked to remember a harmless three-word phrase,
+then exited. A second process using `agy --conversation <id>` returned the
+exact phrase and reported the same conversation ID with two turns. This
+proves CLI continuity. The maintainer subsequently verified the Logic Loop
+ghost-tab and Re-enter path in the dev app. During the original build an
+installed Logic Loop instance was already running with active tabs, so that
+build did not start a competing dev instance. The maintainer subsequently
+reported that the remaining manual matrix passed as expected. The individual
+prompt replies and probe console output were not supplied, so those rows are
+identified below as maintainer-reported rather than independently captured.
+
+| Check | Status / evidence |
+|---|---|
+| A new `agy --conversation <id>` process recalls a distinctive fact from a prior process | PASS — agy 1.2.4, 2026-09-16; second process returned the exact phrase and same ID, with `num_turns: 2` |
+| First tethered turn creates a binding with `agent = antigravity`, exact tether, and project key | PASS — maintainer's dev-app SQLite read on 2026-09-16 found one active row for tether `d97aebfa…`: agent `antigravity`, session `5d8cfdd7…`, project key and cwd both `/Users/vandershark/Desktop/dev/context_terminal`, title `Agy reentry test`, color `#56b6c2` |
+| Second turn refreshes that binding and returns the tab to working without an extra counted turn | PASS — read-only SQLite on 2026-09-16 found one binding for the tether and, after re-entry, 3 `hook:SessionStart`, 3 `hook:UserPromptSubmit`, and 3 `hook:Stop` rows for the same session. Running `summarizeDelta` over all 27 real session events returned `turns: 3`, so synthetic starts did not inflate the digest. The maintainer also confirmed the tab visibly changed to working during an Agy turn and resolved green afterward. |
+| Empty `workspacePaths` uses only the exact live tab's project; stale/untethered events write no binding | PASS — maintainer reports the disposable live-app native-shaped payload probe passed, including exact live-tether binding. `bind-check` covers native cwd priority and rejection of missing, mismatched, or dead tethers; `antigravity::tests` covers absent/empty workspace paths. This was an injected native-shaped payload, not an observed CLI-generated projectless event. |
+| Rename/recolor, quit, relaunch: one ghost tab retains project, title, color, and Re-enter | PASS — maintainer reported the dev-app ghost tab retained its `Agy reentry test` title and `#56b6c2` color, with Re-enter available after quit/relaunch (2026-09-16) |
+| Re-enter launches the verified CLI command and retains prior conversation context | PASS — maintainer used Re-enter and reported that Agy recalled the pre-quit codeword `opal falcon 731` (2026-09-16) |
+| Outside-terminal Antigravity session creates no tethered binding or ghost | PASS — maintainer reports the no-tether live-app native-shaped payload probe passed with no session binding. `sessionBindingLocation` also rejects a missing `tab_id`. This was an injected payload rather than a separate interactive Agy process. |
+| Dead ingest still yields hook stdout `{}`, exit 0, and usable terminal; record elapsed time for two posts | PASS — 2026-09-16, with the app's saved ingest port confirmed closed, a valid turn-0 `PreInvocation` payload to the dev binary returned stdout `{}`, empty stderr, exit 0 in 0.028 s. The maintainer subsequently reports that Agy answered both prompts in the same outside-terminal session while Logic Loop was closed. The earlier shell attempt with a missing input file was not counted as a valid-payload test. |
+| Claude/Codex resume and OpenCode's unsupported label remain correct | PASS — maintainer reports fresh Claude and Codex ghost-tab Re-enter tests recalled their distinct pre-quit codewords and Setup showed OpenCode `Re-entry not supported`. All 8 `pty::tests` passed, including Claude fallback, Codex command, Antigravity command, and unsafe-ID rejection. |
+
+Live setup: macOS 26.4.1, `agy` 1.2.4, app branch commit `01f82a6`,
+sanitized conversation ID `5d8cfdd7…`. Keep private transcripts and account
+details out of git.
+
+Automated evidence (2026-09-16, sprint branch):
+
+- [x] `cargo test --lib antigravity::tests` — 28/28; ordered synthetic
+      SessionStart and turn-open payloads, absent cwd/transcript, and
+      no synthetic start for mid-turn calls or missing IDs.
+- [x] `cargo test --lib resume_command_selects_antigravity_syntax` — 1/1;
+      the unchanged ID validator is covered in the full Rust suite.
+- [x] `npm run check` — all 27 configured frontend checks, including new
+      binding fallback and Antigravity re-entry row assertions.
+- [x] `npx tsc --noEmit`, `npm run build`,
+      `cd src-tauri && cargo test --lib` (67/67),
+      `cd src-tauri && cargo clippy --all-targets -- -D warnings`, and
+      `git diff --check` passed.
+- [x] App quit/relaunch, visible turn state, and dead-ingest hook timing were
+      observed as above. The maintainer reported that the remaining
+      projectless/outside-terminal probes, terminal-usability check, and
+      other-adapter live regression passed; raw outputs were not supplied.
+- [x] 2026-09-16 rerun: focused `bind:check`, `reentry:check`, `epoch:check`,
+      `delta:check`, `onboarding:check`, 28 Antigravity Rust tests, and 8 PTY
+      Rust tests; then `npm run opencode:check`, all 27 `npm run check`
+      scripts, `npx tsc --noEmit`, `npm run build`, `cargo test --lib`
+      (67/67), and clippy with warnings denied all passed.
+- [x] After the approved `reentry: true` onboarding change, Step 7 was rerun
+      in order: `onboarding:check`, 28 Antigravity Rust tests, 8 PTY Rust
+      tests, `reentry:check`, `opencode:check`, all 27 frontend checks,
+      `tsc --noEmit`, production build, 67 Rust tests, and clippy with
+      warnings denied all passed. `git diff --check` passed.
+- [x] `npm run golden` intentionally not run; no extraction prompt changed.
+
+## 52. Antigravity `ask_question` waiting indicator (Agy Plan 004)
+
+**Status: PASS.** Agy 004 is limited to surfacing Antigravity's
+interactive `ask_question` pause as Logic Loop's existing waiting state.
+The maintainer-provided review for `agy` 1.2.4 verified the hook contract:
+register `PreToolUse` only for matcher `ask_question`, translate it to the
+canonical `PermissionRequest` event, and answer the blocking hook with
+`{"decision":"allow"}` so Antigravity proceeds to its own prompt.
+
+- [x] Adapter setup includes a grouped `PreToolUse` hook with matcher
+      `ask_question`, while `PostToolUse` remains matcher `*`.
+- [x] `PreToolUse` translation emits `hook_event_name: "PermissionRequest"`
+      and preserves `tool_name: "ask_question"` without ingesting prompt text.
+- [x] `epoch:check` covers `UserPromptSubmit` → `PermissionRequest` →
+      `PostToolUse` as working → waiting → working.
+- [x] Stale pre-Plan-004 Antigravity setup no longer reports as enabled:
+      `antigravity_hooks_status` now requires the `PreToolUse` registration
+      and the `ask_question` matcher, so users are prompted to re-run setup.
+- [x] Live Logic Loop tab manual check with `agy` 1.2.4: ask Antigravity a
+      prompt that triggers `ask_question`; confirm the tab dot turns amber
+      and pulses while the terminal waits for the answer, returns blue after
+      the answer is submitted, and returns green on `Stop`. First attempt on
+      2026-09-16 failed because `~/.gemini/config/hooks.json` still had the
+      old four-event registration with no `PreToolUse`; rebuild/relaunch and
+      run Antigravity setup again before repeating this check. Retest on
+      2026-09-16 passed: Antigravity setup showed on, `ask_question` blocked
+      in the terminal, and the active tab showed the amber waiting state.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*

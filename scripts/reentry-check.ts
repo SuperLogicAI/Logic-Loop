@@ -6,7 +6,7 @@ const row = (
   tether: string,
   sessionId: string,
   updatedAt: number,
-  presentation: { agent?: string; tab_title?: string | null; tab_color?: string | null } = {}
+  presentation: { agent?: string; tab_title?: string | null; tab_color?: string | null; transcript_path?: string } = {}
 ) => ({
   session_id: sessionId,
   tab_tether: tether,
@@ -46,6 +46,16 @@ assert.deepEqual(
   latestPerTether([row("tab-1", "s1", 1000, { agent: "codex" })]).map((c) => c.agent),
   ["codex"],
   "agent field did not survive latestPerTether"
+);
+
+// Agy has no tailed transcript. Its latest binding still restores agent and
+// tab presentation without borrowing a Claude-shaped transcript path.
+assert.deepEqual(
+  latestPerTether([
+    row("agy-tab", "agy-old", 1000, { agent: "antigravity", transcript_path: "", tab_title: "Old", tab_color: "#111111" }),
+    row("agy-tab", "agy-new", 2000, { agent: "antigravity", transcript_path: "", tab_title: "Agy work", tab_color: "#f97316" }),
+  ]).map((c) => [c.session_id, c.agent, c.transcript_path, c.tab_title, c.tab_color]),
+  [["agy-new", "antigravity", "", "Agy work", "#f97316"]]
 );
 
 // A legacy/no-marker row keeps agent undefined, not fabricated.

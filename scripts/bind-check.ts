@@ -1,18 +1,36 @@
 // Self-check for session→tab binding (tether + cwd fallback).
 // Run: npm run bind:check
 import { strict as assert } from "node:assert";
-import { bindSession, type BindCandidate } from "../src/lib/ingest";
+import { bindSession, sessionBindingLocation, type BindCandidate } from "../src/lib/ingest";
 import type { HookPayload } from "../src/types";
 
 const REPO = "/Users/x/dev/proj";
 
 const tab = (id: string, cwd = REPO): BindCandidate => ({ id, cwd, status: "live" });
+function ev(extra: Record<string, unknown> = {}): HookPayload {
+  return { hook_event_name: "UserPromptSubmit", session_id: "s1", ...extra };
+}
 
-const ev = (extra: Record<string, unknown> = {}): HookPayload => ({
-  hook_event_name: "UserPromptSubmit",
-  session_id: "s1",
-  ...extra,
-});
+// SessionStart persistence needs a real location. Only Antigravity may
+// recover a missing native cwd from its exact, live tether.
+assert.deepEqual(
+  sessionBindingLocation(ev({ agent: "antigravity", tab_id: "tab-1", cwd: `${REPO}/src` }), REPO, tab("tab-1")),
+  { cwd: `${REPO}/src`, projectKey: REPO }
+);
+assert.deepEqual(
+  sessionBindingLocation(ev({ agent: "antigravity", tab_id: "tab-1" }), undefined, tab("tab-1")),
+  { cwd: REPO, projectKey: REPO }
+);
+for (const candidate of [undefined, tab("tab-2"), { ...tab("tab-1"), status: "dead" }]) {
+  assert.equal(sessionBindingLocation(ev({ agent: "antigravity", tab_id: "tab-1" }), undefined, candidate), null);
+  assert.equal(sessionBindingLocation(ev({ agent: "antigravity", tab_id: "tab-1", cwd: REPO }), REPO, candidate), null);
+}
+assert.equal(sessionBindingLocation(ev({ agent: "antigravity" }), undefined, tab("tab-1")), null);
+assert.equal(sessionBindingLocation(ev({ agent: "codex", tab_id: "tab-1" }), undefined, tab("tab-1")), null);
+assert.deepEqual(
+  sessionBindingLocation(ev({ agent: "codex", tab_id: "tab-1", cwd: REPO }), REPO, tab("tab-1")),
+  { cwd: REPO, projectKey: REPO }
+);
 
 const bind = (
   p: HookPayload,

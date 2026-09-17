@@ -73,6 +73,7 @@ test dependency is proposed for Phase 26.
 | [022](022-safe-router-traffic-view.md) | Optional Safe Router model traffic view | P1 | M (read-only Rust reader + compact UI + macOS pass) | Accepted main through Phase 32; explicit approval of this plan; Safe Router v2 view for populated state | CANDIDATE — global recent-request view only; no implementation, agent reconfiguration, or live tag experiment authorized. |
 | [023](023-claude-statusline-limits-meter.md) | Claude Code statusLine rate-limit meter | P1 | M (Rust singleton-swap installer + new ingest endpoint + compact UI + macOS pass) | Accepted main through Phase 32; explicit approval of this plan | CANDIDATE — wraps an existing user `statusLine.command` only (no auto-create); no implementation authorized. |
 | [024](024-branch-reconciliation-and-testing-sprint.md) | Branch reconciliation and testing sprint | P0 | M (one real `board.rs` merge + 2 rebases + sequenced live-test backlog) | None technically; blocks landing 021/022 and any future PR against `main` | PLANNED — not authorized yet; local `main`/`origin/main` diverged (PR #26 vs 2 unpushed local commits, real `board.rs` conflict), both feature worktrees built on the stale side. |
+| [025](025-antigravity-session-reentry.md) | Restore Antigravity conversations through session re-entry | P1 | L (live CLI proof + adapter/binding/resume work + macOS pass) | Codex 001/002, Agy 001; real `agy --conversation` continuity proof | DONE on isolated sprint branch — agy 1.2.4 CLI and Logic Loop re-entry passed; maintainer approved current sprint, final gates in §51; merge separate |
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
@@ -81,7 +82,7 @@ test dependency is proposed for Phase 26.
 | Codex 003 | Handle Codex interruption and session-end lifecycle events | P1 | M | Codex 001 | DONE (Phase 16) |
 | Agy 001 | Fix the Antigravity turn-epoch stuck bug | P0 | M–L | — (gated: live verify) | DONE (Phase 16) |
 | Agy 002 | Normalize Antigravity tool fields for display/detection | P1 | S | — | DONE (Phase 16) |
-| Agy 003 | Antigravity SessionStart emission and session re-entry | P1 | L | Codex 001, Codex 002, Agy 001 | TODO |
+| Agy 003 | Antigravity SessionStart emission and session re-entry | P1 | L | Codex 001, Codex 002, Agy 001 | SUPERSEDED by [Plan 025](025-antigravity-session-reentry.md); old `invocationNum == 1` assumption is stale |
 | Agy 004 | Waiting-state signal for `ask_question` | P2 | S | Agy 001 (live verify) | TODO |
 | OpenCode 001 | OpenCode transcript ingestion (decisions / loop digest / landing) | P0 | L | — (002 batches with it) | TODO |
 | OpenCode 002 | Carry OpenCode adapter identity through ingestion | P1 | S | — | IN PROGRESS (Phase 22 working tree) |
@@ -121,7 +122,10 @@ plan's originally-drafted `invocationNum == 1` assumption.
   Codex events without conflating them with Claude payload behavior.
 - Agy 003 depends on Codex 001/002's shared adapter-marker header and
   `session_bindings.agent` migration/resume-selector infra — reuse it,
-  don't re-derive it — and on Agy 001 for a first-turn signal to bind on.
+  don't re-derive it — and on Agy 001 for a turn-start signal to bind on.
+  Plan 025 replaces its implementation steps and gates the resume command on
+  live continuity proof; `invocationNum == 0` marks each turn, not only the
+  conversation's first turn.
 - Agy 004 depends on Agy 001's Step 1 live-verification result, but tests
   `PreToolUse` specifically — a pass on `PreInvocation` does not imply a
   pass on `PreToolUse`.

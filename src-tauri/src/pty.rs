@@ -191,6 +191,7 @@ fn valid_resume_id(sid: &str) -> bool {
 fn resume_command(agent: Option<&str>, sid: &str, shell: &str) -> String {
     match agent {
         Some("codex") => format!("codex resume {sid}; exec {shell} -l"),
+        Some("antigravity") => format!("agy --conversation {sid}; exec {shell} -l"),
         _ => format!("claude --resume {sid}; exec {shell} -l"),
     }
 }
@@ -788,6 +789,14 @@ mod tests {
         assert_eq!(
             resume_command(Some("codex"), "abc-123", "/bin/zsh"),
             "codex resume abc-123; exec /bin/zsh -l"
+        );
+    }
+
+    #[test]
+    fn resume_command_selects_antigravity_syntax() {
+        assert_eq!(
+            resume_command(Some("antigravity"), "abc-123", "/bin/zsh"),
+            "agy --conversation abc-123; exec /bin/zsh -l"
         );
     }
 

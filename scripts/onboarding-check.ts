@@ -18,7 +18,7 @@ assert.deepEqual(
     { id: "claude", command: "claude", capabilities: { activity: true, decisions: true, reentry: true } },
     { id: "codex", command: "codex", capabilities: { activity: true, decisions: true, reentry: true } },
     { id: "opencode", command: "opencode", capabilities: { activity: true, decisions: false, reentry: false } },
-    { id: "antigravity", command: "agy", capabilities: { activity: true, decisions: false, reentry: false } },
+    { id: "antigravity", command: "agy", capabilities: { activity: true, decisions: false, reentry: true } },
   ]
 );
 

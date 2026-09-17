@@ -12,13 +12,12 @@ use tauri::{AppHandle, Emitter};
 /// marker-substring scan per entry.
 const HOOK_NAME: &str = "logic-loop";
 
-/// Never `PreToolUse` — its contract (`hooks.md`'s "PreToolUse Contract")
-/// requires a `decision` field in the response (`"allow"`/`"deny"`/`"ask"`/
-/// `"force_ask"`); the `{}` this module always prints omits it, and the
-/// installed CLI's behavior for a missing `decision` on a real tool gate is
-/// unverified. Do not register it without first confirming that live and
-/// sending an explicit `{"decision": "allow"}` (see Plan 004 in
-/// `plans/Antigravity_Implementation_Plans.md`).
+/// `PreToolUse` is intentionally scoped to `ask_question` only. Live review
+/// against `agy` 1.2.4 confirmed this is the step name Antigravity derives
+/// from `CORTEX_STEP_TYPE_ASK_QUESTION`, and that command hooks for
+/// `PreToolUse` require an explicit `{"decision":"allow"}` response. This
+/// gives Logic Loop a waiting signal for the interactive question without
+/// widening to every synchronous tool gate.
 ///
 /// `PreInvocation` was excluded for the same reason until live-verified
 /// otherwise (Phase 16, 2026-09-06): its own contract
@@ -39,7 +38,13 @@ const HOOK_NAME: &str = "logic-loop";
 /// contradicted this constant's own prior doc comment, which had
 /// (incorrectly) grouped `PreInvocation` with `PreToolUse` as uniformly
 /// unsafe — see CLAUDE.md's Phase 16 entry for the full methodology.
-const ANTIGRAVITY_HOOK_EVENTS: [&str; 4] = ["PostToolUse", "PostInvocation", "PreInvocation", "Stop"];
+const ANTIGRAVITY_HOOK_EVENTS: [&str; 5] = [
+    "PostToolUse",
+    "PostInvocation",
+    "PreInvocation",
+    "PreToolUse",
+    "Stop",
+];
 
 /// Global discovery location per the installed CLI's own docs (`~/.gemini/
 /// config/` — "Global Configuration (Machine-Local)"), not the per-project
@@ -97,6 +102,8 @@ fn apply_setup(settings: &mut serde_json::Value) -> Result<(), String> {
         // flat shape (bare handler list) for everything else.
         hooks[event] = if event == "PostToolUse" {
             serde_json::json!([{ "matcher": "*", "hooks": [{ "type": "command", "command": command }] }])
+        } else if event == "PreToolUse" {
+            serde_json::json!([{ "matcher": "ask_question", "hooks": [{ "type": "command", "command": command }] }])
         } else {
             serde_json::json!([{ "type": "command", "command": command }])
         };
@@ -106,7 +113,24 @@ fn apply_setup(settings: &mut serde_json::Value) -> Result<(), String> {
 }
 
 fn hooks_status_from(settings: &serde_json::Value) -> bool {
-    settings.get(HOOK_NAME).is_some()
+    let Some(hooks) = settings.get(HOOK_NAME) else {
+        return false;
+    };
+    ANTIGRAVITY_HOOK_EVENTS
+        .iter()
+        .all(|event| hooks.get(*event).and_then(|v| v.as_array()).is_some_and(|arr| !arr.is_empty()))
+        && hooks
+            .get("PostToolUse")
+            .and_then(|v| v.get(0))
+            .and_then(|v| v.get("matcher"))
+            .and_then(|v| v.as_str())
+            == Some("*")
+        && hooks
+            .get("PreToolUse")
+            .and_then(|v| v.get(0))
+            .and_then(|v| v.get("matcher"))
+            .and_then(|v| v.as_str())
+            == Some("ask_question")
 }
 
 fn is_executable(candidate: &std::path::Path) -> bool {
@@ -254,6 +278,12 @@ fn translate(event: &str, input: &serde_json::Value) -> serde_json::Value {
     if let Some(tp) = input.get("transcriptPath").and_then(|v| v.as_str()) {
         out["transcript_path"] = tp.into();
     }
+    if event == "PreToolUse" {
+        out["hook_event_name"] = "PermissionRequest".into();
+        if let Some(name) = input.get("toolCall").and_then(|tc| tc.get("name")).and_then(|v| v.as_str()) {
+            out["tool_name"] = name.into();
+        }
+    }
     if event == "PostToolUse" {
         if let Some(name) = input.get("toolCall").and_then(|tc| tc.get("name")).and_then(|v| v.as_str()) {
             out["tool_name"] = name.into();
@@ -268,6 +298,24 @@ fn translate(event: &str, input: &serde_json::Value) -> serde_json::Value {
         }
     }
     out
+}
+
+/// Agy has no SessionStart hook. Its invocation counter resets on every new
+/// turn, so this intentionally refreshes the same session binding each turn.
+/// Keep the existing turn-open event second; neither event depends on the
+/// frontend having committed the other to SQLite yet.
+fn translate_payloads(event: &str, input: &serde_json::Value) -> Vec<serde_json::Value> {
+    let translated = translate(event, input);
+    if event == "PreInvocation"
+        && translated["hook_event_name"] == "UserPromptSubmit"
+        && translated["session_id"].as_str().is_some_and(|s| !s.is_empty())
+    {
+        let mut start = translated.clone();
+        start["hook_event_name"] = "SessionStart".into();
+        vec![start, translated]
+    } else {
+        vec![translated]
+    }
 }
 
 /// Antigravity's own PascalCase tool arg field names, added under the shared
@@ -305,32 +353,40 @@ fn normalize_tool_args(args: &mut serde_json::Value) {
 /// timeout handling rather than duplicating it. Always exits 0: a
 /// translation or delivery failure must never surface to Antigravity as a
 /// bad `command` result on a Post* event.
+fn post_payload(translated: &serde_json::Value) {
+    if translated.get("session_id").and_then(|v| v.as_str()).is_some_and(|s| !s.is_empty()) {
+        if let Ok(mut child) = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(crate::ingest::hook_command_with_agent(Some("antigravity")))
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+        {
+            if let Some(mut stdin) = child.stdin.take() {
+                let _ = stdin.write_all(translated.to_string().as_bytes());
+            }
+            let _ = child.wait();
+        }
+    }
+}
+
 pub fn run_hook_mode(event_name: &str) -> ! {
     let mut raw = String::new();
     let _ = std::io::stdin().read_to_string(&mut raw);
     if let Ok(input) = serde_json::from_str::<serde_json::Value>(&raw) {
-        let translated = translate(event_name, &input);
-        if translated.get("session_id").and_then(|v| v.as_str()).is_some_and(|s| !s.is_empty()) {
-            if let Ok(mut child) = std::process::Command::new("sh")
-                .arg("-c")
-                .arg(crate::ingest::hook_command_with_agent(Some("antigravity")))
-                .stdin(std::process::Stdio::piped())
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .spawn()
-            {
-                if let Some(mut stdin) = child.stdin.take() {
-                    let _ = stdin.write_all(translated.to_string().as_bytes());
-                }
-                let _ = child.wait();
-            }
+        for translated in translate_payloads(event_name, &input) {
+            post_payload(&translated);
         }
     }
-    // Antigravity expects a JSON object on our stdout for every hook type
-    // (PostToolUse's contract explicitly documents `{}`); print it
-    // unconditionally so a translation/delivery failure above never leaves
-    // malformed/empty stdout for Antigravity to parse.
-    print!("{{}}");
+    // Antigravity expects a JSON object on our stdout for every hook type.
+    // `PreToolUse` is a response-blocking hook and requires an explicit
+    // allow decision; the Post* and Stop contracts accept `{}`.
+    if event_name == "PreToolUse" {
+        print!("{{\"decision\":\"allow\"}}");
+    } else {
+        print!("{{}}");
+    }
     let _ = std::io::stdout().flush();
     std::process::exit(0);
 }
@@ -360,7 +416,10 @@ mod tests {
         assert_eq!(s["lint-checker"]["PostToolUse"][0]["hooks"][0]["command"], "./scripts/lint.sh");
         assert_eq!(s[HOOK_NAME]["PostToolUse"][0]["matcher"], "*");
         assert!(s[HOOK_NAME]["PostToolUse"][0]["hooks"][0]["command"].as_str().is_some());
+        assert_eq!(s[HOOK_NAME]["PreToolUse"][0]["matcher"], "ask_question");
+        assert!(s[HOOK_NAME]["PreToolUse"][0]["hooks"][0]["command"].as_str().is_some());
         assert!(s[HOOK_NAME]["PostInvocation"][0]["command"].as_str().is_some());
+        assert!(s[HOOK_NAME]["PreInvocation"][0]["command"].as_str().is_some());
         assert!(s[HOOK_NAME]["Stop"][0]["command"].as_str().is_some());
         for event in ANTIGRAVITY_HOOK_EVENTS {
             assert!(s[HOOK_NAME][event].is_array(), "{event} missing");
@@ -383,6 +442,36 @@ mod tests {
         assert!(hooks_status_from(&s));
         strip_ours(&mut s);
         assert_eq!(s, serde_json::json!({}));
+    }
+
+    #[test]
+    fn status_rejects_stale_setup_without_pre_tool_use() {
+        let settings = serde_json::json!({
+            HOOK_NAME: {
+                "PostToolUse": [{
+                    "matcher": "*",
+                    "hooks": [{ "type": "command", "command": "./logic-loop --antigravity-hook PostToolUse" }]
+                }],
+                "PostInvocation": [{ "type": "command", "command": "./logic-loop --antigravity-hook PostInvocation" }],
+                "PreInvocation": [{ "type": "command", "command": "./logic-loop --antigravity-hook PreInvocation" }],
+                "Stop": [{ "type": "command", "command": "./logic-loop --antigravity-hook Stop" }]
+            }
+        });
+        assert!(
+            !hooks_status_from(&settings),
+            "stale pre-Plan-004 setup must not look enabled"
+        );
+    }
+
+    #[test]
+    fn status_rejects_unscoped_pre_tool_use() {
+        let mut settings = serde_json::json!({});
+        apply_setup(&mut settings).unwrap();
+        settings[HOOK_NAME]["PreToolUse"][0]["matcher"] = "*".into();
+        assert!(
+            !hooks_status_from(&settings),
+            "PreToolUse must stay scoped to ask_question"
+        );
     }
 
     #[test]
@@ -462,7 +551,25 @@ mod tests {
     }
 
     #[test]
-    fn translate_non_post_tool_use_never_maps_tool_call() {
+    fn translate_pre_tool_use_maps_question_to_permission_request() {
+        let input = serde_json::json!({
+            "conversationId": "abc-123",
+            "workspacePaths": ["/tmp/proj"],
+            "toolCall": {
+                "name": "ask_question",
+                "args": { "Prompt": "Which path should I take?" }
+            }
+        });
+        let out = translate("PreToolUse", &input);
+        assert_eq!(out["hook_event_name"], "PermissionRequest");
+        assert_eq!(out["session_id"], "abc-123");
+        assert_eq!(out["cwd"], "/tmp/proj");
+        assert_eq!(out["tool_name"], "ask_question");
+        assert!(out.get("tool_input").is_none(), "PreToolUse must not ingest untrusted prompt text");
+    }
+
+    #[test]
+    fn translate_inert_lifecycle_events_never_map_tool_call() {
         let input = serde_json::json!({
             "conversationId": "abc-123",
             "workspacePaths": ["/tmp/proj"],
@@ -556,6 +663,54 @@ mod tests {
         let out = translate("PreInvocation", &input);
         assert_eq!(out["hook_event_name"], "UserPromptSubmit");
         assert_eq!(out["session_id"], "abc-123");
+    }
+
+    #[test]
+    fn turn_start_emits_session_start_before_prompt_submit() {
+        let input = serde_json::json!({
+            "conversationId": "abc-123",
+            "workspacePaths": ["/tmp/proj"],
+            "transcriptPath": "/tmp/agy.jsonl",
+            "invocationNum": 0
+        });
+        let payloads = translate_payloads("PreInvocation", &input);
+        assert_eq!(payloads.len(), 2);
+        assert_eq!(payloads[0]["hook_event_name"], "SessionStart");
+        assert_eq!(payloads[1]["hook_event_name"], "UserPromptSubmit");
+        for payload in payloads {
+            assert_eq!(payload["session_id"], "abc-123");
+            assert_eq!(payload["cwd"], "/tmp/proj");
+            assert_eq!(payload["transcript_path"], "/tmp/agy.jsonl");
+        }
+    }
+
+    #[test]
+    fn turn_start_missing_optional_fields_still_emits_both_events() {
+        let payloads = translate_payloads("PreInvocation", &serde_json::json!({
+            "conversationId": "abc-123", "workspacePaths": []
+        }));
+        assert_eq!(payloads.len(), 2);
+        assert!(payloads[0].get("cwd").is_none());
+        assert!(payloads[0].get("transcript_path").is_none());
+        assert_eq!(payloads[1]["hook_event_name"], "UserPromptSubmit");
+    }
+
+    #[test]
+    fn later_invocations_and_missing_ids_do_not_emit_session_start() {
+        let later = translate_payloads("PreInvocation", &serde_json::json!({
+            "conversationId": "abc-123", "invocationNum": 1
+        }));
+        assert_eq!(later.len(), 1);
+        assert_eq!(later[0]["hook_event_name"], "PreInvocation");
+        for input in [serde_json::json!({}), serde_json::json!({ "conversationId": "" })] {
+            let payloads = translate_payloads("PreInvocation", &input);
+            assert_eq!(payloads.len(), 1);
+            assert_eq!(payloads[0]["hook_event_name"], "UserPromptSubmit");
+        }
+        assert_eq!(
+            translate_payloads("Stop", &serde_json::json!({ "conversationId": "abc-123" })).len(),
+            1
+        );
     }
 
     #[test]
