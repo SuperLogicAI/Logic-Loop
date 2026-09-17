@@ -11,7 +11,8 @@ Requires the AWS CLI, the Session Manager plugin, and a default VPC in the regio
 aws cloudformation deploy --stack-name logic-loop --template-file deploy/logic-loop.yaml --capabilities CAPABILITY_IAM --disable-rollback
 ```
 
-The first deploy builds the app on the instance (about 15 to 30 minutes). The
+The first deploy builds the app on the instance (about 25 to 35 minutes; add
+`--parameter-overrides InstanceType=m6i.xlarge` to roughly halve the Rust build). The
 stack reaches `CREATE_COMPLETE` only after the app window is up; a failed
 build ends in `CREATE_FAILED` with the instance kept for debugging.
 
