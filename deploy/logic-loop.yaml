@@ -141,7 +141,7 @@ Resources:
             HASH=$(echo "$PW" | docker run --rm -i caddy:2 caddy hash-password)
             case "$HASH" in '$2'*) ;; *) echo "password hash failed"; false;; esac
             mkdir -p /opt/caddy
-            for line in ':8080 {' 'bind 127.0.0.1' 'basic_auth {' "logicloop $HASH" '}' 'reverse_proxy 127.0.0.1:6080' '}'; do
+            for line in ':8080 {' 'bind 127.0.0.1' 'basic_auth {' "logicloop $HASH" '}' 'redir / /vnc.html?autoconnect=1&resize=scale' 'reverse_proxy 127.0.0.1:6080' '}'; do
               echo "$line"
             done > /opt/caddy/Caddyfile
             docker rm -f caddy || true
@@ -172,5 +172,5 @@ Outputs:
     Description: Open while ConnectCommand is running.
     Value: http://localhost:6080/vnc.html?autoconnect=1&resize=scale
   WebPasswordCommand:
-    Description: Prints the public URL password (user logicloop). The URL is https://logic-loop.<tailnet>.ts.net/vnc.html
+    Description: Prints the public URL password (user logicloop). The URL is https://logic-loop.<tailnet>.ts.net
     Value: !Sub aws ssm get-parameter --region ${AWS::Region} --name ${WebPasswordParameter} --with-decryption --query Parameter.Value --output text

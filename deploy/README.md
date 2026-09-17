@@ -38,8 +38,7 @@ When that parameter exists, the deploy also joins the tailnet as `logic-loop`,
 puts Caddy basic auth in front of noVNC, and turns on Funnel. The stack only
 completes if the URL returns 401 without the password and 200 with it. The
 password is generated on first boot and stored in SSM; print it with the
-`WebPasswordCommand` output. Then open
-`https://logic-loop.<tailnet>.ts.net/vnc.html?autoconnect=1&resize=scale`
+`WebPasswordCommand` output. Then open `https://logic-loop.<tailnet>.ts.net`
 and sign in as `logicloop`.
 
 To rotate the password, delete `/logic-loop/web-password` and redeploy. To turn
