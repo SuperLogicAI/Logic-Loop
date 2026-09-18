@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="138" height="34" viewBox="0 0 138 34">
+  <title>Agent | Claude</title>
+  <clipPath id="pill"><rect width="138" height="34" rx="17"/></clipPath>
+  <g clip-path="url(#pill)">
+    <path fill="#F5F0E8" d="M0 0h63v34H0z"/>
+    <path fill="#1A1A1A" d="M63 0h75v34H63z"/>
+  </g>
+  <text x="31.5" y="17" fill="#1A1A1A" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" dominant-baseline="middle">Agent</text>
+  <text x="100.5" y="17" fill="#FF7E1B" font-family="Arial, sans-serif" font-size="14" font-weight="700" text-anchor="middle" dominant-baseline="middle">Claude</text>
+</svg>

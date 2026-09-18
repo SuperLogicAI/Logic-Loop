@@ -1,9 +1,18 @@
-<h1>
-  <img src="docs/assets/logo.png" alt="Logic Loop logo" height="32" valign="middle">
+<h1 align="center">
+  <img src="docs/assets/logo-rounded.svg" alt="Logic Loop logo" height="48" valign="middle">
   &nbsp;Logic Loop
+  <img src="docs/assets/by-super-logic-ai.svg" alt="by Super Logic AI" height="20" valign="middle">
 </h1>
 
-**Effortlessly switch between multiple concurrent AI coding agent terminal sessions — a macOS app.**
+<p align="center">Effortlessly switch between multiple concurrent AI coding agent terminal sessions — a macOS app.</p>
+
+<p align="center">
+  <img src="docs/assets/agent-agy.svg" alt="Agent | Agy" height="34">
+  <img src="docs/assets/agent-claude.svg" alt="Agent | Claude" height="34">
+  <img src="docs/assets/agent-codex.svg" alt="Agent | Codex" height="34">
+  <img src="docs/assets/agent-deepseek.svg" alt="Agent | DeepSeek" height="34">
+  <img src="docs/assets/agent-pi.svg" alt="Agent | Pi" height="34">
+</p>
 
 ![Logic Loop](docs/assets/logic-loop-ui.png)
 
