@@ -148,7 +148,8 @@ export function OnboardingModal({
               const state = adapterStates[adapter.id];
               const progress = adapterProgress(state, observedAdapters.has(adapter.id));
               const busy = state.operation !== null;
-              const canToggle = state.available === true && !busy;
+              const installUrl = progress === "not-detected" ? adapter.installUrl : undefined;
+              const canToggle = (state.available === true || installUrl !== undefined) && !busy;
               return (
                 <div
                   key={adapter.id}
@@ -218,10 +219,16 @@ export function OnboardingModal({
                   <button
                     type="button"
                     disabled={!canToggle}
-                    onClick={() => void onToggleAdapter(adapter.id)}
+                    onClick={() => {
+                      if (installUrl) void openUrl(installUrl);
+                      else void onToggleAdapter(adapter.id);
+                    }}
+                    title={installUrl ? `Open ${adapter.label} installation instructions` : undefined}
                     className="h-8 min-w-20 rounded-md bg-zinc-100 px-3 text-xs font-medium text-zinc-950 hover:bg-white disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400"
                   >
-                    {busy
+                    {installUrl
+                      ? "Install"
+                      : busy
                       ? state.operation === "enabling"
                         ? "Enabling…"
                         : "Disabling…"

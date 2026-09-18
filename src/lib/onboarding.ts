@@ -4,6 +4,7 @@ export interface AdapterMetadata {
   id: AdapterId;
   label: string;
   command: string;
+  installUrl?: string;
   configLocation: string;
   capabilities: {
     activity: true;
@@ -31,7 +32,7 @@ export type AdapterProgress =
   | "connected"
   | "error";
 
-export const ONBOARDING_VERSION = 2;
+export const ONBOARDING_VERSION = 3;
 
 export function parseOnboardingVersion(value: string | null): number {
   if (value === null || !/^\d+$/.test(value)) return 0;
@@ -72,6 +73,7 @@ export const ADAPTERS: readonly AdapterMetadata[] = [
     id: "pi",
     label: "Pi Agent",
     command: "pi",
+    installUrl: "https://pi.dev",
     configLocation: "~/.pi/agent/extensions/logic-loop.ts",
     // resume_command's pi arm (Build step 4) and its live re-entry gate
     // (Step 5, docs/TESTING.md §54, 2026-09-18) both now pass.
@@ -80,7 +82,8 @@ export const ADAPTERS: readonly AdapterMetadata[] = [
   {
     id: "deepseek",
     label: "DeepSeek Harness",
-    command: "dsh",
+    command: "dsh --profile logic-loop",
+    installUrl: "https://www.npmjs.com/package/@deepseek-ai/dsh",
     configLocation: "~/.dsh/profiles/logic-loop (dsh-terminal-app plugin)",
     // No shipped first-party or safely-adoptable third-party terminal UI
     // exists upstream (plans/027) — this is Logic Loop's own first-party

@@ -11,7 +11,7 @@ import {
   type AdapterRuntimeState,
 } from "../src/lib/onboarding";
 
-assert.equal(ONBOARDING_VERSION, 2);
+assert.equal(ONBOARDING_VERSION, 3);
 assert.deepEqual(
   ADAPTERS.map(({ id, command, capabilities }) => ({ id, command, capabilities })),
   [
@@ -20,7 +20,7 @@ assert.deepEqual(
     { id: "opencode", command: "opencode", capabilities: { activity: true, decisions: false, reentry: false } },
     { id: "antigravity", command: "agy", capabilities: { activity: true, decisions: false, reentry: true } },
     { id: "pi", command: "pi", capabilities: { activity: true, decisions: false, reentry: true } },
-    { id: "deepseek", command: "dsh", capabilities: { activity: true, decisions: false, reentry: true } },
+    { id: "deepseek", command: "dsh --profile logic-loop", capabilities: { activity: true, decisions: false, reentry: true } },
   ]
 );
 
@@ -72,6 +72,8 @@ assert.match(statusSource, />\s*Setup\s*</);
 const modalSource = readFileSync("src/components/OnboardingModal.tsx", "utf8");
 assert.ok(modalSource.includes('role="dialog"'));
 assert.ok(modalSource.includes("Waiting for first event"));
+assert.match(modalSource, /installUrl\s*\?\s*"Install"/);
+assert.ok(modalSource.includes("installation instructions"));
 assert.ok(modalSource.includes('src="/loop.png"'));
 assert.ok(modalSource.includes("developed by Super Logic AI"));
 assert.ok(modalSource.includes('href="https://superlogicai.com"'));

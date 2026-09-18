@@ -2935,6 +2935,13 @@ pending the maintainer's clean-profile macOS matrix.
 All five outstanding Step 5 items now pass. Plan 026 (Pi Agent adapter) is
 DONE — activity, decisions-not-supported, and re-entry are all live-verified.
 
+**Homebrew detection regression (2026-09-18):** a Finder-launched release
+build initially showed Pi Agent and DeepSeek Harness as "Not detected" even
+though both CLIs were installed at `/opt/homebrew/bin`; both Enable buttons
+were disabled. After `36a67b3` added Homebrew-prefix detection and the app was
+rebuilt/relaunched, both adapters were detected and their hooks enabled
+successfully. This is a GUI-PATH check, not evidence from shell PATH alone.
+
 
 ## Quality gates (machine-run, not manual)
 
