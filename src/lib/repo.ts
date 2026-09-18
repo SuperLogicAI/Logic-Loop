@@ -1,4 +1,5 @@
 import Database from "@tauri-apps/plugin-sql";
+import { invoke } from "@tauri-apps/api/core";
 import type {
   Blocker,
   AgentState,
@@ -24,6 +25,37 @@ import { clampPanelWidth, parsePanelMode, type VisiblePanelMode } from "./panelL
 import { parseLandingNoteMode } from "./landingMode";
 
 let db: Database | null = null;
+
+export interface TrafficRow {
+  id: number;
+  ts: string;
+  plane: string;
+  keyId: string;
+  modelReq: string;
+  modelServed: string | null;
+  backend: string | null;
+  disposition: string;
+  status: number | null;
+  tokensIn: number | null;
+  tokensOut: number | null;
+  usageState: "complete" | "partial" | "not_recorded";
+  clientTag: string | null;
+}
+
+export type TrafficSnapshot =
+  | { kind: "missing" }
+  | { kind: "v1" }
+  | { kind: "ready"; rows: TrafficRow[] }
+  | { kind: "error" };
+
+/** The sole frontend gateway to the external Safe Router log. */
+export async function readSafeRouterTraffic(): Promise<TrafficSnapshot> {
+  try {
+    return await invoke<TrafficSnapshot>("read_safe_router_traffic");
+  } catch {
+    return { kind: "error" };
+  }
+}
 // Lifecycle hooks can arrive concurrently. Keep each raw-hook/derivative pair
 // ordered so a later accepted observation cannot overtake its source event.
 const hookWriteChains = new Map<string, Promise<void>>();
