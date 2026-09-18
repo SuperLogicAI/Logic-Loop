@@ -286,3 +286,9 @@ architecture rules that aren't up for debate.
 
 Built and maintained by [Super Logic AI](https://superlogicai.com) — AI automation
 for small businesses.
+
+Also from Super Logic AI: **[Safe Router](https://github.com/SuperLogicAI/safe_router)**,
+a headless, local-first model router. It keeps designated clients on approved local
+backends, brokers explicitly authorized remote requests, and writes a private
+metadata log of what was requested, served, and reported as used — prompts and
+responses are never stored in it.
