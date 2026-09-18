@@ -2977,6 +2977,14 @@ view, and a latest row with `usage_state=complete`; no model call was made.
       it unattributed. No project is inferred. Any future agent-specific tag
       experiment needs separate client-setup authorization and its own record.
 
+## 58. Hook pill command labels hotfix
+
+- [ ] In a live app with Antigravity and DeepSeek Harness detected, confirm the
+      header hook pills read `agy on/off` and `dsh on/off` respectively, while
+      their tooltips retain the full agent names.
+- [ ] Toggle each pill and confirm setup/disable behavior and the Setup modal
+      remain unchanged. This visual/manual check is pending.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*

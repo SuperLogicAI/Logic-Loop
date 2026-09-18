@@ -68,6 +68,8 @@ assert.equal(statusSource.match(/const toggleAdapter/g)?.length, 1, "header and 
 assert.ok(statusSource.includes("getOnboardingVersion"));
 assert.ok(statusSource.includes("setOnboardingVersion"));
 assert.match(statusSource, />\s*Setup\s*</);
+assert.match(statusSource, /const command = adapter\?\.command\.split\(" "\)\[0\] \?\? id;/);
+assert.match(statusSource, /\{command\} \{state\.enabled/);
 
 const modalSource = readFileSync("src/components/OnboardingModal.tsx", "utf8");
 assert.ok(modalSource.includes('role="dialog"'));

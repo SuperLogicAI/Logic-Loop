@@ -241,10 +241,12 @@ export function AgentStatusBar({
           {(["antigravity", "claude", "codex", "deepseek", "opencode", "pi"] as const).map((id) => {
             const state = adapterStates[id];
             if (state.available === false) return null;
-            const label = ADAPTERS.find((adapter) => adapter.id === id)?.label ?? id;
+            const adapter = ADAPTERS.find((item) => item.id === id);
+            const label = adapter?.label ?? id;
+            const command = adapter?.command.split(" ")[0] ?? id;
             return (
               <button key={id} type="button" className={hookClass(state.enabled, id === "claude")} onClick={() => void toggleAdapter(id)} title={`Toggle ${label} structured hooks`}>
-                {id} {state.enabled === null ? "?" : state.enabled ? "on" : "off"}
+                {command} {state.enabled === null ? "?" : state.enabled ? "on" : "off"}
               </button>
             );
           })}
