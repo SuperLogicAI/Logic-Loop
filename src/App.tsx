@@ -10,6 +10,7 @@ import {
   deriveClock,
   onAdapterWarning,
   onHookEvent,
+  onStatusline,
   onTailerFailed,
   onTranscriptLine,
   seedUnclaimedTabs,
@@ -30,7 +31,7 @@ import { LandingNoteModal } from "./components/LandingNoteModal";
 import { FanOutModal } from "./components/FanOutModal";
 import { IsolateLoopModal } from "./components/IsolateLoopModal";
 import { AttentionInbox } from "./components/AttentionInbox";
-import type { Decision } from "./types";
+import type { ClaudeStatuslineSnapshot, Decision } from "./types";
 import { ptyWrite } from "./lib/pty";
 import { TabBar } from "./components/TabBar";
 import { AgentStatusBar } from "./components/AgentStatusBar";
@@ -160,6 +161,9 @@ export default function App() {
   const [blindSessions, setBlindSessions] = useState<Record<string, string>>({});
   // Adapter setup warnings (e.g. foreign PostToolUse hook collision in older agy).
   const [adapterWarnings, setAdapterWarnings] = useState<Array<{ agent: string; reason: string }>>([]);
+  // Plan 023: latest mirrored Claude statusLine snapshot per session_id. Live
+  // gauge state, never persisted to SQLite — overwritten on every rerun.
+  const [claudeStatusline, setClaudeStatusline] = useState<Record<string, ClaudeStatuslineSnapshot>>({});
   const [observedAdapters, setObservedAdapters] = useState<Set<AdapterId>>(new Set());
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
@@ -1092,6 +1096,26 @@ export default function App() {
     };
   }, [expand, refreshBlockerCounts, refreshDecisionCounts, scheduleAttentionRefresh]);
 
+  // Plan 023: live statusLine mirror. Self-contained listener (StrictMode-
+  // safe cancelled+unlisten, same shape as the drag-drop effect below) —
+  // deliberately not folded into the big hook-listener effect above, since
+  // this is a distinct emit (`ingest://statusline`, never `ingest://hook`).
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+    void onStatusline((p) => {
+      if (cancelled) return;
+      setClaudeStatusline((prev) => ({ ...prev, [p.session_id]: { payload: p, receivedAt: Date.now() } }));
+    }).then((u) => {
+      if (cancelled) u();
+      else unlisten = u;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
   // File drag-drop: the webview intercepts native drops (no DOM drop events),
   // so paste dropped paths into the active terminal — the human dragged them,
   // the app is not typing on its own.
@@ -1402,6 +1426,7 @@ export default function App() {
             onOpenAttention={() => setAttentionOpen(true)}
             landingNoteMode={landingNoteMode}
             onLandingNoteModeChange={changeLandingNoteMode}
+            claudeStatusline={(activeTab.sessionId && claudeStatusline[activeTab.sessionId]) || null}
           />
         )}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">

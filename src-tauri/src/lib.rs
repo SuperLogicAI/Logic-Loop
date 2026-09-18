@@ -6,6 +6,7 @@ mod home;
 mod ingest;
 mod opencode;
 mod pty;
+mod statusline;
 // pub: main.rs calls antigravity::run_hook_mode directly, ahead of
 // app_lib::run(), to intercept `--antigravity-hook` before the GUI boots.
 pub mod antigravity;
@@ -274,6 +275,9 @@ pub fn run() {
             ingest::hooks_remove,
             ingest::hooks_status,
             ingest::claude_detect,
+            statusline::claude_statusline_status,
+            statusline::claude_statusline_setup,
+            statusline::claude_statusline_remove,
             opencode::opencode_detect,
             opencode::opencode_hooks_setup,
             opencode::opencode_hooks_remove,

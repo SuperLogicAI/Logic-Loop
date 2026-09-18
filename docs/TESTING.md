@@ -2572,6 +2572,83 @@ canonical `PermissionRequest` event, and answer the blocking hook with
       2026-09-16 passed: Antigravity setup showed on, `ask_question` blocked
       in the terminal, and the active tab showed the amber waiting state.
 
+## 53. Claude statusLine rate-limit meter (Plan 023)
+
+Implementation authorized in-session by the maintainer (verbal "start the
+coding sprint" while away from the machine, same precedent as Plans 025/026
+bypassing the literal phase-token gate) against
+`plans/023-claude-statusline-limits-meter.md`, CANDIDATE at the time. Built
+on `feat/plan023-claude-statusline-meter` off `origin/main` post-PR #35/#36.
+Wraps an existing `statusLine.command` only — never creates one from
+scratch. New `src-tauri/src/statusline.rs` (singleton swap-and-restore,
+base64-embedded original inside the generated wrapper script, `claude
+--version` gate), a new `POST /statusline` ingest endpoint (`ingest.rs`,
+never written to the `events` table), and a "Claude usage" sidebar block
+(`src/components/ClaudeUsageBlock.tsx`) between the Sidebar LM row and the
+adapter-warnings strip, matching all states in the plan's §3.
+
+**Known deviation from the plan, flagged rather than silently resolved:**
+§3.1 says the model name should render independently of the wrapper, "from
+the existing transcript tailer." The plan's own §5 file-scope list does not
+include `src/lib/decisions.ts`, and no `message.model` parser exists there
+today. Rather than expand scope into the transcript tailer unbidden, the
+model name here is sourced from the *same* `/statusline` mirror payload as
+`rate_limits` (the real Claude statusLine JSON carries both) — so the model
+label only appears once the wrapper is installed and has fired at least
+once, not independently of it. Needs the maintainer's call: amend the plan
+to match this, or file a follow-up to add the transcript-tailer path.
+
+Automated evidence ([feat/plan023-claude-statusline-meter], 2026-09-17):
+
+- [x] `cd src-tauri && cargo test --lib` — 80/80 (10 new `statusline.rs`
+      tests: no-statusLine, setup+idempotent-second-call, remove-restores-
+      exact-original, remove-on-foreign-is-noop, wrapper-path-repointed-is-
+      noop, wrapper-file-missing/foreign-is-not-force-restored, byte-exact
+      round-trip on arbitrary originals (quotes, pipes, embedded newlines,
+      empty string), and the CLI version-gate parser). All against in-memory
+      `serde_json::Value`/string fixtures — never a live `~/.claude/settings.json`.
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings` clean.
+- [x] `npm run statusline:check` — new script; state-derivation matrix (all
+      7 states), bar-fill clamping (including the >100 spend_limit case,
+      unclamped in the underlying number), reset-time formatting,
+      staleness predicate, model-label parsing, and a source-grep guard
+      that `App.tsx` registers `onStatusline` and `SidePanel` renders
+      `ClaudeUsageBlock`.
+- [x] `npm run check` — all 27 configured checks pass (26 prior + the new
+      `statusline:check`).
+- [x] `npx tsc --noEmit` clean.
+- [x] `npm run build` clean.
+- [x] `npm run golden` intentionally not run — no extraction-prompt changes.
+
+Manual macOS matrix (unchecked until the maintainer runs it — this session
+had no display to drive the actual app UI):
+
+- [ ] No existing `statusLine` configured: block shows "No status line
+      configured," no wrapper file is created, no `settings.json` write
+      happens until/unless the user later adds their own statusLine and
+      re-checks.
+- [ ] Existing hand-written `statusLine.command` (the maintainer's own bar):
+      enable the wrapper, confirm the visible terminal status line is
+      byte-identical before and after, confirm a decision card / any other
+      hook-driven feature still works unaffected, confirm the "Claude
+      usage" block populates after the session's first response.
+- [ ] Disable the wrapper: confirm `settings.json`'s `statusLine.command`
+      is restored to the exact original string, confirm the wrapper script
+      file is gone, confirm the visible status line is unaffected.
+- [ ] Pre-v2.1.251 CLI (or a non-Pro/Max account) fixture: confirm the
+      correct one of `unavailable-old-cli`/`unavailable-ineligible` shows,
+      confirm no infinite retry/error loop.
+- [ ] Two Claude tabs in the same project, one bound/active and one not:
+      only the active bound tab's block populates; switching focus swaps
+      which tab's data is shown, no stale carry-over.
+- [ ] Kill/restart the ingest server while a session is running: statusLine
+      mirror POSTs fail silently (fail-open), the visible terminal status
+      line is never affected, the sidebar block degrades to `stale` rather
+      than erroring.
+- [ ] Compare displayed 5h/weekly percentages and reset times against the
+      same account's own Claude Code terminal status line at the same
+      moment.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*

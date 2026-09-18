@@ -19,7 +19,7 @@ fn config_dir() -> PathBuf {
     PathBuf::from(home_or_tmp()).join(".context-terminal")
 }
 
-fn settings_path() -> PathBuf {
+pub(crate) fn settings_path() -> PathBuf {
     PathBuf::from(home_or_tmp()).join(".claude/settings.json")
 }
 
@@ -87,11 +87,19 @@ pub fn start(app: AppHandle) {
                 let _ = request.respond(tiny_http::Response::empty(204));
                 continue;
             }
+            let is_statusline = request.url() == "/statusline";
             let hook_version = header_value(&request, "X-Logic-Loop-Hook");
             let agent_header = header_value(&request, "X-Logic-Loop-Agent");
             let mut body = String::new();
             if request.as_reader().take(1_000_000).read_to_string(&mut body).is_err() {
                 let _ = request.respond(tiny_http::Response::empty(400));
+                continue;
+            }
+            if is_statusline {
+                if let Ok(payload) = serde_json::from_str::<serde_json::Value>(&body) {
+                    emit_statusline(&app, payload, tab_id);
+                }
+                let _ = request.respond(tiny_http::Response::empty(204));
                 continue;
             }
             if let Ok(mut payload) = serde_json::from_str::<serde_json::Value>(&body) {
@@ -180,6 +188,37 @@ fn header_value(request: &tiny_http::Request, name: &'static str) -> Option<Stri
         .iter()
         .find(|h| h.field.equiv(name))
         .map(|h| h.value.as_str().to_string())
+}
+
+/// Live gauge snapshot from the Claude statusLine wrapper (Plan 023): a
+/// distinct emit from `/event`'s hook payloads, and never written to the
+/// `events` table — statusLine reruns on nearly every assistant message, and
+/// this is transient per-tab display state, not an append-only fact.
+/// `model`/`rate_limits` are passed through opaquely so a field this server
+/// doesn't know about still reaches the frontend, which owns display
+/// validation (clamping, missing-field states, staleness).
+fn emit_statusline(app: &AppHandle, payload: serde_json::Value, tab_id: Option<String>) {
+    let Some(obj) = payload.as_object() else { return };
+    let Some(session_id) = obj.get("session_id").and_then(|v| v.as_str()) else { return };
+    let project_key = obj
+        .get("workspace")
+        .and_then(|w| w.get("current_dir"))
+        .and_then(|v| v.as_str())
+        .map(crate::pty::project_key);
+    let mut out = serde_json::json!({
+        "session_id": session_id,
+        "model": obj.get("model").cloned().unwrap_or(serde_json::Value::Null),
+        "rate_limits": obj.get("rate_limits").cloned().unwrap_or(serde_json::Value::Null),
+    });
+    if let Some(key) = project_key {
+        out["project_key"] = key.into();
+    }
+    // Absent tether (statusLine invoked outside any Logic Loop tab) stays
+    // absent — same fallback /event's tab_id handling already documents.
+    if let Some(tab) = tab_id.filter(|t| !t.is_empty()) {
+        out["tab_id"] = tab.into();
+    }
+    let _ = app.emit("ingest://statusline", out);
 }
 
 /// Tail a session's JSONL transcript from its current end, emitting new lines.
@@ -321,7 +360,7 @@ fn is_ours(entry: &serde_json::Value) -> bool {
         })
 }
 
-fn read_settings() -> Result<serde_json::Value, String> {
+pub(crate) fn read_settings() -> Result<serde_json::Value, String> {
     match fs::read_to_string(settings_path()) {
         Ok(s) => serde_json::from_str(&s).map_err(|e| format!("settings.json is not valid JSON: {e}")),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(serde_json::json!({})),
@@ -329,7 +368,7 @@ fn read_settings() -> Result<serde_json::Value, String> {
     }
 }
 
-fn write_settings(v: &serde_json::Value) -> Result<(), String> {
+pub(crate) fn write_settings(v: &serde_json::Value) -> Result<(), String> {
     let path = settings_path();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
