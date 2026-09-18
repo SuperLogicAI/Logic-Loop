@@ -845,6 +845,19 @@ export async function setProjectMuted(cwd: string, muted: boolean): Promise<void
   );
 }
 
+// Plan 023: global opt-in for the Claude statusLine wrapper — account-wide,
+// like the wrapper itself, not per-project. Same "1"/"0" convention as
+// isProjectMuted above.
+const CLAUDE_STATUSLINE_WRAPPER_ENABLED_KEY = "claude_statusline_wrapper_enabled";
+
+export async function getClaudeStatuslineWrapperEnabled(): Promise<boolean> {
+  return (await getSetting(CLAUDE_STATUSLINE_WRAPPER_ENABLED_KEY)) === "1";
+}
+
+export async function setClaudeStatuslineWrapperEnabled(enabled: boolean): Promise<void> {
+  await setSetting(CLAUDE_STATUSLINE_WRAPPER_ENABLED_KEY, enabled ? "1" : "0");
+}
+
 // --- Idea Board (Phase 18): per-project collapsed/height, same settings-
 // table pattern as project mute above. ---
 

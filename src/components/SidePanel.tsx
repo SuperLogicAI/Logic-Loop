@@ -11,6 +11,7 @@ import { parseBoard, readBoard, spliceCard, writeBoard, type Card } from "../lib
 import { topPlannedCard } from "./IdeaBoard";
 import { PanelIcon } from "./PanelIcon";
 import { SidebarLmControl } from "./SidebarLmControl";
+import { ClaudeUsageBlock } from "./ClaudeUsageBlock";
 import {
   gitAddAll,
   gitAddU,
@@ -35,6 +36,7 @@ import {
 import type {
   AgentState,
   Blocker,
+  ClaudeStatuslineSnapshot,
   Commit,
   Decision,
   FanOutRollup,
@@ -79,6 +81,7 @@ interface Props {
   onOpenAttention: () => void;
   landingNoteMode: LandingNoteMode;
   onLandingNoteModeChange: (mode: LandingNoteMode) => Promise<void>;
+  claudeStatusline: ClaudeStatuslineSnapshot | null; // latest mirrored statusLine payload for the active tab's exact session
 }
 
 // Long lists collapse to this many rows behind a full-width ＋ toggle.
@@ -236,6 +239,7 @@ export function SidePanel({
   onOpenAttention,
   landingNoteMode,
   onLandingNoteModeChange,
+  claudeStatusline,
 }: Props) {
   const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
   const [muted, setMuted] = useState(false);
@@ -973,6 +977,7 @@ export function SidePanel({
           {muted ? "muted" : "notify"}
         </button>
       </div>
+      <ClaudeUsageBlock agent={agent} sessionId={sessionId} lastEventTs={lastEventTs} now={now} snapshot={claudeStatusline} />
       {/* Adapter warnings: e.g. foreign PostToolUse collision in older agy releases */}
       {adapterWarnings.map((w, i) => (
         <p
