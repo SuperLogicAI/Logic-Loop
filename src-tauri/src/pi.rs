@@ -1,6 +1,6 @@
 use crate::home::home_or_tmp;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Stamped into the generated file's header comment so `is_ours` can tell our
 /// file apart from an unrelated user extension that happens to share the
@@ -240,6 +240,15 @@ fn is_executable(candidate: &std::path::Path) -> bool {
     }
 }
 
+fn pi_detection_paths(home: &Path) -> [PathBuf; 4] {
+    [
+        home.join(".pi").join("agent").join("bin").join("pi"),
+        home.join(".local").join("bin").join("pi"),
+        PathBuf::from("/opt/homebrew/bin/pi"),
+        PathBuf::from("/usr/local/bin/pi"),
+    ]
+}
+
 #[tauri::command]
 pub fn pi_detect() -> bool {
     // GUI apps launched from /Applications inherit macOS's minimal default
@@ -251,12 +260,12 @@ pub fn pi_detect() -> bool {
     if path_hit {
         return true;
     }
-    // Per-user locations documented by the two official installers
-    // (npm global with an unwritable prefix, and the pi.dev/install.sh
-    // shell script's default/managed targets).
-    [".pi/agent/bin", ".local/bin"]
+    // Finder-launched apps do not inherit Homebrew's PATH either. Check its
+    // standard prefixes as well as the per-user locations from Pi's official
+    // installers.
+    pi_detection_paths(Path::new(&home_or_tmp()))
         .iter()
-        .any(|rel| is_executable(&PathBuf::from(home_or_tmp()).join(rel).join("pi")))
+        .any(|candidate| is_executable(candidate))
 }
 
 #[tauri::command]
@@ -383,5 +392,12 @@ mod tests {
         assert!(!src.contains("event.prompt"));
         assert!(!src.contains("event.result"));
         assert!(!src.contains(".content"));
+    }
+
+    #[test]
+    fn detection_paths_include_homebrew_prefixes() {
+        let paths = pi_detection_paths(Path::new("/tmp/pi-home"));
+        assert!(paths.contains(&PathBuf::from("/opt/homebrew/bin/pi")));
+        assert!(paths.contains(&PathBuf::from("/usr/local/bin/pi")));
     }
 }

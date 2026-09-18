@@ -58,6 +58,15 @@ fn has_on_path(name: &str) -> bool {
     })
 }
 
+fn deepseek_detection_paths(home: &Path) -> [PathBuf; 4] {
+    [
+        home.join("npm-global").join("bin").join("dsh"),
+        home.join(".local").join("bin").join("dsh"),
+        PathBuf::from("/opt/homebrew/bin/dsh"),
+        PathBuf::from("/usr/local/bin/dsh"),
+    ]
+}
+
 #[tauri::command]
 pub fn deepseek_detect() -> bool {
     // DeepSeek Harness is npx-first in practice — Plan 027 found no local
@@ -70,9 +79,9 @@ pub fn deepseek_detect() -> bool {
     // not a claim that DeepSeek is unusable without it (`setup()` below
     // falls back to `npx` regardless).
     has_on_path("dsh")
-        || ["npm-global/bin", ".local/bin"]
+        || deepseek_detection_paths(Path::new(&home_or_tmp()))
             .iter()
-            .any(|rel| is_executable(&PathBuf::from(home_or_tmp()).join(rel).join("dsh")))
+            .any(|candidate| is_executable(candidate))
 }
 
 /// The program + leading args to invoke `dsh` with. Prefers a global
@@ -369,5 +378,12 @@ mod tests {
         let invocation = ["npx".to_string(), "--yes".to_string(), "@deepseek-ai/dsh".to_string()];
         assert_eq!(invocation[0], "npx");
         assert_eq!(invocation.last().unwrap(), "@deepseek-ai/dsh");
+    }
+
+    #[test]
+    fn detection_paths_include_homebrew_prefixes() {
+        let paths = deepseek_detection_paths(Path::new("/tmp/dsh-home"));
+        assert!(paths.contains(&PathBuf::from("/opt/homebrew/bin/dsh")));
+        assert!(paths.contains(&PathBuf::from("/usr/local/bin/dsh")));
     }
 }
