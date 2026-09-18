@@ -1,6 +1,5 @@
 mod board;
 mod clipboard;
-mod deepseek;
 mod extractor;
 mod codex;
 mod home;
@@ -292,10 +291,6 @@ pub fn run() {
             pi::pi_hooks_setup,
             pi::pi_hooks_remove,
             pi::pi_hooks_status,
-            deepseek::deepseek_detect,
-            deepseek::deepseek_hooks_setup,
-            deepseek::deepseek_hooks_remove,
-            deepseek::deepseek_hooks_status,
             extractor::run_extractor,
             clipboard::clipboard_text,
             clipboard::clipboard_image_path,

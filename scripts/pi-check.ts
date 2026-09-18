@@ -72,8 +72,8 @@ assert.ok(onboarding.includes('id: "pi"'));
 assert.match(onboarding, /agent === "pi"/, "adapterIdForHook must accept \"pi\"");
 
 const ingestRust = readFileSync("src-tauri/src/ingest.rs", "utf8");
-// Widened to 5 when Plan 028 added "deepseek" — this assertion only needs
-// "pi" present in the allowlist, not that the array stops there.
+// Regex only needs "pi" present in the allowlist, not a fixed array length —
+// stays stable as future adapters extend it.
 assert.match(ingestRust, /const RECOGNIZED_AGENTS: \[&str; \d+\] = \[[^\]]*"pi"[^\]]*\];/);
 assert.match(ingestRust, /Some\(_\) => false,/, "tailer gate must stay closed for every non-codex agent, including pi");
 

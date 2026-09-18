@@ -82,22 +82,6 @@ export function piHooksStatus(): Promise<boolean> {
   return invoke<boolean>("pi_hooks_status");
 }
 
-export function deepseekDetect(): Promise<boolean> {
-  return invoke<boolean>("deepseek_detect");
-}
-
-export function deepseekHooksSetup(): Promise<void> {
-  return invoke("deepseek_hooks_setup");
-}
-
-export function deepseekHooksRemove(): Promise<void> {
-  return invoke("deepseek_hooks_remove");
-}
-
-export function deepseekHooksStatus(): Promise<boolean> {
-  return invoke<boolean>("deepseek_hooks_status");
-}
-
 export function onHookEvent(cb: (p: HookPayload) => void): Promise<UnlistenFn> {
   return listen<HookPayload>("ingest://hook", (e) => {
     if (typeof e.payload?.hook_event_name === "string" && typeof e.payload?.session_id === "string") {
