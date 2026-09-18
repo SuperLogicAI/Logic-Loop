@@ -10,7 +10,7 @@
     "tauri": "tauri",
     "reinstall": "sh scripts/reinstall.sh",
     "golden": "tsx scripts/golden.ts",
-    "check": "npm run landing:check && npm run epoch:check && npm run bind:check && npm run dedupe:check && npm run attention-state:check && npm run attention-inbox:check && npm run reentry:check && npm run unclaimed:check && npm run notify:check && npm run onboarding:check && npm run split-view:check && npm run lock-in:check && npm run spawn:check && npm run scope:check && npm run clock:check && npm run delta:check && npm run loop:check && npm run extractor-queue:check && npm run decisions:check && npm run decision-integrity:check && npm run blockers:check && npm run codex-transcript:check && npm run board:check && npm run empty-state:check && npm run opencode:check && npm run panel-layout:check && npm run diff:check && npm run statusline:check",
+    "check": "npm run landing:check && npm run epoch:check && npm run bind:check && npm run dedupe:check && npm run attention-state:check && npm run attention-inbox:check && npm run reentry:check && npm run unclaimed:check && npm run notify:check && npm run onboarding:check && npm run split-view:check && npm run lock-in:check && npm run spawn:check && npm run scope:check && npm run clock:check && npm run delta:check && npm run loop:check && npm run extractor-queue:check && npm run decisions:check && npm run decision-integrity:check && npm run blockers:check && npm run codex-transcript:check && npm run codex-meter:check && npm run board:check && npm run empty-state:check && npm run opencode:check && npm run panel-layout:check && npm run diff:check && npm run statusline:check",
     "landing:check": "tsx scripts/landing-check.ts",
     "epoch:check": "tsx scripts/epoch-check.ts",
     "bind:check": "tsx scripts/bind-check.ts",
@@ -38,7 +38,8 @@
     "opencode:check": "tsx scripts/opencode-check.ts",
     "panel-layout:check": "tsx scripts/panel-layout-check.ts",
     "diff:check": "tsx scripts/diff-check.ts",
-    "statusline:check": "tsx scripts/statusline-check.ts"
+    "statusline:check": "tsx scripts/statusline-check.ts",
+    "codex-meter:check": "tsx scripts/codex-meter-check.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

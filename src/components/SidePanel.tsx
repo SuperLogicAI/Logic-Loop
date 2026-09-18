@@ -12,6 +12,7 @@ import { topPlannedCard } from "./IdeaBoard";
 import { PanelIcon } from "./PanelIcon";
 import { SidebarLmControl } from "./SidebarLmControl";
 import { ClaudeUsageBlock } from "./ClaudeUsageBlock";
+import { CodexUsageBlock, type CodexMeterSnapshot } from "./CodexUsageBlock";
 import {
   gitAddAll,
   gitAddU,
@@ -82,6 +83,7 @@ interface Props {
   landingNoteMode: LandingNoteMode;
   onLandingNoteModeChange: (mode: LandingNoteMode) => Promise<void>;
   claudeStatusline: ClaudeStatuslineSnapshot | null; // latest mirrored statusLine payload for the active tab's exact session
+  codexMeter: CodexMeterSnapshot | null;
 }
 
 // Long lists collapse to this many rows behind a full-width ＋ toggle.
@@ -240,6 +242,7 @@ export function SidePanel({
   landingNoteMode,
   onLandingNoteModeChange,
   claudeStatusline,
+  codexMeter,
 }: Props) {
   const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
   const [muted, setMuted] = useState(false);
@@ -978,6 +981,7 @@ export function SidePanel({
         </button>
       </div>
       <ClaudeUsageBlock agent={agent} sessionId={sessionId} lastEventTs={lastEventTs} now={now} snapshot={claudeStatusline} />
+      <CodexUsageBlock agent={agent} sessionId={sessionId} snapshot={codexMeter} now={now} />
       {/* Adapter warnings: e.g. foreign PostToolUse collision in older agy releases */}
       {adapterWarnings.map((w, i) => (
         <p

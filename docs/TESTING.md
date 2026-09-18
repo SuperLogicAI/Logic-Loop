@@ -2620,8 +2620,15 @@ Automated evidence ([feat/plan023-claude-statusline-meter], 2026-09-17):
 - [x] `npm run build` clean.
 - [x] `npm run golden` intentionally not run — no extraction-prompt changes.
 
-Manual macOS matrix (unchecked until the maintainer runs it — this session
-had no display to drive the actual app UI):
+Manual macOS matrix (the maintainer ran the core path; the cases below include
+additional checks that remain open):
+
+Maintainer live pass, 2026-09-17: an existing
+`bash /Users/vandershark/.claude/statusline.sh` was detected. The maintainer
+opted in, and the Claude 5h/weekly values matched Claude's own account usage
+view. A short prompt moved 5h usage from 2% to 3%. Disabling restored the
+visible Claude terminal status line. The no-statusLine, old-CLI/ineligible,
+two-Claude-tab, and ingest-restart cases remain untested.
 
 - [ ] No existing `statusLine` configured: block shows "No status line
       configured," no wrapper file is created, no `settings.json` write
@@ -2648,6 +2655,60 @@ had no display to drive the actual app UI):
 - [ ] Compare displayed 5h/weekly percentages and reset times against the
       same account's own Claude Code terminal status line at the same
       moment.
+
+## 54. Codex model and account meter (Plan 029)
+
+Read-only source probe on 2026-09-17, `codex-cli 0.154.0`: a fresh app-server
+connection returned `account.type=chatgpt`, matched an exact CLI rollout
+session ID through `thread/read` and reported its `model`. The
+`rateLimitsByLimitId` response contained `codex` (300-minute primary,
+10080-minute secondary) and `base_model_inference` (10080-minute primary,
+null secondary). No model request, login, thread resume, or account mutation
+was made. Values are omitted here because they are live account data.
+
+Automated checks:
+
+- [x] `npm run codex-meter:check` — duration labels and staleness.
+- [x] `cargo test --lib codex_meter` — named-bucket parsing, null window,
+      malformed percent, wrong session ID (2/2 unit tests).
+- [x] Ignored live production-reader test against an existing local Codex
+      CLI session — exact model and account limits returned through the
+      bounded Rust client. One initial failure exposed premature stdin close;
+      fixed by waiting for all three responses before closing it.
+- [x] `npm run opencode:check`, `npm run check` (28/28), `npx tsc --noEmit`,
+      `npm run build`, `cargo test --lib`, `cargo clippy --all-targets --
+      -D warnings`, and `git diff --check` (82 Rust tests pass, one live test
+      ignored by default). The unprivileged Rust run hit an existing PTY
+      fixture's filesystem sandbox restriction; the elevated rerun passed.
+
+Manual macOS matrix:
+
+Maintainer live pass, 2026-09-17: a Codex tab populated the meter after an
+initial “Hi”, before a separate test prompt. Model and account windows matched
+Codex `/status`. Switching to Claude hid the Codex meter. Returning to Codex
+showed a roughly 1–2 second loading gap. An extra “GPT-reserve” named bucket
+was visible; its applicability to the active model is unproven. Follow-up UI
+change keeps the `codex` bucket visible, places extra named buckets behind an
+“Other account limits” chevron, and caches the last snapshot by exact session
+ID for immediate display on tab re-entry. Recheck those two UI changes live.
+The focused Codex meter check, all 28 frontend checks, TypeScript production
+build, and `git diff --check` passed after this UI change.
+The two-Codex-tab, router, auth, and failure cases remain untested.
+
+- [ ] Open a bound Codex tab and compare the displayed model and each account
+      window's used percent and reset time with Codex's own UI at the same
+      moment. Confirm the 300-minute and 10080-minute labels use their returned
+      durations.
+- [ ] Switch between two Codex tabs in one project, including a model switch
+      and session resume. Each tab shows its own exact session model; old
+      responses do not overwrite the newly active session.
+- [ ] Check an unbound tab and a non-Codex tab: no Codex meter appears. Check
+      collapsed/hidden panel: polling stops.
+- [ ] Check with Safe Router off and on: account windows remain account-wide
+      and never claim project attribution.
+- [ ] Test API-key-only or logged-out auth, a null secondary window, a failed
+      app-server read, and a hung reader. Terminals and hook ingestion continue;
+      UI shows unavailable, missing, error, or stale state as appropriate.
 
 ## Quality gates (machine-run, not manual)
 
