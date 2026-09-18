@@ -9,9 +9,9 @@
 
 Logic Loop is an open-source macOS app, built by [Super Logic AI](https://superlogicai.com),
 that aids the human's context-switching limits while running several AI coding
-agent terminal sessions at once — Claude Code, OpenCode, Codex and Antigravity
-today, more adapters planned. Every competing tool tells you what your *agents*
-are doing. Logic Loop tells you what *you* need to do — and remembers
+agent terminal sessions at once — Claude Code, OpenCode, Codex, Antigravity,
+Pi Agent and DeepSeek Harness today, more adapters planned. Every competing
+tool tells you what your *agents* are doing. Logic Loop tells you what *you* need to do — and remembers
 everything you'd otherwise lose in the switch.
 
 > Agent viewers manage the agents' context. Logic Loop manages yours.
@@ -129,6 +129,7 @@ alongside Claude Code.
 | **Codex** | ✅ | ✅ | Hook contract is near-identical to Claude's; registers into `~/.codex/hooks.json`. Carries its own adapter marker, resumes via `codex resume`, handles `Interrupt`/`SessionEnd` lifecycle events, and can back the Sidebar LM extractor. |
 | **[Antigravity](https://github.com/google-antigravity/antigravity-cli)** (`agy`) | ✅ | — | Structured hooks and session re-entry via `agy --conversation <id>`; quit/relaunch and prior-context recall verified with agy 1.2.4. See caveats below. |
 | **[Pi Agent](https://github.com/earendil-works/pi)** (`pi`) | ✅ | — | In-process global TypeScript extension (`~/.pi/agent/extensions/logic-loop.ts`) translating lifecycle events; no separate config file or transcript to tail. Session re-entry via `pi --session <id>`, live-verified ([Plan 026](plans/026-pi-agent-adapter.md)). |
+| **[DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh)** (`dsh`) | ✅ | — | Runs as `dsh --profile logic-loop`. No first-party terminal UI ships upstream, so the adapter installs Logic Loop's own profile patch at `~/.dsh/profiles/logic-loop` rather than wrapping something DeepSeek provides. Session re-entry via `--resume <sessionId>`, proven cross-process. |
 
 Decision and blocker extraction is available for Claude Code and Codex. The
 Sidebar LM chooser supports Claude CLI (default), Codex CLI, and LM Studio
@@ -169,6 +170,57 @@ at setup time and surfaces a warning strip if one is found, so an older or
 regressed `agy` install fails loud instead of silently dropping every tool
 event.
 
+## Account and usage meters
+
+The active Claude Code tab's sidebar can show which model the session is on
+plus two account allowance bars — 5-hour and weekly — with used percentage and
+reset time. The source is Claude Code's own documented `statusLine` JSON, not
+a local token count. Logic Loop wraps an **existing** `statusLine.command`
+after an explicit click: your original command still runs and renders exactly
+as before, and switching the wrapper off restores the original byte for byte.
+A tab with no status line configured is told so rather than having one created
+for it.
+
+Codex tabs get the equivalent from Codex's own app-server — session model plus
+each named rate-limit bucket it reports, shown separately rather than summed,
+because the response does not map buckets to the active model.
+
+Both are read-only gauges of an account-wide number that happens to be visible
+because that tab is bound and active. Neither is joined across tabs, persisted
+to the database, or turned into a dollar figure.
+
+## Model traffic (optional)
+
+Logic Loop can also read the metadata log written by
+**[Safe Router](https://github.com/SuperLogicAI/safe_router)**, a headless,
+local-first model router from the same project. Safe Router keeps designated
+clients on approved local backends, brokers explicitly authorized remote
+requests, and records what was requested, served, and reported as used —
+never prompts or responses.
+
+If your agents route through it, a header **Traffic** control opens a global
+list of the latest 100 routed requests: time, client key ID, requested versus
+served model, backend, plane, disposition and status, token counters, and
+whether usage was fully recorded. That answers something no single agent's own
+interface can — *which model tier actually served this request* — across every
+agent and project at once.
+
+It is strictly a read. Logic Loop opens `~/.safe-router/log.db` read-only
+(`mode=ro` plus `PRAGMA query_only=1`) on its own connection, never creates the
+file, never writes to it, and selects only from the versioned `v_requests_v2`
+view, never the underlying table. Safe Router remains a separate process and
+the sole writer.
+
+Entirely optional: with no Safe Router installed, the control simply reports
+that no log was found, and nothing else in Logic Loop depends on it. No cost
+or dollar figure is shown — the counters are provider-reported metadata, not a
+bill, and a NULL reads as unknown while a recorded `0` reads as `0`. The
+`client_tag` field is client-supplied text, so no row is attributed to a tab
+or project.
+
+Shipped in [Plan 022](plans/022-safe-router-traffic-view.md). Its manual macOS
+matrix ([docs/TESTING.md](docs/TESTING.md) §57) has not been run yet.
+
 ## Status
 
 Early, actively built, dogfooded daily. Shipped:
@@ -198,6 +250,20 @@ Early, actively built, dogfooded daily. Shipped:
   notifications/dock badge without pausing ingestion
 - ✅ First-run agent setup — detection, capability depth, explicit hook install,
   first-event confirmation, and contextual notification consent
+- ✅ Two-terminal split view — a second ordinary tab in a fixed vertical split,
+  each pane independently tethered
+- ✅ Commit & Push footer — drafts a commit message, stages, pushes and opens a
+  PR without leaving the tab; untracked files are always opt-in, and the tab is
+  checked back out to the branch it started on
+- ✅ Pi Agent adapter — in-process extension, activity and session re-entry
+- ✅ DeepSeek Harness adapter — Logic Loop's own profile patch, activity and
+  cross-process re-entry
+- ✅ Claude usage meter — 5-hour and weekly account bars from Claude Code's own
+  `statusLine` JSON, wrapping an existing status line reversibly
+- ✅ Codex account meter — session model and each reported rate-limit bucket,
+  read from Codex's app-server
+- ✅ Safe Router traffic view — optional, read-only list of recent routed
+  requests and which model tier served them
 - ⏳ Crash recovery, public release polish
 
 ## Stack
@@ -214,9 +280,10 @@ xterm.js · SQLite (tauri-plugin-sql) · localhost hook-ingest server.
 - For agent activity, install at least one supported CLI: [Claude Code](https://claude.com/claude-code),
   [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex),
   [Antigravity](https://github.com/google-antigravity/antigravity-cli) (`agy`),
-  or [Pi Agent](https://github.com/earendil-works/pi) (`pi`). Each is detected
-  independently — `PATH` plus the usual install locations. You can open a
-  plain terminal tab without an agent CLI.
+  [Pi Agent](https://github.com/earendil-works/pi) (`pi`), or
+  [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh) (`dsh`).
+  Each is detected independently — `PATH`, Homebrew prefixes, and the usual
+  install locations. You can open a plain terminal tab without an agent CLI.
 
 ## macOS (build from source)
 
