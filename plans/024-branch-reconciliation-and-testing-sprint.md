@@ -233,6 +233,96 @@ Original list, for reference:
     `pr19-retrigger`, `pr19-retry2`, `feat/phase33.1-haiku-default` — each
     a one-off experiment or retry branch already superseded elsewhere.
 
+## Round 2 (2026-09-18) — drift recurred after Steps A/B/D closed
+
+> Inventory taken on `feat/pi-deepseek-adapters` (`86464f1`), local `main`
+> at `d95a7c7`. Re-verify before executing — same rule as round 1.
+
+**What changed since Round 1 closed (2026-09-14):** `origin/main` gained 7
+more commits local `main` doesn't have — PR #32 (Agy 004 scoped
+`PreToolUse` hook), PR #33-36 (a new `deploy/` EC2 remote-desktop
+template + Tailscale/L3 sign-in follow-ups, authored by an external
+contributor `Linux_Luthor <radwuanabouzeid@gmail.com>` — unrelated to any
+numbered phase or plan here, own directory, no file overlap with anything
+below), PR #37 (Plan 023 statusLine meter, merged), PR #38 (Claude+Codex
+sidebar usage meters, merged). PR #25 is already closed — no action needed,
+that part of Round 1 held.
+
+**Good news vs. Round 1: no real divergence this time.**
+`git merge-base --is-ancestor main origin/main` succeeds — local `main` is
+a clean fast-forward, zero risk, no merge/conflict step needed.
+
+**Still open, same shape as Round 1's Step B:** `feat/safe-router-traffic`
+(Plan 022) and `phase33-contextual-first-run` (Plan 021) are both still
+un-merged and now stale against the new `origin/main` tip (missing PR #32,
+#37, #38 — `#33-36` don't matter, different directory). Neither plan has
+been through its live matrix yet (Round 1 Step C items 13-14), and neither
+has maintainer approval to move off CANDIDATE — that gate is unchanged and
+still outside this plan's scope.
+
+**New, not in Round 1:** the current work branch `feat/pi-deepseek-adapters`
+(Plan 026/028, Pi + DeepSeek adapters) is itself based on the same stale
+`d95a7c7` tip and will need the same rebase treatment before it can merge —
+explicitly **not** in scope until the maintainer finishes live-testing Pi
+and DeepSeek. Don't touch that branch as part of this plan.
+
+**Untracked, flagging not fixing:** `plan021-linux-evidence/` (9 PNGs,
+working tree root) appears to be a stale Plan 021 evidence dump. The captures
+show macOS UI despite the directory name, and they are not part of an
+authorized Plan 021 live matrix. The maintainer removed the stale directory
+on 2026-09-18; do not restore or commit it as part of this plan.
+
+### Round 2 sequencing
+
+**Step A2 — fast-forward `main` (no conflict expected, unlike Round 1):**
+1. `git fetch && git checkout main && git merge --ff-only origin/main`.
+2. No rebuild/test needed — a pure ref move, no working-tree change on a
+   fast-forward.
+
+**Step B2 — rebase the two still-open feature branches onto the new `main`:**
+3. `feat/safe-router-traffic` (Plan 022): rebase onto reconciled `main`.
+   Expect conflicts in `package.json` (both this branch and PR #37/#38 add
+   `check` script entries) and `docs/TESTING.md` (PR #37/#38 both added new
+   sections). Diff `AgentStatusBar.tsx`/`SidePanel.tsx` against
+   `origin/main` first — PR #37/#38 both touch the sidebar meter area Plan
+   022's traffic view UI may also live near; check for real overlap before
+   assuming it's a clean side-by-side merge like Round 1's was. Re-run
+   `cargo test`, `npm run check`.
+4. `phase33-contextual-first-run` (Plan 021): rebase onto reconciled
+   `main`. Expect `docs/TESTING.md` conflicts only, same shape as Round 1
+   — its own files (`OnboardingModal.tsx`, `pty.rs`, `AgentStatusBar.tsx`,
+   `onboarding.ts`) are less likely to overlap PR #32/#37/#38, but confirm
+   `AgentStatusBar.tsx` specifically since three different branches now
+   touch it. Re-run gates.
+5. Push both with `--force-with-lease`. Do not open/merge PRs — 021/022
+   are still CANDIDATE, maintainer approval to implement/merge is a
+   separate decision from this plan, unchanged from Round 1.
+
+**Step C2 — resume the Round 1 testing backlog, now unblocked:**
+6. Plan 021 live matrix (its own clean-profile matrix, supersedes the old
+   Phase 31 §43) — needs maintainer approval decision on Plan 021 first.
+7. Plan 022 live matrix — needs maintainer approval decision on Plan 022
+   first.
+8. Opportunistic re-repro of the tab-restore-loses-a-tab landmine during
+   6-7's quit/relaunch cycles (still not root-caused).
+
+**Explicitly deferred, not this plan's scope:**
+- Rebasing/merging `feat/pi-deepseek-adapters` — after live testing there
+  finishes, per the maintainer.
+- `plan021-linux-evidence/` — removed as stale evidence; do not restore it.
+- Any decision to fold the `deploy/` EC2 work into `CLAUDE.md`'s phase
+  tracking or `plans/README.md` — it landed via 4 merged PRs with no plan
+  number and no phase entry; flagging the gap, not closing it here.
+
+### Round 2 done looks like
+
+- `git log --oneline origin/main..main` and `main..origin/main` both empty.
+- `feat/safe-router-traffic` and `phase33-contextual-first-run` rebased
+  onto the new `main`, gates green, still not merged (pending approval).
+- `plan021-linux-evidence/` removed as stale evidence — not left as a
+  permanent untracked directory.
+- Nothing in `feat/pi-deepseek-adapters` touched.
+
 ## Done looks like
 
 - `git log --oneline origin/main..main` and `main..origin/main` both empty.
