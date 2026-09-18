@@ -147,6 +147,47 @@ export interface ExtractorSettings {
   claudeModel: string;
 }
 
+/** Plan 023: one rate-limit window from Claude Code's statusLine `rate_limits`
+ * JSON. `resets_at` is unix epoch seconds; absent/null means the CLI didn't
+ * report a reset for this window (never manufacture one). */
+export interface ClaudeRateLimitWindow {
+  used_percentage: number;
+  resets_at: number | null;
+}
+
+/** `spend_limit` only appears for gateway/spend-limit accounts and can
+ * legitimately exceed 100 — display the real number, clamp only the bar. */
+export interface ClaudeRateLimits {
+  five_hour?: ClaudeRateLimitWindow | null;
+  seven_day?: ClaudeRateLimitWindow | null;
+  spend_limit?: ClaudeRateLimitWindow | null;
+}
+
+/** Mirrored, transient statusLine snapshot — never persisted to SQLite (see
+ * `onStatusline`). Passed through opaquely by the Rust ingest layer, so an
+ * unrecognized shape here is a display concern, not a parse failure there. */
+export interface ClaudeStatuslinePayload {
+  tab_id?: string;
+  project_key?: string;
+  session_id: string;
+  model?: { id?: string; display_name?: string } | string | null;
+  rate_limits?: ClaudeRateLimits | null;
+}
+
+/** Wrapper install state, mirroring Rust's `statusline::StatuslineStatus`. */
+export interface ClaudeStatuslineStatus {
+  state: "not-installed" | "installed" | "foreign";
+  detected_command: string | null;
+  cli_version_ok: boolean | null;
+}
+
+/** Latest mirrored statusLine payload for a session, with a local arrival
+ * time for staleness detection — the payload itself carries no timestamp. */
+export interface ClaudeStatuslineSnapshot {
+  payload: ClaudeStatuslinePayload;
+  receivedAt: number;
+}
+
 /** A tab-tether-keyed re-entry candidate: the latest session bound to a tab
  * that was still active when the app last quit (see `repo.reentryCandidates`). */
 export interface ReentryCandidate {

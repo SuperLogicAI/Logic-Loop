@@ -1,6 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { AgentState, AttentionSourceContext, HookPayload } from "../types";
+import type {
+  AgentState,
+  AttentionSourceContext,
+  ClaudeStatuslinePayload,
+  ClaudeStatuslineStatus,
+  HookPayload,
+} from "../types";
 
 export function hooksSetup(): Promise<void> {
   return invoke("hooks_setup");
@@ -16,6 +22,18 @@ export function hooksStatus(): Promise<boolean> {
 
 export function claudeDetect(): Promise<boolean> {
   return invoke<boolean>("claude_detect");
+}
+
+export function claudeStatuslineStatus(): Promise<ClaudeStatuslineStatus> {
+  return invoke<ClaudeStatuslineStatus>("claude_statusline_status");
+}
+
+export function claudeStatuslineSetup(): Promise<void> {
+  return invoke("claude_statusline_setup");
+}
+
+export function claudeStatuslineRemove(): Promise<void> {
+  return invoke("claude_statusline_remove");
 }
 
 export function opencodeDetect(): Promise<boolean> {
@@ -110,6 +128,15 @@ export function onAdapterWarning(
   cb: (p: { agent: string; reason: string }) => void
 ): Promise<UnlistenFn> {
   return listen<{ agent: string; reason: string }>("ingest://adapter-warning", (e) => cb(e.payload));
+}
+
+/** Plan 023: live statusLine mirror from the Claude wrapper. Never persisted
+ * (see `ClaudeStatuslinePayload`) — the caller keeps only the latest snapshot
+ * per tab/session. */
+export function onStatusline(cb: (p: ClaudeStatuslinePayload) => void): Promise<UnlistenFn> {
+  return listen<ClaudeStatuslinePayload>("ingest://statusline", (e) => {
+    if (typeof e.payload?.session_id === "string") cb(e.payload);
+  });
 }
 
 /** The subset of a tab this module needs to bind a session to it. */
