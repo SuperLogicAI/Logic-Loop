@@ -58,6 +58,17 @@ assert.deepEqual(
   [["agy-new", "antigravity", "", "Agy work", "#f97316"]]
 );
 
+// Pi has no tailed transcript either. Its latest binding still restores
+// agent and tab presentation without borrowing a Claude-shaped transcript
+// path.
+assert.deepEqual(
+  latestPerTether([
+    row("pi-tab", "pi-old", 1000, { agent: "pi", transcript_path: "", tab_title: "Old", tab_color: "#111111" }),
+    row("pi-tab", "pi-new", 2000, { agent: "pi", transcript_path: "", tab_title: "Pi work", tab_color: "#8b5cf6" }),
+  ]).map((c) => [c.session_id, c.agent, c.transcript_path, c.tab_title, c.tab_color]),
+  [["pi-new", "pi", "", "Pi work", "#8b5cf6"]]
+);
+
 // A legacy/no-marker row keeps agent undefined, not fabricated.
 assert.deepEqual(
   latestPerTether([row("tab-1", "s1", 1000)]).map((c) => c.agent),

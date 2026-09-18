@@ -128,6 +128,7 @@ alongside Claude Code.
 | **OpenCode** | ✅ | — | In-process plugin translating native events; no transcript file to tail. |
 | **Codex** | ✅ | ✅ | Hook contract is near-identical to Claude's; registers into `~/.codex/hooks.json`. Carries its own adapter marker, resumes via `codex resume`, handles `Interrupt`/`SessionEnd` lifecycle events, and can back the Sidebar LM extractor. |
 | **[Antigravity](https://github.com/google-antigravity/antigravity-cli)** (`agy`) | ✅ | — | Structured hooks and session re-entry via `agy --conversation <id>`; quit/relaunch and prior-context recall verified with agy 1.2.4. See caveats below. |
+| **[Pi Agent](https://github.com/earendil-works/pi)** (`pi`) | ✅ | — | In-process global TypeScript extension (`~/.pi/agent/extensions/logic-loop.ts`) translating lifecycle events; no separate config file or transcript to tail. Session re-entry is planned but not yet built ([Plan 026](plans/026-pi-agent-adapter.md)). |
 
 Decision and blocker extraction is available for Claude Code and Codex. The
 Sidebar LM chooser supports Claude CLI (default), Codex CLI, and LM Studio
@@ -212,9 +213,10 @@ xterm.js · SQLite (tauri-plugin-sql) · localhost hook-ingest server.
   where it runs. Building from source does; see the macOS steps below.
 - For agent activity, install at least one supported CLI: [Claude Code](https://claude.com/claude-code),
   [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex),
-  or [Antigravity](https://github.com/google-antigravity/antigravity-cli)
-  (`agy`). Each is detected independently — `PATH` plus the
-  usual install locations. You can open a plain terminal tab without an agent CLI.
+  [Antigravity](https://github.com/google-antigravity/antigravity-cli) (`agy`),
+  or [Pi Agent](https://github.com/earendil-works/pi) (`pi`). Each is detected
+  independently — `PATH` plus the usual install locations. You can open a
+  plain terminal tab without an agent CLI.
 
 ## macOS (build from source)
 

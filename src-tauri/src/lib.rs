@@ -1,10 +1,12 @@
 mod board;
 mod clipboard;
+mod deepseek;
 mod extractor;
 mod codex;
 mod home;
 mod ingest;
 mod opencode;
+mod pi;
 mod pty;
 // pub: main.rs calls antigravity::run_hook_mode directly, ahead of
 // app_lib::run(), to intercept `--antigravity-hook` before the GUI boots.
@@ -286,6 +288,14 @@ pub fn run() {
             antigravity::antigravity_hooks_setup,
             antigravity::antigravity_hooks_remove,
             antigravity::antigravity_hooks_status,
+            pi::pi_detect,
+            pi::pi_hooks_setup,
+            pi::pi_hooks_remove,
+            pi::pi_hooks_status,
+            deepseek::deepseek_detect,
+            deepseek::deepseek_hooks_setup,
+            deepseek::deepseek_hooks_remove,
+            deepseek::deepseek_hooks_status,
             extractor::run_extractor,
             clipboard::clipboard_text,
             clipboard::clipboard_image_path,

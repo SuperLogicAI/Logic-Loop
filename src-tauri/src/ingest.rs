@@ -300,7 +300,7 @@ pub(crate) fn hook_command_with_agent(agent: Option<&'static str>) -> String {
 /// identifies a *subagent* within a Codex session and is used by
 /// `stateForHook` to avoid driving the parent tab's state). Extend this list
 /// when a future adapter plan wires up its own marker.
-const RECOGNIZED_AGENTS: [&str; 3] = ["codex", "opencode", "antigravity"];
+const RECOGNIZED_AGENTS: [&str; 5] = ["codex", "opencode", "antigravity", "pi", "deepseek"];
 
 /// An unrecognized or absent header must stay absent rather than being
 /// guessed as Claude — pulled out as a pure function so the allowlist
@@ -526,6 +526,8 @@ mod tests {
         assert_eq!(recognized_agent(Some("codex")), Some("codex"));
         assert_eq!(recognized_agent(Some("opencode")), Some("opencode"));
         assert_eq!(recognized_agent(Some("antigravity")), Some("antigravity"));
+        assert_eq!(recognized_agent(Some("pi")), Some("pi"));
+        assert_eq!(recognized_agent(Some("deepseek")), Some("deepseek"));
         assert_eq!(recognized_agent(Some("claude")), None);
         assert_eq!(recognized_agent(Some("")), None);
         assert_eq!(recognized_agent(None), None);
@@ -545,6 +547,12 @@ mod tests {
         ));
         assert!(!is_transcript_path(rollout, None));
         assert!(!is_transcript_path(rollout, Some("antigravity")));
+        // Pi is a recognized agent but must never be tailed as a transcript
+        // source — its extension POSTs structured events directly, no file.
+        assert!(!is_transcript_path(rollout, Some("pi")));
+        // Same for deepseek — dsh-terminal-app's own ctx.on("session/event")
+        // observer POSTs directly, no transcript file exists to tail.
+        assert!(!is_transcript_path(rollout, Some("deepseek")));
         assert!(!is_codex_rollout_path(
             std::path::Path::new("/Users/x/.codex/sessions/2026/08/27/events.jsonl"),
             std::path::Path::new("/Users/x")

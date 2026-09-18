@@ -1,4 +1,4 @@
-export type AdapterId = "claude" | "codex" | "opencode" | "antigravity";
+export type AdapterId = "claude" | "codex" | "opencode" | "antigravity" | "pi" | "deepseek";
 
 export interface AdapterMetadata {
   id: AdapterId;
@@ -68,11 +68,38 @@ export const ADAPTERS: readonly AdapterMetadata[] = [
     configLocation: "~/.gemini/config/hooks.json",
     capabilities: { activity: true, decisions: false, reentry: true },
   },
+  {
+    id: "pi",
+    label: "Pi Agent",
+    command: "pi",
+    configLocation: "~/.pi/agent/extensions/logic-loop.ts",
+    // reentry flips true only once Build step 4's resume_command lands and
+    // its live re-entry gate passes (Plan 026) — not yet built.
+    capabilities: { activity: true, decisions: false, reentry: false },
+  },
+  {
+    id: "deepseek",
+    label: "DeepSeek Harness",
+    command: "dsh",
+    configLocation: "~/.dsh/profiles/logic-loop (dsh-terminal-app plugin)",
+    // No shipped first-party or safely-adoptable third-party terminal UI
+    // exists upstream (plans/027) — this is Logic Loop's own first-party
+    // profile patch (plans/028), not an install of anything DeepSeek ships.
+    // decisions stays false: no extraction prompt targets this adapter.
+    // reentry is true — cross-process `--resume <sessionId>` proven live.
+    capabilities: { activity: true, decisions: false, reentry: true },
+  },
 ] as const;
 
 export function adapterIdForHook(agent: string | undefined): AdapterId | null {
   if (agent === undefined) return "claude";
-  return agent === "codex" || agent === "opencode" || agent === "antigravity" ? agent : null;
+  return agent === "codex" ||
+    agent === "opencode" ||
+    agent === "antigravity" ||
+    agent === "pi" ||
+    agent === "deepseek"
+    ? agent
+    : null;
 }
 
 export function adapterProgress(state: AdapterRuntimeState, observed: boolean): AdapterProgress {

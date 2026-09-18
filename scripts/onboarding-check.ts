@@ -19,6 +19,8 @@ assert.deepEqual(
     { id: "codex", command: "codex", capabilities: { activity: true, decisions: true, reentry: true } },
     { id: "opencode", command: "opencode", capabilities: { activity: true, decisions: false, reentry: false } },
     { id: "antigravity", command: "agy", capabilities: { activity: true, decisions: false, reentry: true } },
+    { id: "pi", command: "pi", capabilities: { activity: true, decisions: false, reentry: false } },
+    { id: "deepseek", command: "dsh", capabilities: { activity: true, decisions: false, reentry: true } },
   ]
 );
 
@@ -26,6 +28,8 @@ assert.equal(adapterIdForHook(undefined), "claude");
 assert.equal(adapterIdForHook("codex"), "codex");
 assert.equal(adapterIdForHook("opencode"), "opencode");
 assert.equal(adapterIdForHook("antigravity"), "antigravity");
+assert.equal(adapterIdForHook("pi"), "pi");
+assert.equal(adapterIdForHook("deepseek"), "deepseek");
 assert.equal(adapterIdForHook("future-agent"), null);
 
 const state = (overrides: Partial<AdapterRuntimeState> = {}): AdapterRuntimeState => ({

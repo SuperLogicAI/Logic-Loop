@@ -9,6 +9,10 @@ import {
   codexHooksRemove,
   codexHooksSetup,
   codexHooksStatus,
+  deepseekDetect,
+  deepseekHooksRemove,
+  deepseekHooksSetup,
+  deepseekHooksStatus,
   hooksRemove,
   hooksSetup,
   hooksStatus,
@@ -16,6 +20,10 @@ import {
   opencodeHooksRemove,
   opencodeHooksSetup,
   opencodeHooksStatus,
+  piDetect,
+  piHooksRemove,
+  piHooksSetup,
+  piHooksStatus,
 } from "../lib/ingest";
 import type { LockInMode } from "../lib/lockIn";
 import {
@@ -42,6 +50,13 @@ const ADAPTER_ACTIONS: Record<AdapterId, AdapterActions> = {
   codex: { detect: codexDetect, status: codexHooksStatus, setup: codexHooksSetup, remove: codexHooksRemove },
   opencode: { detect: opencodeDetect, status: opencodeHooksStatus, setup: opencodeHooksSetup, remove: opencodeHooksRemove },
   antigravity: { detect: antigravityDetect, status: antigravityHooksStatus, setup: antigravityHooksSetup, remove: antigravityHooksRemove },
+  pi: { detect: piDetect, status: piHooksStatus, setup: piHooksSetup, remove: piHooksRemove },
+  deepseek: {
+    detect: deepseekDetect,
+    status: deepseekHooksStatus,
+    setup: deepseekHooksSetup,
+    remove: deepseekHooksRemove,
+  },
 };
 
 const initialAdapterStates = Object.fromEntries(
@@ -218,7 +233,7 @@ export function AgentStatusBar({
           <button type="button" onClick={() => setSetupOpen(true)} className="flex h-6 shrink-0 items-center rounded-full border border-zinc-700 px-3 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-sky-400">
             Setup
           </button>
-          {(["antigravity", "claude", "codex", "opencode"] as const).map((id) => {
+          {(["antigravity", "claude", "codex", "deepseek", "opencode", "pi"] as const).map((id) => {
             const state = adapterStates[id];
             if (state.available === false) return null;
             const label = ADAPTERS.find((adapter) => adapter.id === id)?.label ?? id;

@@ -2572,6 +2572,195 @@ canonical `PermissionRequest` event, and answer the blocking hook with
       2026-09-16 passed: Antigravity setup showed on, `ask_question` blocked
       in the terminal, and the active tab showed the amber waiting state.
 
+## 53. Pi Agent Step 0 — local contract verification (Plan 026)
+
+**Status: IN PROGRESS.** Maintainer authorized skipping the literal
+`PHASE 26 ACCEPTED` token for this candidate (Plan 024's branch
+reconciliation is moot — local `main` and `origin/main` both sit at
+`d95a7c7` already). Step 0's live verification is explicitly NOT
+skipped: Plan 026 requires it before any Build step lands.
+
+- [x] Pi CLI installed: `npm install -g --ignore-scripts
+      @earendil-works/pi-coding-agent` (recommended method, `--ignore-scripts`
+      avoids install-time arbitrary code execution vs. the `curl | sh`
+      alternative). Resolved to `/opt/homebrew/bin/pi`.
+- [x] `pi --version`: `0.85.1`
+- [x] `pi --help` captured — confirms `--session <path|id>` (explicit
+      resume), `--session-id <id>` (create-if-missing), `--fork`, `--print/-p`
+      (non-interactive), `--extension/-e <path>` (unpublished local load,
+      matches Step 0's "do not edit global config" instruction), default
+      `--provider` is **google**, not anthropic (plan's docs excerpt didn't
+      state a default).
+- [x] Extension module contract confirmed against upstream `extensions.md`:
+      default factory `(pi: ExtensionAPI) => {...}`, `pi.on(eventName, async
+      (event, ctx) => {...})`. `ctx.sessionManager.getSessionId()` /
+      `getSessionFile()` and `ctx.cwd` exist as the plan assumed.
+- [x] Disposable spike extension written (not installed):
+      `logic-loop-pi-spike.ts`, logs redacted event shapes
+      (`session_start`/`before_agent_start`/`tool_execution_start`/
+      `tool_execution_end`/`agent_settled`/`session_shutdown`) to a local
+      NDJSON file — no network, no prompt/tool-result text captured, only
+      field names and lengths.
+- [x] `pi auth check` — maintainer configured `anthropic` auth out-of-band
+      (`pi auth check --provider anthropic --json` → `{"status":"ready",
+      "authType":"api_key"}`); no key value was read, echoed, or set by
+      this session.
+- [x] Fresh session (`pi -p --session-id <id>`): `session_start` fires with
+      `reason:"startup"`, correct `cwd`, `sessionFile` under
+      `--session-dir`. `before_agent_start` fires with prompt length only.
+- [x] Tool call, success case: `tool_execution_start`/`tool_execution_end`
+      carry `toolCallId`/`toolName`/arg-keys/`isError:false`/result keys
+      (`content`, `details`) — matches Build step 2's assumed shape.
+- [x] Tool call, error case (nonexistent file read): `isError:true`, same
+      shape otherwise. Confirms `tool_response: {is_error: boolean}` is a
+      real, stable discriminator.
+- [x] `agent_settled` fires exactly once, after the tool call completes,
+      `isIdle` true — true idle boundary as the plan assumed.
+- [x] `pi --session <full-uuid>` continuity: resumed a session created
+      without an explicit `--session-id` (auto-generated UUID-v7-shaped ID,
+      safe charset — hex + dashes, same class Claude/Codex/Antigravity IDs
+      already pass through `valid_resume_id`); asked it to recall a value
+      told to it in the prior process; got it back correctly. Context
+      recall across process restart is real, not just same-process memory.
+- [x] `getSessionId()` stability on re-entry: identical ID before and after
+      resume.
+- [~] **Deviation from upstream docs:** `session_start.reason` stayed
+      `"startup"` on the resumed call too, not `"resume"` as
+      `extensions.md`'s documented enum implies. Not a blocker — Build step
+      2 maps `session_start` → `SessionStart` unconditionally, doesn't
+      branch on `reason` — but flagging since the plan's Research section
+      cited that doc as source of truth and it's measurably wrong here on
+      `0.85.1`.
+- [ ] `/new`, `/resume`, `/reload` (TUI-only slash commands) and
+      same-process multi-turn: **not exercised.** `pi -p` is one-shot per
+      process, so these can't be scripted non-interactively — each
+      confirmed above used a fresh process per turn. These need a real
+      interactive terminal pass; deferred to Step 5's live macOS matrix
+      rather than blocking Build steps 1-4, since none of the four are
+      load-bearing for what Build steps 1-4 actually implement (extension
+      install/detect, event mapping, resume command construction).
+- Gotcha for any future scripted `pi -p` spike (not a Pi bug): with no
+  stdin redirect, `pi -p --session <id>` hangs indefinitely at 0% CPU with
+  zero output, including no `session_start` from the extension — reads
+  blocked on stdin with no TTY. Always redirect `< /dev/null` non-
+  interactively. Real Logic Loop usage has a real PTY/TTY attached so this
+  doesn't apply to the actual product, only to headless test scripts.
+
+**Step 0 verdict:** the load-bearing contract (event shapes, tool
+success/error discriminator, `agent_settled` ordering, `--session`
+continuity, stable session ID) is proven on `0.85.1`. Slash-command and
+same-process multi-turn behavior remains open, non-blocking per above.
+Proceeding to Build steps 1-4 is warranted; Step 5's live matrix must still
+cover `/new`/`/resume`/`/reload` before this plan can be called done.
+
+**Build steps 1-2 live smoke test (2026-09-17):** beyond `cargo test`
+coverage of the pure `plan_setup`/`plan_remove`/`extension_source` logic,
+ran the actual generated extension (extracted verbatim from
+`extension_source()`, not hand-transcribed) against a throwaway mock
+ingest HTTP server on an isolated `$HOME` (real `~/.pi` symlinked in for
+auth reuse, fake `.context-terminal/ingest.env` pointing at the mock) —
+chosen specifically because the real Logic Loop dev app was live on its
+real ingest port (`lsof` confirmed) and this had to not touch it. One real
+Pi session with a `bash` tool call produced exactly four POSTs in order —
+`SessionStart` → `UserPromptSubmit` → `PostToolUse` → `Stop` — each with
+correct `Authorization`, `X-Logic-Loop-Tab` (from `LOGIC_LOOP_TAB_ID`),
+`X-Logic-Loop-Hook: 1`, `X-Logic-Loop-Agent: pi`, and `PostToolUse` carried
+`tool_use_id`, `tool_name: "bash"`, `tool_input: {command: "echo
+pi-smoke-test"}`, `tool_response: {is_error: false}` — nothing else. Mock
+server and isolated `$HOME` torn down after.
+
+## 54. Pi Agent Step 5 — unattended groundwork (Plan 026)
+
+**Status: PARTIAL, not a substitute for the live matrix.** Run
+2026-09-17 while the maintainer was away from their computer, to push
+whatever didn't require a human looking at the GUI or real provider
+credentials. Tauri's window is a native WKWebView with no CDP bridge
+(unlike Electron), so nothing in this section drove the actual Logic
+Loop app UI — every GUI-level item below (toggle Pi on in Setup, spawn
+a tab, tool detail/error rendering, disable-while-running, foreign-file
+collision *error surfaced in the UI*, two tabs one cwd) is untouched and
+still needs the maintainer.
+
+What was exercised instead: the real generated extension (extracted
+verbatim from `extension_source()` via a throwaway `#[cfg(test)]` probe,
+run once, then reverted — `git diff --check` and `cargo test --lib`
+82/82 confirm no residue) against a real `pi` 0.85.1 process, fully
+isolated `$HOME` (`/tmp/pi-step5-probe/fakehome`), a disposable mock
+ingest HTTP server, and `expect` (already on the box, nothing installed)
+driving the interactive TUI — `tmux` isn't installed and wasn't added
+per the toolchain-install rule.
+
+- [x] `SessionStart` fires correctly on real interactive boot: correct
+      `Authorization`, `X-Logic-Loop-Tab`, `X-Logic-Loop-Agent: pi`,
+      `session_id`, `cwd`, all via a live process talking to a live
+      (mock) ingest server — not a unit-test assertion on the string.
+- [x] `/new` mid-process: fires a second `SessionStart` with a distinct
+      `session_id` in the same `pi` process. Confirms the plan's
+      per-`/new` re-open semantics and that `pendingTools.clear()` runs
+      on the new `session_start`.
+- [x] Absent ingest server: killed the mock server, booted `pi` fresh.
+      `session_start` still attempts its POST, the extension's
+      `.catch(() => {})` swallows the failure silently, no hang, no
+      exception surfaced in the TUI, clean `/exit`. Fail-open confirmed
+      at the extension level.
+- [~] **Real finding, not yet explained:** the first boot in a given
+      `--session-dir`, with no `--session`/`--session-id`/`--continue`
+      flag at all, returned the *same* `session_id` as a previous run in
+      that same directory (different `--name`). Pi may default to
+      continuing the directory's most-recent session rather than always
+      starting fresh — relevant to the "spawn a fresh Pi tab" matrix item
+      if a stale `--session-dir` (or Pi's own default storage location)
+      could hand a new tab someone else's prior context. Flagging for the
+      live matrix to specifically check: a brand-new tab in a cwd with an
+      existing Pi session history — does it start clean or silently
+      resume?
+- [ ] **Not exercised, correctly stopped rather than worked around:**
+      any real turn (`before_agent_start` → tool call → `agent_settled`)
+      needs provider auth. The isolated `$HOME` has none, and reaching
+      into the real `~/.pi` for it (as Step 0's own live smoke test did
+      via a symlink) is credential access this session's own permission
+      guard correctly declined to do unattended. Consequence: tool
+      detail/error, multiple turns, retry-before-idle, and quit/relaunch
+      `--session` continuity are **not** covered by this pass — Pi does
+      not persist a session file to disk at all until a turn actually
+      completes, so there was nothing to resume in this isolated
+      environment. These remain Step 5 live-matrix items exactly as
+      before.
+- Cleanup: all `pi`/mock-server processes killed, `/tmp/pi-step5-probe`
+  is scratch-only, real `~/.context-terminal/ingest.env` and `~/.pi`
+  were never written to (only listed by mtime to confirm, never read).
+
+**Net effect:** confirms `/new` and absent-server fail-open live, ahead
+of the maintainer's own pass, and surfaces one open question (session
+reuse on fresh boot) worth specifically checking live. Everything
+requiring the GUI or real model auth is unchanged from §53 — still
+pending the maintainer's clean-profile macOS matrix.
+
+### Maintainer live macOS pass (2026-09-17, partial)
+
+- [x] Pi enabled in the real Logic Loop dev app; first tethered session and
+      successful `echo PI-ALPHA-731` tool call appeared in Accomplished.
+- [x] After a dev-app restart, Re-enter restored the Pi session and Pi
+      accurately recalled `PI-ALPHA-731` from the prior process.
+- [x] A missing-file `read` produced an ENOENT in Pi and an Accomplished
+      activity row in Logic Loop. The Blockers panel stayed empty, as expected:
+      Pi has activity support, not decision/blocker extraction.
+- [x] A later `echo PI-SECOND-TURN` prompt passed, confirming continued
+      multi-turn activity.
+- [x] The maintainer reports `/new` began a clean session with a distinct
+      session ID and no recall of the earlier marker. The Pi response also
+      described separate per-directory session files; that explanation is
+      agent-authored text, so the visible behavior is the evidence here.
+- [x] The maintainer reports the app quit/relaunch re-entry check (Step 6)
+      and disable-while-running check (Step 7) passed.
+- [ ] The second-tab `PI-BETA-924` prompt was canceled before completion;
+      finish the two-tabs-one-cwd activity/binding check. The maintainer
+      reported the rest of Step 4 passed, but did not supply separate
+      Accomplished-row evidence for both tabs.
+- [ ] Complete `/resume` and `/reload`, retry/follow-up-before-idle, foreign
+      file collision UI error, and four-adapter regression checks before
+      closing Plan 026. Record any additional Step 7 details if needed.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*
