@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="126" height="28" viewBox="0 0 126 28">
   <title>Landing Notes</title>
-  <rect x="1" y="1" width="124" height="26" rx="5" fill="#F5F0E8" stroke="#FF7E1B" stroke-width="2"/>
+  <rect x="1" y="1" width="124" height="26" rx="5" fill="#1A1A1A" stroke="#FF7E1B" stroke-width="2"/>
   <text x="63" y="14" fill="#00C291" font-family="Arial, sans-serif" font-size="13" font-weight="700" text-anchor="middle" dominant-baseline="middle">Landing Notes</text>
 </svg>
