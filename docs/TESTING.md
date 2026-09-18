@@ -2761,6 +2761,43 @@ pending the maintainer's clean-profile macOS matrix.
       file collision UI error, and four-adapter regression checks before
       closing Plan 026. Record any additional Step 7 details if needed.
 
+### Maintainer live macOS pass, remaining items (2026-09-18) — Plan 026 closed
+
+- [x] Two-tabs-one-cwd, retried: `echo PI-GAMMA-501` in tab A and
+      `echo PI-GAMMA-502` in tab B both landed as separate Accomplished rows
+      correctly bound to their own tabs. Non-blocking note: `PI-GAMMA-502`'s
+      first send echoed back as plain text instead of an executed tool call
+      (Pi's own model chose not to invoke the tool that turn); the identical
+      resend executed normally. Not an ingestion bug — no tool call means
+      nothing for the adapter to have dropped.
+- [x] `/resume` and `/reload`: no crash, no duplicate `SessionStart`. After
+      `/reload`, the tab was no longer bound to the original session — the
+      Accomplished panel showed both `PI-GAMMA-501` and `PI-GAMMA-502` from
+      that tab's full history rather than a single-session scope. Expected
+      given `/reload`'s unbind-and-rebind semantics, not a bug.
+- [x] Retry/follow-up before idle: `echo PI-EPSILON-503 && sleep 3 && echo
+      PI-EPSILON-DONE` followed immediately by an unrelated follow-up
+      prompt before the first settled — both landed as activity, no
+      premature `agent_settled`, no dropped call.
+- [x] Foreign file collision: with Pi disabled, planted a non-Logic-Loop
+      `~/.pi/agent/extensions/logic-loop.ts` (no `MARKER` string), then
+      toggled Pi on. Setup surfaced "Setup failed" with `logic-loop.ts
+      isn't a Logic Loop file — leaving it untouched` and an enable button
+      that flipped to "Retry" — `plan_remove`'s guard message
+      (`pi.rs:227`), not `plan_setup`'s (`pi.rs:214`), meaning the toggle's
+      enable path first attempted a remove/reset against stale frontend
+      state rather than going straight to install. Whichever path fired,
+      the core contract held: the foreign file was left untouched on disk
+      and the error surfaced to the UI instead of silently overwriting.
+      After `rm`-ing the foreign file and re-toggling, the real extension
+      reinstalled cleanly.
+- [x] Four-adapter regression: `echo REGRESSION-CHECK-$RANDOM` in one tab
+      each of Claude, Codex, OpenCode, and Antigravity all ingested
+      correctly — Pi's wiring introduced no regression.
+
+All five outstanding Step 5 items now pass. Plan 026 (Pi Agent adapter) is
+DONE — activity, decisions-not-supported, and re-entry are all live-verified.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*
