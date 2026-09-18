@@ -192,6 +192,7 @@ fn resume_command(agent: Option<&str>, sid: &str, shell: &str) -> String {
     match agent {
         Some("codex") => format!("codex resume {sid}; exec {shell} -l"),
         Some("antigravity") => format!("agy --conversation {sid}; exec {shell} -l"),
+        Some("pi") => format!("pi --session {sid}; exec {shell} -l"),
         _ => format!("claude --resume {sid}; exec {shell} -l"),
     }
 }
@@ -801,6 +802,14 @@ mod tests {
     }
 
     #[test]
+    fn resume_command_selects_pi_syntax() {
+        assert_eq!(
+            resume_command(Some("pi"), "abc-123", "/bin/zsh"),
+            "pi --session abc-123; exec /bin/zsh -l"
+        );
+    }
+
+    #[test]
     fn resume_command_defaults_to_claude_syntax() {
         assert_eq!(
             resume_command(None, "abc-123", "/bin/zsh"),
@@ -828,7 +837,8 @@ mod tests {
     // Still gated after the home() helper: the case-fold assertion needs
     // `~/Library` to exist on a case-insensitive filesystem, and where it does
     // not both spellings fall through canon unchanged and compare unequal.
-    #[cfg(unix)]
+    // macOS-only, not unix in general — Linux is case-sensitive.
+    #[cfg(target_os = "macos")]
     fn canon_resolves_case_and_tilde_to_one_key() {
         let _guard = crate::home::ENV_LOCK.lock().unwrap();
         let home = crate::home::home().unwrap();

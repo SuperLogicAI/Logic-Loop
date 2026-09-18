@@ -1,4 +1,4 @@
-export type AdapterId = "claude" | "codex" | "opencode" | "antigravity";
+export type AdapterId = "claude" | "codex" | "opencode" | "antigravity" | "pi";
 
 export interface AdapterMetadata {
   id: AdapterId;
@@ -68,11 +68,25 @@ export const ADAPTERS: readonly AdapterMetadata[] = [
     configLocation: "~/.gemini/config/hooks.json",
     capabilities: { activity: true, decisions: false, reentry: true },
   },
+  {
+    id: "pi",
+    label: "Pi Agent",
+    command: "pi",
+    configLocation: "~/.pi/agent/extensions/logic-loop.ts",
+    // resume_command's pi arm (Build step 4) and its live re-entry gate
+    // (Step 5, docs/TESTING.md §54, 2026-09-18) both now pass.
+    capabilities: { activity: true, decisions: false, reentry: true },
+  },
 ] as const;
 
 export function adapterIdForHook(agent: string | undefined): AdapterId | null {
   if (agent === undefined) return "claude";
-  return agent === "codex" || agent === "opencode" || agent === "antigravity" ? agent : null;
+  return agent === "codex" ||
+    agent === "opencode" ||
+    agent === "antigravity" ||
+    agent === "pi"
+    ? agent
+    : null;
 }
 
 export function adapterProgress(state: AdapterRuntimeState, observed: boolean): AdapterProgress {

@@ -6,6 +6,7 @@ mod codex_meter;
 mod home;
 mod ingest;
 mod opencode;
+mod pi;
 mod pty;
 mod statusline;
 // pub: main.rs calls antigravity::run_hook_mode directly, ahead of
@@ -292,6 +293,10 @@ pub fn run() {
             antigravity::antigravity_hooks_setup,
             antigravity::antigravity_hooks_remove,
             antigravity::antigravity_hooks_status,
+            pi::pi_detect,
+            pi::pi_hooks_setup,
+            pi::pi_hooks_remove,
+            pi::pi_hooks_status,
             extractor::run_extractor,
             clipboard::clipboard_text,
             clipboard::clipboard_image_path,

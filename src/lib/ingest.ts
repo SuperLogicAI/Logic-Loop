@@ -84,6 +84,22 @@ export function antigravityHooksStatus(): Promise<boolean> {
   return invoke<boolean>("antigravity_hooks_status");
 }
 
+export function piDetect(): Promise<boolean> {
+  return invoke<boolean>("pi_detect");
+}
+
+export function piHooksSetup(): Promise<void> {
+  return invoke("pi_hooks_setup");
+}
+
+export function piHooksRemove(): Promise<void> {
+  return invoke("pi_hooks_remove");
+}
+
+export function piHooksStatus(): Promise<boolean> {
+  return invoke<boolean>("pi_hooks_status");
+}
+
 export function onHookEvent(cb: (p: HookPayload) => void): Promise<UnlistenFn> {
   return listen<HookPayload>("ingest://hook", (e) => {
     if (typeof e.payload?.hook_event_name === "string" && typeof e.payload?.session_id === "string") {

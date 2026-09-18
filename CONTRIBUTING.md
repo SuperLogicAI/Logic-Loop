@@ -14,8 +14,9 @@ npm run tauri dev
 ```
 
 Requirements: macOS (Apple Silicon), [Rust](https://rustup.rs), Node 18+, and
-at least one supported agent CLI (Claude Code, OpenCode, Codex, or
-Antigravity). App state lives in `~/.context-terminal/`.
+at least one supported agent CLI (Claude Code, OpenCode, Codex, Antigravity,
+or [Pi Agent](https://github.com/earendil-works/pi)). App state lives in
+`~/.context-terminal/`.
 
 ## Before you open a PR
 
@@ -67,10 +68,12 @@ Rust module in `src-tauri/src/` that (a) registers itself in that agent's own
 global config when toggled on, and (b) normalizes the agent's native events
 into the same wire shape Claude's hooks POST to the ingest server. Read
 `codex.rs` (thinnest — Codex's hook contract is nearly Claude's),
-`opencode.rs` (in-process plugin translating native events), then
-`antigravity.rs` (the awkward one). Install/remove must be idempotent and
-byte-identically reversible; users have pre-existing hooks that must survive.
-Unit tests cover that for every existing adapter — add yours.
+`opencode.rs` (in-process plugin translating native events), `pi.rs` (also
+an in-process plugin, but writes a real file — no settings.json to splice
+into), then `antigravity.rs` (the awkward one). Install/remove must be
+idempotent and byte-identically reversible; users have pre-existing hooks
+that must survive. Unit tests cover that for every existing adapter — add
+yours.
 
 ## Issues and PRs
 
