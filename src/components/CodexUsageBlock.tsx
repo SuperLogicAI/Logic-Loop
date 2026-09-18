@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 export interface CodexWindow {
   usedPercent: number;
   windowDurationMins: number;
@@ -57,10 +59,23 @@ export function CodexUsageBlock({ agent, sessionId, snapshot, now }: {
   snapshot: CodexMeterSnapshot | null;
   now: number;
 }) {
+  const [showAdditional, setShowAdditional] = useState(false);
+  useEffect(() => setShowAdditional(false), [sessionId]);
   if (agent !== "codex" || !sessionId) return null;
   const current = snapshot?.sessionId === sessionId ? snapshot : null;
   const stale = current ? codexMeterStale(current, now) : false;
   const data = current?.data;
+  const codexBuckets = data?.buckets.filter((bucket) => bucket.id === "codex") ?? [];
+  const additionalBuckets = data?.buckets.filter((bucket) => bucket.id !== "codex") ?? [];
+  const visibleBuckets = codexBuckets.length ? codexBuckets : data?.buckets ?? [];
+  const renderBucket = (bucket: CodexBucket) => (
+    <div key={bucket.id} className="flex flex-col gap-1">
+      <span className="text-zinc-500">{bucket.name || bucket.id} account</span>
+      {bucket.primary && <WindowBar window={bucket.primary} />}
+      {bucket.secondary && <WindowBar window={bucket.secondary} />}
+      {!bucket.primary && !bucket.secondary && <span className="text-zinc-600">No windows returned.</span>}
+    </div>
+  );
   return (
     <div className="flex shrink-0 flex-col gap-1.5 border-b border-zinc-800 px-3 py-1.5 text-[10px] text-zinc-400" title="Shared across this Codex account, including activity outside this project.">
       <span className="text-zinc-500">Codex usage · {data?.model || "Model unknown"}</span>
@@ -68,14 +83,24 @@ export function CodexUsageBlock({ agent, sessionId, snapshot, now }: {
       {current?.state === "unavailable" && <span className="text-zinc-600">Account limits unavailable for this authentication.</span>}
       {current?.state === "error" && !data && <span className="text-amber-400">Could not read account limits.</span>}
       {(stale || current?.state === "error") && data && <span className="text-amber-400">Last update may be stale.</span>}
-      {data?.state === "available" && (data.buckets.length === 0 ? <span className="text-zinc-600">No account windows returned.</span> : data.buckets.map((bucket) => (
-        <div key={bucket.id} className="flex flex-col gap-1">
-          <span className="text-zinc-500">{bucket.name || bucket.id} account</span>
-          {bucket.primary && <WindowBar window={bucket.primary} />}
-          {bucket.secondary && <WindowBar window={bucket.secondary} />}
-          {!bucket.primary && !bucket.secondary && <span className="text-zinc-600">No windows returned.</span>}
-        </div>
-      )))}
+      {data?.state === "available" && (data.buckets.length === 0
+        ? <span className="text-zinc-600">No account windows returned.</span>
+        : <>
+            {visibleBuckets.map(renderBucket)}
+            {codexBuckets.length > 0 && additionalBuckets.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  className="self-start text-zinc-500 hover:text-zinc-300"
+                  aria-expanded={showAdditional}
+                  onClick={() => setShowAdditional((value) => !value)}
+                >
+                  {showAdditional ? "▾" : "▸"} Other account limits ({additionalBuckets.length})
+                </button>
+                {showAdditional && additionalBuckets.map(renderBucket)}
+              </>
+            )}
+          </>)}
     </div>
   );
 }

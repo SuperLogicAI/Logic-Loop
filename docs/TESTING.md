@@ -2620,8 +2620,15 @@ Automated evidence ([feat/plan023-claude-statusline-meter], 2026-09-17):
 - [x] `npm run build` clean.
 - [x] `npm run golden` intentionally not run — no extraction-prompt changes.
 
-Manual macOS matrix (unchecked until the maintainer runs it — this session
-had no display to drive the actual app UI):
+Manual macOS matrix (the maintainer ran the core path; the cases below include
+additional checks that remain open):
+
+Maintainer live pass, 2026-09-17: an existing
+`bash /Users/vandershark/.claude/statusline.sh` was detected. The maintainer
+opted in, and the Claude 5h/weekly values matched Claude's own account usage
+view. A short prompt moved 5h usage from 2% to 3%. Disabling restored the
+visible Claude terminal status line. The no-statusLine, old-CLI/ineligible,
+two-Claude-tab, and ingest-restart cases remain untested.
 
 - [ ] No existing `statusLine` configured: block shows "No status line
       configured," no wrapper file is created, no `settings.json` write
@@ -2675,6 +2682,18 @@ Automated checks:
       fixture's filesystem sandbox restriction; the elevated rerun passed.
 
 Manual macOS matrix:
+
+Maintainer live pass, 2026-09-17: a Codex tab populated the meter after an
+initial “Hi”, before a separate test prompt. Model and account windows matched
+Codex `/status`. Switching to Claude hid the Codex meter. Returning to Codex
+showed a roughly 1–2 second loading gap. An extra “GPT-reserve” named bucket
+was visible; its applicability to the active model is unproven. Follow-up UI
+change keeps the `codex` bucket visible, places extra named buckets behind an
+“Other account limits” chevron, and caches the last snapshot by exact session
+ID for immediate display on tab re-entry. Recheck those two UI changes live.
+The focused Codex meter check, all 28 frontend checks, TypeScript production
+build, and `git diff --check` passed after this UI change.
+The two-Codex-tab, router, auth, and failure cases remain untested.
 
 - [ ] Open a bound Codex tab and compare the displayed model and each account
       window's used percent and reset time with Codex's own UI at the same
