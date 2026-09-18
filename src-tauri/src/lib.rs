@@ -2,6 +2,7 @@ mod board;
 mod clipboard;
 mod extractor;
 mod codex;
+mod codex_meter;
 mod home;
 mod ingest;
 mod opencode;
@@ -283,6 +284,7 @@ pub fn run() {
             opencode::opencode_hooks_remove,
             opencode::opencode_hooks_status,
             codex::codex_detect,
+            codex_meter::codex_meter_read,
             codex::codex_hooks_setup,
             codex::codex_hooks_remove,
             codex::codex_hooks_status,

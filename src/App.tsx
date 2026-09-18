@@ -27,6 +27,7 @@ import { initNotifications, notify, requestNotifications } from "./lib/notify";
 import { adapterIdForHook, type AdapterId } from "./lib/onboarding";
 import { IdeaBoard } from "./components/IdeaBoard";
 import { SidePanel } from "./components/SidePanel";
+import type { CodexMeterData, CodexMeterSnapshot } from "./components/CodexUsageBlock";
 import { LandingNoteModal } from "./components/LandingNoteModal";
 import { FanOutModal } from "./components/FanOutModal";
 import { IsolateLoopModal } from "./components/IsolateLoopModal";
@@ -164,6 +165,9 @@ export default function App() {
   // Plan 023: latest mirrored Claude statusLine snapshot per session_id. Live
   // gauge state, never persisted to SQLite — overwritten on every rerun.
   const [claudeStatusline, setClaudeStatusline] = useState<Record<string, ClaudeStatuslineSnapshot>>({});
+  const [codexMeter, setCodexMeter] = useState<CodexMeterSnapshot | null>(null);
+  const codexMeterInFlightRef = useRef(false);
+  const codexPollRef = useRef<(() => void) | null>(null);
   const [observedAdapters, setObservedAdapters] = useState<Set<AdapterId>>(new Set());
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
@@ -1329,6 +1333,42 @@ export default function App() {
   }, [markTabLeft]);
 
   const activeTab = tabs.find((t) => t.id === activeId) ?? null;
+  const codexMeterSession = panelMode === "expanded" && activeTab?.agent === "codex" ? activeTab.sessionId : null;
+  useEffect(() => {
+    if (!codexMeterSession) { setCodexMeter(null); codexPollRef.current = null; return; }
+    let cancelled = false;
+    setCodexMeter({ sessionId: codexMeterSession, state: "loading", data: null, receivedAt: null });
+    const poll = () => {
+      if (codexMeterInFlightRef.current || cancelled) return;
+      codexMeterInFlightRef.current = true;
+      void invoke<CodexMeterData>("codex_meter_read", { sessionId: codexMeterSession })
+        .then((data) => {
+          if (cancelled) return;
+          setCodexMeter({ sessionId: codexMeterSession, state: data.state, data, receivedAt: Date.now() });
+        })
+        .catch((error) => {
+          if (cancelled) return;
+          setCodexMeter((previous) => ({
+            sessionId: codexMeterSession, state: "error",
+            data: previous?.sessionId === codexMeterSession ? previous.data : null,
+            receivedAt: previous?.sessionId === codexMeterSession ? previous.receivedAt : null,
+            error: String(error),
+          }));
+        })
+        .finally(() => {
+          codexMeterInFlightRef.current = false;
+          if (cancelled) codexPollRef.current?.();
+        });
+    };
+    codexPollRef.current = poll;
+    poll();
+    const timer = window.setInterval(poll, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      if (codexPollRef.current === poll) codexPollRef.current = null;
+    };
+  }, [codexMeterSession]);
 
   const openAttentionTab = useCallback((tabId: string) => {
     const tab = tabsRef.current.find((candidate) => candidate.id === tabId && candidate.status === "live");
@@ -1427,6 +1467,7 @@ export default function App() {
             landingNoteMode={landingNoteMode}
             onLandingNoteModeChange={changeLandingNoteMode}
             claudeStatusline={(activeTab.sessionId && claudeStatusline[activeTab.sessionId]) || null}
+            codexMeter={codexMeter}
           />
         )}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
