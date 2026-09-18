@@ -193,6 +193,14 @@ fn resume_command(agent: Option<&str>, sid: &str, shell: &str) -> String {
         Some("codex") => format!("codex resume {sid}; exec {shell} -l"),
         Some("antigravity") => format!("agy --conversation {sid}; exec {shell} -l"),
         Some("pi") => format!("pi --session {sid}; exec {shell} -l"),
+        // Unlike codex/antigravity/pi, `dsh` is npx-first in practice (Plan
+        // 027: no global install found on a real dev machine) — using a
+        // bare `dsh` here would silently fall through to a plain shell for
+        // most users. `npx --yes` is the invocation plans/027/028 proved
+        // actually works with no global install.
+        Some("deepseek") => format!(
+            "npx --yes @deepseek-ai/dsh --profile logic-loop --resume {sid}; exec {shell} -l"
+        ),
         _ => format!("claude --resume {sid}; exec {shell} -l"),
     }
 }
@@ -806,6 +814,14 @@ mod tests {
         assert_eq!(
             resume_command(Some("pi"), "abc-123", "/bin/zsh"),
             "pi --session abc-123; exec /bin/zsh -l"
+        );
+    }
+
+    #[test]
+    fn resume_command_selects_deepseek_syntax() {
+        assert_eq!(
+            resume_command(Some("deepseek"), "abc-123", "/bin/zsh"),
+            "npx --yes @deepseek-ai/dsh --profile logic-loop --resume abc-123; exec /bin/zsh -l"
         );
     }
 
