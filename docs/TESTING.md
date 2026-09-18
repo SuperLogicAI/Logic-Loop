@@ -3044,3 +3044,11 @@ view, and a latest row with `usage_state=complete`; no model call was made.
 - [x] `npm run diff:check` — per-file diff slicing assertions pass, including
       the same-basename-in-a-sibling-directory case that must NOT match.
       *(new, issue #10; run 2026-09-06 on Windows via `npm run check`)*
+
+## README badge hotfix — 2026-09-18
+
+- [x] Inspected README markup: “Agents” appears above the five agent badges,
+      matching the existing “Features” heading pattern.
+- [x] Inspected all five agent SVGs: each has a `#1A1A1A` background and only
+      its agent name in the visible pill.
+- [x] Inspected all ten feature SVGs: each already has a `#1A1A1A` background.

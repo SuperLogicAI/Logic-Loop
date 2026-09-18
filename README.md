@@ -6,12 +6,14 @@
 
 <p align="center">Effortlessly switch between multiple concurrent AI coding agent terminal sessions — a macOS app.</p>
 
+<p align="center"><strong>Agents</strong></p>
+
 <p align="center">
-  <img src="docs/assets/agent-agy.svg" alt="Agent | Agy" height="28">
-  <img src="docs/assets/agent-claude.svg" alt="Agent | Claude" height="28">
-  <img src="docs/assets/agent-codex.svg" alt="Agent | Codex" height="28">
-  <img src="docs/assets/agent-deepseek.svg" alt="Agent | DeepSeek" height="28">
-  <img src="docs/assets/agent-pi.svg" alt="Agent | Pi" height="28">
+  <img src="docs/assets/agent-agy.svg" alt="Agy" height="28">
+  <img src="docs/assets/agent-claude.svg" alt="Claude" height="28">
+  <img src="docs/assets/agent-codex.svg" alt="Codex" height="28">
+  <img src="docs/assets/agent-deepseek.svg" alt="DeepSeek" height="28">
+  <img src="docs/assets/agent-pi.svg" alt="Pi" height="28">
 </p>
 
 <p align="center"><strong>Features</strong></p>
