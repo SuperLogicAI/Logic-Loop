@@ -1,10 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="132" height="34" viewBox="0 0 132 34">
+<svg xmlns="http://www.w3.org/2000/svg" width="111" height="28" viewBox="0 0 111 28">
   <title>Agent | Codex</title>
-  <clipPath id="pill"><rect width="132" height="34" rx="17"/></clipPath>
+  <clipPath id="pill"><rect width="111" height="28" rx="6"/></clipPath>
   <g clip-path="url(#pill)">
-    <path fill="#F5F0E8" d="M0 0h63v34H0z"/>
-    <path fill="#1A1A1A" d="M63 0h69v34H63z"/>
+    <path fill="#F5F0E8" d="M0 0h55v28H0z"/>
+    <path fill="#1A1A1A" d="M55 0h56v28H55z"/>
   </g>
-  <text x="31.5" y="17" fill="#1A1A1A" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" dominant-baseline="middle">Agent</text>
-  <text x="97.5" y="17" fill="#FF7E1B" font-family="Arial, sans-serif" font-size="14" font-weight="700" text-anchor="middle" dominant-baseline="middle">Codex</text>
+  <text x="27.5" y="14" fill="#1A1A1A" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" dominant-baseline="middle">Agent</text>
+  <text x="83" y="14" fill="#FF7E1B" font-family="Arial, sans-serif" font-size="14" font-weight="700" text-anchor="middle" dominant-baseline="middle">Codex</text>
+  <rect x="1" y="1" width="109" height="26" rx="5" fill="none" stroke="#00D09B" stroke-width="2"/>
 </svg>

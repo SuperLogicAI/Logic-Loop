@@ -7,11 +7,26 @@
 <p align="center">Effortlessly switch between multiple concurrent AI coding agent terminal sessions — a macOS app.</p>
 
 <p align="center">
-  <img src="docs/assets/agent-agy.svg" alt="Agent | Agy" height="34">
-  <img src="docs/assets/agent-claude.svg" alt="Agent | Claude" height="34">
-  <img src="docs/assets/agent-codex.svg" alt="Agent | Codex" height="34">
-  <img src="docs/assets/agent-deepseek.svg" alt="Agent | DeepSeek" height="34">
-  <img src="docs/assets/agent-pi.svg" alt="Agent | Pi" height="34">
+  <img src="docs/assets/agent-agy.svg" alt="Agent | Agy" height="28">
+  <img src="docs/assets/agent-claude.svg" alt="Agent | Claude" height="28">
+  <img src="docs/assets/agent-codex.svg" alt="Agent | Codex" height="28">
+  <img src="docs/assets/agent-deepseek.svg" alt="Agent | DeepSeek" height="28">
+  <img src="docs/assets/agent-pi.svg" alt="Agent | Pi" height="28">
+</p>
+
+<p align="center"><strong>Features</strong></p>
+
+<p align="center">
+  <img src="docs/assets/feature-browser-navigation.svg" alt="Browser Navigation" height="28">
+  <img src="docs/assets/feature-bookmark-projects.svg" alt="Bookmark Projects" height="28">
+  <img src="docs/assets/feature-rapid-re-entry.svg" alt="Rapid Re-Entry" height="28">
+  <img src="docs/assets/feature-claude-codex-usage-feed.svg" alt="Claude/Codex Usage Feed" height="28">
+  <img src="docs/assets/feature-since-you-left-briefs.svg" alt="Since You Left Briefs" height="28">
+  <img src="docs/assets/feature-landing-notes.svg" alt="Landing Notes" height="28">
+  <img src="docs/assets/feature-up-next-prompts.svg" alt="Up Next Prompts" height="28">
+  <img src="docs/assets/feature-decision-trackers.svg" alt="Decision Trackers" height="28">
+  <img src="docs/assets/feature-project-idea-boards.svg" alt="Project Idea Boards" height="28">
+  <img src="docs/assets/feature-local-coding-optimizations.svg" alt="Local Coding Optimizations" height="28">
 </p>
 
 ![Logic Loop](docs/assets/logic-loop-ui.png)
