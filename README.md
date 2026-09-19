@@ -11,7 +11,7 @@
 ---
 
 <p align="center">
-  <strong><span style="color: #00C291;">Run more agents across more projects.</span></strong><br>
+  <strong><span style="color: #00C291;">Run more agents across more projects.</span></strong>
   <strong><span style="color: #FF7E1B;">Lose nothing in between.</span></strong><br><br>
   Every switch between projects costs you- a few seconds to reload state, a few minutes to wrap your head around it, and a slow drain that compounds across your day. Logic Loop keeps the context loaded so you don't have to. Jump between projects and coding agents without rebuilding the picture in your head each time.
 </p>
