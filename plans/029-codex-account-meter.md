@@ -13,3 +13,11 @@ Add a bounded Rust reader that starts the installed Codex app-server, performs t
 ## Verification
 
 Focused parser and UI checks, then repository gates. Manual macOS checks in `docs/TESTING.md` compare model and limits with Codex's own UI, exercise two tabs and model switching, and check no-router/router/non-Codex contexts.
+
+## Authorized startup fix — 2026-09-19
+
+Maintainer requested the fix for the packaged-app meter failing while dev works.
+Extend only the meter subprocess PATH with its launcher directory and standard
+Homebrew/system directories, preserving inherited precedence. Stamp the internal
+subprocess tether. Add a regression that executes an env-node launcher with a
+minimal GUI PATH. This is a Plan 029 bugfix, not a new implementation phase.

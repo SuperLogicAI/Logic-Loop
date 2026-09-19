@@ -3079,3 +3079,22 @@ wrote `PHASE 35 APPROVED`; unrun regression cases remain unchecked below.
 - [x] Inspected all five agent SVGs: each has a `#1A1A1A` background and only
       its agent name in the visible pill.
 - [x] Inspected all ten feature SVGs: each already has a `#1A1A1A` background.
+
+## Codex meter GUI PATH hotfix — 2026-09-19 (Plan 029)
+
+- [x] Reproduced installed npm Codex startup failure with system-only PATH:
+      `env: node: No such file or directory`; normal shell reports 0.155.1.
+- [x] Rust regression executes an env-node launcher against an isolated PATH
+      without Node, then verifies the meter's augmented PATH finds its runtime.
+      Inherited runtime precedence and fallback deduplication are also covered.
+- [x] `npm run check` (including OpenCode and Codex meter), `npx tsc --noEmit`,
+      `npm run build`, Clippy, and `npm run tauri build` passed.
+- [x] Rust suite excluding `has_own_repo_refuses_a_home_directory_git_it_did_not_create`:
+      110 passed, one authenticated live test ignored. The full suite hit a
+      sandbox denial when that existing test tried to create `~/.git`, followed
+      by a poisoned-lock failure in another test. The latter passes when the
+      home-mutating test is excluded; no home-directory permissions were expanded.
+- [ ] Fully quit the old app when running sessions can be closed safely. Open
+      the newly built app from Finder (or replace the installed copy first),
+      start/re-enter a Codex session, and expand its sidebar. Confirm model and
+      account windows load and refresh. This end-to-end GUI check remains pending.

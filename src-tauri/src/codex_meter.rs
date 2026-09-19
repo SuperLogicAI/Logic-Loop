@@ -7,6 +7,23 @@ use std::time::{Duration, Instant};
 const MAX_OUTPUT: usize = 256_000;
 const MAX_BUCKETS: usize = 8;
 
+// npm's Codex launcher uses `#!/usr/bin/env node`. Finding Codex by an
+// absolute path is insufficient when Finder supplies only the system PATH.
+// Preserve the user's runtime preference, then add installation directories.
+fn subprocess_path(binary: &std::path::Path, inherited: Option<&std::ffi::OsStr>) -> Result<std::ffi::OsString, String> {
+    let mut dirs: Vec<_> = inherited.map(std::env::split_paths).into_iter().flatten().collect();
+    let parent = binary.parent().filter(|p| !p.as_os_str().is_empty());
+    for dir in parent.into_iter().chain([
+        std::path::Path::new("/opt/homebrew/bin"),
+        std::path::Path::new("/usr/local/bin"),
+        std::path::Path::new("/usr/bin"),
+        std::path::Path::new("/bin"),
+    ]) {
+        if !dirs.iter().any(|existing| existing == dir) { dirs.push(dir.to_path_buf()); }
+    }
+    std::env::join_paths(dirs).map_err(|e| format!("Invalid Codex subprocess PATH: {e}"))
+}
+
 fn codex_binary() -> String {
     if let Some(path) = std::env::var_os("PATH") {
         for dir in std::env::split_paths(&path) {
@@ -70,7 +87,11 @@ fn parse_responses(lines: &[Value], session_id: &str) -> Result<Value, String> {
 
 fn read_snapshot(session_id: &str) -> Result<Value, String> {
     if !valid_session_id(session_id) { return Err("invalid Codex session ID".into()); }
-    let mut child = Command::new(codex_binary()).args(["app-server", "--stdio"])
+    let binary = codex_binary();
+    let path = subprocess_path(std::path::Path::new(&binary), std::env::var_os("PATH").as_deref())?;
+    let mut child = Command::new(binary).args(["app-server", "--stdio"])
+        .env("PATH", path)
+        .env("LOGIC_LOOP_TAB_ID", crate::ingest::EXTRACTOR_TETHER)
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null())
         .spawn().map_err(|e| format!("Codex app-server unavailable: {e}"))?;
     let stdout = child.stdout.take().ok_or("Codex stdout missing")?;
@@ -136,6 +157,43 @@ pub async fn codex_meter_read(session_id: String) -> Result<Value, String> {
 mod tests {
     use super::*;
     const ID: &str = "01a0b398-ad50-73e2-8842-097683f1b287";
+    #[test]
+    fn subprocess_path_preserves_runtime_preference_and_adds_gui_fallbacks() {
+        let inherited = std::env::join_paths(["/custom/node/bin", "/usr/bin", "/bin"]).unwrap();
+        let path = subprocess_path(std::path::Path::new("/opt/homebrew/bin/codex"), Some(&inherited)).unwrap();
+        let dirs: Vec<_> = std::env::split_paths(&path).collect();
+        assert_eq!(dirs[0], std::path::Path::new("/custom/node/bin"));
+        assert!(dirs.contains(&std::path::PathBuf::from("/opt/homebrew/bin")));
+        assert!(dirs.contains(&std::path::PathBuf::from("/usr/local/bin")));
+        assert_eq!(dirs.iter().filter(|p| **p == std::path::Path::new("/usr/bin")).count(), 1);
+        assert!(subprocess_path(std::path::Path::new("codex"), None).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn gui_path_can_execute_an_env_node_launcher() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("logic-loop-meter-path-{}", std::process::id()));
+        std::fs::create_dir(&dir).unwrap();
+        let launcher = dir.join("codex");
+        let node = dir.join("node");
+        std::fs::write(&launcher, "#!/usr/bin/env node\n").unwrap();
+        std::fs::write(&node, "#!/bin/sh\nprintf 'runtime-found'\n").unwrap();
+        for file in [&launcher, &node] {
+            std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        // Hermetic stand-in for a GUI PATH without Node (some CI machines
+        // have Node in /usr/bin, unlike the affected macOS installation).
+        let minimal = dir.join("system-bin");
+        std::fs::create_dir(&minimal).unwrap();
+        let broken = Command::new(&launcher).env("PATH", &minimal).output().unwrap();
+        let fixed = Command::new(&launcher)
+            .env("PATH", subprocess_path(&launcher, Some(minimal.as_os_str())).unwrap()).output().unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(!broken.status.success());
+        assert!(fixed.status.success());
+        assert_eq!(fixed.stdout, b"runtime-found");
+    }
     #[test]
     fn parses_named_buckets_without_combining_windows() {
         let lines = vec![json!({"id":1,"result":{"account":{"type":"chatgpt"}}}), json!({"id":2,"result":{"rateLimitsByLimitId":{"codex":{"primary":{"usedPercent":4,"windowDurationMins":300,"resetsAt":1789737586},"secondary":null},"base_model_inference":{"primary":{"usedPercent":0,"windowDurationMins":10080,"resetsAt":1789866931}}}}}), json!({"id":3,"result":{"thread":{"id":ID,"model":"gpt-5.6-sol"}}})];
