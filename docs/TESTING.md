@@ -3098,3 +3098,10 @@ wrote `PHASE 35 APPROVED`; unrun regression cases remain unchecked below.
       the newly built app from Finder (or replace the installed copy first),
       start/re-enter a Codex session, and expand its sidebar. Confirm model and
       account windows load and refresh. This end-to-end GUI check remains pending.
+
+### Rust test-isolation follow-up — 2026-09-19
+
+- [x] `cargo test --lib` — 111 passed, one authenticated live Codex meter test
+      ignored. The home-directory repo regression now uses a temporary `HOME`;
+      environment restoration and poisoned-lock recovery prevent it from
+      affecting the rest of the suite.

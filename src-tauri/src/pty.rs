@@ -856,7 +856,7 @@ mod tests {
     // macOS-only, not unix in general — Linux is case-sensitive.
     #[cfg(target_os = "macos")]
     fn canon_resolves_case_and_tilde_to_one_key() {
-        let _guard = crate::home::ENV_LOCK.lock().unwrap();
+        let _guard = crate::home::lock_env();
         let home = crate::home::home().unwrap();
         // `~` expands, and a case-variant spelling of an existing dir resolves to
         // the same string — that equality is what keeps a project from splitting
@@ -899,7 +899,7 @@ mod tests {
     // half of the Windows port, not the env-var half.
     #[cfg(unix)]
     fn project_key_outside_a_repo_is_the_dir_itself() {
-        let _guard = crate::home::ENV_LOCK.lock().unwrap();
+        let _guard = crate::home::lock_env();
         let home = crate::home::home().unwrap();
         // No `.git` anywhere up to `/` → the dir is its own project, no panic
         // and no walk off the end of the tree.
@@ -922,17 +922,19 @@ mod tests {
         // walked up and operated on the whole home directory. A directory with
         // no `.git` anywhere between it and `$HOME` must report false, even
         // when `$HOME` itself has one.
-        let _guard = crate::home::ENV_LOCK.lock().unwrap();
-        let home = crate::home::home().unwrap();
-        let had_home_git = std::path::Path::new(&home).join(".git").exists();
-        if !had_home_git {
-            std::fs::create_dir(std::path::Path::new(&home).join(".git")).unwrap();
-        }
+        let _guard = crate::home::lock_env();
+        let _restore_env = crate::home::EnvRestore::capture();
+
+        let home = std::env::temp_dir()
+            .join(format!("ll-horepo-home-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join(".git")).unwrap();
+        std::env::set_var("HOME", &home);
 
         // Must live *inside* $HOME to actually exercise the boundary — a
         // scratch dir under /tmp would hit the filesystem root without ever
         // passing through $HOME, proving nothing about the crossing itself.
-        let scratch = std::path::Path::new(&home).join(format!("ll-horepo-test-{}", std::process::id()));
+        let scratch = home.join(format!("ll-horepo-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&scratch);
         std::fs::create_dir_all(&scratch).unwrap();
 
@@ -945,8 +947,6 @@ mod tests {
         assert!(has_own_repo(scratch.to_str().unwrap()), "its own .git must be honored");
 
         std::fs::remove_dir_all(&scratch).unwrap();
-        if !had_home_git {
-            std::fs::remove_dir(std::path::Path::new(&home).join(".git")).unwrap();
-        }
+        std::fs::remove_dir_all(&home).unwrap();
     }
 }

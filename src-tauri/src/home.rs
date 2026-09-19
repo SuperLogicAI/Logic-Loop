@@ -28,14 +28,44 @@ pub fn home_or_tmp() -> String {
 pub(crate) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[cfg(test)]
+pub(crate) fn lock_env() -> std::sync::MutexGuard<'static, ()> {
+    // A test failure while changing process-wide environment variables must not
+    // hide later failures behind a poisoned lock.
+    ENV_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+#[cfg(test)]
+pub(crate) struct EnvRestore(Option<std::ffi::OsString>, Option<std::ffi::OsString>);
+
+#[cfg(test)]
+impl EnvRestore {
+    pub(crate) fn capture() -> Self {
+        Self(std::env::var_os("HOME"), std::env::var_os("USERPROFILE"))
+    }
+}
+
+#[cfg(test)]
+impl Drop for EnvRestore {
+    fn drop(&mut self) {
+        match &self.0 {
+            Some(value) => std::env::set_var("HOME", value),
+            None => std::env::remove_var("HOME"),
+        }
+        match &self.1 {
+            Some(value) => std::env::set_var("USERPROFILE", value),
+            None => std::env::remove_var("USERPROFILE"),
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn home_falls_back_to_userprofile_when_home_unset() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        let orig_home = std::env::var("HOME").ok();
-        let orig_profile = std::env::var("USERPROFILE").ok();
+        let _guard = lock_env();
+        let _restore_env = EnvRestore::capture();
 
         std::env::remove_var("HOME");
         std::env::set_var("USERPROFILE", "/tmp/fake-userprofile");
@@ -46,13 +76,5 @@ mod tests {
         assert_eq!(home(), None);
         assert_eq!(home_or_tmp(), std::env::temp_dir().to_string_lossy());
 
-        match orig_home {
-            Some(v) => std::env::set_var("HOME", v),
-            None => std::env::remove_var("HOME"),
-        }
-        match orig_profile {
-            Some(v) => std::env::set_var("USERPROFILE", v),
-            None => std::env::remove_var("USERPROFILE"),
-        }
     }
 }
