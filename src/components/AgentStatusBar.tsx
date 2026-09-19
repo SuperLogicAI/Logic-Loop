@@ -26,6 +26,7 @@ import {
   piHooksStatus,
 } from "../lib/ingest";
 import type { LockInMode } from "../lib/lockIn";
+import type { SplitOrientation } from "../lib/splitView";
 import {
   ADAPTERS,
   formatAdapterError,
@@ -72,8 +73,9 @@ interface Props {
   onTimedLockIn: () => void;
   onUnlock: () => void;
   splitActive: boolean;
+  splitOrientation: SplitOrientation;
   canSplit: boolean;
-  onToggleSplit: () => void;
+  onToggleSplit: (orientation: SplitOrientation) => void;
   observedAdapters: Set<AdapterId>;
   notificationsEnabled: boolean;
   onRequestNotifications: () => Promise<boolean>;
@@ -88,6 +90,7 @@ export function AgentStatusBar({
   onTimedLockIn,
   onUnlock,
   splitActive,
+  splitOrientation,
   canSplit,
   onToggleSplit,
   observedAdapters,
@@ -214,24 +217,29 @@ export function AgentStatusBar({
               </button>
             )}
           </div>
-          <button
-            type="button"
-            className={`flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-xs focus-visible:outline-2 focus-visible:outline-sky-400 disabled:cursor-not-allowed disabled:opacity-40 ${
-              splitActive
-                ? "border-sky-700 bg-sky-950/70 text-sky-300 hover:bg-sky-900/70"
-                : "border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-            }`}
-            aria-pressed={splitActive}
-            aria-label={splitActive ? "Exit split terminal view" : "Show two terminal tabs side by side"}
-            title={splitActive ? "Exit split view and keep the focused terminal" : "Show two terminal tabs side by side"}
-            disabled={!canSplit}
-            onClick={onToggleSplit}
-          >
-            <PanelIcon name="split-screen" className="h-4 w-4" />
-            Split
-          </button>
-          <button type="button" onClick={onOpenTraffic} className="flex h-7 shrink-0 items-center rounded-full border border-zinc-700 px-2.5 text-xs text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-sky-400" title="View recent Safe Router model traffic">
+          <div className="flex h-7 shrink-0 items-center overflow-hidden rounded-full border border-zinc-700 text-zinc-400" role="group" aria-label="Split terminal controls">
+            {(["horizontal", "vertical"] as const).map((orientation, index) => {
+              const active = splitActive && splitOrientation === orientation;
+              const label = orientation === "horizontal" ? "Show two terminal tabs side by side" : "Show two terminal tabs top and bottom";
+              return (
+                <button
+                  key={orientation}
+                  type="button"
+                  className={`flex h-full w-7 items-center justify-center hover:bg-zinc-800 hover:text-zinc-200 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400 disabled:cursor-not-allowed disabled:opacity-40 ${active ? "bg-sky-950/70 text-sky-300" : ""} ${index === 1 ? "border-l border-zinc-700" : ""}`}
+                  aria-pressed={active}
+                  aria-label={active ? "Exit split terminal view" : label}
+                  title={active ? "Exit split view and keep the focused terminal" : label}
+                  disabled={!canSplit}
+                  onClick={() => onToggleSplit(orientation)}
+                >
+                  <img src={orientation === "horizontal" ? "/split_screen.svg" : "/split_screen_vert.svg"} alt="" className="h-4 w-4" />
+                </button>
+              );
+            })}
+          </div>
+          <button type="button" onClick={onOpenTraffic} className="flex h-7 shrink-0 items-center gap-0 rounded-full border border-zinc-700 px-2.5 text-xs text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-sky-400" title="View recent Safe Router model traffic">
             Traffic
+            <img src="/bounce.svg" alt="" className="h-4 w-4" />
           </button>
         </div>
         <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 overflow-x-auto">

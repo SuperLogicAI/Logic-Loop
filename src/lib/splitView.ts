@@ -1,4 +1,5 @@
 export type SplitPaneIds = [string, string];
+export type SplitOrientation = "horizontal" | "vertical";
 
 export function splitContains(pair: SplitPaneIds | null, tabId: string): boolean {
   return pair?.[0] === tabId || pair?.[1] === tabId;
@@ -21,4 +22,3 @@ export function visibleTerminalIds(
   if (pair) return pair;
   return activeId ? [activeId] : [];
 }
-

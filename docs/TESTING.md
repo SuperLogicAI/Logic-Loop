@@ -2063,6 +2063,11 @@ silently inherited or marked complete.
       clipping, stale columns, or input crossing panes.
 - [x] Quit and relaunch. Split composition is not restored; resumable sessions
       return through the existing ordinary-tab re-entry behavior.
+- [ ] Click each split icon in the shared header pill. The left icon opens an
+      even left/right split and the right icon opens an even top/bottom split.
+      While split, click the other icon to change orientation without spawning
+      another terminal; click the active icon to return to one pane. Resize in
+      both orientations and confirm each xterm refits without clipping.
 
 Automated evidence (2026-09-10):
 
@@ -2973,6 +2978,9 @@ view, and a latest row with `usage_state=complete`; no model call was made.
 - [ ] In narrow/wide windows and with split terminals, compact/hidden project
       rail, and Lock-in, the global overlay remains legible; Escape/Close
       restore focus and normal work controls remain available.
+- [ ] Confirm the Traffic trigger retains normal pill padding and shows its
+      text beside the supplied bounce icon, then opens the existing traffic
+      overlay.
 - [ ] A fixture with an HTML-like `client_tag` renders it literally and leaves
       it unattributed. No project is inferred. Any future agent-specific tag
       experiment needs separate client-setup authorization and its own record.

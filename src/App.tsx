@@ -77,6 +77,7 @@ import { landingDepartureAction } from "./lib/landingMode";
 import {
   selectIntoSplit,
   splitContains,
+  type SplitOrientation,
   visibleTerminalIds,
   type SplitPaneIds,
 } from "./lib/splitView";
@@ -92,6 +93,7 @@ export default function App() {
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [splitPaneIds, setSplitPaneIds] = useState<SplitPaneIds | null>(null);
+  const [splitOrientation, setSplitOrientation] = useState<SplitOrientation>("horizontal");
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
@@ -420,11 +422,13 @@ export default function App() {
     return tab.id;
   }, [focusTab]);
 
-  const toggleSplit = useCallback(() => {
+  const toggleSplit = useCallback((orientation: SplitOrientation) => {
     if (splitPaneIdsRef.current) {
-      setSplitPaneIds(null);
+      if (splitOrientation === orientation) setSplitPaneIds(null);
+      else setSplitOrientation(orientation);
       return;
     }
+    setSplitOrientation(orientation);
     const source = tabsRef.current.find((tab) => tab.id === activeIdRef.current);
     if (!source) return;
     const sourceId = source.id;
@@ -434,7 +438,7 @@ export default function App() {
       .catch(() => {
         suppressLandingRef.current = false;
       });
-  }, [expand, openTab]);
+  }, [expand, openTab, splitOrientation]);
 
   /** Fan out (Phase 7): spawn N child tabs under a new group, each via the
    * ordinary `openTab` path (invariant #4 — no second spawn code path, no
@@ -1487,6 +1491,7 @@ export default function App() {
             onTimedLockIn={() => activateLockIn("timed")}
             onUnlock={unlockLockIn}
             splitActive={splitPaneIds !== null}
+            splitOrientation={splitOrientation}
             canSplit={activeTab !== null}
             onToggleSplit={toggleSplit}
             observedAdapters={observedAdapters}
@@ -1497,7 +1502,7 @@ export default function App() {
               return enabled;
             }}
           />
-          <div className="flex min-h-0 flex-1">
+          <div className={`flex min-h-0 flex-1 ${splitPaneIds && splitOrientation === "vertical" ? "flex-col" : ""}`}>
             {tabs.map((tab) => {
               const paneOrder = splitPaneIds ? splitPaneIds.indexOf(tab.id) : tab.id === activeId ? 0 : -1;
               return (
@@ -1507,6 +1512,7 @@ export default function App() {
                   visible={visibleTabIds.has(tab.id)}
                   focused={tab.id === activeId}
                   paneOrder={paneOrder}
+                  splitOrientation={splitOrientation}
                   onFocus={focusTab}
                   onExit={markDead}
                   onRestart={(id, sid) => void restartTab(id, sid)}

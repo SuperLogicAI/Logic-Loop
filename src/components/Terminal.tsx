@@ -7,18 +7,20 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 import { onPtyExit, onPtyOutput, ptyResize, ptyWrite, stampInput } from "../lib/pty";
 import type { Tab } from "../types";
+import type { SplitOrientation } from "../lib/splitView";
 
 interface Props {
   tab: Tab;
   visible: boolean;
   focused: boolean;
   paneOrder: number;
+  splitOrientation: SplitOrientation;
   onExit: (tabId: string) => void;
   onRestart: (tabId: string, resumeSessionId?: string) => void;
   onFocus: (tabId: string) => void;
 }
 
-export function Terminal({ tab, visible, focused, paneOrder, onExit, onRestart, onFocus }: Props) {
+export function Terminal({ tab, visible, focused, paneOrder, splitOrientation, onExit, onRestart, onFocus }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -136,13 +138,13 @@ export function Terminal({ tab, visible, focused, paneOrder, onExit, onRestart, 
 
   return (
     <div
-      className={`relative h-full min-w-0 ${visible && paneOrder >= 0 ? "flex-1 basis-0" : "w-full"} ${
+      className={`relative h-full min-h-0 min-w-0 ${visible && paneOrder >= 0 ? "flex-1 basis-0" : "w-full"} ${
         focused && paneOrder >= 0
           ? "ring-[1.5px] ring-inset ring-white"
           : visible && paneOrder >= 0
             ? "ring-2 ring-inset ring-sky-700"
             : ""
-      } ${visible && paneOrder === 1 ? "border-l border-zinc-700" : ""}`}
+      } ${visible && paneOrder === 1 ? splitOrientation === "vertical" ? "border-t border-zinc-700" : "border-l border-zinc-700" : ""}`}
       style={{ display: visible ? "block" : "none", order: paneOrder }}
       onFocusCapture={() => onFocus(tab.id)}
       onPointerDown={() => onFocus(tab.id)}
