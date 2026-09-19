@@ -2985,6 +2985,33 @@ view, and a latest row with `usage_state=complete`; no model call was made.
 - [ ] Toggle each pill and confirm setup/disable behavior and the Setup modal
       remain unchanged. This visual/manual check is pending.
 
+## 59. Phase 35 — Agent identity icons in terminal tabs
+
+Phase 35 was accepted on 2026-09-19. Automated evidence: `npm run check`
+(32/32 scripts), `npx tsc --noEmit`, `npm run build`, and `git diff --check`
+pass. The maintainer reviewed live screenshots with all six agent icons and
+wrote `PHASE 35 APPROVED`; unrun regression cases remain unchecked below.
+
+- [ ] Open one tab for each supported adapter: Claude, Codex, OpenCode,
+      Antigravity, DeepSeek, and Pi. After its first structured event, confirm
+      the matching icon appears beside the project name on the bottom row.
+      Hovering the icon names the agent.
+- [ ] Open a fresh shell tab without starting an agent. Confirm it has no agent
+      icon. Start Claude and confirm the Claude icon appears only after
+      structured activity arrives.
+- [ ] Relaunch with a restored Claude session and at least one explicitly
+      marked adapter session. Confirm both restored tabs show the right icon
+      before new activity, with no broken-image placeholder.
+- [ ] Check active, inactive, split-visible, narrow, long-title, waiting-age,
+      auto-turn, blocker/decision-count, fan-out, and isolate-loop tabs. The
+      top row keeps status/state/age/auto left and counts right; the bottom row
+      keeps agent/project identity together; close remains visible on the top
+      row with its hit area flush to the right edge. Ordinary project names
+      remain readable, icons stay legible with compact spacing, notification
+      badges do not touch or waste space, long titles truncate, and selection,
+      close, reorder, scrolling, badges, and glows still work. The two rows
+      read as a compact unit without crowding the top border or each other.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*

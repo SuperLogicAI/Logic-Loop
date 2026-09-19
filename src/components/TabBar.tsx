@@ -1,6 +1,34 @@
 import { useState } from "react";
+import antigravityIcon from "../../agents/agy.svg";
+import claudeIcon from "../../agents/claude.svg";
+import codexIcon from "../../agents/codex.svg";
+import deepseekIcon from "../../agents/dsh.svg";
+import opencodeIcon from "../../agents/opencode.svg";
+import piIcon from "../../agents/pi.svg";
 import { deriveClock, formatAge } from "../lib/ingest";
 import type { Tab } from "../types";
+
+interface AgentIcon {
+  src: string;
+  label: string;
+}
+
+const AGENT_ICONS: Record<string, AgentIcon> = {
+  antigravity: { src: antigravityIcon, label: "Antigravity" },
+  claude: { src: claudeIcon, label: "Claude" },
+  codex: { src: codexIcon, label: "Codex" },
+  deepseek: { src: deepseekIcon, label: "DeepSeek" },
+  opencode: { src: opencodeIcon, label: "OpenCode" },
+  pi: { src: piIcon, label: "Pi" },
+};
+
+function agentIconForTab(tab: Tab): AgentIcon | null {
+  // Claude's legacy hook has no explicit adapter marker. Only apply that
+  // compatibility default after structured activity or session restoration;
+  // a brand-new shell must not be labeled as an agent prematurely.
+  const agent = tab.agent ?? (tab.sessionId || tab.agentState ? "claude" : undefined);
+  return agent ? (AGENT_ICONS[agent] ?? null) : null;
+}
 
 // WAITING pulses — that dot is the whole point of the product. A stalled
 // "working" dot loses its blue for a dim amber ring instead — distinct from
@@ -94,6 +122,9 @@ export function TabBar({
       <div className="tab-strip flex min-w-0 items-end gap-1 overflow-x-auto px-2 pt-2">
         {tabs.map((tab) => {
         const clock = deriveClock(tab, now);
+        const agentIcon = agentIconForTab(tab);
+        const stateLabel =
+          tab.status === "dead" ? "dead" : clock.stalled ? "stalled" : tab.agentState;
         return (
         <div
           key={tab.id}
@@ -116,7 +147,7 @@ export function TabBar({
             if (dragId && dragId !== tab.id) onReorder(dragId, tab.id);
           }}
           onPointerUp={() => setDragId(null)}
-          className={`group relative flex max-w-52 min-w-28 cursor-pointer items-center gap-2 rounded-t-md border-t-2 px-3 py-1.5 text-sm transition-[background-color,opacity] after:pointer-events-none after:absolute after:inset-0 after:rounded-t-md after:border-t-0 ${
+          className={`group relative grid max-w-52 min-w-28 cursor-pointer gap-0.5 rounded-t-md border-t-2 px-2 pt-0.5 pb-1 text-sm transition-[background-color,opacity] after:pointer-events-none after:absolute after:inset-0 after:rounded-t-md after:border-t-0 ${
             tab.id === activeId
               ? "bg-zinc-700 text-zinc-100 after:border-x-[1.5px] after:border-b-[1.5px] after:border-white"
               : visibleIds.has(tab.id)
@@ -138,49 +169,70 @@ export function TabBar({
                 : undefined,
           }}
         >
-          <span
-            className={`h-2 w-2 shrink-0 rounded-full ${dotClass(tab, clock.stalled)} ${
-              unclaimed(tab) ? "shadow-[0_0_6px_2px_rgba(16,185,129,0.6)]" : ""
-            }`}
-            title={tab.agentState ? `${tab.agentState} · quiet ${formatAge(clock.quietMs)}` : undefined}
-          />
-          {tab.lastTurnAuto && (
+          <div className="flex min-w-0 items-center gap-1.5">
             <span
-              className="shrink-0 text-xl leading-none font-bold text-zinc-200"
-              title="last turn was auto (no human keystrokes)"
+              className={`h-2 w-2 shrink-0 rounded-full ${dotClass(tab, clock.stalled)} ${
+                unclaimed(tab) ? "shadow-[0_0_6px_2px_rgba(16,185,129,0.6)]" : ""
+              }`}
+              title={stateLabel ? `${stateLabel} · quiet ${formatAge(clock.quietMs)}` : undefined}
+            />
+            {stateLabel && (
+              <span className="truncate text-[10px] text-zinc-400">
+                {stateLabel}
+                {tab.lastEventTs ? ` · ${formatAge(clock.quietMs)}` : ""}
+              </span>
+            )}
+            {tab.lastTurnAuto && (
+              <span
+                className="shrink-0 text-sm leading-none font-bold text-zinc-200"
+                title="last turn was auto (no human keystrokes)"
+              >
+                ⟳
+              </span>
+            )}
+            <span className="ml-auto" />
+            <span className="flex shrink-0 items-center gap-0.5">
+              {blockerCount(tab) > 0 && (
+                <span className="shrink-0 rounded-full bg-red-500/20 px-1.5 text-[10px] font-semibold text-red-400">
+                  {blockerCount(tab)}
+                </span>
+              )}
+              {decisionCount(tab) > 0 && (
+                <span className="shrink-0 rounded-full bg-orange-500/20 px-1.5 text-[10px] font-semibold text-orange-400">
+                  {decisionCount(tab)}
+                </span>
+              )}
+            </span>
+            <button
+              className="-mr-2 shrink-0 rounded-l px-1 text-zinc-500 hover:bg-zinc-600 hover:text-zinc-200"
+              aria-label={`Close ${tab.title}`}
+              title={`Close ${tab.title}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose(tab.id);
+              }}
             >
-              ⟳
+              ✕
+            </button>
+          </div>
+          <div className="flex min-w-0 items-center gap-1">
+            {agentIcon && (
+              <img
+                src={agentIcon.src}
+                alt={`${agentIcon.label} agent`}
+                title={`${agentIcon.label} agent`}
+                draggable={false}
+                className="h-3.5 w-3.5 shrink-0 object-contain"
+              />
+            )}
+            <span
+              className={`min-w-0 flex-1 truncate ${isFanOutParent(tab) ? "text-purple-300" : ""}`}
+              style={isFanOutParent(tab) ? { textShadow: "0 0 6px rgba(168,85,247,0.85)" } : undefined}
+              title={isFanOutParent(tab) ? "fan-out origin tab" : undefined}
+            >
+              {tab.title}
             </span>
-          )}
-          {tab.agentState === "waiting" && clock.quietMs > 2 * 60 * 1000 && (
-            <span className="shrink-0 text-[9px] text-amber-400/70">{formatAge(clock.quietMs)}</span>
-          )}
-          <span
-            className={`truncate ${isFanOutParent(tab) ? "text-purple-300" : ""}`}
-            style={isFanOutParent(tab) ? { textShadow: "0 0 6px rgba(168,85,247,0.85)" } : undefined}
-            title={isFanOutParent(tab) ? "fan-out origin tab" : undefined}
-          >
-            {tab.title}
-          </span>
-          {blockerCount(tab) > 0 && (
-            <span className="shrink-0 rounded-full bg-red-500/20 px-1.5 text-[10px] font-semibold text-red-400">
-              {blockerCount(tab)}
-            </span>
-          )}
-          {decisionCount(tab) > 0 && (
-            <span className="shrink-0 rounded-full bg-orange-500/20 px-1.5 text-[10px] font-semibold text-orange-400">
-              {decisionCount(tab)}
-            </span>
-          )}
-          <button
-            className="ml-auto shrink-0 rounded px-1 text-zinc-500 opacity-0 group-hover:opacity-100 hover:bg-zinc-600 hover:text-zinc-200"
-            onClick={(e) => {
-              e.stopPropagation();
-              onClose(tab.id);
-            }}
-          >
-            ✕
-          </button>
+          </div>
         </div>
         );
         })}
