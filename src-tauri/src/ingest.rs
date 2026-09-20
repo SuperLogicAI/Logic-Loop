@@ -249,25 +249,48 @@ fn ensure_tailer(app: &AppHandle, session_id: String, path: String) {
     });
 }
 
-/// Cross-platform (device, file-id) pair used to detect a path being
+/// Cross-platform (device/volume, file-id) pair used to detect a path being
 /// replaced by a different underlying file (rename-over-path, atomic
 /// rewrite) — length alone can't catch a same-size replacement, and an
 /// already-open fd keeps reading the *old* file's bytes forever once that
 /// happens, silently blinding the tailer to everything written after.
+/// Takes an open handle, not `Metadata`: Windows identity is only
+/// obtainable via a handle (`GetFileInformationByHandle`), not by path stat.
 #[cfg(unix)]
-fn file_identity(meta: &fs::Metadata) -> Option<(u64, u64)> {
+fn file_identity(file: &fs::File) -> Option<(u64, u64)> {
     use std::os::unix::fs::MetadataExt;
+    let meta = file.metadata().ok()?;
     Some((meta.dev(), meta.ino()))
 }
 
+/// `std::os::windows::fs::MetadataExt`'s `volume_serial_number()`/
+/// `file_index()` would do this without a dependency, but both require the
+/// unstable `windows_by_handle` feature (rust-lang/rust#63010) — confirmed
+/// by a real Windows CI failure (Plan 032) when this first shipped using
+/// them. `windows-sys` is Microsoft's own zero-transitive-dependency FFI
+/// crate, so this is a native API call via `Cargo.toml`'s windows-only
+/// dependency, not new app logic.
 #[cfg(windows)]
-fn file_identity(meta: &fs::Metadata) -> Option<(u64, u64)> {
-    use std::os::windows::fs::MetadataExt;
-    Some((meta.volume_serial_number()? as u64, meta.file_index()?))
+fn file_identity(file: &fs::File) -> Option<(u64, u64)> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{
+        GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+    };
+    let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
+    let handle = file.as_raw_handle() as windows_sys::Win32::Foundation::HANDLE;
+    // SAFETY: `handle` is a valid, open, live handle for the lifetime of this
+    // call (borrowed from `file`, which outlives it); `info` is a properly
+    // sized, zeroed out-parameter the call fills in. Returns 0 on failure.
+    let ok = unsafe { GetFileInformationByHandle(handle, &mut info) };
+    if ok == 0 {
+        return None;
+    }
+    let file_index = ((info.nFileIndexHigh as u64) << 32) | info.nFileIndexLow as u64;
+    Some((info.dwVolumeSerialNumber as u64, file_index))
 }
 
 #[cfg(not(any(unix, windows)))]
-fn file_identity(_meta: &fs::Metadata) -> Option<(u64, u64)> {
+fn file_identity(_file: &fs::File) -> Option<(u64, u64)> {
     None
 }
 
@@ -300,31 +323,34 @@ impl TranscriptReader {
     fn open(path: &Path) -> std::io::Result<Self> {
         let mut file = fs::File::open(path)?;
         let offset = file.seek(SeekFrom::End(0))?;
-        let identity = fs::metadata(path).ok().and_then(|m| file_identity(&m));
+        let identity = file_identity(&file);
         Ok(Self { file, offset, pending: Vec::new(), identity })
     }
 
     /// Re-derive complete records from the current on-disk state. Returns
-    /// `Gone` when the path can no longer be statted (live delete) so the
+    /// `Gone` when the path can no longer be opened (live delete) so the
     /// caller can emit the same failure signal as a missing initial open.
+    /// Opens a fresh handle on the path every poll purely to check identity
+    /// — Windows can only get a file-id from a handle, not a path stat —
+    /// and reuses that same open to double as the "is it still there" and
+    /// "how big is it now" check, replacing three separate path-based calls
+    /// the original version needed.
     fn poll(&mut self, path: &Path) -> TailOutcome {
-        let Ok(meta) = fs::metadata(path) else {
+        let Ok(probe) = fs::File::open(path) else {
             return TailOutcome::Gone;
         };
-        let identity = file_identity(&meta);
+        let Ok(meta) = probe.metadata() else {
+            return TailOutcome::Gone;
+        };
+        let identity = file_identity(&probe);
         // Identity known and changed: the path now points at a different
-        // file. Reopen it and drop any partial fragment from the old file —
-        // it belongs to content that's gone, not to this one.
+        // file. Switch to it and drop any partial fragment from the old
+        // file — it belongs to content that's gone, not to this one.
         if identity.is_some() && identity != self.identity {
-            match fs::File::open(path) {
-                Ok(f) => {
-                    self.file = f;
-                    self.offset = 0;
-                    self.pending.clear();
-                    self.identity = identity;
-                }
-                Err(_) => return TailOutcome::Gone,
-            }
+            self.file = probe;
+            self.offset = 0;
+            self.pending.clear();
+            self.identity = identity;
         } else if meta.len() < self.offset {
             // Same file, shrunk in place (truncated/rotated) — re-read from
             // the start; a stale fragment from the old tail is meaningless.

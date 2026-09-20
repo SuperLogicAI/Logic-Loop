@@ -35,3 +35,13 @@ sqlx = { version = "0.8.6", default-features = false, features = ["sqlite", "run
 # Unix-only: kill_session's killpg. Not built on Windows at all.
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.186"
+
+# Windows-only: ingest.rs's transcript-replacement identity check needs
+# GetFileInformationByHandle. std::os::windows::fs::MetadataExt's
+# volume_serial_number()/file_index() would do this without a dependency,
+# but both require the unstable `windows_by_handle` feature (rust-lang/rust
+# #63010) — not available on stable, confirmed by a real Windows CI failure
+# (Plan 032). windows-sys is Microsoft's own zero-transitive-dependency FFI
+# bindings crate, so this is a native-API call, not app logic pulled in.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem", "Win32_Foundation"] }
