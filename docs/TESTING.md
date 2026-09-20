@@ -1,5 +1,55 @@
 # Manual Test Script — v2
 
+## v4 — Plan 033 first-useful-session re-verify (2026-09-19)
+
+**Not yet gated**: `PLAN.md` still shows "Awaiting maintainer authorization"
+for Plan 033, but Steps 1–3 are already coded on the working tree
+(uncommitted as of this writing) — onboarding launch flow, folder-cwd
+validation, bookmark save-await contract. Flag that mismatch separately;
+it doesn't block testing what's actually on disk tonight. Rebuild the
+release app first (see "Before you start" below) — v3's rule still applies.
+
+### 11. First-run launch flow (new — Setup modal "Start a session")
+
+- [ ] Open Setup (fresh profile, or reopen via whatever control re-shows
+      it). A "Start a session" block appears above the adapter list with
+      "Choose folder…", an agent/shell picker, and a "Start session" button.
+- [ ] Click "Choose folder…" then Cancel in the native dialog — no folder
+      is set, no error shown, nothing else changes.
+- [ ] Pick a valid project folder — its path appears next to the button, no
+      error text.
+- [ ] Manually point at (or otherwise trigger validation against) a
+      nonexistent/invalid path — an inline error appears; the picker does
+      NOT silently fall back to your home directory.
+- [ ] With a valid folder selected, "Start session" is enabled; with none
+      selected, it's disabled (greyed out).
+- [ ] Pick "Plain shell", click Start — a new tab opens in that folder, no
+      agent command runs. Status line reads "Shell session started — check
+      the new tab."
+- [ ] Pick an installed agent (e.g. Claude), click Start — button shows
+      "Starting…" briefly, then status reads "Waiting for first event…",
+      flipping to "Connected — first event received." once the agent does
+      something in the new tab.
+- [ ] Double-click "Start session" quickly — exactly one tab is created,
+      not two.
+- [ ] Force a spawn failure if you can (e.g. pick a folder you don't have
+      permission to enter) — an inline error appears next to the button and
+      your folder/agent selection is preserved (not reset to blank).
+
+### 9 (re-verify). Bookmarks — save/delete failure handling
+
+- [ ] Add a bookmark normally — while the save is in flight, the Save
+      button reads "Saving…" and is disabled (can't double-submit).
+- [ ] Force a save failure if possible (e.g. kill DB access, or a
+      duplicate-name constraint if one exists) — the form stays open with
+      your typed values intact, an inline red error appears, and the button
+      changes to "Retry". Fields must NOT be silently discarded.
+- [ ] Retry after fixing the issue — form closes normally on success.
+- [ ] Delete a bookmark and force that to fail — a "Delete failed: …" chip
+      appears in the bookmarks bar (bookmark itself is not silently removed
+      from the UI if the delete didn't actually persist... confirm actual
+      list state matches DB state).
+
 ## v3 — Bug-fix sprint re-verify (2026-07-11)
 
 **First run was invalidated**: the stale copy at `/Applications/Context

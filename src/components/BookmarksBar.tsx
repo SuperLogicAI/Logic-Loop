@@ -5,9 +5,9 @@ import { PALETTE } from "../types";
 interface Props {
   bookmarks: Bookmark[];
   onOpen: (b: Bookmark) => void;
-  onAdd: (name: string, cwd: string, color: string) => void;
-  onUpdate: (b: Bookmark) => void;
-  onDelete: (id: number) => void;
+  onAdd: (name: string, cwd: string, color: string) => Promise<void>;
+  onUpdate: (b: Bookmark) => Promise<void>;
+  onDelete: (id: number) => Promise<void>;
   onReorder: (srcId: number, dstId: number) => void;
 }
 
@@ -18,21 +18,37 @@ interface FormState {
   color: string;
 }
 
+const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
 export function BookmarksBar({ bookmarks, onOpen, onAdd, onUpdate, onDelete, onReorder }: Props) {
   const [form, setForm] = useState<FormState | null>(null);
   const [dragId, setDragId] = useState<number | null>(null);
   const [menu, setMenu] = useState<{ id: number; x: number; y: number } | null>(null);
+  const [pending, setPending] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const submit = () => {
-    if (!form || !form.name.trim()) return;
+  // Only clears the form on confirmed persistence — a rejected write keeps
+  // the user's fields and shows a retryable error instead of silently
+  // discarding the edit (plan033).
+  const submit = async () => {
+    if (!form || !form.name.trim() || pending) return;
     const cwd = form.cwd.trim() || "~"; // empty/nonexistent cwd falls back to home in pty_spawn
-    if (form.id === null) {
-      onAdd(form.name.trim(), cwd, form.color);
-    } else {
-      const orig = bookmarks.find((b) => b.id === form.id);
-      if (orig) onUpdate({ ...orig, name: form.name.trim(), cwd, color: form.color });
+    setPending(true);
+    setSaveError(null);
+    try {
+      if (form.id === null) {
+        await onAdd(form.name.trim(), cwd, form.color);
+      } else {
+        const orig = bookmarks.find((b) => b.id === form.id);
+        if (orig) await onUpdate({ ...orig, name: form.name.trim(), cwd, color: form.color });
+      }
+      setForm(null);
+    } catch (error) {
+      setSaveError(errorMessage(error));
+    } finally {
+      setPending(false);
     }
-    setForm(null);
   };
 
   return (
@@ -69,10 +85,19 @@ export function BookmarksBar({ bookmarks, onOpen, onAdd, onUpdate, onDelete, onR
         ))}
         <button
           className="shrink-0 rounded-full px-2 py-0.5 text-xs text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
-          onClick={() => setForm({ id: null, name: "", cwd: "", color: PALETTE[0] })}
+          onClick={() => {
+            setSaveError(null);
+            setForm({ id: null, name: "", cwd: "", color: PALETTE[0] });
+          }}
         >
           ＋ bookmark
         </button>
+
+      {deleteError && (
+        <span className="shrink-0 rounded-full bg-red-950/60 px-2 py-0.5 text-xs text-red-300">
+          Delete failed: {deleteError}
+        </span>
+      )}
 
       {menu && (
         <>
@@ -85,7 +110,10 @@ export function BookmarksBar({ bookmarks, onOpen, onAdd, onUpdate, onDelete, onR
               className="px-4 py-1 text-left hover:bg-zinc-700"
               onClick={() => {
                 const b = bookmarks.find((x) => x.id === menu.id);
-                if (b) setForm({ id: b.id, name: b.name, cwd: b.cwd, color: b.color });
+                if (b) {
+                  setSaveError(null);
+                  setForm({ id: b.id, name: b.name, cwd: b.cwd, color: b.color });
+                }
                 setMenu(null);
               }}
             >
@@ -94,8 +122,10 @@ export function BookmarksBar({ bookmarks, onOpen, onAdd, onUpdate, onDelete, onR
             <button
               className="px-4 py-1 text-left text-red-400 hover:bg-zinc-700"
               onClick={() => {
-                onDelete(menu.id);
+                const id = menu.id;
                 setMenu(null);
+                setDeleteError(null);
+                void onDelete(id).catch((error: unknown) => setDeleteError(errorMessage(error)));
               }}
             >
               Delete
@@ -111,15 +141,17 @@ export function BookmarksBar({ bookmarks, onOpen, onAdd, onUpdate, onDelete, onR
             className="rounded bg-zinc-900 px-2 py-1 text-zinc-200 outline-none"
             placeholder="Name"
             value={form.name}
+            disabled={pending}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
-            onKeyDown={(e) => e.key === "Enter" && submit()}
+            onKeyDown={(e) => e.key === "Enter" && void submit()}
           />
           <input
             className="w-64 rounded bg-zinc-900 px-2 py-1 text-zinc-200 outline-none"
             placeholder="Working directory (e.g. ~/Desktop/proj)"
             value={form.cwd}
+            disabled={pending}
             onChange={(e) => setForm({ ...form, cwd: e.target.value })}
-            onKeyDown={(e) => e.key === "Enter" && submit()}
+            onKeyDown={(e) => e.key === "Enter" && void submit()}
           />
           <div className="flex gap-1.5">
             {PALETTE.map((c) => (
@@ -131,12 +163,24 @@ export function BookmarksBar({ bookmarks, onOpen, onAdd, onUpdate, onDelete, onR
               />
             ))}
           </div>
+          {saveError && <p className="max-w-64 break-words text-red-400">{saveError}</p>}
           <div className="flex justify-end gap-2">
-            <button className="text-zinc-400 hover:text-zinc-200" onClick={() => setForm(null)}>
+            <button
+              className="text-zinc-400 hover:text-zinc-200 disabled:opacity-50"
+              disabled={pending}
+              onClick={() => {
+                setForm(null);
+                setSaveError(null);
+              }}
+            >
               Cancel
             </button>
-            <button className="rounded bg-zinc-600 px-3 py-1 text-zinc-100 hover:bg-zinc-500" onClick={submit}>
-              Save
+            <button
+              className="rounded bg-zinc-600 px-3 py-1 text-zinc-100 hover:bg-zinc-500 disabled:opacity-50"
+              disabled={pending}
+              onClick={() => void submit()}
+            >
+              {pending ? "Saving…" : saveError ? "Retry" : "Save"}
             </button>
           </div>
         </div>

@@ -818,6 +818,21 @@ export async function setOnboardingVersion(version: number): Promise<void> {
   await setSetting(ONBOARDING_VERSION_KEY, String(safeVersion));
 }
 
+// Separate from ONBOARDING_VERSION on purpose: version tracks whether the
+// setup checklist has been seen, this tracks whether any session has ever
+// actually been launched. A profile can dismiss setup without launching
+// anything — startup's home-tab fallback must key off this, not that,
+// or a brand-new user gets a silent home PTY behind Setup on first run.
+const HAS_LAUNCHED_SESSION_KEY = "has_launched_session";
+
+export async function hasLaunchedSession(): Promise<boolean> {
+  return (await getSetting(HAS_LAUNCHED_SESSION_KEY)) === "1";
+}
+
+export async function setHasLaunchedSession(): Promise<void> {
+  await setSetting(HAS_LAUNCHED_SESSION_KEY, "1");
+}
+
 export async function getPanelMode(): Promise<PanelMode> {
   return parsePanelMode(await getSetting(PANEL_MODE_KEY));
 }

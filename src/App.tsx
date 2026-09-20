@@ -185,6 +185,11 @@ export default function App() {
   const codexPollRef = useRef<(() => void) | null>(null);
   const [observedAdapters, setObservedAdapters] = useState<Set<AdapterId>>(new Set());
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  // True profile-first-run only (plan033): startup found no ghost tabs AND
+  // this profile has never launched a session before. Forces Setup open
+  // instead of the old unconditional home-tab spawn, and its own launch
+  // section becomes the thing that opens the first tab.
+  const [forceSetupOpen, setForceSetupOpen] = useState(false);
 
   const applyPanelLayout = useCallback(
     (next: { mode: PanelMode; lastVisible: VisiblePanelMode }) => {
@@ -430,8 +435,21 @@ export default function App() {
     };
     setTabs((t) => [...t, tab]);
     focusTab(tab.id);
+    // Marks this profile as past first-run — startup's ghost-restore effect
+    // reads this to decide whether a no-project launch may fall back to a
+    // home tab. Every spawn path funnels through here (invariant #4), so
+    // marking it here alone covers Start, bookmarks, new-tab, fan-out, etc.
+    void repo.setHasLaunchedSession().catch(() => undefined);
     return tab.id;
   }, [focusTab]);
+
+  // Fallback for a first run that dismisses Setup without ever using its
+  // launch section (Skip, or the ×): the old unconditional startup home tab
+  // is deferred to here so it happens after Setup closes, never behind it,
+  // and only if nothing was actually launched in the meantime.
+  const openHomeTabIfNoneOpen = useCallback(() => {
+    if (tabsRef.current.length === 0) void openTab();
+  }, [openTab]);
 
   const toggleSplit = useCallback((orientation: SplitOrientation) => {
     if (splitPaneIdsRef.current) {
@@ -810,7 +828,14 @@ export default function App() {
       // process death uses.
       const candidates = await repo.reentryCandidates().catch(() => []);
       if (candidates.length === 0) {
-        void openTab();
+        // Returning users (this profile has launched before) keep the old
+        // behavior: always land on a home tab. A true first run does not —
+        // spawning one here would sit silently behind Setup, so instead
+        // Setup's own launch section becomes the only way the first tab
+        // gets created (see AgentStatusBar's onSetupClose fallback).
+        const launchedBefore = await repo.hasLaunchedSession().catch(() => true);
+        if (launchedBefore) void openTab();
+        else setForceSetupOpen(true);
         return;
       }
       const ghosts: Tab[] = candidates.map((c) => ({
@@ -1450,18 +1475,26 @@ export default function App() {
         isFanOutParent={(t) => fanOutParentIds.has(t.id)}
         isWorktreeBound={(t) => worktreeTabIds.has(t.id)}
         now={now}
+        onRename={(id, title) => setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, title } : t)))}
       />
       <BookmarksBar
         bookmarks={bookmarks}
         onOpen={(b) => void openTab({ name: b.name, cwd: b.cwd, color: b.color })}
-        onAdd={(name, cwd, color) =>
-          void canonicalizeCwd(cwd)
-            .catch(() => cwd)
-            .then((c) => repo.addBookmark(name, c, color))
-            .then(refreshBookmarks)
-        }
-        onUpdate={(b) => void repo.updateBookmark(b).then(refreshBookmarks)}
-        onDelete={(id) => void repo.deleteBookmark(id).then(refreshBookmarks)}
+        onAdd={async (name, cwd, color) => {
+          const c = await canonicalizeCwd(cwd).catch(() => cwd);
+          await repo.addBookmark(name, c, color);
+          // A failed list refresh after a successful write is not a save
+          // failure — BookmarksBar already reported success by this point.
+          void refreshBookmarks().catch(() => undefined);
+        }}
+        onUpdate={async (b) => {
+          await repo.updateBookmark(b);
+          void refreshBookmarks().catch(() => undefined);
+        }}
+        onDelete={async (id) => {
+          await repo.deleteBookmark(id);
+          void refreshBookmarks().catch(() => undefined);
+        }}
         onReorder={reorderBookmarks}
       />
       <div className="flex min-h-0 flex-1">
@@ -1521,6 +1554,10 @@ export default function App() {
               setNotificationsEnabled(enabled);
               return enabled;
             }}
+            forceOpen={forceSetupOpen}
+            onForceOpenHandled={() => setForceSetupOpen(false)}
+            onLaunch={(cwd, cmd, name) => openTab({ cwd, cmd, name })}
+            onSetupClose={openHomeTabIfNoneOpen}
           />
           <div className={`flex min-h-0 flex-1 ${splitPaneIds && splitOrientation === "vertical" ? "flex-col" : ""}`}>
             {tabs.map((tab) => {

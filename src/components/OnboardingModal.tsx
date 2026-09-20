@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { open as openFolderDialog } from "@tauri-apps/plugin-dialog";
 import {
   ADAPTERS,
   adapterProgress,
+  formatAdapterError,
   type AdapterId,
   type AdapterRuntimeState,
 } from "../lib/onboarding";
+import { validateProjectDir } from "../lib/pty";
 
 interface Props {
   adapterStates: Record<AdapterId, AdapterRuntimeState>;
@@ -14,7 +17,15 @@ interface Props {
   persistenceError: string | null;
   onToggleAdapter: (id: AdapterId) => Promise<void>;
   onRequestNotifications: () => Promise<boolean>;
+  onLaunch: (cwd: string, cmd: string | undefined, name: string) => Promise<string>;
   onClose: () => void;
+}
+
+type LaunchChoiceId = AdapterId | "shell";
+
+interface LaunchState {
+  tabId: string;
+  agentId: AdapterId | null;
 }
 
 const PROGRESS_LABELS = {
@@ -35,12 +46,53 @@ export function OnboardingModal({
   persistenceError,
   onToggleAdapter,
   onRequestNotifications,
+  onLaunch,
   onClose,
 }: Props) {
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const [requestingNotifications, setRequestingNotifications] = useState(false);
   const [notificationAttempted, setNotificationAttempted] = useState(false);
+
+  const [folder, setFolder] = useState<string | null>(null);
+  const [folderError, setFolderError] = useState<string | null>(null);
+  const [launchChoice, setLaunchChoice] = useState<LaunchChoiceId>("shell");
+  const [starting, setStarting] = useState(false);
+  const startingRef = useRef(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  const [launched, setLaunched] = useState<LaunchState | null>(null);
+
+  const pickFolder = async () => {
+    const picked = await openFolderDialog({ directory: true, multiple: false });
+    if (!picked || Array.isArray(picked)) return; // cancel is a no-op
+    try {
+      const resolved = await validateProjectDir(picked);
+      setFolder(resolved);
+      setFolderError(null);
+    } catch (error) {
+      // Keep whatever folder was already selected — an invalid pick must
+      // surface as an error, never silently fall back to home (plan033).
+      setFolderError(formatAdapterError(error));
+    }
+  };
+
+  const startSession = async () => {
+    if (!folder || startingRef.current) return;
+    startingRef.current = true;
+    setStarting(true);
+    setStartError(null);
+    try {
+      const chosen = launchChoice === "shell" ? null : ADAPTERS.find((a) => a.id === launchChoice) ?? null;
+      const name = folder.split("/").filter(Boolean).pop() ?? folder;
+      const tabId = await onLaunch(folder, chosen?.command, name);
+      setLaunched({ tabId, agentId: chosen?.id ?? null });
+    } catch (error) {
+      setStartError(formatAdapterError(error));
+    } finally {
+      startingRef.current = false;
+      setStarting(false);
+    }
+  };
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -143,6 +195,74 @@ export function OnboardingModal({
         </header>
 
         <div className="space-y-3 px-5 py-3">
+          <div className="space-y-2.5 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2.5">
+            <div>
+              <div className="text-sm font-medium text-zinc-100">Start a session</div>
+              <p className="mt-0.5 text-xs text-zinc-400">
+                Pick a project folder and an agent — or a plain shell — to open your first terminal tab.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void pickFolder()}
+                className="h-8 shrink-0 rounded-md border border-zinc-700 px-3 text-xs text-zinc-200 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-sky-400"
+              >
+                Choose folder…
+              </button>
+              <span className="min-w-0 truncate text-xs text-zinc-400" title={folder ?? undefined}>
+                {folder ?? "No folder selected"}
+              </span>
+            </div>
+            {folderError && (
+              <p className="break-words rounded bg-red-950/40 px-2 py-1.5 text-xs text-red-300">{folderError}</p>
+            )}
+            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Agent to launch">
+              {[...ADAPTERS.map((a) => ({ id: a.id as LaunchChoiceId, label: a.label })), { id: "shell" as LaunchChoiceId, label: "Plain shell" }].map(
+                (opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={launchChoice === opt.id}
+                    onClick={() => setLaunchChoice(opt.id)}
+                    className={`h-7 rounded-full px-3 text-xs focus-visible:outline-2 focus-visible:outline-sky-400 ${
+                      launchChoice === opt.id
+                        ? "bg-sky-950 text-sky-300"
+                        : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                )
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={!folder || starting}
+                onClick={() => void startSession()}
+                className="h-8 rounded-md bg-sky-500 px-3 text-xs font-semibold text-sky-950 hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400"
+              >
+                {starting ? "Starting…" : "Start session"}
+              </button>
+              {startError && <span className="text-xs text-red-300">{startError}</span>}
+            </div>
+            {launched && (
+              <p
+                className={`text-xs ${
+                  launched.agentId && observedAdapters.has(launched.agentId) ? "text-emerald-300" : "text-zinc-400"
+                }`}
+              >
+                {launched.agentId === null
+                  ? "Shell session started — check the new tab."
+                  : observedAdapters.has(launched.agentId)
+                    ? "Connected — first event received. Check the new tab."
+                    : "Waiting for first event…"}
+              </p>
+            )}
+          </div>
+
           <div className="grid gap-2">
             {ADAPTERS.map((adapter) => {
               const state = adapterStates[adapter.id];

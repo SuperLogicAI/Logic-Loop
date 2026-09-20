@@ -120,6 +120,23 @@ pub fn canonicalize_cwd(path: String) -> String {
     canon(&path)
 }
 
+/// Strict counterpart to `canon`/`canonicalize_cwd`, used only by the Setup
+/// launch flow's folder picker. Every other caller (bookmarks, ghost-tab
+/// restore, `openTab`'s general spawn path) intentionally keeps `canon`'s
+/// silent fall-through — a bookmark pointing at a since-deleted folder must
+/// keep working, not start erroring. A freshly-picked project folder has no
+/// such excuse: a bad pick here should surface, not silently resolve to
+/// whatever `pty_spawn` falls back to when `cwd` isn't a directory.
+#[tauri::command]
+pub fn validate_project_dir(path: String) -> Result<String, String> {
+    let resolved = canon(&path);
+    if std::path::Path::new(&resolved).is_dir() {
+        Ok(resolved)
+    } else {
+        Err(format!("\"{path}\" is not a folder Logic Loop can open"))
+    }
+}
+
 /// Stable project key: the nearest enclosing git repo root, else the dir itself.
 /// `cd src-tauri && claude` must file against the same project as `claude` from
 /// the repo root — keyed on raw cwd they are two projects, and every panel then
@@ -830,7 +847,10 @@ fn git_pr_create_blocking(cwd: String, title: String, body: String) -> Result<St
 
 #[cfg(test)]
 mod tests {
-    use super::{canon, has_own_repo, project_key, resume_command, spawn_ordered_writer, valid_resume_id};
+    use super::{
+        canon, has_own_repo, project_key, resume_command, spawn_ordered_writer, valid_resume_id,
+        validate_project_dir,
+    };
     use std::io::Write;
     use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
     use std::sync::{Arc, Mutex};
@@ -864,6 +884,28 @@ mod tests {
         fn flush(&mut self) -> std::io::Result<()> {
             Ok(())
         }
+    }
+
+    #[test]
+    fn validate_project_dir_accepts_a_real_directory() {
+        let dir = std::env::temp_dir();
+        let resolved = validate_project_dir(dir.to_string_lossy().into_owned()).unwrap();
+        assert_eq!(resolved, canon(&dir.to_string_lossy()));
+    }
+
+    #[test]
+    fn validate_project_dir_rejects_a_missing_path() {
+        let missing = std::env::temp_dir().join("logic-loop-plan033-does-not-exist");
+        assert!(validate_project_dir(missing.to_string_lossy().into_owned()).is_err());
+    }
+
+    #[test]
+    fn validate_project_dir_rejects_a_file() {
+        let file = std::env::temp_dir().join("logic-loop-plan033-validate-file-test");
+        std::fs::write(&file, b"x").unwrap();
+        let result = validate_project_dir(file.to_string_lossy().into_owned());
+        std::fs::remove_file(&file).ok();
+        assert!(result.is_err());
     }
 
     #[test]

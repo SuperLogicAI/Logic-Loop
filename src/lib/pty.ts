@@ -39,6 +39,14 @@ export function canonicalizeCwd(path: string): Promise<string> {
   return invoke<string>("canonicalize_cwd", { path });
 }
 
+/** Strict counterpart to `canonicalizeCwd` for the Setup launch flow only —
+ * rejects a missing/inaccessible/non-directory path instead of silently
+ * resolving it, so a bad folder pick surfaces as an error rather than
+ * falling back to wherever `pty_spawn` lands when `cwd` isn't a directory. */
+export function validateProjectDir(path: string): Promise<string> {
+  return invoke<string>("validate_project_dir", { path });
+}
+
 /** Nearest enclosing git repo root — the project key panels query by. */
 export function projectKeyOf(path: string): Promise<string> {
   return invoke<string>("project_key_of", { path });
