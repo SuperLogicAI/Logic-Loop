@@ -140,9 +140,11 @@ export interface Note {
 export type LandingNoteMode = "auto" | "manual";
 
 export interface ExtractorSettings {
-  backend: "claude" | "codex" | "lmstudio";
+  backend: "claude" | "codex" | "lmstudio" | "ollama";
   lmstudioUrl: string;
   lmstudioModel: string;
+  ollamaUrl: string;
+  ollamaModel: string;
   codexModel: string;
   claudeModel: string;
 }

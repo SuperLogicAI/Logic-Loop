@@ -139,6 +139,8 @@ async function extract(
       backend: s.backend,
       lmstudioUrl: s.lmstudioUrl,
       lmstudioModel: s.lmstudioModel,
+      ollamaUrl: s.ollamaUrl,
+      ollamaModel: s.ollamaModel,
       codexModel: s.codexModel,
       model: s.claudeModel,
     });
