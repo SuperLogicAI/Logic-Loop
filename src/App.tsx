@@ -166,6 +166,17 @@ export default function App() {
   const [blindSessions, setBlindSessions] = useState<Record<string, string>>({});
   // Adapter setup warnings (e.g. foreign PostToolUse hook collision in older agy).
   const [adapterWarnings, setAdapterWarnings] = useState<Array<{ agent: string; reason: string }>>([]);
+  // "extraction_failed" is transient (wrong URL, backend down, bad model) —
+  // clear it as soon as a later extraction call for that backend actually
+  // reaches it again, rather than leaving a stale banner up after the user
+  // fixes their Sidebar LM settings. Other warning reasons (schema drift,
+  // foreign hook) are structural and don't self-heal, so they're untouched.
+  const clearExtractionFailedWarning = useCallback((agent: string) => {
+    setAdapterWarnings((prev) => prev.filter((w) => !(w.agent === agent && w.reason === "extraction_failed")));
+  }, []);
+  const dismissAdapterWarning = useCallback((agent: string, reason: string) => {
+    setAdapterWarnings((prev) => prev.filter((w) => !(w.agent === agent && w.reason === reason)));
+  }, []);
   // Plan 023: latest mirrored Claude statusLine snapshot per session_id. Live
   // gauge state, never persisted to SQLite — overwritten on every rerun.
   const [claudeStatusline, setClaudeStatusline] = useState<Record<string, ClaudeStatuslineSnapshot>>({});
@@ -931,11 +942,18 @@ export default function App() {
         }
       }
       if (p.hook_event_name === "Stop") {
-        decisions.onStop(p.session_id, sessionCwd.get(p.session_id), refreshDecisionCounts, sourceContext, (agent, reason) => {
-          setAdapterWarnings((prev) =>
-            prev.some((w) => w.agent === agent && w.reason === reason) ? prev : [...prev, { agent, reason }]
-          );
-        });
+        decisions.onStop(
+          p.session_id,
+          sessionCwd.get(p.session_id),
+          refreshDecisionCounts,
+          sourceContext,
+          (agent, reason) => {
+            setAdapterWarnings((prev) =>
+              prev.some((w) => w.agent === agent && w.reason === reason) ? prev : [...prev, { agent, reason }]
+            );
+          },
+          clearExtractionFailedWarning
+        );
       }
       // A completed or interrupted turn is a real result worth flagging when
       // unseen; SessionEnd alone is session shutdown, not a new result — it
@@ -1078,7 +1096,8 @@ export default function App() {
           setAdapterWarnings((prev) =>
             prev.some((w) => w.agent === agent && w.reason === reason) ? prev : [...prev, { agent, reason }]
           );
-        }
+        },
+        clearExtractionFailedWarning
       );
       // transcripts flowing again → clear any warning for this session
       setBlindSessions((s) => {
@@ -1461,6 +1480,7 @@ export default function App() {
             refreshKey={panelRefresh}
             blindPaths={Object.values(blindSessions)}
             adapterWarnings={adapterWarnings}
+            onDismissAdapterWarning={dismissAdapterWarning}
             sessionBlind={!!(activeTab.sessionId && blindSessions[activeTab.sessionId])}
             agent={activeTab.agent}
             fanOut={fanOutRollups}

@@ -66,6 +66,7 @@ interface Props {
   refreshKey: number; // bump to force reload (new events / blocker changes)
   blindPaths: string[]; // transcripts that failed to open — panels are incomplete
   adapterWarnings?: Array<{ agent: string; reason: string }>; // adapter setup warnings (e.g. foreign PostToolUse collision)
+  onDismissAdapterWarning?: (agent: string, reason: string) => void; // manual × close on a warning strip entry
   sessionBlind: boolean; // active tab's own session has no transcript — decisions may be missed, not confirmed absent
   agent?: string; // active tab's adapter marker ("codex"/"opencode"/"antigravity"), undefined for plain Claude
   fanOut: FanOutRollup[]; // every fan-out group the active tab belongs to (as parent, possibly several; as child, at most one), oldest first
@@ -225,6 +226,7 @@ export function SidePanel({
   refreshKey,
   blindPaths,
   adapterWarnings = [],
+  onDismissAdapterWarning,
   sessionBlind,
   agent,
   fanOut,
@@ -990,6 +992,16 @@ export function SidePanel({
         >
           <WarningIcon className="h-7 w-7 shrink-0 text-orange-300" />
           <span className="min-w-0 flex-1 leading-4">{adapterWarningMessage(w)}</span>
+          {onDismissAdapterWarning && (
+            <button
+              type="button"
+              onClick={() => onDismissAdapterWarning(w.agent, w.reason)}
+              aria-label="Dismiss warning"
+              className="shrink-0 px-1 text-orange-300 hover:text-orange-100"
+            >
+              ×
+            </button>
+          )}
         </p>
       ))}
       {/* Blind sessions: hooks arrive but the transcript file will not open, so

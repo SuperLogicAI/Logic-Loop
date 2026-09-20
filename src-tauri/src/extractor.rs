@@ -98,6 +98,31 @@ fn claude_result(stdout: &[u8]) -> Result<String, String> {
         .ok_or_else(|| "claude: no result field in json output".into())
 }
 
+/// Total request deadline (connect + send + full body read) for the LM
+/// Studio HTTP call. Without this, a stalled local model hangs `ureq`
+/// forever on this `spawn_blocking` thread, and `extractorQueue.ts`'s
+/// serialized `queue.then(fn, fn)` never sees the call settle — every later
+/// queued extraction/landing/commit-message call is blocked behind it
+/// permanently. Reuses `EXTRACTOR_TIMEOUT` for one deadline policy across
+/// every backend.
+fn lmstudio_extract(url: &str, body: &serde_json::Value, timeout: Duration) -> Result<String, String> {
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(timeout))
+        .build()
+        .into();
+    let resp: serde_json::Value = agent
+        .post(format!("{url}/v1/chat/completions"))
+        .send_json(body)
+        .map_err(|e| format!("lmstudio: {e}"))?
+        .body_mut()
+        .read_json()
+        .map_err(|e| format!("lmstudio parse: {e}"))?;
+    resp["choices"][0]["message"]["content"]
+        .as_str()
+        .map(String::from)
+        .ok_or_else(|| "lmstudio: no content in response".into())
+}
+
 fn codex_bin() -> String {
     let mut candidates = Vec::new();
     if let Some(home) = crate::home::home() {
@@ -212,16 +237,7 @@ fn run_extractor_blocking(
             if let Some(m) = lmstudio_model.filter(|m| !m.is_empty()) {
                 body["model"] = m.into();
             }
-            let resp: serde_json::Value = ureq::post(format!("{url}/v1/chat/completions"))
-                .send_json(&body)
-                .map_err(|e| format!("lmstudio: {e}"))?
-                .body_mut()
-                .read_json()
-                .map_err(|e| format!("lmstudio parse: {e}"))?;
-            resp["choices"][0]["message"]["content"]
-                .as_str()
-                .map(String::from)
-                .ok_or_else(|| "lmstudio: no content in response".into())
+            lmstudio_extract(&url, &body, EXTRACTOR_TIMEOUT)
         }
         "codex" => {
             let args = codex_args(codex_model.as_deref());
@@ -347,6 +363,31 @@ not json
         );
         assert!(claude_result(b"not json").is_err());
         assert!(claude_result(br#"{"usage":{}}"#).is_err(), "missing result field");
+    }
+
+    #[test]
+    fn lmstudio_request_respects_a_total_deadline() {
+        use std::net::TcpListener;
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            // Accept the connection but never write a response — simulates a
+            // stalled local model that never finishes generating.
+            if let Ok((stream, _)) = listener.accept() {
+                std::thread::sleep(Duration::from_secs(5));
+                drop(stream);
+            }
+        });
+        let url = format!("http://{addr}");
+        let body = serde_json::json!({ "messages": [], "temperature": 0 });
+        let start = Instant::now();
+        let result = lmstudio_extract(&url, &body, Duration::from_millis(300));
+        assert!(result.is_err(), "a withheld response must fail, not hang forever");
+        assert!(
+            start.elapsed() < Duration::from_secs(2),
+            "must fail near the configured deadline, not block indefinitely: took {:?}",
+            start.elapsed()
+        );
     }
 
     #[test]
