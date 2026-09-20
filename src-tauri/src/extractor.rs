@@ -202,27 +202,35 @@ fn codex_final_message(stdout: &[u8]) -> Result<String, String> {
 /// same way blocking the main thread did before. `spawn_blocking` moves the
 /// whole synchronous body onto tokio's separate blocking-thread pool, which
 /// is never used for cooperative scheduling.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn run_extractor(
     prompt: String,
     backend: String,
     lmstudio_url: Option<String>,
     lmstudio_model: Option<String>,
+    ollama_url: Option<String>,
+    ollama_model: Option<String>,
     codex_model: Option<String>,
     model: Option<String>,
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        run_extractor_blocking(prompt, backend, lmstudio_url, lmstudio_model, codex_model, model)
+        run_extractor_blocking(
+            prompt, backend, lmstudio_url, lmstudio_model, ollama_url, ollama_model, codex_model, model,
+        )
     })
     .await
     .map_err(|e| format!("extractor task panicked: {e}"))?
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_extractor_blocking(
     prompt: String,
     backend: String,
     lmstudio_url: Option<String>,
     lmstudio_model: Option<String>,
+    ollama_url: Option<String>,
+    ollama_model: Option<String>,
     codex_model: Option<String>,
     model: Option<String>,
 ) -> Result<String, String> {
@@ -237,6 +245,21 @@ fn run_extractor_blocking(
             if let Some(m) = lmstudio_model.filter(|m| !m.is_empty()) {
                 body["model"] = m.into();
             }
+            lmstudio_extract(&url, &body, EXTRACTOR_TIMEOUT)
+        }
+        // Ollama's `/v1/chat/completions` is OpenAI-compatible, same request/
+        // response shape LM Studio uses — reuses `lmstudio_extract` as-is.
+        // Unlike LM Studio, Ollama has no "whatever's loaded" default: the
+        // model field is required or the call 400s, so an empty override
+        // falls back to a common default pull rather than omitting it.
+        "ollama" => {
+            let url = ollama_url.unwrap_or_else(|| "http://127.0.0.1:11434".into());
+            let m = ollama_model.filter(|m| !m.is_empty()).unwrap_or_else(|| "llama3.2".into());
+            let body = serde_json::json!({
+                "messages": [{ "role": "user", "content": prompt }],
+                "model": m,
+                "temperature": 0
+            });
             lmstudio_extract(&url, &body, EXTRACTOR_TIMEOUT)
         }
         "codex" => {

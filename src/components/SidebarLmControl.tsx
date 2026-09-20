@@ -68,6 +68,14 @@ export function SidebarLmControl() {
             />
             LM Studio (local)
           </label>
+          <label className="flex items-center gap-2 text-zinc-300">
+            <input
+              type="radio"
+              checked={extractor.backend === "ollama"}
+              onChange={() => saveExtractor({ ...extractor, backend: "ollama" })}
+            />
+            Ollama (local)
+          </label>
           {extractor.backend === "codex" && (
             <input
               className="rounded bg-zinc-900 px-2 py-1 text-zinc-200 outline-none"
@@ -89,6 +97,22 @@ export function SidebarLmControl() {
                 placeholder="model (blank = loaded model)"
                 value={extractor.lmstudioModel}
                 onChange={(event) => saveExtractor({ ...extractor, lmstudioModel: event.target.value })}
+              />
+            </>
+          )}
+          {extractor.backend === "ollama" && (
+            <>
+              <input
+                className="rounded bg-zinc-900 px-2 py-1 text-zinc-200 outline-none"
+                placeholder="http://127.0.0.1:11434"
+                value={extractor.ollamaUrl}
+                onChange={(event) => saveExtractor({ ...extractor, ollamaUrl: event.target.value })}
+              />
+              <input
+                className="rounded bg-zinc-900 px-2 py-1 text-zinc-200 outline-none"
+                placeholder="model (e.g. llama3.2)"
+                value={extractor.ollamaModel}
+                onChange={(event) => saveExtractor({ ...extractor, ollamaModel: event.target.value })}
               />
             </>
           )}
