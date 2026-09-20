@@ -178,3 +178,43 @@ plan's originally-drafted `invocationNum == 1` assumption.
 See `Antigravity_Implementation_Plans.md`'s header note for why Agy 001 and
 004 carry a HIGH risk rating the Codex plans don't: they touch a
 synchronous, blocking-capable hook class Phase 11 deliberately excluded.
+
+
+## 2026-09-19 review: next three to five sprints (candidates)
+
+[Full findings, evidence, adoption strategy and verification limits](2026-09-19-codebase-and-adoption-review.md).
+Planned at `a87bafd`, verified equal to GitHub main. These extend the existing index;
+no prior acceptance/status is overwritten. Sprint labels are not phase assignments.
+The user requested sequenced kickoff drafts; these five were selected as a coherent
+recommendation, not approved implementation. Read each file at kickoff, refresh its
+drift check, and obtain approval for a current PLAN.md. Literal phase acceptance
+remains required between builds.
+
+| Order | Plan | Dependency | Status |
+|---|---|---|---|
+| 1 | [032 Trust and responsiveness](032-trust-and-responsiveness.md) | Current phase accepted and new scope approved | DONE — automated gates clean, live manual pass complete (`docs/TESTING.md` §60) |
+| 2 | [033 First useful session](033-first-useful-session.md) | 032 accepted; refresh/extend Plan 021 | CANDIDATE |
+| 3 | [034 Downloadable beta](034-downloadable-beta.md) | 033 accepted; release checks/signing | CANDIDATE |
+| 4 | [035 Keyboard and interaction safety](035-keyboard-and-interaction-safety.md) | 034 accepted; 033 test harness | CANDIDATE |
+| 5 | [036 Re-entry proof](036-reentry-proof.md) | 035 accepted; pilot observations | CANDIDATE |
+
+Three-sprint cut: 032–034, small beta only. Pull modal safety forward if pilot
+reproduction makes it release-blocking, by explicitly revising the approved sequence.
+Considered/rejected: more adapters, duplicate shipped features, broad rewrite,
+autonomous PTY input, generated context imports without contract/trust validation.
+Details and by-design distinctions are recorded in the report.
+
+### Copy/paste kickoff
+
+Use one prompt per session, replacing the filename with the next accepted candidate:
+
+> Work from plans/032-trust-and-responsiveness.md. Read its full execution contract,
+> the repo agent guide, and current PLAN.md. Verify baseline drift and previous
+> phase acceptance. Prepare PLAN.md for this sprint only, with exact scope, tests
+> and manual acceptance checks; do not infer approval from this draft. If scope
+> is already explicitly approved in this session, implement only that scope,
+> run the focused tests and applicable gates, record real manual evidence, and
+> stop at the phase boundary. Do not begin another sprint or publish anything.
+
+The files are self-contained development prompts; retain their stop conditions
+when copying them to another agent.

@@ -1,7 +1,7 @@
 use crate::home::home_or_tmp;
 use std::collections::HashSet;
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter};
@@ -249,10 +249,121 @@ fn ensure_tailer(app: &AppHandle, session_id: String, path: String) {
     });
 }
 
+/// Cross-platform (device, file-id) pair used to detect a path being
+/// replaced by a different underlying file (rename-over-path, atomic
+/// rewrite) — length alone can't catch a same-size replacement, and an
+/// already-open fd keeps reading the *old* file's bytes forever once that
+/// happens, silently blinding the tailer to everything written after.
+#[cfg(unix)]
+fn file_identity(meta: &fs::Metadata) -> Option<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    Some((meta.dev(), meta.ino()))
+}
+
+#[cfg(windows)]
+fn file_identity(meta: &fs::Metadata) -> Option<(u64, u64)> {
+    use std::os::windows::fs::MetadataExt;
+    Some((meta.volume_serial_number()? as u64, meta.file_index()?))
+}
+
+#[cfg(not(any(unix, windows)))]
+fn file_identity(_meta: &fs::Metadata) -> Option<(u64, u64)> {
+    None
+}
+
+/// Byte-level incremental JSONL reader. `offset` is always the disk position
+/// through which we've read (monotonic, never rewound except on truncation/
+/// replacement); `pending` holds bytes read but not yet newline-terminated,
+/// so a record split across polls (a write still in flight) is reassembled
+/// instead of being emitted as a truncated fragment. Framing (this struct)
+/// and semantic JSON parsing (the extractor) are deliberately separate.
+struct TranscriptReader {
+    file: fs::File,
+    offset: u64,
+    pending: Vec<u8>,
+    identity: Option<(u64, u64)>,
+}
+
+/// Cap a single unterminated record: a transcript line this large is not a
+/// slow write in progress, it's a different framing (or a corrupt/foreign
+/// file) — drop the fragment rather than buffer it forever.
+const MAX_PENDING_BYTES: usize = 4 * 1024 * 1024;
+
+enum TailOutcome {
+    Records(Vec<String>),
+    Gone,
+}
+
+impl TranscriptReader {
+    /// Open fresh and seek to the current end — only newly appended content
+    /// is tailed, matching prior behavior.
+    fn open(path: &Path) -> std::io::Result<Self> {
+        let mut file = fs::File::open(path)?;
+        let offset = file.seek(SeekFrom::End(0))?;
+        let identity = fs::metadata(path).ok().and_then(|m| file_identity(&m));
+        Ok(Self { file, offset, pending: Vec::new(), identity })
+    }
+
+    /// Re-derive complete records from the current on-disk state. Returns
+    /// `Gone` when the path can no longer be statted (live delete) so the
+    /// caller can emit the same failure signal as a missing initial open.
+    fn poll(&mut self, path: &Path) -> TailOutcome {
+        let Ok(meta) = fs::metadata(path) else {
+            return TailOutcome::Gone;
+        };
+        let identity = file_identity(&meta);
+        // Identity known and changed: the path now points at a different
+        // file. Reopen it and drop any partial fragment from the old file —
+        // it belongs to content that's gone, not to this one.
+        if identity.is_some() && identity != self.identity {
+            match fs::File::open(path) {
+                Ok(f) => {
+                    self.file = f;
+                    self.offset = 0;
+                    self.pending.clear();
+                    self.identity = identity;
+                }
+                Err(_) => return TailOutcome::Gone,
+            }
+        } else if meta.len() < self.offset {
+            // Same file, shrunk in place (truncated/rotated) — re-read from
+            // the start; a stale fragment from the old tail is meaningless.
+            self.offset = 0;
+            self.pending.clear();
+        }
+        if meta.len() <= self.offset {
+            return TailOutcome::Records(Vec::new());
+        }
+        if self.file.seek(SeekFrom::Start(self.offset)).is_err() {
+            return TailOutcome::Gone;
+        }
+        let mut buf = Vec::new();
+        if self.file.read_to_end(&mut buf).is_err() {
+            return TailOutcome::Gone;
+        }
+        self.offset += buf.len() as u64;
+        self.pending.extend_from_slice(&buf);
+
+        let mut records = Vec::new();
+        while let Some(pos) = self.pending.iter().position(|&b| b == b'\n') {
+            let record: Vec<u8> = self.pending.drain(..=pos).collect();
+            let text = String::from_utf8_lossy(&record[..record.len() - 1]);
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+                records.push(trimmed.to_string());
+            }
+        }
+        if self.pending.len() > MAX_PENDING_BYTES {
+            self.pending.clear();
+        }
+        TailOutcome::Records(records)
+    }
+}
+
 /// The tail loop proper. Returning means "stop tailing"; the caller
 /// de-registers so a later hook can start it again.
 fn tail(app: &AppHandle, session_id: &str, path: &str) {
-    let Ok(mut file) = fs::File::open(path) else {
+    let Ok(mut reader) = TranscriptReader::open(Path::new(path)) else {
         // Claude Code can report a transcript_path it has not created. That is
         // invisible without this — the session keeps sending hooks and the
         // panels just stay empty.
@@ -262,47 +373,24 @@ fn tail(app: &AppHandle, session_id: &str, path: &str) {
         );
         return;
     };
-    let mut offset = file.seek(SeekFrom::End(0)).unwrap_or(0);
     loop {
         std::thread::sleep(std::time::Duration::from_millis(500));
-        // An already-open fd survives unlink on Unix, but `metadata`/`seek`
-        // still fail once the path is gone — that's a live-delete, not just
-        // a not-yet-created transcript, and must warn the same way.
-        let Ok(meta) = fs::metadata(path) else {
-            let _ = app.emit(
-                "ingest://tailer-failed",
-                serde_json::json!({ "session_id": session_id, "path": path }),
-            );
-            return;
-        };
-        if meta.len() < offset {
-            offset = 0; // truncated/rotated
-        }
-        if meta.len() == offset {
-            continue;
-        }
-        if file.seek(SeekFrom::Start(offset)).is_err() {
-            let _ = app.emit(
-                "ingest://tailer-failed",
-                serde_json::json!({ "session_id": session_id, "path": path }),
-            );
-            return;
-        }
-        let mut reader = BufReader::new(&mut file);
-        let mut line = String::new();
-        while let Ok(n) = reader.read_line(&mut line) {
-            if n == 0 {
-                break;
-            }
-            offset += n as u64;
-            let trimmed = line.trim();
-            if !trimmed.is_empty() {
+        match reader.poll(Path::new(path)) {
+            TailOutcome::Gone => {
                 let _ = app.emit(
-                    "ingest://transcript",
-                    serde_json::json!({ "session_id": session_id, "line": trimmed }),
+                    "ingest://tailer-failed",
+                    serde_json::json!({ "session_id": session_id, "path": path }),
                 );
+                return;
             }
-            line.clear();
+            TailOutcome::Records(records) => {
+                for line in records {
+                    let _ = app.emit(
+                        "ingest://transcript",
+                        serde_json::json!({ "session_id": session_id, "line": line }),
+                    );
+                }
+            }
         }
     }
 }
@@ -474,6 +562,146 @@ pub fn hooks_status() -> Result<bool, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    /// A fresh, collision-safe path for each test — tests run in parallel and
+    /// share `temp_dir()`.
+    fn temp_path(label: &str) -> PathBuf {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!(
+            "logic-loop-test-{}-{}-{}.jsonl",
+            std::process::id(),
+            label,
+            n
+        ))
+    }
+
+    fn write_new(path: &Path, contents: &[u8]) {
+        let mut f = fs::File::create(path).unwrap();
+        f.write_all(contents).unwrap();
+    }
+
+    fn append(path: &Path, contents: &[u8]) {
+        let mut f = fs::OpenOptions::new().append(true).open(path).unwrap();
+        f.write_all(contents).unwrap();
+    }
+
+    #[test]
+    fn split_write_across_polls_reassembles_record() {
+        let path = temp_path("split");
+        write_new(&path, b"");
+        let mut reader = TranscriptReader::open(&path).unwrap();
+
+        append(&path, b"{\"partial\":");
+        let TailOutcome::Records(recs) = reader.poll(&path) else { panic!("gone") };
+        assert!(recs.is_empty(), "must not emit an unterminated fragment");
+
+        append(&path, b"true}\n");
+        let TailOutcome::Records(recs) = reader.poll(&path) else { panic!("gone") };
+        assert_eq!(recs, vec!["{\"partial\":true}".to_string()]);
+
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn multiple_records_plus_trailing_partial_in_one_write() {
+        let path = temp_path("multi");
+        write_new(&path, b"");
+        let mut reader = TranscriptReader::open(&path).unwrap();
+
+        append(&path, b"A\nB\npartial");
+        let TailOutcome::Records(recs) = reader.poll(&path) else { panic!("gone") };
+        assert_eq!(recs, vec!["A".to_string(), "B".to_string()]);
+
+        append(&path, b"\n");
+        let TailOutcome::Records(recs) = reader.poll(&path) else { panic!("gone") };
+        assert_eq!(recs, vec!["partial".to_string()]);
+
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn crlf_and_blank_lines_are_trimmed_and_skipped() {
+        let path = temp_path("crlf");
+        write_new(&path, b"");
+        let mut reader = TranscriptReader::open(&path).unwrap();
+
+        append(&path, b"foo\r\n\r\n   \nbar\r\n");
+        let TailOutcome::Records(recs) = reader.poll(&path) else { panic!("gone") };
+        assert_eq!(recs, vec!["foo".to_string(), "bar".to_string()]);
+
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn truncation_in_place_rereads_from_start() {
+        let path = temp_path("truncate");
+        write_new(&path, b"old-line\n");
+        let mut reader = TranscriptReader::open(&path).unwrap();
+        // Consume nothing yet (opened at end) — now shrink the same inode.
+        write_new(&path, b"new\n");
+        let TailOutcome::Records(recs) = reader.poll(&path) else { panic!("gone") };
+        assert_eq!(recs, vec!["new".to_string()]);
+
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn replacement_with_a_new_inode_reopens_and_drops_stale_partial() {
+        let path = temp_path("replace");
+        write_new(&path, b"");
+        let mut reader = TranscriptReader::open(&path).unwrap();
+
+        // Leave an unterminated fragment from the "old" file.
+        append(&path, b"stale-partial-no-newline");
+        let TailOutcome::Records(recs) = reader.poll(&path) else { panic!("gone") };
+        assert!(recs.is_empty());
+
+        // Replace the path with a brand new file (new inode on Unix/Windows).
+        fs::remove_file(&path).unwrap();
+        write_new(&path, b"fresh\n");
+        let TailOutcome::Records(recs) = reader.poll(&path) else { panic!("gone") };
+        assert_eq!(
+            recs,
+            vec!["fresh".to_string()],
+            "must read the new file's content, not a mix with the old fd's stale bytes"
+        );
+
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn oversized_unterminated_record_is_dropped_not_buffered_forever() {
+        let path = temp_path("oversized");
+        write_new(&path, b"");
+        let mut reader = TranscriptReader::open(&path).unwrap();
+
+        let huge = vec![b'x'; MAX_PENDING_BYTES + 10];
+        append(&path, &huge);
+        let TailOutcome::Records(recs) = reader.poll(&path) else { panic!("gone") };
+        assert!(recs.is_empty());
+
+        append(&path, b"ok\n");
+        let TailOutcome::Records(recs) = reader.poll(&path) else { panic!("gone") };
+        assert_eq!(
+            recs,
+            vec!["ok".to_string()],
+            "pending must have been reset, not grown into one giant garbled record"
+        );
+
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn poll_on_a_deleted_path_reports_gone() {
+        let path = temp_path("deleted");
+        write_new(&path, b"");
+        let mut reader = TranscriptReader::open(&path).unwrap();
+        fs::remove_file(&path).unwrap();
+        assert!(matches!(reader.poll(&path), TailOutcome::Gone));
+    }
 
     fn foreign_settings() -> serde_json::Value {
         serde_json::json!({

@@ -3020,6 +3020,115 @@ wrote `PHASE 35 APPROVED`; unrun regression cases remain unchecked below.
       close, reorder, scrolling, badges, and glows still work. The two rows
       read as a compact unit without crowding the top border or each other.
 
+## 60. Trust and responsiveness (Plan 032)
+
+Maintainer authorized in-session 2026-09-19 ("Let's start 032"), same
+precedent as Plans 016/017/025/026/029. Fixes three bounded reliability bugs
+found by the 2026-09-19 codebase review, before further feature work: a lost
+transcript record on file replacement/truncation, an LM Studio extraction
+call with no total deadline (wedges the extractor queue forever on a stalled
+local model), and a synchronous PTY write that could block the app's main
+event-loop thread on a backpressured child. See
+`plans/032-trust-and-responsiveness.md`.
+
+Automated evidence (2026-09-19):
+
+- [x] `cd src-tauri && cargo test --lib` — 122/122, including 7 new
+      `ingest::tests` fixtures (split-write reassembly, multi-record +
+      trailing partial, CRLF/blank-line trim, in-place truncation, new-inode
+      replacement discarding a stale partial, oversized-unterminated-record
+      cap, deleted-path `Gone` signal), 1 new `extractor::tests` fixture
+      (LM Studio request against a TCP listener that accepts but never
+      responds — call fails near its configured deadline, not indefinitely),
+      and 3 new `pty::tests` fixtures against the extracted
+      `spawn_ordered_writer` (send order matches chunk order; a send during
+      an in-flight blocking write returns immediately; the drain thread
+      exits and further sends error once a write fails).
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings`
+- [x] `npm run check` — 32/32 configured scripts pass.
+- [x] `npx tsc --noEmit`
+- [x] `npm run build`
+- [x] `git diff --check`
+- `npm run golden` not run — no extraction-prompt changes.
+
+Manual live pass — automated-gate pass above was run without GUI/built-app
+access; the manual steps below were run live by the maintainer afterward,
+on the `npm run tauri dev` build (`target/debug/app`, pid confirmed via
+process tree, one clean `zsh -l` child):
+
+- [x] Paste a large multi-KB block into one terminal tab while a second tab
+      stays interactive. Passed — paste landed correctly, second tab stayed
+      responsive.
+- [x] Close/kill a tab immediately after a large paste. Passed — the tab's
+      `zsh -l` process was confirmed gone from the process tree afterward
+      (no orphan under launchd, no zombie); close was not observed to hang.
+- [x] LM Studio down, connection-refused case: fully quit LM Studio (server
+      process confirmed gone via `lsof -iTCP:1234` and a refused `curl`),
+      configured Sidebar LM to `lmstudio`, asked a question in a terminal
+      tab. Passed — no decision card appeared, and the app surfaced
+      `lmstudio: decision extraction failed — check the ⚙ Sidebar LM
+      backend/model settings` in the UI. Fails fast and fails open; no hang,
+      no crash, no dangling extraction.
+- [ ] LM Studio down, **stalled-response** case (the actual 120s
+      `timeout_global` code path — a refused connection above fails near-
+      instantly at the OS level and never reaches it): point Sidebar LM's
+      URL at a listener that accepts but never responds (e.g. `nc -l
+      <port>`), ask a question, confirm the call fails at ~120s rather than
+      hanging indefinitely. Covered by
+      `extractor::tests::lmstudio_request_respects_a_total_deadline`
+      (unit, fake TCP listener) but not yet observed live end-to-end.
+- [x] Recovery: confirmed 2026-09-19 — after switching Sidebar LM's backend
+      back to `claude` post-test, a later extraction succeeded (which also
+      cleared the stale `extraction_failed` banner, see addendum below).
+      Queue was not left permanently wedged by the earlier failure.
+- [x] Reproduce a transcript file replacement: copy the tailed session's
+      `.jsonl` to a temp path and rename it over the original (new inode,
+      identical content — same pattern editors use for a "safe write").
+      Confirmed live 2026-09-19 on `dt-scratch-diffpopout`'s active session
+      (`bfdb996c-c999-49bb-bac8-acdd7f6b1847.jsonl`, 37 lines before and
+      after the swap). The session kept responding normally afterward (ran
+      a Bash tool call, reached its permission prompt) — no data loss, no
+      "tailer-failed" warning.
+
+### Addendum: adapter-warning strip never clears (found live during the
+    LM Studio down-test above, fixed same session)
+
+Not part of Plan 032's original three fixes — a separate, real bug the
+maintainer found live while testing step 4: `adapterWarnings` state
+(`App.tsx`) was append-only. Every call site only ever added a warning
+(deduped by agent+reason); nothing removed one, and `SidePanel.tsx` had no
+dismiss control. Switching Sidebar LM's backend back to `claude` after
+fixing an `extraction_failed` warning did nothing — the stale red banner
+stayed until the app was restarted.
+
+Fixed:
+
+- `decisions.ts`'s `extract()` now takes an `onExtractionSucceeded?: (agent)
+  => void` callback, threaded through `enqueue`/`onTranscript`/`onStop`
+  alongside the existing `onExtractionFailed` one. It fires whenever
+  `run_extractor` returns successfully (even if that turn's JSON is later
+  rejected by `parseExtraction`) — connectivity/config is what
+  `extraction_failed` was actually about, not any single turn's content.
+- `App.tsx` wires this to `clearExtractionFailedWarning`, which filters any
+  matching `{agent, reason: "extraction_failed"}` entry out of
+  `adapterWarnings`. Structural warnings (`transcript_schema_unrecognized`,
+  `foreign_post_tool_use`) are untouched — those don't self-heal on a
+  successful extraction, so auto-clearing them would be wrong.
+- `SidePanel.tsx` adds a manual `×` button on every warning-strip entry
+  (`onDismissAdapterWarning` prop, generic — works for any reason, not just
+  `extraction_failed`), for warnings the user wants to dismiss before the
+  underlying condition resolves itself.
+
+Automated evidence (2026-09-19): `npm run check` 32/32 (including
+`decision-integrity:check`'s source-shape contract locks, which caught a
+real mistake mid-fix — reformatting one `enqueue(...)` call onto multiple
+lines broke its literal-substring ordering check; reverted to single-line),
+`npx tsc --noEmit`, `npm run build`, `git diff --check`. No Rust changes.
+
+- [x] Live, confirmed 2026-09-19 by the maintainer: the banner clears on its
+      own after a later successful extraction, and the × button dismisses a
+      warning immediately on click. Reported "tested and working."
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*

@@ -461,4 +461,66 @@ open. Append-only. Referenced from CLAUDE.md.
   stray processes, real `~/.context-terminal` and `~/.pi` untouched
   (`cargo test --lib` 82/82, `git diff --check` clean throughout).
 
+- Phase 35 (agent identity icons in terminal tabs): ACCEPTED and APPROVED
+  2026-09-19 (PR #42). Two-row tab layout: status/state/age/auto-turn/counts/
+  close on top, agent icon + project name on bottom. `Tab.agent` (structured
+  hook identity, never PTY output) drives a small adapter→SVG mapping; a
+  fresh shell with no session/agentState shows no icon rather than guessing
+  Claude. Five live layout refinements during the same session (spacing/
+  padding). Automated gates clean; broader regression matrix in
+  `docs/TESTING.md` §59 recorded without claiming unrun cases. (Backfilled
+  into this log 2026-09-19 — missing from the initial CLAUDE.md split.)
+
+- Plan 032 (trust and responsiveness): BUILT 2026-09-19 — maintainer
+  authorized in-session ("Let's start 032"), same precedent as Plans
+  016/017/025/026/029. Fixed three bugs from the 2026-09-19 codebase review
+  before further feature work: `ingest.rs`'s tailer could lose a transcript
+  record on file replacement/truncation (offset advanced past unterminated
+  fragments; the fd was never reopened on a new inode at the same path) —
+  replaced with `TranscriptReader`, a byte-level incremental reader that
+  buffers unterminated tails across polls and detects replacement via
+  (dev, inode)/(volume, file-index) identity, cross-platform. `extractor.rs`'s
+  LM Studio HTTP call had no total deadline, so a stalled local model wedged
+  `extractorQueue.ts`'s serialized queue forever — added `timeout_global` via
+  `ureq::Agent::config_builder()`, reusing the existing 120s CLI deadline for
+  one policy across backends. `pty.rs`'s `pty_write` synchronously called
+  `write_all` while holding the same per-session lock `pty_kill`/`pty_resize`
+  need, so a backpressured child (busy TUI, full PTY buffer) could block
+  those too, not just input — fixed with `spawn_ordered_writer`, a dedicated
+  per-session thread draining an unbounded FIFO channel, so the blocking
+  syscall never runs under any lock and multiple concurrent `pty_write`
+  calls can't reorder each other (a risk plain `spawn_blocking`-per-call
+  would have reintroduced). No PTY-cancellation release-blocker was hit.
+  11 new Rust tests (7 ingest, 1 extractor, 3 pty), all using real file I/O /
+  a real TCP listener / a mock `Write` — no new dependency. Automated gates
+  clean: `cargo test --lib` 122/122, clippy, `npm run check` 32/32, `tsc
+  --noEmit`, production build, `git diff --check`. Live manual pass
+  completed by the maintainer on `npm run tauri dev`: large-paste order/
+  responsiveness, bounded close (confirmed via process tree — no orphaned
+  shell), LM Studio connection-refused fail-open (clean UI error, no hang),
+  transcript replacement (safe-write swap over an active session's live
+  transcript — 37 lines before/after, session kept responding normally,
+  no data loss), and recovery. Not separately live-verified: the 120s
+  deadline on a *stalled* (vs. refused) LM Studio response — unit-tested
+  only (`lmstudio_request_respects_a_total_deadline`). `docs/TESTING.md`
+  §60. Plan: `plans/032-trust-and-responsiveness.md`.
+
+  Addendum, same session: live testing surfaced a separate real bug —
+  `App.tsx`'s `adapterWarnings` state was append-only, so the
+  `extraction_failed` banner never cleared even after fixing Sidebar LM's
+  backend. Fixed: `decisions.ts`'s `extract()` gained an
+  `onExtractionSucceeded` callback (fires whenever `run_extractor` returns
+  successfully, regardless of whether that turn's JSON later parses),
+  threaded through `enqueue`/`onTranscript`/`onStop` alongside the existing
+  `onExtractionFailed`; `App.tsx` uses it to clear a matching
+  `extraction_failed` warning. Structural warnings (schema drift, foreign
+  hook) are untouched — they don't self-heal. Added a generic manual `×`
+  dismiss button on every warning-strip entry (`SidePanel.tsx`). Caught and
+  fixed a real mistake mid-fix: reformatting one `enqueue(...)` call onto
+  multiple lines broke `decision-integrity-check.ts`'s literal-substring
+  ordering contract lock; reverted to single-line. Gates clean: `npm run
+  check` 32/32, `tsc --noEmit`, build, `git diff --check` (no Rust
+  changes). Live-confirmed by the maintainer: auto-clear and the × button
+  both "tested and working."
+
 Update this file as phases are accepted.

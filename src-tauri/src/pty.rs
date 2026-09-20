@@ -3,6 +3,7 @@ use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize}
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
 
@@ -39,7 +40,19 @@ pub(crate) async fn spawn_blocking_result<T: Send + 'static>(
 pub struct PtySession {
     master: Box<dyn MasterPty + Send>,
     child: Box<dyn Child + Send + Sync>,
-    writer: Box<dyn Write + Send>,
+    // Not the writer itself — `pty_write` used to call `writer.write_all`
+    // directly under this session's lock, so a stalled child (busy TUI
+    // render, backed-up PTY buffer) blocked that syscall *while holding the
+    // lock* pty_kill/pty_resize also need, i.e. the same freeze class Plan
+    // 017 found for git commands on the main thread, just scoped to one
+    // session instead of the whole app. Fix: a dedicated writer thread (spawned
+    // once in pty_spawn) owns the real `Write` end and drains this channel
+    // FIFO, so `write_all` never runs under `session`'s lock at all. Channel
+    // is deliberately unbounded — ponytail: this is human/paste-bounded input,
+    // not an adversarial data stream, so a bytes-capped backpressure scheme
+    // buys nothing a plain queue doesn't already give for free; revisit only
+    // if that assumption breaks (e.g. programmatic bulk pty_write).
+    writer_tx: mpsc::Sender<Vec<u8>>,
 }
 
 // Per-session lock, not one map-wide lock: pty_write can block on the writer
@@ -205,6 +218,26 @@ fn resume_command(agent: Option<&str>, sid: &str, shell: &str) -> String {
     }
 }
 
+/// Owns `writer` on a dedicated thread and drains `Vec<u8>` chunks off an
+/// unbounded FIFO channel, calling `write_all` for each in receive order.
+/// The returned sender is the only way callers touch the writer: sending
+/// never blocks on the child's own I/O (that's the thread's problem alone),
+/// and because there is exactly one draining thread, write order always
+/// matches send order regardless of how many callers send concurrently.
+/// The thread exits cleanly once every sender is dropped (channel
+/// disconnects) or once a write errors (dead child/closed pty).
+fn spawn_ordered_writer(mut writer: Box<dyn Write + Send>) -> mpsc::Sender<Vec<u8>> {
+    let (tx, rx) = mpsc::channel::<Vec<u8>>();
+    std::thread::spawn(move || {
+        while let Ok(chunk) = rx.recv() {
+            if writer.write_all(&chunk).is_err() {
+                break;
+            }
+        }
+    });
+    tx
+}
+
 // Each param is a flat named field on the JS `invoke("pty_spawn", {...})`
 // call site (Tauri's command convention) — bundling them into a struct would
 // mean every caller nests its args under one key, an unrelated-to-this-phase
@@ -258,7 +291,8 @@ pub fn pty_spawn(
     drop(pair.slave);
 
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
-    let mut writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+    let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+    let writer_tx = spawn_ordered_writer(writer);
 
     // Fan-out launch command (invariant #4, reworded 2026-08-15): written
     // once here, before the session is stored or the id is returned to JS —
@@ -268,7 +302,7 @@ pub fn pty_spawn(
     // being called carefully. Fail open: a bad command just errors inside
     // the shell like a mistyped one would.
     if let Some(c) = launch_cmd.filter(|c| !c.is_empty()) {
-        let _ = writer.write_all(format!("{c}\n").as_bytes());
+        let _ = writer_tx.send(format!("{c}\n").into_bytes());
     }
 
     let id = state.next_id.fetch_add(1, Ordering::SeqCst);
@@ -277,7 +311,7 @@ pub fn pty_spawn(
         Arc::new(Mutex::new(PtySession {
             master: pair.master,
             child,
-            writer,
+            writer_tx,
         })),
     );
 
@@ -315,8 +349,13 @@ fn get_session(state: &State<'_, PtyManager>, id: u32) -> Result<Arc<Mutex<PtySe
 #[tauri::command]
 pub fn pty_write(state: State<'_, PtyManager>, id: u32, data: String) -> Result<(), String> {
     let session = get_session(&state, id)?;
-    let mut session = session.lock().map_err(|e| e.to_string())?;
-    session.writer.write_all(data.as_bytes()).map_err(|e| e.to_string())
+    let session = session.lock().map_err(|e| e.to_string())?;
+    // Queues onto the writer thread; never calls write_all here, so a
+    // stalled child can't block this (or any other tab's) command dispatch.
+    session
+        .writer_tx
+        .send(data.into_bytes())
+        .map_err(|_| "pty session writer closed".to_string())
 }
 
 #[tauri::command]
@@ -791,7 +830,106 @@ fn git_pr_create_blocking(cwd: String, title: String, body: String) -> Result<St
 
 #[cfg(test)]
 mod tests {
-    use super::{canon, has_own_repo, project_key, resume_command, valid_resume_id};
+    use super::{canon, has_own_repo, project_key, resume_command, spawn_ordered_writer, valid_resume_id};
+    use std::io::Write;
+    use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
+
+    /// A mock `Write` end for exercising `spawn_ordered_writer` without a
+    /// real PTY/child process. `delay_first` simulates a stalled child on
+    /// its first write; `fail_after` simulates a dead child by erroring on
+    /// a given call index.
+    struct RecordingWriter {
+        buf: Arc<Mutex<Vec<u8>>>,
+        calls: Arc<AtomicUsize>,
+        delay_first: Option<Duration>,
+        fail_after: Option<usize>,
+    }
+
+    impl Write for RecordingWriter {
+        fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+            let n = self.calls.fetch_add(1, AtomicOrdering::SeqCst);
+            if n == 0 {
+                if let Some(d) = self.delay_first {
+                    std::thread::sleep(d);
+                }
+            }
+            if self.fail_after == Some(n) {
+                return Err(std::io::Error::other("boom"));
+            }
+            self.buf.lock().unwrap().extend_from_slice(data);
+            Ok(data.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn ordered_writer_preserves_send_order_across_chunks() {
+        let buf = Arc::new(Mutex::new(Vec::new()));
+        let writer = RecordingWriter {
+            buf: buf.clone(),
+            calls: Arc::new(AtomicUsize::new(0)),
+            delay_first: None,
+            fail_after: None,
+        };
+        let tx = spawn_ordered_writer(Box::new(writer));
+        for chunk in ["a", "b", "c", "d", "e"] {
+            tx.send(chunk.as_bytes().to_vec()).unwrap();
+        }
+        for _ in 0..100 {
+            if buf.lock().unwrap().len() == 5 {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(*buf.lock().unwrap(), b"abcde", "chunks sent in order must be written in that same order");
+    }
+
+    #[test]
+    fn ordered_writer_send_does_not_block_while_a_write_is_in_flight() {
+        let buf = Arc::new(Mutex::new(Vec::new()));
+        let writer = RecordingWriter {
+            buf: buf.clone(),
+            calls: Arc::new(AtomicUsize::new(0)),
+            delay_first: Some(Duration::from_millis(300)),
+            fail_after: None,
+        };
+        let tx = spawn_ordered_writer(Box::new(writer));
+        tx.send(b"slow-first-write".to_vec()).unwrap();
+        // Give the drain thread a moment to pick this up and start blocking
+        // inside write_all before we measure the next send.
+        std::thread::sleep(Duration::from_millis(30));
+        let start = Instant::now();
+        tx.send(b"second-tab-keystroke".to_vec()).unwrap();
+        assert!(
+            start.elapsed() < Duration::from_millis(100),
+            "send must return immediately even while a prior write is stalled: took {:?}",
+            start.elapsed()
+        );
+    }
+
+    #[test]
+    fn ordered_writer_thread_exits_after_a_write_error() {
+        let buf = Arc::new(Mutex::new(Vec::new()));
+        let writer = RecordingWriter {
+            buf: buf.clone(),
+            calls: Arc::new(AtomicUsize::new(0)),
+            delay_first: None,
+            fail_after: Some(0),
+        };
+        let tx = spawn_ordered_writer(Box::new(writer));
+        tx.send(b"boom".to_vec()).unwrap();
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(
+            tx.send(b"never written".to_vec()).is_err(),
+            "the drain thread must exit (dropping its receiver) once a write fails, \
+             so pty_kill is never left waiting on a wedged writer"
+        );
+        assert!(buf.lock().unwrap().is_empty(), "the failed write must not have appended data");
+    }
 
     #[test]
     fn resume_command_selects_codex_syntax() {
