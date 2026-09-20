@@ -29,7 +29,7 @@ assert.match(terminal, /ring-2 ring-inset ring-sky-700/);
 assert.match(terminal, /splitOrientation === "vertical"/);
 assert.match(tabBar, /tab\.id === activeId[\s\S]*?after:border-\[1\.5px\][\s\S]*?after:border-white/);
 assert.match(tabBar, /visibleIds\.has\(tab\.id\)[\s\S]*?after:border-sky-700/);
-assert.match(tabBar, /visibleIds\.has\(tab\.id\)[\s\S]*?after:border-2 after:border-sky-700/);
+assert.match(tabBar, /visibleIds\.has\(tab\.id\)[\s\S]*?after:border-2 after:border-b-0 after:border-sky-700/);
 assert.doesNotMatch(app, /setSplitPaneIds\([^\n]*repo\./);
 
 console.log("split-view-check: all assertions passed");
