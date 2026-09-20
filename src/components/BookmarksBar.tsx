@@ -57,7 +57,7 @@ export function BookmarksBar({ bookmarks, onOpen, onAdd, onUpdate, onDelete, onR
       data-tauri-drag-region="deep"
       onPointerUp={() => setDragId(null)}
       onPointerLeave={() => setDragId(null)}
-      className="relative flex select-none items-center gap-1.5 border-b border-zinc-800 bg-zinc-900 px-2 py-1"
+      className="relative flex select-none items-center gap-1.5 border-t border-b border-zinc-700 bg-zinc-800 px-2 py-1"
     >
       {bookmarks.map((b) => (
           <button
@@ -74,7 +74,7 @@ export function BookmarksBar({ bookmarks, onOpen, onAdd, onUpdate, onDelete, onR
               if (dragId !== null && dragId !== b.id) onReorder(dragId, b.id);
             }}
             onPointerUp={() => setDragId(null)}
-            className={`flex shrink-0 items-center gap-1.5 rounded-full bg-zinc-800 px-3 py-0.5 text-xs text-zinc-300 transition-[background-color,opacity] hover:bg-zinc-700 ${
+            className={`flex shrink-0 items-center gap-1.5 rounded-full border border-zinc-600 bg-zinc-900 py-0.5 pr-3 pl-2 text-xs text-zinc-300 transition-[background-color,border-color,opacity] hover:border-zinc-400 hover:bg-zinc-800 ${
               dragId === b.id ? "opacity-60 ring-1 ring-zinc-500" : ""
             }`}
             title={b.cwd}
@@ -84,7 +84,7 @@ export function BookmarksBar({ bookmarks, onOpen, onAdd, onUpdate, onDelete, onR
           </button>
         ))}
         <button
-          className="shrink-0 rounded-full px-2 py-0.5 text-xs text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
+          className="shrink-0 rounded-full px-2 py-0.5 text-xs text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
           onClick={() => {
             setSaveError(null);
             setForm({ id: null, name: "", cwd: "", color: PALETTE[0] });

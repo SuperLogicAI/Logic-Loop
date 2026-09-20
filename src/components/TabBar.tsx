@@ -167,9 +167,9 @@ export function TabBar({
           }}
           className={`group relative grid max-w-52 min-w-28 cursor-pointer gap-0.5 rounded-t-md px-2 pt-0.5 pb-1 text-sm transition-[background-color,opacity] after:pointer-events-none after:absolute after:inset-0 after:rounded-t-md ${
             tab.id === activeId
-              ? "bg-zinc-700 text-zinc-100 after:border-[1.5px] after:border-white"
+              ? "bg-zinc-700 text-zinc-100 after:border-[1.5px] after:border-b-0 after:border-white"
               : visibleIds.has(tab.id)
-                ? "bg-zinc-700/70 text-zinc-300 after:border-2 after:border-sky-700"
+                ? "bg-zinc-700/70 text-zinc-300 after:border-2 after:border-b-0 after:border-sky-700"
                 : "bg-zinc-800/70 text-zinc-500 after:border-[1.5px] after:border-zinc-800 hover:bg-zinc-700/50 hover:text-zinc-300"
           } ${dragId === tab.id ? "opacity-60 ring-1 ring-zinc-500" : ""} ${
             isFanOutChild(tab) || isWorktreeBound(tab) ? "z-10" : "z-0"

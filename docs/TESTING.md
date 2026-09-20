@@ -38,12 +38,13 @@ release app first (see "Before you start" below) — v3's rule still applies.
 
 ### 9 (re-verify). Bookmarks — save/delete failure handling
 
-- [ ] Add a bookmark normally — while the save is in flight, the Save
+- [x] Add a bookmark normally — while the save is in flight, the Save
       button reads "Saving…" and is disabled (can't double-submit).
-- [ ] Force a save failure if possible (e.g. kill DB access, or a
+- [fail] Force a save failure if possible (e.g. kill DB access, or a
       duplicate-name constraint if one exists) — the form stays open with
       your typed values intact, an inline red error appears, and the button
       changes to "Retry". Fields must NOT be silently discarded.
+      "this one if you mistype the filepath it still comes up as a new usable terminal window apparently it creates the file I opened up a bookmark for supra and intentionally mis-spelled supbra and now theres a new 'supbra' file. 
 - [ ] Retry after fixing the issue — form closes normally on success.
 - [ ] Delete a bookmark and force that to fail — a "Delete failed: …" chip
       appears in the bookmarks bar (bookmark itself is not silently removed
