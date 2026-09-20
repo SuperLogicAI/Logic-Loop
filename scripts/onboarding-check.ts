@@ -81,9 +81,44 @@ assert.ok(modalSource.includes("developed by Super Logic AI"));
 assert.ok(modalSource.includes('href="https://superlogicai.com"'));
 assert.doesNotMatch(modalSource, /invoke\(|ptyWrite|SELECT |INSERT |UPDATE /);
 
+// Plan 033: launch flow contract. Structural checks only (no DOM harness
+// wired into `check` yet — see plans/033-first-useful-session.md Step 4);
+// npm run test:ui covers the rendered-interaction cases once approved.
+assert.match(modalSource, /Choose folder/, "Setup needs a folder picker");
+assert.match(modalSource, /directory:\s*true/, "folder picker must be a directory dialog, not a file picker");
+assert.match(modalSource, /validateProjectDir/, "folder pick must go through the strict validator, not canonicalizeCwd's silent fallback");
+assert.match(modalSource, /setFolderError/, "an invalid folder pick must surface an error, not silently substitute home");
+assert.match(modalSource, /startingRef\.current/, "Start must guard against a double-click spawning two tabs");
+assert.doesNotMatch(modalSource, /invoke\(|ptyWrite|SELECT |INSERT |UPDATE /);
+
+const repoSource = readFileSync("src/lib/repo.ts", "utf8");
+assert.match(repoSource, /export async function hasLaunchedSession/);
+assert.match(repoSource, /export async function setHasLaunchedSession/);
+assert.match(appSource, /hasLaunchedSession\(\)/, "startup must consult hasLaunchedSession before the home-tab fallback");
+assert.match(appSource, /setForceSetupOpen\(true\)/, "a true first run must force Setup open instead of a silent home spawn");
+
+const bookmarksSource = readFileSync("src/components/BookmarksBar.tsx", "utf8");
+assert.match(
+  bookmarksSource,
+  /onAdd:\s*\(name: string, cwd: string, color: string\) => Promise<void>/,
+  "bookmark save callbacks must be awaited, not fire-and-forget"
+);
+assert.match(bookmarksSource, /catch \(error\) \{\s*setSaveError/, "a rejected save must show a retryable error, not silently clear the form");
+assert.doesNotMatch(
+  bookmarksSource.slice(bookmarksSource.indexOf("const submit"), bookmarksSource.indexOf("const submit") + 400),
+  /setForm\(null\);[\s\S]*await/,
+  "setForm(null) must not run before the save actually resolves"
+);
+
 const rustSource = readFileSync("src-tauri/src/ingest.rs", "utf8");
 assert.match(rustSource, /pub fn claude_detect\(\) -> bool/);
-assert.ok(readFileSync("src-tauri/src/lib.rs", "utf8").includes("ingest::claude_detect"));
+const libRsSource = readFileSync("src-tauri/src/lib.rs", "utf8");
+assert.ok(libRsSource.includes("ingest::claude_detect"));
 assert.ok(readFileSync("src/lib/ingest.ts", "utf8").includes('invoke<boolean>("claude_detect")'));
+
+const ptyRsSource = readFileSync("src-tauri/src/pty.rs", "utf8");
+assert.match(ptyRsSource, /pub fn validate_project_dir\(path: String\) -> Result<String, String>/);
+assert.ok(libRsSource.includes("pty::validate_project_dir"));
+assert.ok(readFileSync("src/lib/pty.ts", "utf8").includes('invoke<string>("validate_project_dir"'));
 
 console.log("onboarding-check: all assertions passed");

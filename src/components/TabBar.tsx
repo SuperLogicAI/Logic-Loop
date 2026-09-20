@@ -73,6 +73,9 @@ interface Props {
   /** Clock tick (Phase 14b) — drives stalled/age display, nothing else
    * changes agentState on its own. */
   now: number;
+  /** Cosmetic only — updates the in-memory tab title. Not a rewrite of the
+   * project/session it's bound to. */
+  onRename: (id: string, title: string) => void;
 }
 
 // Left/right/top only, no bottom — the tab visually joins the terminal pane
@@ -100,8 +103,17 @@ export function TabBar({
   isFanOutParent,
   isWorktreeBound,
   now,
+  onRename,
 }: Props) {
   const [dragId, setDragId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+
+  const commitRename = (tabId: string) => {
+    const trimmed = renameDraft.trim();
+    if (trimmed) onRename(tabId, trimmed);
+    setRenamingId(null);
+  };
   return (
     // Tauri drag region: empty strip space moves the window, Chrome-style
     // select-none: a pointer-drag starting here otherwise runs a DOM text
@@ -147,17 +159,22 @@ export function TabBar({
             if (dragId && dragId !== tab.id) onReorder(dragId, tab.id);
           }}
           onPointerUp={() => setDragId(null)}
-          className={`group relative grid max-w-52 min-w-28 cursor-pointer gap-0.5 rounded-t-md border-t-2 px-2 pt-0.5 pb-1 text-sm transition-[background-color,opacity] after:pointer-events-none after:absolute after:inset-0 after:rounded-t-md after:border-t-0 ${
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setRenameDraft(tab.title);
+            setRenamingId(tab.id);
+          }}
+          className={`group relative grid max-w-52 min-w-28 cursor-pointer gap-0.5 rounded-t-md px-2 pt-0.5 pb-1 text-sm transition-[background-color,opacity] after:pointer-events-none after:absolute after:inset-0 after:rounded-t-md ${
             tab.id === activeId
-              ? "bg-zinc-700 text-zinc-100 after:border-x-[1.5px] after:border-b-[1.5px] after:border-white"
+              ? "bg-zinc-700 text-zinc-100 after:border-[1.5px] after:border-white"
               : visibleIds.has(tab.id)
-                ? "bg-zinc-700/70 text-zinc-300 after:border-x-2 after:border-b-2 after:border-sky-700"
-                : "bg-zinc-800/70 text-zinc-500 hover:bg-zinc-700/50 hover:text-zinc-300"
+                ? "bg-zinc-700/70 text-zinc-300 after:border-2 after:border-sky-700"
+                : "bg-zinc-800/70 text-zinc-500 after:border-[1.5px] after:border-zinc-800 hover:bg-zinc-700/50 hover:text-zinc-300"
           } ${dragId === tab.id ? "opacity-60 ring-1 ring-zinc-500" : ""} ${
             isFanOutChild(tab) || isWorktreeBound(tab) ? "z-10" : "z-0"
           }`}
           style={{
-            borderTopColor: tab.color,
             // relative+z-10 above (plain flex siblings are static, so
             // without it, a later-DOM-order neighbor paints over this
             // shadow's bleed into their shared gap — the missing
@@ -215,6 +232,10 @@ export function TabBar({
               ✕
             </button>
           </div>
+          {/* Favorite/bookmark color: was the tab's top border (crowded next
+              to notifications above); moved to sit between the two rows so
+              it reads with the agent/name row it actually describes. */}
+          <div className="-mx-2 h-[1.5px] shrink-0 rounded-md" style={{ backgroundColor: tab.color }} />
           <div className="flex min-w-0 items-center gap-1">
             {agentIcon && (
               <img
@@ -225,13 +246,30 @@ export function TabBar({
                 className="h-3.5 w-3.5 shrink-0 object-contain"
               />
             )}
-            <span
-              className={`min-w-0 flex-1 truncate ${isFanOutParent(tab) ? "text-purple-300" : ""}`}
-              style={isFanOutParent(tab) ? { textShadow: "0 0 6px rgba(168,85,247,0.85)" } : undefined}
-              title={isFanOutParent(tab) ? "fan-out origin tab" : undefined}
-            >
-              {tab.title}
-            </span>
+            {renamingId === tab.id ? (
+              <input
+                autoFocus
+                value={renameDraft}
+                onChange={(e) => setRenameDraft(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+                onBlur={() => commitRename(tab.id)}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === "Enter") commitRename(tab.id);
+                  if (e.key === "Escape") setRenamingId(null);
+                }}
+                className="min-w-0 flex-1 rounded bg-zinc-900 px-1 text-zinc-100 outline-none"
+              />
+            ) : (
+              <span
+                className={`min-w-0 flex-1 truncate ${isFanOutParent(tab) ? "text-purple-300" : ""}`}
+                style={isFanOutParent(tab) ? { textShadow: "0 0 6px rgba(168,85,247,0.85)" } : undefined}
+                title={isFanOutParent(tab) ? "fan-out origin tab" : "Right-click to rename"}
+              >
+                {tab.title}
+              </span>
+            )}
           </div>
         </div>
         );

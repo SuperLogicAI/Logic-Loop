@@ -79,6 +79,12 @@ interface Props {
   observedAdapters: Set<AdapterId>;
   notificationsEnabled: boolean;
   onRequestNotifications: () => Promise<boolean>;
+  /** True exactly once, on a true first run (plan033) — forces Setup open
+   * so its launch section is the way the first tab gets created. */
+  forceOpen: boolean;
+  onForceOpenHandled: () => void;
+  onLaunch: (cwd: string, cmd: string | undefined, name: string) => Promise<string>;
+  onSetupClose: () => void;
 }
 
 export function AgentStatusBar({
@@ -96,10 +102,20 @@ export function AgentStatusBar({
   observedAdapters,
   notificationsEnabled,
   onRequestNotifications,
+  forceOpen,
+  onForceOpenHandled,
+  onLaunch,
+  onSetupClose,
 }: Props) {
   const [adapterStates, setAdapterStates] = useState(initialAdapterStates);
   const [setupOpen, setSetupOpen] = useState(false);
   const [persistenceError, setPersistenceError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!forceOpen) return;
+    setSetupOpen(true);
+    onForceOpenHandled();
+  }, [forceOpen, onForceOpenHandled]);
 
   useEffect(() => {
     let cancelled = false;
@@ -164,7 +180,8 @@ export function AgentStatusBar({
     void repo.setOnboardingVersion(ONBOARDING_VERSION).catch((error: unknown) => {
       setPersistenceError(formatAdapterError(error));
     });
-  }, []);
+    onSetupClose();
+  }, [onSetupClose]);
 
   const hookClass = (enabled: boolean | null, primary = false) =>
     `flex h-6 shrink-0 items-center rounded-full px-3 text-xs ${
@@ -268,6 +285,7 @@ export function AgentStatusBar({
           persistenceError={persistenceError}
           onToggleAdapter={toggleAdapter}
           onRequestNotifications={onRequestNotifications}
+          onLaunch={onLaunch}
           onClose={closeSetup}
         />
       )}

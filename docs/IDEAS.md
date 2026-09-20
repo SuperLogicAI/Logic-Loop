@@ -13,6 +13,11 @@ a home.
 
 ## Diff/file preview pop-out
 
+**Status update (date unknown when built — confirmed shipped on inspection
+2026-09-19):** already live. `DiffModal.tsx` exists; `SidePanel.tsx` wires
+`setDiffPath`/`DiffModal` at the Accomplished panel's file rows. Entry below
+kept as originally written, for history — do not re-build this.
+
 Click a "Wrote X"/"Edited X" row in the Accomplished panel → show the diff.
 Cheap: `git_diff_cached` already exists (Commit & Push footer), the
 Accomplished panel already carries `file_path` per row (`listToolEvents`,
