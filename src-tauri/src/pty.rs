@@ -137,6 +137,24 @@ pub fn validate_project_dir(path: String) -> Result<String, String> {
     }
 }
 
+/// `pty_spawn`'s own cwd resolution: same silent-fallback shape as
+/// `validate_project_dir`'s doc comment describes, plus a `strict` mode for
+/// the same Setup launch flow — the folder was valid at pick time
+/// (`validate_project_dir`) but a spawn happens later, on click, and can
+/// race a `rm -rf` in between. `strict` is only ever true for that one
+/// caller; every other `pty_spawn` caller passes `false` and keeps landing
+/// wherever the shell's own default cwd is when the folder is gone.
+fn resolve_spawn_cwd(cwd: Option<String>, strict: bool) -> Result<Option<String>, String> {
+    let Some(c) = cwd.map(|c| canon(&c)) else { return Ok(None) };
+    if std::path::Path::new(&c).is_dir() {
+        Ok(Some(c))
+    } else if strict {
+        Err(format!("\"{c}\" is not a folder Logic Loop can open"))
+    } else {
+        Ok(None)
+    }
+}
+
 /// Stable project key: the nearest enclosing git repo root, else the dir itself.
 /// `cd src-tauri && claude` must file against the same project as `claude` from
 /// the repo root — keyed on raw cwd they are two projects, and every panel then
@@ -271,7 +289,17 @@ pub fn pty_spawn(
     resume_session: Option<String>,
     resume_agent: Option<String>,
     launch_cmd: Option<String>,
+    // Setup's launch flow only (invariant carve-out documented on
+    // `validate_project_dir`): a folder picked, then deleted before Start is
+    // clicked, must surface an error instead of silently landing the new
+    // session somewhere else. Every other caller (bookmarks, ghost-tab
+    // restore, fan-out, `openTab`'s general path) omits this and keeps the
+    // existing silent fallback — a bookmark pointing at a since-deleted
+    // folder must keep working.
+    strict_cwd: Option<bool>,
 ) -> Result<u32, String> {
+    let cwd = resolve_spawn_cwd(cwd, strict_cwd.unwrap_or(false))?;
+
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(PtySize {
@@ -299,8 +327,7 @@ pub fn pty_spawn(
     if let Some(tab_id) = tab_id {
         cmd.env("LOGIC_LOOP_TAB_ID", tab_id);
     }
-    let cwd = cwd.map(|c| canon(&c));
-    if let Some(cwd) = cwd.filter(|c| std::path::Path::new(c).is_dir()) {
+    if let Some(cwd) = cwd {
         cmd.cwd(cwd);
     }
 
@@ -848,8 +875,8 @@ fn git_pr_create_blocking(cwd: String, title: String, body: String) -> Result<St
 #[cfg(test)]
 mod tests {
     use super::{
-        canon, has_own_repo, project_key, resume_command, spawn_ordered_writer, valid_resume_id,
-        validate_project_dir,
+        canon, has_own_repo, project_key, resolve_spawn_cwd, resume_command, spawn_ordered_writer,
+        valid_resume_id, validate_project_dir,
     };
     use std::io::Write;
     use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
@@ -906,6 +933,37 @@ mod tests {
         let result = validate_project_dir(file.to_string_lossy().into_owned());
         std::fs::remove_file(&file).ok();
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn resolve_spawn_cwd_non_strict_silently_drops_a_missing_dir() {
+        // Every caller except Setup's launch flow (bookmarks, ghost-tab
+        // restore, fan-out) — a since-deleted folder must still spawn a
+        // fallback shell, not error.
+        let missing = std::env::temp_dir().join("logic-loop-plan033-resolve-missing");
+        assert_eq!(resolve_spawn_cwd(Some(missing.to_string_lossy().into_owned()), false), Ok(None));
+    }
+
+    #[test]
+    fn resolve_spawn_cwd_strict_errors_on_a_missing_dir() {
+        // Setup's launch flow: pick a valid folder, delete it, click Start —
+        // this is the exact gap Finding 1 (docs/TESTING.md) filed.
+        let missing = std::env::temp_dir().join("logic-loop-plan033-resolve-missing-strict");
+        assert!(resolve_spawn_cwd(Some(missing.to_string_lossy().into_owned()), true).is_err());
+    }
+
+    #[test]
+    fn resolve_spawn_cwd_accepts_a_real_directory_in_either_mode() {
+        let dir = std::env::temp_dir().to_string_lossy().into_owned();
+        let resolved = canon(&dir);
+        assert_eq!(resolve_spawn_cwd(Some(dir.clone()), false), Ok(Some(resolved.clone())));
+        assert_eq!(resolve_spawn_cwd(Some(dir), true), Ok(Some(resolved)));
+    }
+
+    #[test]
+    fn resolve_spawn_cwd_passes_through_none() {
+        assert_eq!(resolve_spawn_cwd(None, true), Ok(None));
+        assert_eq!(resolve_spawn_cwd(None, false), Ok(None));
     }
 
     #[test]

@@ -411,7 +411,7 @@ export default function App() {
     refreshMutedProjects();
   }, [refreshBlockerCounts, refreshDecisionCounts, refreshMutedProjects]);
 
-  const openTab = useCallback(async (opts?: { name?: string; cwd?: string; color?: string; cmd?: string }) => {
+  const openTab = useCallback(async (opts?: { name?: string; cwd?: string; color?: string; cmd?: string; strictCwd?: boolean }) => {
     const spawnCwd = await canonicalizeCwd(opts?.cwd ?? "~").catch(() => opts?.cwd ?? "~");
     // tab.cwd is the project key every panel queries by, so it is the repo
     // root, not the spawn dir — otherwise a tab opened in src-tauri files
@@ -424,7 +424,7 @@ export default function App() {
     // "tab-6" alone had 12 different sessions bound to it over two days,
     // silently burying all but the most-recently-updated one in re-entry.
     const id = crypto.randomUUID();
-    const ptyId = await ptySpawn(spawnCwd, 80, 24, id, undefined, opts?.cmd);
+    const ptyId = await ptySpawn(spawnCwd, 80, 24, id, undefined, opts?.cmd, undefined, opts?.strictCwd);
     const tab: Tab = {
       id,
       ptyId,
@@ -1556,7 +1556,7 @@ export default function App() {
             }}
             forceOpen={forceSetupOpen}
             onForceOpenHandled={() => setForceSetupOpen(false)}
-            onLaunch={(cwd, cmd, name) => openTab({ cwd, cmd, name })}
+            onLaunch={(cwd, cmd, name) => openTab({ cwd, cmd, name, strictCwd: true })}
             onSetupClose={openHomeTabIfNoneOpen}
           />
           <div className={`flex min-h-0 flex-1 ${splitPaneIds && splitOrientation === "vertical" ? "flex-col" : ""}`}>

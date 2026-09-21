@@ -19,6 +19,7 @@ fixes are deferred to a single follow-up PR per maintainer instruction.
 - [FAIL] Folder deleted after pick, before Start — expected an inline error;
       got a normal shell session in a silently-substituted cwd instead. See
       **Finding 1**.
+      *Fixed 2026-09-21, needs live re-verify — see Findings below.*
 - [x] Start disabled with no folder, enabled once one's picked.
 - [x] Plain shell launch — new tab, no agent run, correct status line.
 - [~] Agent launch waiting→connected — works, but gated on the agent's own
@@ -28,6 +29,7 @@ fixes are deferred to a single follow-up PR per maintainer instruction.
       violation, just a rough edge — not filed as a numbered finding.
 - [FAIL] Double-click "Start session" — got two tabs, not one, reproduced
       twice. See **Finding 3**.
+      *Fixed 2026-09-21, needs live re-verify — see Findings below.*
 - [x] Spawn failure (permission-denied folder) — inline `Permission denied
       (os error 13)`, no tab spawned, selection preserved.
 
@@ -39,15 +41,83 @@ fixes are deferred to a single follow-up PR per maintainer instruction.
       the *same* bookmark creates the folder and launches into it. See
       **Finding 2** — distinct from Finding 1, needs its own investigation
       (something is materializing a directory on retry).
+      *Fixed 2026-09-21 (root cause: Idea Board auto-seed, not the bookmark
+      path itself), needs live re-verify — see Findings below.*
 - [FAIL] Forced save failure (DB chmod 444): correct error + Retry state
       shown. But after `chmod 644` restore **and a full app quit/relaunch**,
       Retry still failed with the same `readonly database` error. See
       **Finding 4** — worse than the original test anticipated.
+      *Root-caused 2026-09-21: not a code bug — `chmod 644` only restored
+      the main `.db` file, and SQLite had independently left
+      `context-terminal.db-wal` at `444` as a side effect of the earlier
+      failed write. Re-verify by chmod'ing `.db`, `.db-wal`, and `.db-shm`
+      together; see Findings below.*
 - [FAIL] Same for delete: `Delete failed: … readonly database`, persisted
       through the same restore-and-restart sequence. Same root cause as
       Finding 4.
+      *Same note as above — re-verify with all three files restored.*
 
-### Findings — filed 2026-09-21, none fixed yet (batching for one PR)
+### Findings — filed 2026-09-21, code fixes landed same day (batched one PR)
+
+**Status: code-fixed, awaiting live re-verify.** All four have a fix on the
+working tree, `tsc --noEmit`/`cargo clippy -D warnings`/`cargo test --lib`/
+`npm run check`/`npm run golden` all clean, and each Rust fix has a new
+regression test. None of that substitutes for the actual GUI re-verify of
+§9/§11 below — the `[FAIL]` markers there stay as-is until that's rerun
+against a rebuilt release app (see "Before you start"). Per-finding notes:
+
+1. **Fixed.** `pty_spawn` (`pty.rs`) now takes a `strict_cwd` flag, threaded
+   through only from Setup's launch flow (`App.tsx`'s `onLaunch` →
+   `openTab({ ..., strictCwd: true })` → `ptySpawn(...)`). When set and the
+   resolved cwd isn't a directory, `pty_spawn` now returns
+   `Err("\"<path>\" is not a folder Logic Loop can open")` *before*
+   allocating a pty, and `OnboardingModal.startSession`'s existing catch
+   block (already used for the permission-denied case) surfaces it inline.
+   Every other `pty_spawn` caller (bookmarks, ghost-tab restore, fan-out,
+   split, isolate-loop) omits the flag and keeps the exact silent fallback
+   they need. New tests: `pty::tests::resolve_spawn_cwd_*` (4 cases).
+2. **Fixed — root cause confirmed.** Not a bookmark-launch bug at all: the
+   Idea Board panel (`SidePanel.tsx`) calls `read_board(tab.cwd)` for
+   whichever tab is active, and `board.rs`'s `read_board_blocking`, on a
+   missing `board.md`, seeded the example board via
+   `write_board_blocking` → `create_dir_all(project_key/.logic-loop)`.
+   `create_dir_all` creates *every* missing ancestor, `project_key` itself
+   included — so opening a bookmark tab whose folder didn't exist yet
+   silently `mkdir`'d it as a side effect of the sidebar loading, and the
+   *second* click's `pty_spawn` then correctly found a real directory and
+   landed in it. Fix: both `read_board_blocking` and `write_board_blocking`
+   now refuse (empty string / `Err`, fail open per invariant #2) unless
+   `project_key` already exists as a directory — no path-creation beyond
+   the `.logic-loop` subdirectory of an already-real project folder. New
+   tests: `board::tests::read_missing_project_dir_returns_empty_and_creates_nothing`,
+   `write_to_missing_project_dir_errors_and_creates_nothing`.
+3. **Fixed — root cause confirmed, and it wasn't a wiring bug.** The
+   `startingRef.current` guard *is* airtight against two overlapping
+   `startSession()` calls — but it only blocks calls while one is in
+   flight. Local Tauri IPC (`canonicalizeCwd` → `projectKeyOf` → `ptySpawn`)
+   resolves fast enough that a real second click, landing after the first
+   click's promise has already settled, sails right through as a
+   legitimate new launch — no double-wiring, no second `OnboardingModal`
+   instance, just a mutex with no memory once it's released. Fix: the
+   Start button now also disables once `launched !== null` (a session was
+   actually started for the current pick), and `pickFolder` clears
+   `launched` on a fresh pick so starting a different folder still works.
+   A rapid double-click can now produce at most one tab regardless of how
+   fast the IPC round-trip is.
+4. **Not a code bug — confirmed via isolated repro, no code change.**
+   Reproduced the exact mechanism in a scratch SQLite db (WAL mode, same as
+   this app's `tauri-plugin-sql` default): `chmod 444` the main `.db` file
+   and attempt a write — SQLite, as a side effect of that failed write,
+   also leaves the `-wal` sidecar at `444` (confirmed via `stat` before/
+   after). Restoring *only* `context-terminal.db` back to `644` (as the
+   original repro did) leaves `context-terminal.db-wal` stuck at `444`,
+   which independently blocks every subsequent write — including from a
+   brand-new process, since this is on-disk state, not anything an app
+   restart could clear. No orphan process was involved (`ps aux` showed a
+   single running instance at repro time). The fix is to the *retest
+   procedure*, not the app: restoring access to a WAL-mode db means
+   `chmod` the `.db`, `.db-wal`, **and** `.db-shm` together. Re-verify note
+   added to §9 below.
 
 1. **Silent cwd fallback still reachable at spawn time.** Plan 033 added
    `validate_project_dir` (`pty.rs:131`) for the Setup picker's *pick-time*

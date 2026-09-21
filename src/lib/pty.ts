@@ -29,9 +29,21 @@ export function ptySpawn(
   tabId?: string,
   resumeSession?: string,
   launchCmd?: string,
-  resumeAgent?: string
+  resumeAgent?: string,
+  // Setup's launch flow only — see `resolve_spawn_cwd` in pty.rs. Every
+  // other caller omits this and keeps the silent cwd fallback.
+  strictCwd?: boolean
 ): Promise<number> {
-  return invoke<number>("pty_spawn", { cwd, cols, rows, tabId, resumeSession, launchCmd, resumeAgent });
+  return invoke<number>("pty_spawn", {
+    cwd,
+    cols,
+    rows,
+    tabId,
+    resumeSession,
+    launchCmd,
+    resumeAgent,
+    strictCwd,
+  });
 }
 
 /** Resolve `~` and case/symlinks to the real path. */

@@ -69,6 +69,9 @@ export function OnboardingModal({
       const resolved = await validateProjectDir(picked);
       setFolder(resolved);
       setFolderError(null);
+      // A fresh pick means "start again is fine" — otherwise Start stays
+      // disabled forever after the first successful launch (see below).
+      setLaunched(null);
     } catch (error) {
       // Keep whatever folder was already selected — an invalid pick must
       // surface as an error, never silently fall back to home (plan033).
@@ -240,7 +243,15 @@ export function OnboardingModal({
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                disabled={!folder || starting}
+                // `starting` alone only blocks overlapping clicks *during*
+                // the in-flight launch — a genuine second click landing
+                // after `onLaunch` has already resolved (local IPC is fast
+                // enough that this reliably beats human double-click
+                // timing) sailed right through it and spawned a second tab
+                // (docs/TESTING.md Finding 3). `launched` stays set once a
+                // session has actually started, so Start won't fire again
+                // for the same pick — pickFolder clears it on a new pick.
+                disabled={!folder || starting || launched !== null}
                 onClick={() => void startSession()}
                 className="h-8 rounded-md bg-sky-500 px-3 text-xs font-semibold text-sky-950 hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400"
               >

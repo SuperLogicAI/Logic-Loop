@@ -542,14 +542,29 @@ open. Append-only. Referenced from CLAUDE.md.
   pre-merge `a87bafd` candidate, and `docs/TESTING.md`'s v4 section header
   still says "Not yet gated." Both are stale against `main` as of this
   writing and need reconciling, not treated as historical fact.
-  **Manual test status:** unrun. `docs/TESTING.md` v4 §11 (first-run launch
-  flow) and the §9 re-verify (bookmark save/delete failure handling) are
-  the live matrix; §9's first pass (pre-merge build) already found one real
-  bug live — a mistyped bookmark folder path silently created a new file/dir
-  at the typo'd name instead of erroring — status marked `[fail]`, not yet
-  confirmed fixed on the merged build. Rebuild the release app before
-  testing (the "Before you start" v3 rule still applies — a stale
-  `/Applications` copy has burned a prior test round).
+  **Manual test status:** live matrix run 2026-09-21 against the merged
+  build (`docs/TESTING.md` v4 §11 + §9 re-verify) found four real bugs —
+  filed the same day as `docs/TESTING.md`'s "Findings" section, repro steps
+  included. All four have a code fix on `fix/dsh-path-and-readability` as
+  of this writing: (1) `pty_spawn` gained a `strict_cwd` flag, set only by
+  Setup's launch flow, that errors instead of silently substituting cwd
+  when a picked folder is deleted before Start; (2) `board.rs`'s
+  `read_board`/`write_board` no longer `create_dir_all` a project folder
+  that doesn't exist yet — root cause was the Idea Board panel auto-seeding
+  on tab-open, not the bookmark launch path itself; (3) Setup's Start
+  button now also disables once a session has actually launched for the
+  current pick, closing the timing window where a fast IPC round-trip let a
+  genuine second click past the in-flight guard; (4) confirmed NOT a code
+  bug via an isolated WAL-mode repro — the original chmod-restore test
+  procedure only restored the main `.db` file, leaving `.db-wal` stuck
+  read-only independent of any app restart. `tsc --noEmit`, `cargo clippy
+  --all-targets -D warnings`, `cargo test --lib` (136/136, 9 new), `npm run
+  check`, and `npm run golden` all clean; new regression tests cover (1)
+  and (2) directly.
+  **Still open:** the actual live re-run of v4 §11 + §9 against a rebuilt
+  release app — that part needs a human at the keyboard, not claimed here.
+  Do not mark this Plan fully accepted until that pass comes back clean and
+  the `[FAIL]` markers in `docs/TESTING.md` are flipped by whoever ran it.
   **Overlaps Phase 31's deferred clean-profile matrix (§43):** both exercise
   the same underlying tether-based Connected transition and the
   invalid-folder/no-silent-home-fallback path — §43's close-out disposition
