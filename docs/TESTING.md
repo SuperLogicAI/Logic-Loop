@@ -1,55 +1,155 @@
 # Manual Test Script — v2
 
-## v4 — Plan 033 first-useful-session re-verify (2026-09-19)
+## v4 — Plan 033 first-useful-session re-verify (2026-09-19, live pass closed 2026-09-21)
 
-**Not yet gated**: `PLAN.md` still shows "Awaiting maintainer authorization"
-for Plan 033, but Steps 1–3 are already coded on the working tree
-(uncommitted as of this writing) — onboarding launch flow, folder-cwd
-validation, bookmark save-await contract. Flag that mismatch separately;
-it doesn't block testing what's actually on disk tonight. Rebuild the
-release app first (see "Before you start" below) — v3's rule still applies.
+**Doc-gate note (unresolved, tracked in docs/PROGRESS.md):** `PLAN.md` still
+shows "Awaiting maintainer authorization" for Plan 033 even though it merged
+via PR #44 (`2f4fb1f`, 2026-09-20). Doesn't block this matrix.
+
+Live matrix run 2026-09-21 on a clean Mac mini profile (`jvandershark`),
+release build. Full pass/fail below; four real findings surfaced, filed
+under "Findings" at the end of this section — **none fixed yet, by design**:
+fixes are deferred to a single follow-up PR per maintainer instruction.
 
 ### 11. First-run launch flow (new — Setup modal "Start a session")
 
-- [ ] Open Setup (fresh profile, or reopen via whatever control re-shows
-      it). A "Start a session" block appears above the adapter list with
-      "Choose folder…", an agent/shell picker, and a "Start session" button.
-- [ ] Click "Choose folder…" then Cancel in the native dialog — no folder
-      is set, no error shown, nothing else changes.
-- [ ] Pick a valid project folder — its path appears next to the button, no
-      error text.
-- [ ] Manually point at (or otherwise trigger validation against) a
-      nonexistent/invalid path — an inline error appears; the picker does
-      NOT silently fall back to your home directory.
-- [ ] With a valid folder selected, "Start session" is enabled; with none
-      selected, it's disabled (greyed out).
-- [ ] Pick "Plain shell", click Start — a new tab opens in that folder, no
-      agent command runs. Status line reads "Shell session started — check
-      the new tab."
-- [ ] Pick an installed agent (e.g. Claude), click Start — button shows
-      "Starting…" briefly, then status reads "Waiting for first event…",
-      flipping to "Connected — first event received." once the agent does
-      something in the new tab.
-- [ ] Double-click "Start session" quickly — exactly one tab is created,
-      not two.
-- [ ] Force a spawn failure if you can (e.g. pick a folder you don't have
-      permission to enter) — an inline error appears next to the button and
-      your folder/agent selection is preserved (not reset to blank).
+- [x] Setup opens, "Start a session" block present above the adapter list.
+- [x] Cancel on the folder dialog is a no-op.
+- [x] Valid folder pick shows path, no error.
+- [FAIL] Folder deleted after pick, before Start — expected an inline error;
+      got a normal shell session in a silently-substituted cwd instead. See
+      **Finding 1**.
+      *Fixed 2026-09-21, needs live re-verify — see Findings below.*
+- [x] Start disabled with no folder, enabled once one's picked.
+- [x] Plain shell launch — new tab, no agent run, correct status line.
+- [~] Agent launch waiting→connected — works, but gated on the agent's own
+      trust-folder prompt (Claude's "Yes, I trust this folder") rather than
+      just first activity, and reopening Setup resets the launch section to
+      blank with no memory of the tab just started. Not a contract
+      violation, just a rough edge — not filed as a numbered finding.
+- [FAIL] Double-click "Start session" — got two tabs, not one, reproduced
+      twice. See **Finding 3**.
+      *Fixed 2026-09-21, needs live re-verify — see Findings below.*
+- [x] Spawn failure (permission-denied folder) — inline `Permission denied
+      (os error 13)`, no tab spawned, selection preserved.
 
 ### 9 (re-verify). Bookmarks — save/delete failure handling
 
-- [x] Add a bookmark normally — while the save is in flight, the Save
-      button reads "Saving…" and is disabled (can't double-submit).
-- [fail] Force a save failure if possible (e.g. kill DB access, or a
-      duplicate-name constraint if one exists) — the form stays open with
-      your typed values intact, an inline red error appears, and the button
-      changes to "Retry". Fields must NOT be silently discarded.
-      "this one if you mistype the filepath it still comes up as a new usable terminal window apparently it creates the file I opened up a bookmark for supra and intentionally mis-spelled supbra and now theres a new 'supbra' file. 
-- [ ] Retry after fixing the issue — form closes normally on success.
-- [ ] Delete a bookmark and force that to fail — a "Delete failed: …" chip
-      appears in the bookmarks bar (bookmark itself is not silently removed
-      from the UI if the delete didn't actually persist... confirm actual
-      list state matches DB state).
+- [x] Save-in-flight "Saving…" disabled state confirmed (happens fast).
+- [FAIL] Bookmark pointing at a deleted/typo'd folder: first click gives a
+      bare fallback shell (same root cause as Finding 1); second click on
+      the *same* bookmark creates the folder and launches into it. See
+      **Finding 2** — distinct from Finding 1, needs its own investigation
+      (something is materializing a directory on retry).
+      *Fixed 2026-09-21 (root cause: Idea Board auto-seed, not the bookmark
+      path itself), needs live re-verify — see Findings below.*
+- [FAIL] Forced save failure (DB chmod 444): correct error + Retry state
+      shown. But after `chmod 644` restore **and a full app quit/relaunch**,
+      Retry still failed with the same `readonly database` error. See
+      **Finding 4** — worse than the original test anticipated.
+      *Root-caused 2026-09-21: not a code bug — `chmod 644` only restored
+      the main `.db` file, and SQLite had independently left
+      `context-terminal.db-wal` at `444` as a side effect of the earlier
+      failed write. Re-verify by chmod'ing `.db`, `.db-wal`, and `.db-shm`
+      together; see Findings below.*
+- [FAIL] Same for delete: `Delete failed: … readonly database`, persisted
+      through the same restore-and-restart sequence. Same root cause as
+      Finding 4.
+      *Same note as above — re-verify with all three files restored.*
+
+### Findings — filed 2026-09-21, code fixes landed same day (batched one PR)
+
+**Status: code-fixed, awaiting live re-verify.** All four have a fix on the
+working tree, `tsc --noEmit`/`cargo clippy -D warnings`/`cargo test --lib`/
+`npm run check`/`npm run golden` all clean, and each Rust fix has a new
+regression test. None of that substitutes for the actual GUI re-verify of
+§9/§11 below — the `[FAIL]` markers there stay as-is until that's rerun
+against a rebuilt release app (see "Before you start"). Per-finding notes:
+
+1. **Fixed.** `pty_spawn` (`pty.rs`) now takes a `strict_cwd` flag, threaded
+   through only from Setup's launch flow (`App.tsx`'s `onLaunch` →
+   `openTab({ ..., strictCwd: true })` → `ptySpawn(...)`). When set and the
+   resolved cwd isn't a directory, `pty_spawn` now returns
+   `Err("\"<path>\" is not a folder Logic Loop can open")` *before*
+   allocating a pty, and `OnboardingModal.startSession`'s existing catch
+   block (already used for the permission-denied case) surfaces it inline.
+   Every other `pty_spawn` caller (bookmarks, ghost-tab restore, fan-out,
+   split, isolate-loop) omits the flag and keeps the exact silent fallback
+   they need. New tests: `pty::tests::resolve_spawn_cwd_*` (4 cases).
+2. **Fixed — root cause confirmed.** Not a bookmark-launch bug at all: the
+   Idea Board panel (`SidePanel.tsx`) calls `read_board(tab.cwd)` for
+   whichever tab is active, and `board.rs`'s `read_board_blocking`, on a
+   missing `board.md`, seeded the example board via
+   `write_board_blocking` → `create_dir_all(project_key/.logic-loop)`.
+   `create_dir_all` creates *every* missing ancestor, `project_key` itself
+   included — so opening a bookmark tab whose folder didn't exist yet
+   silently `mkdir`'d it as a side effect of the sidebar loading, and the
+   *second* click's `pty_spawn` then correctly found a real directory and
+   landed in it. Fix: both `read_board_blocking` and `write_board_blocking`
+   now refuse (empty string / `Err`, fail open per invariant #2) unless
+   `project_key` already exists as a directory — no path-creation beyond
+   the `.logic-loop` subdirectory of an already-real project folder. New
+   tests: `board::tests::read_missing_project_dir_returns_empty_and_creates_nothing`,
+   `write_to_missing_project_dir_errors_and_creates_nothing`.
+3. **Fixed — root cause confirmed, and it wasn't a wiring bug.** The
+   `startingRef.current` guard *is* airtight against two overlapping
+   `startSession()` calls — but it only blocks calls while one is in
+   flight. Local Tauri IPC (`canonicalizeCwd` → `projectKeyOf` → `ptySpawn`)
+   resolves fast enough that a real second click, landing after the first
+   click's promise has already settled, sails right through as a
+   legitimate new launch — no double-wiring, no second `OnboardingModal`
+   instance, just a mutex with no memory once it's released. Fix: the
+   Start button now also disables once `launched !== null` (a session was
+   actually started for the current pick), and `pickFolder` clears
+   `launched` on a fresh pick so starting a different folder still works.
+   A rapid double-click can now produce at most one tab regardless of how
+   fast the IPC round-trip is.
+4. **Not a code bug — confirmed via isolated repro, no code change.**
+   Reproduced the exact mechanism in a scratch SQLite db (WAL mode, same as
+   this app's `tauri-plugin-sql` default): `chmod 444` the main `.db` file
+   and attempt a write — SQLite, as a side effect of that failed write,
+   also leaves the `-wal` sidecar at `444` (confirmed via `stat` before/
+   after). Restoring *only* `context-terminal.db` back to `644` (as the
+   original repro did) leaves `context-terminal.db-wal` stuck at `444`,
+   which independently blocks every subsequent write — including from a
+   brand-new process, since this is on-disk state, not anything an app
+   restart could clear. No orphan process was involved (`ps aux` showed a
+   single running instance at repro time). The fix is to the *retest
+   procedure*, not the app: restoring access to a WAL-mode db means
+   `chmod` the `.db`, `.db-wal`, **and** `.db-shm` together. Re-verify note
+   added to §9 below.
+
+1. **Silent cwd fallback still reachable at spawn time.** Plan 033 added
+   `validate_project_dir` (`pty.rs:131`) for the Setup picker's *pick-time*
+   check only. `pty_spawn`'s own cwd handling (`pty.rs:~300`,
+   `cwd.filter(|c| ... is_dir())`) still silently omits `.cwd()` and spawns
+   normally if the path is gone by launch time — the exact gap PLAN.md's own
+   drift note flagged as unresolved against candidate `a87bafd`. Repro: pick
+   a valid folder, `rm -rf` it, click Start.
+2. **Bookmark retry-creates-folder.** A bookmark pointing at a missing path:
+   1st click → silent fallback shell (Finding 1's mechanism). 2nd click on
+   the same bookmark → folder gets created and the session launches into it.
+   Root cause not yet identified — needs tracing through whatever bookmark
+   launch does differently on a retry vs. Finding 1's direct Setup path.
+3. **Double-click on "Start session" spawns two tabs.** `startSession`'s
+   `startingRef.current` guard (`OnboardingModal.tsx`) should block this
+   synchronously but didn't in the built app — reproduced twice on a real
+   double-click, not a one-off.
+4. **DB stays wedged read-only after chmod restore + full app restart.**
+   `context-terminal.db` forced to 444, then restored to 644 — the app,
+   even after a complete quit and relaunch, kept returning
+   `SQLITE_READONLY (code 8)` on write. Suspect an orphaned process holding
+   the old read-only fd (matches this repo's known orphan-process landmine
+   pattern) or a `-wal`/`-shm` sidecar file that didn't get the permission
+   restore. Needs `ps aux | grep context-terminal` and a check for WAL/SHM
+   files before assuming it's a code bug vs. a test-environment artifact.
+
+**Already fixed, shipped separately:** the Setup adapter list only showed a
+clickable "Install" link for Pi/DeepSeek (the only two adapters with an
+`installUrl` in `onboarding.ts`) — Claude/Codex/OpenCode/Antigravity showed
+a dead-end disabled "Enable" instead. Fixed same day by adding `installUrl`
+to all four remaining adapters (`onboarding.ts`). Not filed as a numbered
+finding since it's already resolved on `main`.
 
 ## v3 — Bug-fix sprint re-verify (2026-07-11)
 
@@ -2997,6 +3097,16 @@ though both CLIs were installed at `/opt/homebrew/bin`; both Enable buttons
 were disabled. After `36a67b3` added Homebrew-prefix detection and the app was
 rebuilt/relaunched, both adapters were detected and their hooks enabled
 successfully. This is a GUI-PATH check, not evidence from shell PATH alone.
+
+**Re-confirmed 2026-09-21** (independent of the Plan 026 close-out above,
+run after CLAUDE.md's stale phase-status line was mistakenly read as "Step 5
+still pending"): items 1-5 of the live GUI matrix (toggle, tab spawn, tool
+detail/error rendering, disable-while-running, two-tabs-one-cwd) re-passed.
+Item 6, foreign-file collision, re-run explicitly: planted a non-marker
+`~/.pi/agent/extensions/logic-loop.ts`, clicked Enable — "Setup failed" /
+`logic-loop.ts already exists and isn't a Logic Loop file — leaving it
+untouched` surfaced correctly, file left untouched on disk, re-enable after
+removing the foreign file worked cleanly. No regression since 2026-09-18.
 
 ## 57. Optional Safe Router model traffic view (Plan 022)
 

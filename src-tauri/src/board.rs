@@ -31,12 +31,25 @@ Cards move to `done` instead of being deleted, so history stays in the file.\n";
 /// read error → empty board (fail open, invariant #2 — a board panel must
 /// never affect terminals); an existing-but-empty file (user cleared it) is
 /// returned as-is, never reseeded.
+///
+/// `project_key` itself must already exist as a directory before seeding —
+/// `write_board_blocking`'s `create_dir_all` will happily create a whole
+/// missing path, `project_key` included. Without this guard, opening the
+/// board panel for a tab whose cwd doesn't exist (Finding 2,
+/// docs/TESTING.md: a bookmark pointing at a deleted/typo'd folder) silently
+/// materializes that folder on disk as a side effect of seeding
+/// `<project_key>/.logic-loop/board.md` — which is exactly what made a
+/// bookmark's *second* click "work": the first click's board read had
+/// already created the folder the first click's own spawn couldn't find.
 #[tauri::command]
 pub async fn read_board(project_key: String) -> String {
     crate::pty::spawn_blocking_or_default(move || read_board_blocking(project_key)).await
 }
 
 fn read_board_blocking(project_key: String) -> String {
+    if !std::path::Path::new(&project_key).is_dir() {
+        return String::new();
+    }
     match std::fs::read_to_string(board_path(&project_key)) {
         Ok(content) => content,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -53,6 +66,9 @@ pub async fn write_board(project_key: String, content: String) -> Result<(), Str
 }
 
 fn write_board_blocking(project_key: String, content: String) -> Result<(), String> {
+    if !std::path::Path::new(&project_key).is_dir() {
+        return Err(format!("\"{project_key}\" is not a folder Logic Loop can open"));
+    }
     let path = board_path(&project_key);
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
@@ -73,6 +89,7 @@ mod tests {
     fn read_missing_file_seeds_example_board_once() {
         let dir = std::env::temp_dir().join(format!("logic-loop-board-test-seed-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
         let key = dir.to_string_lossy().into_owned();
 
         let seeded = read_board_blocking(key.clone());
@@ -87,9 +104,35 @@ mod tests {
     }
 
     #[test]
+    fn read_missing_project_dir_returns_empty_and_creates_nothing() {
+        // Regression test for Finding 2 (docs/TESTING.md, 2026-09-21): a tab
+        // opened against a folder that doesn't exist (bookmark pointing at a
+        // deleted/typo'd path) must not have its Idea Board panel silently
+        // `mkdir` that folder into existence as a side effect of seeding the
+        // example board.
+        let dir = std::env::temp_dir().join(format!("logic-loop-board-test-missing-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let key = dir.to_string_lossy().into_owned();
+
+        assert_eq!(read_board_blocking(key), "");
+        assert!(!dir.exists(), "a nonexistent project dir must not be created by reading its board");
+    }
+
+    #[test]
+    fn write_to_missing_project_dir_errors_and_creates_nothing() {
+        let dir = std::env::temp_dir().join(format!("logic-loop-board-test-write-missing-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let key = dir.to_string_lossy().into_owned();
+
+        assert!(write_board_blocking(key, "x".into()).is_err());
+        assert!(!dir.exists(), "a nonexistent project dir must not be created by writing its board");
+    }
+
+    #[test]
     fn write_creates_dot_logic_loop_dir_and_round_trips() {
         let dir = std::env::temp_dir().join(format!("logic-loop-board-test-rw-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
         let key = dir.to_string_lossy().into_owned();
 
         write_board_blocking(key.clone(), "## card one\nstatus: idea\n".into()).unwrap();
