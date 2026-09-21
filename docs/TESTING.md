@@ -16,10 +16,9 @@ fixes are deferred to a single follow-up PR per maintainer instruction.
 - [x] Setup opens, "Start a session" block present above the adapter list.
 - [x] Cancel on the folder dialog is a no-op.
 - [x] Valid folder pick shows path, no error.
-- [FAIL] Folder deleted after pick, before Start — expected an inline error;
-      got a normal shell session in a silently-substituted cwd instead. See
-      **Finding 1**.
-      *Fixed 2026-09-21, needs live re-verify — see Findings below.*
+- [x] Folder deleted after pick, before Start — was **Finding 1**, fixed and
+      live-reverified 2026-09-21: inline error `"<path>" is not a folder
+      Logic Loop can open`, no tab spawned.
 - [x] Start disabled with no folder, enabled once one's picked.
 - [x] Plain shell launch — new tab, no agent run, correct status line.
 - [~] Agent launch waiting→connected — works, but gated on the agent's own
@@ -27,22 +26,18 @@ fixes are deferred to a single follow-up PR per maintainer instruction.
       just first activity, and reopening Setup resets the launch section to
       blank with no memory of the tab just started. Not a contract
       violation, just a rough edge — not filed as a numbered finding.
-- [FAIL] Double-click "Start session" — got two tabs, not one, reproduced
-      twice. See **Finding 3**.
-      *Fixed 2026-09-21, needs live re-verify — see Findings below.*
+- [x] Double-click "Start session" — was **Finding 3**, fixed and
+      live-reverified 2026-09-21: exactly one tab.
 - [x] Spawn failure (permission-denied folder) — inline `Permission denied
       (os error 13)`, no tab spawned, selection preserved.
 
 ### 9 (re-verify). Bookmarks — save/delete failure handling
 
 - [x] Save-in-flight "Saving…" disabled state confirmed (happens fast).
-- [FAIL] Bookmark pointing at a deleted/typo'd folder: first click gives a
-      bare fallback shell (same root cause as Finding 1); second click on
-      the *same* bookmark creates the folder and launches into it. See
-      **Finding 2** — distinct from Finding 1, needs its own investigation
-      (something is materializing a directory on retry).
-      *Fixed 2026-09-21 (root cause: Idea Board auto-seed, not the bookmark
-      path itself), needs live re-verify — see Findings below.*
+- [x] Bookmark pointing at a deleted/typo'd folder — was **Finding 2**,
+      fixed and live-reverified 2026-09-21: no more silent folder creation
+      on retry (root cause was the Idea Board panel's auto-seed, not the
+      bookmark launch path).
 - [FAIL] Forced save failure (DB chmod 444): correct error + Retry state
       shown. But after `chmod 644` restore **and a full app quit/relaunch**,
       Retry still failed with the same `readonly database` error. See
@@ -59,12 +54,13 @@ fixes are deferred to a single follow-up PR per maintainer instruction.
 
 ### Findings — filed 2026-09-21, code fixes landed same day (batched one PR)
 
-**Status: code-fixed, awaiting live re-verify.** All four have a fix on the
-working tree, `tsc --noEmit`/`cargo clippy -D warnings`/`cargo test --lib`/
-`npm run check`/`npm run golden` all clean, and each Rust fix has a new
-regression test. None of that substitutes for the actual GUI re-verify of
-§9/§11 below — the `[FAIL]` markers there stay as-is until that's rerun
-against a rebuilt release app (see "Before you start"). Per-finding notes:
+**Status: closed.** Findings 1-3 fixed and live-reverified 2026-09-21
+against the rebuilt release app (PR #48) — `[FAIL]` markers in §9/§11 above
+are now `[x]`. Finding 4 confirmed a test-procedure artifact, not a code
+bug — see its note below; no code change, so nothing to re-verify.
+`tsc --noEmit`/`cargo clippy -D warnings`/`cargo test --lib`/`npm run
+check`/`npm run golden` all clean, and each Rust fix (1, 2) has a new
+regression test. Per-finding notes:
 
 1. **Fixed.** `pty_spawn` (`pty.rs`) now takes a `strict_cwd` flag, threaded
    through only from Setup's launch flow (`App.tsx`'s `onLaunch` →
