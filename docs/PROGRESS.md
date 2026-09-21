@@ -561,10 +561,11 @@ open. Append-only. Referenced from CLAUDE.md.
   --all-targets -D warnings`, `cargo test --lib` (136/136, 9 new), `npm run
   check`, and `npm run golden` all clean; new regression tests cover (1)
   and (2) directly.
-  **Still open:** the actual live re-run of v4 §11 + §9 against a rebuilt
-  release app — that part needs a human at the keyboard, not claimed here.
-  Do not mark this Plan fully accepted until that pass comes back clean and
-  the `[FAIL]` markers in `docs/TESTING.md` are flipped by whoever ran it.
+  **PLAN 033 ACCEPTED 2026-09-21.** Live re-run of v4 §11 + §9 against a
+  rebuilt release app came back clean; `[FAIL]` markers in `docs/TESTING.md`
+  flipped to `[x]`. `PLAN.md`'s gate section and `docs/TESTING.md`'s v4
+  header updated to match — the doc-gate lag this entry originally flagged
+  is reconciled.
   **Overlaps Phase 31's deferred clean-profile matrix (§43):** both exercise
   the same underlying tether-based Connected transition and the
   invalid-folder/no-silent-home-fallback path — §43's close-out disposition

@@ -2,24 +2,22 @@
 
 ## v4 — Plan 033 first-useful-session re-verify (2026-09-19, live pass closed 2026-09-21)
 
-**Doc-gate note (unresolved, tracked in docs/PROGRESS.md):** `PLAN.md` still
-shows "Awaiting maintainer authorization" for Plan 033 even though it merged
-via PR #44 (`2f4fb1f`, 2026-09-20). Doesn't block this matrix.
+**Plan 033 ACCEPTED 2026-09-21.** Doc-gate reconciled — see docs/PROGRESS.md
+and PLAN.md.
 
 Live matrix run 2026-09-21 on a clean Mac mini profile (`jvandershark`),
-release build. Full pass/fail below; four real findings surfaced, filed
-under "Findings" at the end of this section — **none fixed yet, by design**:
-fixes are deferred to a single follow-up PR per maintainer instruction.
+release build. Four real findings surfaced, filed under "Findings" at the
+end of this section, fixed same day on `fix/dsh-path-and-readability`
+(merged PR #48), and re-verified live against a rebuilt release app —
+all pass.
 
 ### 11. First-run launch flow (new — Setup modal "Start a session")
 
 - [x] Setup opens, "Start a session" block present above the adapter list.
 - [x] Cancel on the folder dialog is a no-op.
 - [x] Valid folder pick shows path, no error.
-- [FAIL] Folder deleted after pick, before Start — expected an inline error;
-      got a normal shell session in a silently-substituted cwd instead. See
-      **Finding 1**.
-      *Fixed 2026-09-21, needs live re-verify — see Findings below.*
+- [x] Folder deleted after pick, before Start — now inline error, no tab
+      spawned. Finding 1 fix re-verified live 2026-09-21.
 - [x] Start disabled with no folder, enabled once one's picked.
 - [x] Plain shell launch — new tab, no agent run, correct status line.
 - [~] Agent launch waiting→connected — works, but gated on the agent's own
@@ -27,44 +25,29 @@ fixes are deferred to a single follow-up PR per maintainer instruction.
       just first activity, and reopening Setup resets the launch section to
       blank with no memory of the tab just started. Not a contract
       violation, just a rough edge — not filed as a numbered finding.
-- [FAIL] Double-click "Start session" — got two tabs, not one, reproduced
-      twice. See **Finding 3**.
-      *Fixed 2026-09-21, needs live re-verify — see Findings below.*
+- [x] Double-click "Start session" — one tab only, reproduced attempts no
+      longer double-spawn. Finding 3 fix re-verified live 2026-09-21.
 - [x] Spawn failure (permission-denied folder) — inline `Permission denied
       (os error 13)`, no tab spawned, selection preserved.
 
 ### 9 (re-verify). Bookmarks — save/delete failure handling
 
 - [x] Save-in-flight "Saving…" disabled state confirmed (happens fast).
-- [FAIL] Bookmark pointing at a deleted/typo'd folder: first click gives a
-      bare fallback shell (same root cause as Finding 1); second click on
-      the *same* bookmark creates the folder and launches into it. See
-      **Finding 2** — distinct from Finding 1, needs its own investigation
-      (something is materializing a directory on retry).
-      *Fixed 2026-09-21 (root cause: Idea Board auto-seed, not the bookmark
-      path itself), needs live re-verify — see Findings below.*
-- [FAIL] Forced save failure (DB chmod 444): correct error + Retry state
-      shown. But after `chmod 644` restore **and a full app quit/relaunch**,
-      Retry still failed with the same `readonly database` error. See
-      **Finding 4** — worse than the original test anticipated.
-      *Root-caused 2026-09-21: not a code bug — `chmod 644` only restored
-      the main `.db` file, and SQLite had independently left
-      `context-terminal.db-wal` at `444` as a side effect of the earlier
-      failed write. Re-verify by chmod'ing `.db`, `.db-wal`, and `.db-shm`
-      together; see Findings below.*
-- [FAIL] Same for delete: `Delete failed: … readonly database`, persisted
-      through the same restore-and-restart sequence. Same root cause as
-      Finding 4.
-      *Same note as above — re-verify with all three files restored.*
+- [x] Bookmark pointing at a deleted/typo'd folder: no longer materializes
+      the directory on retry; consistent inline error both clicks.
+      Finding 2 fix re-verified live 2026-09-21.
+- [x] Forced save failure (DB chmod 444): correct error + Retry state shown.
+      Restoring `.db`, `.db-wal`, and `.db-shm` together (corrected
+      procedure — see Finding 4) then Retry succeeds.
+- [x] Same for delete: Retry succeeds once all three files are restored.
 
 ### Findings — filed 2026-09-21, code fixes landed same day (batched one PR)
 
-**Status: code-fixed, awaiting live re-verify.** All four have a fix on the
-working tree, `tsc --noEmit`/`cargo clippy -D warnings`/`cargo test --lib`/
-`npm run check`/`npm run golden` all clean, and each Rust fix has a new
-regression test. None of that substitutes for the actual GUI re-verify of
-§9/§11 below — the `[FAIL]` markers there stay as-is until that's rerun
-against a rebuilt release app (see "Before you start"). Per-finding notes:
+**Status: code-fixed and live re-verified 2026-09-21.** All four have a fix
+on the working tree, `tsc --noEmit`/`cargo clippy -D warnings`/`cargo test
+--lib`/`npm run check`/`npm run golden` all clean, each Rust fix has a new
+regression test, and the GUI re-verify of §9/§11 above against a rebuilt
+release app confirms all four in practice. Per-finding notes:
 
 1. **Fixed.** `pty_spawn` (`pty.rs`) now takes a `strict_cwd` flag, threaded
    through only from Setup's launch flow (`App.tsx`'s `onLaunch` →

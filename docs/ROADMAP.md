@@ -36,8 +36,8 @@ table below until one gets its own PLAN.md.
 | Idea Board "Now" set (IDEAS.md item F) | BUILT (Phase 20) — manual test docs/TESTING.md §30 pending | a few hours | Phase 18 |
 | Landing-note manual/auto capture (IDEAS.md item E) | DONE (Phase 28) — automated + live matrices pass | ~1d | — |
 | Split-pane tabs | BUILT (Phase 32) — automated gates clean; live matrix pending | ~1d | — |
-| Decision Tracker reconciliation and truthful answer state | Phase 33 implementation in progress; live matrix pending (date this row was written: unknown) | ~1–2d | Phase 32 accepted |
-| First useful session (`plans/033-first-useful-session.md`) | **Numbering note added 2026-09-19, not resolved:** also filed as Plan/Phase 033, dated 2026-09-19 — different scope than the "Decision Tracker reconciliation" row above sharing the same number. Two candidates currently share "033." Reconcile numbering when picking either up; neither row edited/removed pending that. | 2–3d | Plan 032 accepted |
+| Decision Tracker reconciliation and truthful answer state | DONE (Phase 33, 2026-09-11) — row was stale, superseded by later history: manual 11-step matrix passed same day, automatic reconciliation itself was descoped 2026-09-12 (Plan 016, `docs/PROGRESS.md`) after a freeze investigation found it wasn't load-bearing (manual dismiss + Answer-Now + notifications cover it). See `docs/PROGRESS.md` Phase 33/33.1 entries for the full trail. | ~1–2d | Phase 32 accepted |
+| First useful session (`plans/033-first-useful-session.md`) | DONE — Plan 033 ACCEPTED 2026-09-21, merged via PR #44 (#48 for the four live-test findings). **Numbering note resolved 2026-09-21:** the "033" collision above was never a real conflict — `plans/NNN-*.md` (Plan numbers) and `docs/PROGRESS.md` "Phase N" (Phase numbers) are two independent sequences that happen to reuse the same digits; Phase 33 (decision reconciliation, 2026-09-11) and Plan 033 (this row, 2026-09-19/21) are unrelated items that never actually shared a slot. | 2–3d | Plan 032 accepted |
 | Remaining adapters (Gemini, Copilot) | v2 | — | Codex adapter |
 
 Phase boundaries still hard stops. Phase 5 items enter PLAN.md for approval
