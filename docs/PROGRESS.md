@@ -523,4 +523,51 @@ open. Append-only. Referenced from CLAUDE.md.
   changes). Live-confirmed by the maintainer: auto-clear and the × button
   both "tested and working."
 
+- Plan 033 (first useful session — launch flow + bookmark save integrity):
+  MERGED 2026-09-20 (PR #44, `2f4fb1f`), but never logged here at the time —
+  backfilled 2026-09-21. Steps 1–3 of `plans/033-first-useful-session.md`:
+  (1) Setup modal gained an explicit "Start a session" launch state machine —
+  folder pick with a real nonexistent/invalid-path check (no silent fallback
+  to the home directory), agent-or-shell pick, waiting → connected driven
+  only by a real tethered structured event, never PTY output or elapsed
+  time; `pty.rs`'s `pty_spawn` now errors on an invalid cwd instead of
+  silently dropping it (the exact gap `PLAN.md`'s drift check had flagged
+  against `a87bafd`). (2) `BookmarksBar` add/update/delete now await actual
+  persistence before clearing the form — a failed save keeps the typed
+  values and shows an inline error with Retry instead of silently
+  discarding the edit.
+  **Doc/process gap, not a code gap:** this shipped without the literal
+  `PLAN 033 ACCEPTED` gate this file's process calls for — `PLAN.md` still
+  reads "Awaiting maintainer authorization. Not yet started" against the
+  pre-merge `a87bafd` candidate, and `docs/TESTING.md`'s v4 section header
+  still says "Not yet gated." Both are stale against `main` as of this
+  writing and need reconciling, not treated as historical fact.
+  **Manual test status:** unrun. `docs/TESTING.md` v4 §11 (first-run launch
+  flow) and the §9 re-verify (bookmark save/delete failure handling) are
+  the live matrix; §9's first pass (pre-merge build) already found one real
+  bug live — a mistyped bookmark folder path silently created a new file/dir
+  at the typo'd name instead of erroring — status marked `[fail]`, not yet
+  confirmed fixed on the merged build. Rebuild the release app before
+  testing (the "Before you start" v3 rule still applies — a stale
+  `/Applications` copy has burned a prior test round).
+  **Overlaps Phase 31's deferred clean-profile matrix (§43):** both exercise
+  the same underlying tether-based Connected transition and the
+  invalid-folder/no-silent-home-fallback path — §43's close-out disposition
+  (2026-09-13) already flagged Phase 31 as pending supersession by this
+  project-or-home launch-flow work (tracked there under the "Plan 021"
+  precedent name; Plan 033's own scope note says Plan 021 was background
+  only, not a separate work order — Plan 033 is what actually shipped it).
+  Running v4 §11 covers §43's core agent-detection → Enable → Waiting →
+  Connected flow and its invalid-folder case, so a v4 pass should fold that
+  part of §43 in rather than re-running it separately. It does **not** cover
+  §43's other, distinct checks: Escape/×/backdrop/Skip-for-now persisting
+  `onboarding_version` 2, invalid adapter-config JSON → Setup failed → Retry,
+  header-toggle/checklist state sync, the notification-permission opt-in
+  click path, or keyboard-nav-during-streaming isolation — none of those are
+  in Plan 033's scope (`PLAN.md`'s Out list excludes hook-installer and full
+  onboarding-redesign work). After a v4 pass, close §43 as **SUPERSEDED by
+  Plan 033** for the overlapping items only, and keep the remaining five
+  checks as their own small residual matrix rather than carrying all ten
+  forward as open debt.
+
 Update this file as phases are accepted.
