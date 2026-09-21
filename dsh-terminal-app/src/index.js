@@ -29,6 +29,10 @@ import { assertNever } from "@deepseek-ai/dsh-util-values";
  * those happen inside `agent.whenIdle()`'s black box.
  */
 
+// ponytail: plain ANSI SGR, no chalk/kleur dep for two constants.
+const USER_BLUE = "\x1b[38;2;77;106;254m"; // #4d6afe
+const RESET = "\x1b[0m";
+
 const name = "terminal-runner";
 const inject = ["agentDefaultModel", "agents", "sessions"];
 // schemastery fields are optional by default; only .required() opts in,
@@ -324,16 +328,20 @@ async function run(ctx, config, io) {
   io.stdin.once("end", () => stdinEnded.abort());
 
   io.stdout.write(`dsh terminal — session ${sessionId}\n`);
-  io.stdout.write("Type a message and press Enter. /exit quits.\n");
+  io.stdout.write("Type a message and press Enter. /exit quits.\n\n");
 
   try {
     for (;;) {
       let line;
       try {
-        line = await rl.question("> ", { signal: stdinEnded.signal });
+        // Color left open (no reset) after "> " so the terminal echoes the
+        // user's own typed characters in the same blue — belt-and-suspenders
+        // distinction from the assistant's default-colored reply below.
+        line = await rl.question(`${USER_BLUE}> `, { signal: stdinEnded.signal });
       } catch {
         break; // stdin closed (EOF / Ctrl-D) or aborted above
       }
+      io.stdout.write(`${RESET}\n`);
       const text = line.trim();
       if (text === "/exit") break;
       if (text === "") continue;
@@ -347,6 +355,7 @@ async function run(ctx, config, io) {
       reportTurnError(agent.session, firstSeq, io.stderr);
       postEvent({ hook_event_name: "Stop", session_id: sessionId, cwd: process.cwd() });
       await sessions.flush(agent.session);
+      io.stdout.write("\n");
     }
   } finally {
     stopObserving();
