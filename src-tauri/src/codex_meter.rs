@@ -10,7 +10,7 @@ const MAX_BUCKETS: usize = 8;
 // npm's Codex launcher uses `#!/usr/bin/env node`. Finding Codex by an
 // absolute path is insufficient when Finder supplies only the system PATH.
 // Preserve the user's runtime preference, then add installation directories.
-fn subprocess_path(binary: &std::path::Path, inherited: Option<&std::ffi::OsStr>) -> Result<std::ffi::OsString, String> {
+pub(crate) fn subprocess_path(binary: &std::path::Path, inherited: Option<&std::ffi::OsStr>) -> Result<std::ffi::OsString, String> {
     let mut dirs: Vec<_> = inherited.map(std::env::split_paths).into_iter().flatten().collect();
     let parent = binary.parent().filter(|p| !p.as_os_str().is_empty());
     for dir in parent.into_iter().chain([

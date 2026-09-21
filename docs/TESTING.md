@@ -3038,11 +3038,24 @@ view, and a latest row with `usage_state=complete`; no model call was made.
 
 ## 58. Hook pill command labels hotfix
 
-- [ ] In a live app with Antigravity and DeepSeek Harness detected, confirm the
+- [x] In a live app with Antigravity and DeepSeek Harness detected, confirm the
       header hook pills read `agy on/off` and `dsh on/off` respectively, while
       their tooltips retain the full agent names.
-- [ ] Toggle each pill and confirm setup/disable behavior and the Setup modal
-      remain unchanged. This visual/manual check is pending.
+      *2026-09-20: agy passed clean.*
+- [x] Toggle each pill and confirm setup/disable behavior and the Setup modal
+      remain unchanged.
+      *2026-09-20: agy passed clean. dsh toggle surfaced two real bugs, both
+      fixed same session: `deepseek.rs::run()` and the `npm install` spawn
+      (deepseek.rs:289) both used bare `Command::new(...)`, inheriting only
+      the GUI-launched app's system PATH (no Homebrew/nvm dirs) — same root
+      cause as the Codex meter GUI PATH bug (Plan 029). Both now go through
+      `codex_meter::subprocess_path` (made `pub(crate)`), reusing the existing
+      fix instead of duplicating it. Retested clean after rebuild.
+      Also shipped while here: `dsh-terminal-app/src/index.js` was rendering
+      user/assistant turns with no visual separation — added a blank line
+      between turns and colored the `> ` prompt (and the terminal's echo of
+      what you type after it) `#4d6afe` so the two are distinguishable.
+      Confirmed live.*
 
 ## 59. Phase 35 — Agent identity icons in terminal tabs
 
@@ -3120,14 +3133,25 @@ process tree, one clean `zsh -l` child):
       `lmstudio: decision extraction failed — check the ⚙ Sidebar LM
       backend/model settings` in the UI. Fails fast and fails open; no hang,
       no crash, no dangling extraction.
-- [ ] LM Studio down, **stalled-response** case (the actual 120s
+- [x] LM Studio down, **stalled-response** case (the actual 120s
       `timeout_global` code path — a refused connection above fails near-
       instantly at the OS level and never reaches it): point Sidebar LM's
       URL at a listener that accepts but never responds (e.g. `nc -l
       <port>`), ask a question, confirm the call fails at ~120s rather than
       hanging indefinitely. Covered by
       `extractor::tests::lmstudio_request_respects_a_total_deadline`
-      (unit, fake TCP listener) but not yet observed live end-to-end.
+      (unit, fake TCP listener) and now observed live end-to-end.
+      *2026-09-21: confirmed live. `nc -l 1234` was on the same port LM
+      Studio's own background server already occupies by default — the
+      first attempt silently hit the real LM Studio server instead of the
+      stub (extraction pipeline worked fine, just not the intended test).
+      After confirming LM Studio's server was stopped and `nc` actually held
+      the port (`lsof -iTCP:1234`), the request landed at `nc` — full
+      request headers/body, no response sent — and the app surfaced
+      `lmstudio: decision extraction failed — check the ⚙ Sidebar LM
+      backend/model settings` after the stall. Also confirmed live: the
+      Decision extractor backend setting is global (one `extractor_config`
+      row, no per-project scoping), so any tab's turns can trigger it.*
 - [x] Recovery: confirmed 2026-09-19 — after switching Sidebar LM's backend
       back to `claude` post-test, a later extraction succeeded (which also
       cleared the stale `extraction_failed` banner, see addendum below).
@@ -3262,10 +3286,11 @@ lines broke its literal-substring ordering check; reverted to single-line),
       sandbox denial when that existing test tried to create `~/.git`, followed
       by a poisoned-lock failure in another test. The latter passes when the
       home-mutating test is excluded; no home-directory permissions were expanded.
-- [ ] Fully quit the old app when running sessions can be closed safely. Open
+- [x] Fully quit the old app when running sessions can be closed safely. Open
       the newly built app from Finder (or replace the installed copy first),
       start/re-enter a Codex session, and expand its sidebar. Confirm model and
-      account windows load and refresh. This end-to-end GUI check remains pending.
+      account windows load and refresh.
+      *2026-09-21: confirmed live, in ongoing daily use.*
 
 ### Rust test-isolation follow-up — 2026-09-19
 

@@ -177,9 +177,17 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
 
 fn run(invocation: &[String], args: &[&str]) -> Result<(), String> {
     let (program, leading) = invocation.split_first().ok_or_else(|| "no dsh invocation".to_string())?;
+    // GUI-launched apps inherit only the system PATH, missing the
+    // Homebrew/nvm dirs `npx` normally lives in (see codex_meter's
+    // `subprocess_path`, built for the identical Codex GUI PATH bug).
+    let path = crate::codex_meter::subprocess_path(
+        std::path::Path::new(program),
+        std::env::var_os("PATH").as_deref(),
+    )?;
     let output = std::process::Command::new(program)
         .args(leading)
         .args(args)
+        .env("PATH", path)
         .output()
         .map_err(|e| format!("failed to run {program}: {e}"))?;
     if !output.status.success() {
@@ -278,9 +286,14 @@ pub fn deepseek_hooks_setup(app: AppHandle) -> Result<(), String> {
     //    these packages declare `peerDependencies` among themselves that
     //    npm's default resolver tries to auto-satisfy from the registry,
     //    conflicting on shared transitive versions (plans/028).
+    let npm_path = crate::codex_meter::subprocess_path(
+        std::path::Path::new("npm"),
+        std::env::var_os("PATH").as_deref(),
+    )?;
     let output = std::process::Command::new("npm")
         .args(["install", "--legacy-peer-deps"])
         .current_dir(&plugin_dir)
+        .env("PATH", npm_path)
         .output()
         .map_err(|e| format!("failed to run npm install: {e}"))?;
     if !output.status.success() {
