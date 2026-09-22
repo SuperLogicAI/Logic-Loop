@@ -346,13 +346,31 @@ pub fn opencode_hooks_remove() -> Result<(), String> {
     write_settings(&settings)
 }
 
+// settings.json's plugin entry is a stable file *path* — toggling the
+// adapter off/on isn't what changes when this file's own version bumps (a
+// Rust code change alone does), so a version bump alone leaves a stale
+// file on disk with no user-visible signal. Confirmed live 2026-09-22: a
+// v2 file survived through the v3/v4 TranscriptLine and question-tool
+// work with `opencode_hooks_status` still reporting `true`, silently
+// skipping all of Plan 038 Part 1's extraction paths. Same class of fix
+// as Agy 004's `antigravity_hooks_status` tightening.
+fn status_from(settings: &serde_json::Value, plugin_file_content: Option<&str>) -> bool {
+    let registered = settings
+        .get("plugin")
+        .and_then(|v| v.as_array())
+        .is_some_and(|arr| arr.iter().any(is_ours));
+    if !registered {
+        return false;
+    }
+    let current_marker = format!("version {OPENCODE_PLUGIN_VERSION}");
+    plugin_file_content.is_some_and(|c| c.contains(&current_marker))
+}
+
 #[tauri::command]
 pub fn opencode_hooks_status() -> Result<bool, String> {
     let settings = read_settings()?;
-    Ok(settings
-        .get("plugin")
-        .and_then(|v| v.as_array())
-        .is_some_and(|arr| arr.iter().any(is_ours)))
+    let content = fs::read_to_string(plugin_path()).ok();
+    Ok(status_from(&settings, content.as_deref()))
 }
 
 #[cfg(test)]
@@ -397,6 +415,33 @@ mod tests {
         let mut s = original.clone();
         strip_ours(&mut s);
         assert_eq!(s, original);
+    }
+
+    #[test]
+    fn status_is_false_when_registered_but_the_deployed_file_is_stale_or_missing() {
+        let mut s = serde_json::json!({});
+        apply_setup(&mut s).unwrap();
+
+        assert!(
+            status_from(&s, Some(&format!("...version {OPENCODE_PLUGIN_VERSION}..."))),
+            "registered + current-version file must report enabled"
+        );
+        assert!(
+            !status_from(&s, Some("...version 2...")),
+            "registered but a stale (v2) file on disk must not report enabled"
+        );
+        assert!(
+            !status_from(&s, None),
+            "registered but no deployed file at all must not report enabled"
+        );
+    }
+
+    #[test]
+    fn status_is_false_when_never_registered_even_with_a_current_file() {
+        // Guards against a future refactor accidentally dropping the
+        // registration check once the version check exists.
+        let s = serde_json::json!({});
+        assert!(!status_from(&s, Some(&format!("version {OPENCODE_PLUGIN_VERSION}"))));
     }
 
     #[test]

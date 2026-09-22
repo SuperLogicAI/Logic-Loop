@@ -320,6 +320,43 @@ was never captured live. If a future pass wants the answer paired
 in the same card rather than relying on the user's next message to close
 it, that needs its own live capture first, not a guess.
 
+#### Both the v4 re-test *and* a plain-text retry still failed live — real root cause: stale deployed file, not code (2026-09-22)
+
+The maintainer re-ran Test 1 after v4 shipped and still saw no Decisions
+card — including on a fresh instance with a **plain-text** question
+("Ask me verbatim in text: Do you want A or B?"), a path v3 alone should
+already have handled. That ruled out a v4-specific bug and pointed at
+something both versions would share.
+
+Checked `~/.context-terminal/logic-loop-opencode-plugin.mjs` directly:
+`version 2` — the file deployed **before any of today's work** (v1's
+lifecycle-only shape, no `TranscriptLine` logic whatsoever). Root cause:
+`opencode_hooks_setup` (which regenerates this file) only runs from the
+Setup toggle's manual enable action — never automatically, and never on
+app start for an adapter already marked enabled. `opencode_hooks_status`
+only checked that *a* plugin entry existed in `opencode.json` (a stable
+file *path*), never that the file's *content* matched the current
+`OPENCODE_PLUGIN_VERSION` — so a stale file reports "enabled" forever,
+identical to the exact bug class Agy 004 already fixed for Antigravity
+(`antigravity_hooks_status` tightened to require the current contract).
+OpenCode simply never got the same treatment.
+
+Fixed: extracted a pure `status_from(settings, plugin_file_content)`
+(mirrors `antigravity.rs`'s `hooks_status_from` shape), returning `false`
+whenever the deployed file's content doesn't contain the current
+`"version {OPENCODE_PLUGIN_VERSION}"` marker — a missing or stale file no
+longer reports enabled. `opencode_hooks_status`'s Tauri command is now a
+thin `read_settings` + `fs::read_to_string(plugin_path())` wrapper around
+it. Two new Rust tests: stale/missing-file-reports-false, and
+never-registered-still-reports-false-even-with-a-current-file (guards the
+registration check surviving a future refactor).
+
+**Unblocking action for anyone hitting this**: toggle OpenCode off then
+on again in Setup — that's what actually calls `opencode_hooks_setup` and
+rewrites the file. After this fix ships, a stale file will show as
+"not enabled" instead of silently doing nothing, so this won't need a
+manual disk check to diagnose again.
+
 ### Step 3: Frontend wiring and manual verification
 
 Decisions panel picks up OpenCode-sourced open questions the same way it

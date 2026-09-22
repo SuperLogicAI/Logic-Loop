@@ -3449,6 +3449,38 @@ question). Answer-side content is explicitly not captured — the
 - **Still pending**: the original Test 1 (real reply, real open question,
       Decisions panel) re-run against this fix, live, in the app.
 
+### §62 second follow-up — real root cause was a stale deployed file, not code (2026-09-22)
+
+The v4 re-test (and a plain-text retry that should have worked under v3
+alone) both still failed live. Checked
+`~/.context-terminal/logic-loop-opencode-plugin.mjs` directly:
+**`version 2`** — deployed before any of today's work, no
+`TranscriptLine` logic at all. `opencode_hooks_setup` only runs from the
+Setup toggle's manual enable action, never automatically; and
+`opencode_hooks_status` only checked that *a* plugin entry existed in
+`opencode.json` (a stable path), never that the file's *content* matched
+`OPENCODE_PLUGIN_VERSION` — so a stale file reported "enabled" forever.
+Same bug class Agy 004 already fixed for Antigravity
+(`antigravity_hooks_status`'s tightening); OpenCode never got it.
+
+Fixed: `opencode_hooks_status` now reports `false` for a registered-but-
+stale-or-missing deployed file, via a new pure `status_from(settings,
+plugin_file_content)` (mirrors `antigravity.rs`'s `hooks_status_from`).
+**Unblocking action**: toggle OpenCode off then on in Setup to force a
+fresh write — that's the only thing that actually regenerates the file,
+before or after this fix.
+
+- [x] `cd src-tauri && cargo test --lib` — 136/136, including
+      `status_is_false_when_registered_but_the_deployed_file_is_stale_or_missing`
+      and `status_is_false_when_never_registered_even_with_a_current_file`.
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings` clean.
+- [x] `npx tsc --noEmit` clean.
+- [x] `npm run check` — 35/35.
+- [x] `npm run build` clean.
+- [x] `git diff --check` clean.
+- **Still pending**: toggle OpenCode off/on in the real app to redeploy
+      the current file, then re-run Test 1 for real.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*
