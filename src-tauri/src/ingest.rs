@@ -103,6 +103,30 @@ pub fn start(app: AppHandle) {
                 continue;
             }
             if let Ok(mut payload) = serde_json::from_str::<serde_json::Value>(&body) {
+                // OpenCode has no transcript file to tail (Plan 038 Part 1):
+                // its in-process plugin assembles a completed message's text
+                // itself and posts it here as a synthetic transcript line,
+                // reusing the exact `ingest://transcript` path the real file
+                // tailer already feeds into `decisions.onTranscript` — no
+                // separate extraction pipeline needed. Scoped to the
+                // `opencode` agent marker specifically, not any payload
+                // claiming this event name, matching `is_transcript_path`'s
+                // own per-agent scoping discipline one block below.
+                if payload.get("hook_event_name").and_then(|v| v.as_str()) == Some("TranscriptLine")
+                    && recognized_agent(agent_header.as_deref()) == Some("opencode")
+                {
+                    if let (Some(sid), Some(line)) = (
+                        payload.get("session_id").and_then(|v| v.as_str()),
+                        payload.get("line").and_then(|v| v.as_str()),
+                    ) {
+                        let _ = app.emit(
+                            "ingest://transcript",
+                            serde_json::json!({ "session_id": sid, "line": line }),
+                        );
+                    }
+                    let _ = request.respond(tiny_http::Response::empty(204));
+                    continue;
+                }
                 if let Some(path) = payload.get("transcript_path").and_then(|v| v.as_str()) {
                     if is_transcript_path(path, recognized_agent(agent_header.as_deref())) {
                         if let Some(sid) = payload.get("session_id").and_then(|v| v.as_str()) {

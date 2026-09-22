@@ -3343,6 +3343,75 @@ lines broke its literal-substring ordering check; reverted to single-line),
       own after a later successful extraction, and the × button dismisses a
       warning immediately on click. Reported "tested and working."
 
+## 62. OpenCode decision/blocker extraction (Plan 038 Part 1)
+
+**Status: BUILT, live in-app manual pass pending.** See
+`plans/038-opencode-adapter-expansion.md` Part 1.
+
+OpenCode has no transcript file to tail. Its in-process plugin now buffers
+`message.part.updated` text parts by part id and, once a message
+completes, posts one synthetic `TranscriptLine` event
+(`{type: "opencode_message", role, text}` as the `line`) through the
+existing `/event` endpoint — scoped to the `opencode` agent marker,
+re-emitted by `ingest.rs` as `ingest://transcript`, the exact shape the
+real Claude/Codex file tailer already produces. `decisions.ts` gained one
+more envelope case for it. Every downstream consumer (turn-pairing,
+schema-drift tripwire, raw event log) is unchanged.
+
+Two real bugs found and fixed before this shipped, neither assumed —
+both caught by testing against real captured data:
+
+1. **`message.updated`'s `info` object carries no text at all** — only
+   `message.part.updated` does, and a part's *last* update (not first)
+   carries the full accumulated text, with `reasoning`-type parts
+   (internal chain-of-thought, never shown to the user) excluded by
+   design.
+2. **User messages never receive a `time.completed` timestamp**, ever —
+   confirmed across two full turns of live capture. The first
+   implementation gated every flush on that field, which would have
+   silently dropped the user-prompt half of every pair forever (activity
+   tracking would look fine; extraction would just quietly never fire).
+   Fixed: only assistant messages gate on `time.completed` (they stream);
+   user messages flush as soon as their single-shot text part has
+   arrived.
+
+Live verification (2026-09-21, opencode 1.18.32):
+
+- [x] A hand-simulation of the buffering/flush rule, replayed against a
+      real captured 2-turn event trace (`opencode run`, a real tool call,
+      a real resume) — correct role-paired text for both turns, no
+      duplicates, no `reasoning` leakage, before any Rust code was written
+      against the assumption.
+- [x] The **actual compiled `plugin_source()` output** (dumped via a
+      throwaway test, not shipped), loaded into a real `opencode run`
+      process behind a `fetch` wrapper that intercepted only the local
+      ingest URL and passed every other call through unchanged (a first,
+      blanket `fetch` override hung the whole process — it also broke
+      OpenCode's own provider API calls). No real network call left the
+      process. The real plugin posted exactly one correct `TranscriptLine`
+      per role, correctly paired, with pre-existing lifecycle events
+      unaffected.
+- **Pending**: the real Logic Loop app, a live OpenCode tab, an actual
+  open question in a real reply, confirming it surfaces in the Decisions
+  panel. Update `README.md`'s OpenCode extraction column (`—` → `✅`) only
+  after that passes.
+
+Automated evidence (2026-09-21):
+
+- [x] `cd src-tauri && cargo test --lib` — 133/133, including
+      `plugin_source_buffers_text_parts_and_posts_transcript_lines`.
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings` clean.
+- [x] `npx tsc --noEmit` clean.
+- [x] `npm run check` — 35/35 configured scripts, including new
+      `opencode-transcript:check` (role/text round-trip, empty-text and
+      unrecognized-role rejection, malformed-input handling, schema-drift
+      tripwire recognizing the new envelope — mirrors
+      `codex-transcript-check.ts`'s coverage shape).
+- [x] `npm run build` clean.
+- [x] `git diff --check` clean.
+- `npm run golden` not run — no extraction-prompt changed, confirmed by
+      reading `extractor.rs`/`decisions.ts` before this step, not assumed.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*

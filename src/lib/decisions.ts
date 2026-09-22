@@ -46,7 +46,10 @@ export function transcriptEnvelopeType(line: string): "recognized" | "unrecogniz
   } catch {
     return "unparseable";
   }
-  return obj.type === "assistant" || obj.type === "user" || obj.type === "response_item"
+  return obj.type === "assistant" ||
+    obj.type === "user" ||
+    obj.type === "response_item" ||
+    obj.type === "opencode_message"
     ? "recognized"
     : "unrecognized";
 }
@@ -75,6 +78,8 @@ export function textFromTranscriptLine(line: string): { role: string; text: stri
   try {
     const obj = JSON.parse(line) as {
       type?: string;
+      role?: string;
+      text?: unknown;
       message?: { content?: unknown };
       payload?: {
         type?: string;
@@ -82,6 +87,16 @@ export function textFromTranscriptLine(line: string): { role: string; text: stri
         content?: unknown;
       };
     };
+    // OpenCode's plugin (Plan 038 Part 1) has no transcript file — it posts
+    // this envelope directly, already reduced to plain text in-process (see
+    // opencode.rs's `flushMessage`). No block/content-array parsing needed
+    // here, unlike Claude/Codex below: there's only ever one shape to read.
+    if (obj.type === "opencode_message") {
+      if (obj.role !== "user" && obj.role !== "assistant") return null;
+      const text = typeof obj.text === "string" ? obj.text : "";
+      if (!text.trim()) return null;
+      return { role: obj.role, text };
+    }
     if (obj.type === "assistant" || obj.type === "user") {
       const content = obj.message?.content;
       let text = "";

@@ -198,6 +198,78 @@ if this is purely a new turn-text source feeding the existing prompt
 unchanged, golden should not need a rerun (confirm this assumption before
 running it speculatively).
 
+#### Step 2 — actual wire shape shipped, and a second bug the earlier
+findings missed (2026-09-21)
+
+Rather than a new payload field on an existing lifecycle event, this
+reuses `onTranscript`'s existing turn-pairing machinery wholesale: the
+plugin posts a synthetic **`TranscriptLine`** event
+(`{hook_event_name: "TranscriptLine", session_id, cwd, line}`) where
+`line` is a JSON string shaped `{type: "opencode_message", role, text}`.
+`ingest.rs`'s `/event` handler recognizes this event name **scoped to the
+`opencode` agent marker only** and re-emits it as `ingest://transcript`
+(`{session_id, line}`) — the exact shape the real Claude/Codex file tailer
+already emits — instead of `ingest://hook`. `decisions.ts`'s
+`textFromTranscriptLine` gained one more envelope case
+(`type === "opencode_message"`) that reads `{role, text}` directly, no
+block/content-array parsing needed (OpenCode's plugin already reduced it
+to plain text in-process). Every downstream consumer —
+`onTranscript`'s assistant-buffer/pairing state machine, the schema-drift
+tripwire, `repo.addEvent`'s raw log — works completely unchanged. This
+was the simplest option on the ladder that actually held: reusing the
+existing pipe beat inventing a parallel one.
+
+**A second real bug found by testing against the Step 1 capture, not
+assumed**: the first implementation gated *every* flush on
+`info.time.completed`. Replaying the actual captured event trace through
+that logic (a Python re-simulation of the exact buffering rule, run
+against the real `spike.log`) produced only the two **assistant** replies
+— the user's own prompt text never flushed at all, because **user
+messages never receive a `time.completed` timestamp in this OpenCode
+version, ever** (confirmed across both turns of the live capture — every
+`role: "user"` `message.updated` entry has a `time.created` and no
+`time.completed` key, full stop). Since `onTranscript`'s pairing/
+extraction trigger fires specifically on receiving a **user** line,
+shipping the original logic would have silently never extracted anything
+for OpenCode — activity would look correct, extraction would just quietly
+never run. Fixed: only assistant messages gate on `info.time.completed`
+(they genuinely stream and need it); user messages flush as soon as their
+(non-streamed, single-shot) text part has arrived, using the fact that
+`message.updated` reliably re-fires for the same message id afterward —
+an early firing before the part lands is a harmless no-op on an empty
+buffer, not a wrong flush.
+
+**Verified twice, both against real data, not assumption:**
+1. A hand-simulation in Python of the corrected rule, replayed against the
+   real captured `spike.log` trace — produced the exact real prompt/reply
+   pairs for both turns, correctly ordered, no duplicates, no `reasoning`
+   leakage.
+2. The **actual compiled `plugin_source()` output** (dumped via a
+   throwaway test, removed afterward — not shipped), loaded into a real
+   `opencode run` process with a `fetch`-interception wrapper that passed
+   through every URL except the local ingest endpoint (a blanket global
+   override was tried first and hung the whole process — it also broke
+   OpenCode's own provider API calls; scoping the intercept to the
+   ingest URL fixed it) — no real network call ever left the process.
+   The real plugin posted exactly one correct `TranscriptLine` per role,
+   correctly paired, alongside the unaffected pre-existing lifecycle
+   events.
+
+Golden not rerun — no extraction prompt changed, only a new upstream
+source feeding the same `buildPrompt`/`parseExtraction` path Claude/Codex
+already use, confirmed by reading `extractor.rs` and `decisions.ts`
+before this step, not assumed.
+
+New automated coverage: `src-tauri/src/opencode.rs`'s
+`plugin_source_buffers_text_parts_and_posts_transcript_lines` (string-
+presence, matching this file's existing test style) and
+`scripts/opencode-transcript-check.ts` (new, registered in `package.json`
+as `opencode-transcript:check` and in the aggregate `check` script) —
+role/text round-trip, empty-text rejection, unrecognized-role rejection,
+malformed-input rejection, and the schema-drift tripwire recognizing the
+new envelope type, mirroring `codex-transcript-check.ts`'s coverage shape
+for the Codex envelope.
+
 ### Step 3: Frontend wiring and manual verification
 
 Decisions panel picks up OpenCode-sourced open questions the same way it
