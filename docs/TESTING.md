@@ -2,24 +2,22 @@
 
 ## v4 — Plan 033 first-useful-session re-verify (2026-09-19, live pass closed 2026-09-21)
 
-**Doc-gate note (unresolved, tracked in docs/PROGRESS.md):** `PLAN.md` still
-shows "Awaiting maintainer authorization" for Plan 033 even though it merged
-via PR #44 (`2f4fb1f`, 2026-09-20). Doesn't block this matrix.
+**Plan 033 ACCEPTED 2026-09-21.** Doc-gate reconciled — see docs/PROGRESS.md
+and PLAN.md.
 
 Live matrix run 2026-09-21 on a clean Mac mini profile (`jvandershark`),
-release build. Full pass/fail below; four real findings surfaced, filed
-under "Findings" at the end of this section — **none fixed yet, by design**:
-fixes are deferred to a single follow-up PR per maintainer instruction.
+release build. Four real findings surfaced, filed under "Findings" at the
+end of this section, fixed same day on `fix/dsh-path-and-readability`
+(merged PR #48), and re-verified live against a rebuilt release app —
+all pass.
 
 ### 11. First-run launch flow (new — Setup modal "Start a session")
 
 - [x] Setup opens, "Start a session" block present above the adapter list.
 - [x] Cancel on the folder dialog is a no-op.
 - [x] Valid folder pick shows path, no error.
-- [FAIL] Folder deleted after pick, before Start — expected an inline error;
-      got a normal shell session in a silently-substituted cwd instead. See
-      **Finding 1**.
-      *Fixed 2026-09-21, needs live re-verify — see Findings below.*
+- [x] Folder deleted after pick, before Start — now inline error, no tab
+      spawned. Finding 1 fix re-verified live 2026-09-21.
 - [x] Start disabled with no folder, enabled once one's picked.
 - [x] Plain shell launch — new tab, no agent run, correct status line.
 - [~] Agent launch waiting→connected — works, but gated on the agent's own
@@ -27,44 +25,29 @@ fixes are deferred to a single follow-up PR per maintainer instruction.
       just first activity, and reopening Setup resets the launch section to
       blank with no memory of the tab just started. Not a contract
       violation, just a rough edge — not filed as a numbered finding.
-- [FAIL] Double-click "Start session" — got two tabs, not one, reproduced
-      twice. See **Finding 3**.
-      *Fixed 2026-09-21, needs live re-verify — see Findings below.*
+- [x] Double-click "Start session" — one tab only, reproduced attempts no
+      longer double-spawn. Finding 3 fix re-verified live 2026-09-21.
 - [x] Spawn failure (permission-denied folder) — inline `Permission denied
       (os error 13)`, no tab spawned, selection preserved.
 
 ### 9 (re-verify). Bookmarks — save/delete failure handling
 
 - [x] Save-in-flight "Saving…" disabled state confirmed (happens fast).
-- [FAIL] Bookmark pointing at a deleted/typo'd folder: first click gives a
-      bare fallback shell (same root cause as Finding 1); second click on
-      the *same* bookmark creates the folder and launches into it. See
-      **Finding 2** — distinct from Finding 1, needs its own investigation
-      (something is materializing a directory on retry).
-      *Fixed 2026-09-21 (root cause: Idea Board auto-seed, not the bookmark
-      path itself), needs live re-verify — see Findings below.*
-- [FAIL] Forced save failure (DB chmod 444): correct error + Retry state
-      shown. But after `chmod 644` restore **and a full app quit/relaunch**,
-      Retry still failed with the same `readonly database` error. See
-      **Finding 4** — worse than the original test anticipated.
-      *Root-caused 2026-09-21: not a code bug — `chmod 644` only restored
-      the main `.db` file, and SQLite had independently left
-      `context-terminal.db-wal` at `444` as a side effect of the earlier
-      failed write. Re-verify by chmod'ing `.db`, `.db-wal`, and `.db-shm`
-      together; see Findings below.*
-- [FAIL] Same for delete: `Delete failed: … readonly database`, persisted
-      through the same restore-and-restart sequence. Same root cause as
-      Finding 4.
-      *Same note as above — re-verify with all three files restored.*
+- [x] Bookmark pointing at a deleted/typo'd folder: no longer materializes
+      the directory on retry; consistent inline error both clicks.
+      Finding 2 fix re-verified live 2026-09-21.
+- [x] Forced save failure (DB chmod 444): correct error + Retry state shown.
+      Restoring `.db`, `.db-wal`, and `.db-shm` together (corrected
+      procedure — see Finding 4) then Retry succeeds.
+- [x] Same for delete: Retry succeeds once all three files are restored.
 
 ### Findings — filed 2026-09-21, code fixes landed same day (batched one PR)
 
-**Status: code-fixed, awaiting live re-verify.** All four have a fix on the
-working tree, `tsc --noEmit`/`cargo clippy -D warnings`/`cargo test --lib`/
-`npm run check`/`npm run golden` all clean, and each Rust fix has a new
-regression test. None of that substitutes for the actual GUI re-verify of
-§9/§11 below — the `[FAIL]` markers there stay as-is until that's rerun
-against a rebuilt release app (see "Before you start"). Per-finding notes:
+**Status: code-fixed and live re-verified 2026-09-21.** All four have a fix
+on the working tree, `tsc --noEmit`/`cargo clippy -D warnings`/`cargo test
+--lib`/`npm run check`/`npm run golden` all clean, each Rust fix has a new
+regression test, and the GUI re-verify of §9/§11 above against a rebuilt
+release app confirms all four in practice. Per-finding notes:
 
 1. **Fixed.** `pty_spawn` (`pty.rs`) now takes a `strict_cwd` flag, threaded
    through only from Setup's launch flow (`App.tsx`'s `onLaunch` →
@@ -3225,6 +3208,59 @@ Automated evidence (2026-09-19):
 - [x] `git diff --check`
 - `npm run golden` not run — no extraction-prompt changes.
 
+## 61. OpenCode session re-entry, resume-selector wiring (Plan 038 Part 2)
+
+**Status: PASS — live-verified 2026-09-22.** The maintainer ran real
+quit/relaunch/Re-enter against a live OpenCode tab in the built app
+**twice back to back**: both times a ghost tab appeared and Re-enter
+correctly resumed the TUI into the same prior conversation.
+`capabilities.reentry` flipped to `true`; `README.md`'s OpenCode row
+updated. Maintainer authorized
+2026-09-21 ("Plan 038 APPROVED"), same in-session precedent as Plans
+016/017/025/026/029/032. See `plans/038-opencode-adapter-expansion.md`
+Part 2.
+
+Live spike (2026-09-21, opencode 1.18.32, non-interactive `opencode run`,
+not the TUI): `opencode run -s <session_id> "..."` in a fresh process
+correctly recalled the prior turn's actual prompt, confirming resume
+works. `session.created` did **not** re-fire on resume (once, total,
+across both processes) — contradicts the upstream doc excerpt this plan
+cited ("runs for both fresh creation and resume replay"); live behavior
+trusted per this repo's standing doc-vs-live rule.
+
+Found while implementing: `App.tsx`'s `SessionStart` binding-write path
+was already fully agent-agnostic (`transcript_path` optional), and
+OpenCode's plugin has emitted a `SessionStart`-mapped event since Phase 8
+— so a ghost tab with "Re-enter" was very likely already appearing for
+OpenCode sessions, but clicking it ran `resume_command`'s Claude fallback
+and silently launched the wrong CLI. Fixed by adding an `"opencode"` arm
+(`opencode -s <sid>; exec <shell> -l`, per `opencode --help`'s top-level
+`-s`/`--session` flag) to `pty.rs`'s closed-set resume selector.
+
+**Live pass, 2026-09-22**: quit/relaunch of the real built app with a live
+OpenCode tab produced a ghost tab both times; Re-enter correctly resumed
+the TUI into the same prior conversation both times, confirming the
+non-interactive spike's finding held for the actual interactive path the
+app launches. One real caveat surfaced during the same testing session
+(not specific to re-entry, but discovered alongside it): a ghost tab that
+re-enters a process which started **before** a plugin version bump keeps
+running that process's already-loaded (stale) plugin code — Node doesn't
+hot-reload an in-memory module, so only a genuinely new process picks up
+a newly-deployed plugin file. Not a bug; document as an expected limit —
+after toggling OpenCode off/on (or any future version bump), use a fresh
+tab rather than a re-entered one to confirm the new behavior.
+
+Automated evidence (2026-09-21):
+
+- [x] `cd src-tauri && cargo test --lib` — 132/132, including new
+      `resume_command_selects_opencode_syntax`.
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings` clean.
+- [x] `npx tsc --noEmit` clean.
+- [x] `npm run check` — all configured scripts pass (exit 0).
+- [x] `npm run build` clean.
+- [x] `git diff --check` clean.
+- `npm run golden` not run — no extraction-prompt changes.
+
 Manual live pass — automated-gate pass above was run without GUI/built-app
 access; the manual steps below were run live by the maintainer afterward,
 on the `npm run tauri dev` build (`target/debug/app`, pid confirmed via
@@ -3313,6 +3349,169 @@ lines broke its literal-substring ordering check; reverted to single-line),
 - [x] Live, confirmed 2026-09-19 by the maintainer: the banner clears on its
       own after a later successful extraction, and the × button dismisses a
       warning immediately on click. Reported "tested and working."
+
+## 62. OpenCode decision/blocker extraction (Plan 038 Part 1)
+
+**Status: PASS — live-verified 2026-09-22.** A real plain-text question
+("Do you want A or B?") produced a real Decisions card in the built app —
+confirmed by screenshot: "NEXT" and "DECISIONS (1)" both showing "Do you
+want A or B?" with answer/context/delegate actions, plus several earlier
+dismissed cards from the same testing session ("Do you like green or
+orange?", etc.), confirming this isn't a one-off. `capabilities.decisions`
+flipped to `true`; `README.md`'s OpenCode row updated. Also fixed:
+`decisionsEmptyReason`'s empty-state message was still hardcoded to
+`agent !== "codex"` — would have kept claiming "not available for this
+agent" for OpenCode forever even with extraction genuinely working.
+Extracted a shared `adapterSupportsDecisions()` in `onboarding.ts`
+(single source of truth off the `ADAPTERS` capabilities record) so this
+can't drift out of sync with a future adapter's flip again.
+
+The two earlier attempts that showed no card (a question-tool call before
+v4 shipped, then a plain-text retry on an already-running re-entered tab)
+are both explained, not unresolved — see the v4 and stale-file
+sub-entries below, and Part 2's §61 caveat about re-entered tabs running
+stale in-memory plugin code.
+
+See `plans/038-opencode-adapter-expansion.md` Part 1.
+
+OpenCode has no transcript file to tail. Its in-process plugin now buffers
+`message.part.updated` text parts by part id and, once a message
+completes, posts one synthetic `TranscriptLine` event
+(`{type: "opencode_message", role, text}` as the `line`) through the
+existing `/event` endpoint — scoped to the `opencode` agent marker,
+re-emitted by `ingest.rs` as `ingest://transcript`, the exact shape the
+real Claude/Codex file tailer already produces. `decisions.ts` gained one
+more envelope case for it. Every downstream consumer (turn-pairing,
+schema-drift tripwire, raw event log) is unchanged.
+
+Two real bugs found and fixed before this shipped, neither assumed —
+both caught by testing against real captured data:
+
+1. **`message.updated`'s `info` object carries no text at all** — only
+   `message.part.updated` does, and a part's *last* update (not first)
+   carries the full accumulated text, with `reasoning`-type parts
+   (internal chain-of-thought, never shown to the user) excluded by
+   design.
+2. **User messages never receive a `time.completed` timestamp**, ever —
+   confirmed across two full turns of live capture. The first
+   implementation gated every flush on that field, which would have
+   silently dropped the user-prompt half of every pair forever (activity
+   tracking would look fine; extraction would just quietly never fire).
+   Fixed: only assistant messages gate on `time.completed` (they stream);
+   user messages flush as soon as their single-shot text part has
+   arrived.
+
+Live verification (2026-09-21, opencode 1.18.32):
+
+- [x] A hand-simulation of the buffering/flush rule, replayed against a
+      real captured 2-turn event trace (`opencode run`, a real tool call,
+      a real resume) — correct role-paired text for both turns, no
+      duplicates, no `reasoning` leakage, before any Rust code was written
+      against the assumption.
+- [x] The **actual compiled `plugin_source()` output** (dumped via a
+      throwaway test, not shipped), loaded into a real `opencode run`
+      process behind a `fetch` wrapper that intercepted only the local
+      ingest URL and passed every other call through unchanged (a first,
+      blanket `fetch` override hung the whole process — it also broke
+      OpenCode's own provider API calls). No real network call left the
+      process. The real plugin posted exactly one correct `TranscriptLine`
+      per role, correctly paired, with pre-existing lifecycle events
+      unaffected.
+- **Pending**: the real Logic Loop app, a live OpenCode tab, an actual
+  open question in a real reply, confirming it surfaces in the Decisions
+  panel. Update `README.md`'s OpenCode extraction column (`—` → `✅`) only
+  after that passes.
+
+Automated evidence (2026-09-21):
+
+- [x] `cd src-tauri && cargo test --lib` — 133/133, including
+      `plugin_source_buffers_text_parts_and_posts_transcript_lines`.
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings` clean.
+- [x] `npx tsc --noEmit` clean.
+- [x] `npm run check` — 35/35 configured scripts, including new
+      `opencode-transcript:check` (role/text round-trip, empty-text and
+      unrecognized-role rejection, malformed-input handling, schema-drift
+      tripwire recognizing the new envelope — mirrors
+      `codex-transcript-check.ts`'s coverage shape).
+- [x] `npm run build` clean.
+- [x] `git diff --check` clean.
+- `npm run golden` not run — no extraction-prompt changed, confirmed by
+      reading `extractor.rs`/`decisions.ts` before this step, not assumed.
+
+### §62 follow-up — real gap found by the live test, fixed as v4 (2026-09-22)
+
+The maintainer's actual live test (a prompt designed to make OpenCode ask
+a clarifying question) surfaced a real miss: it asked via
+`→Asked 1 question` with multichoice options, not plain text, and no
+Decisions card appeared. Root cause: OpenCode ships a real built-in
+`question` tool (confirmed via upstream docs,
+`packages/opencode/src/tool/question.txt`) — it arrives as a tool call,
+never a text part, so v3's text-only buffering correctly never saw it.
+Full derivation in `plans/038-opencode-adapter-expansion.md` Part 1's
+"Step 3 live test" subsection.
+
+Fixed (v4): `tool.execute.after` now special-cases `input.tool ===
+"question"` and posts the formatted question (+ options) through the
+same `TranscriptLine` path, reusing `onStop`'s existing assistant-only
+extraction (no separate "user reply" line exists for a tool-answered
+question). Answer-side content is explicitly not captured — the
+`question` tool's `output` shape was never seen live; not guessed.
+
+- [x] A live-schema-accurate synthetic `tool.execute.after` call, matching
+      OpenCode's documented `QuestionV1.Prompt` shape exactly, fed
+      directly to the real compiled `plugin_source()` output's actual
+      handler — produced exactly one correctly-formatted `TranscriptLine`
+      post (`"Which file should the sum helper go in? (utils.ts /
+      math.ts)"`), silent for a non-question tool and a malformed
+      `question` call.
+- [x] `cd src-tauri && cargo test --lib` — 134/134, including new
+      `plugin_source_extracts_the_question_tool_as_a_transcript_line`.
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings` clean.
+- [x] `npx tsc --noEmit` clean.
+- [x] `npm run check` — 35/35, including a new `opencode-transcript-check.ts`
+      fixture for the question-tool-formatted text.
+- [x] `npm run build` clean.
+- [x] `git diff --check` clean.
+- **Resolved**: re-run against this fix initially still showed no card —
+      root cause was a stale deployed plugin file, not this fix; see the
+      follow-up entry below. Once redeployed, this fix's own logic
+      (question-tool extraction) has not yet been independently re-proven
+      live with a real `question`-tool call specifically (the live pass
+      that finally succeeded used a plain-text question) — the direct-
+      handler test remains this path's load-bearing verification.
+
+### §62 second follow-up — real root cause was a stale deployed file, not code (2026-09-22)
+
+The v4 re-test (and a plain-text retry that should have worked under v3
+alone) both still failed live. Checked
+`~/.context-terminal/logic-loop-opencode-plugin.mjs` directly:
+**`version 2`** — deployed before any of today's work, no
+`TranscriptLine` logic at all. `opencode_hooks_setup` only runs from the
+Setup toggle's manual enable action, never automatically; and
+`opencode_hooks_status` only checked that *a* plugin entry existed in
+`opencode.json` (a stable path), never that the file's *content* matched
+`OPENCODE_PLUGIN_VERSION` — so a stale file reported "enabled" forever.
+Same bug class Agy 004 already fixed for Antigravity
+(`antigravity_hooks_status`'s tightening); OpenCode never got it.
+
+Fixed: `opencode_hooks_status` now reports `false` for a registered-but-
+stale-or-missing deployed file, via a new pure `status_from(settings,
+plugin_file_content)` (mirrors `antigravity.rs`'s `hooks_status_from`).
+**Unblocking action**: toggle OpenCode off then on in Setup to force a
+fresh write — that's the only thing that actually regenerates the file,
+before or after this fix.
+
+- [x] `cd src-tauri && cargo test --lib` — 136/136, including
+      `status_is_false_when_registered_but_the_deployed_file_is_stale_or_missing`
+      and `status_is_false_when_never_registered_even_with_a_current_file`.
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings` clean.
+- [x] `npx tsc --noEmit` clean.
+- [x] `npm run check` — 35/35.
+- [x] `npm run build` clean.
+- [x] `git diff --check` clean.
+- **Resolved, 2026-09-22**: toggled OpenCode off/on, re-ran Test 1 on a
+      fresh tab — real Decisions card confirmed by screenshot. See §62's
+      top-level PASS status.
 
 ## Quality gates (machine-run, not manual)
 

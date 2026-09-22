@@ -63,7 +63,15 @@ export const ADAPTERS: readonly AdapterMetadata[] = [
     command: "opencode",
     installUrl: "https://opencode.ai/",
     configLocation: "global OpenCode plugin",
-    capabilities: { activity: true, decisions: false, reentry: false },
+    // decisions: live-verified 2026-09-22 (Plan 038 Part 1, v3+v4) — both
+    // a plain-text question and OpenCode's built-in `question` tool
+    // correctly produced a Decisions card. reentry: live-verified
+    // 2026-09-22 (Plan 038 Part 2) — quit/relaunch/Re-enter passed twice
+    // back to back with a real TUI resume. A ghost tab re-entering a
+    // process that started before a plugin version bump keeps running
+    // that process's already-loaded (stale) plugin code — a fresh tab is
+    // needed to pick up a new version, same as any other Node plugin.
+    capabilities: { activity: true, decisions: true, reentry: true },
   },
   {
     id: "antigravity",
@@ -107,6 +115,19 @@ export function adapterIdForHook(agent: string | undefined): AdapterId | null {
     agent === "deepseek"
     ? agent
     : null;
+}
+
+/** Single source of truth for "does this agent support decision
+ * extraction" — used by SidePanel's empty-state messaging so a future
+ * adapter's capabilities flip doesn't also require remembering to update a
+ * second, hardcoded check elsewhere (the exact staleness this file's
+ * ADAPTERS array and that duplicate check drifted into, 2026-09-22). An
+ * unrecognized/future agent string defaults to unsupported rather than
+ * guessing. */
+export function adapterSupportsDecisions(agent: string | undefined): boolean {
+  const id = adapterIdForHook(agent);
+  if (id === null) return false;
+  return ADAPTERS.find((a) => a.id === id)?.capabilities.decisions ?? false;
 }
 
 export function adapterProgress(state: AdapterRuntimeState, observed: boolean): AdapterProgress {

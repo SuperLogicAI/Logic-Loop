@@ -66,7 +66,7 @@ for (const command of [
 }
 
 const source = readFileSync("src-tauri/src/opencode.rs", "utf8");
-assert.match(source, /const OPENCODE_PLUGIN_VERSION: u32 = 2;/);
+assert.match(source, /const OPENCODE_PLUGIN_VERSION: u32 = 4;/);
 assert.ok(source.includes('"X-Logic-Loop-Agent": "opencode"'));
 for (const mapping of [
   '"session.created": "SessionStart"',
@@ -75,9 +75,24 @@ for (const mapping of [
 ]) {
   assert.ok(source.includes(mapping), `missing OpenCode event mapping: ${mapping}`);
 }
-for (const token of ["chat.message", "tool.execute.after", "UserPromptSubmit", "PostToolUse"]) {
+for (const token of [
+  "chat.message",
+  "tool.execute.after",
+  "UserPromptSubmit",
+  "PostToolUse",
+  // Plan 038 Part 1: decision extraction plumbing.
+  "message.part.updated",
+  "message.updated",
+  "TranscriptLine",
+  "opencode_message",
+]) {
   assert.ok(source.includes(token), `missing OpenCode adapter token: ${token}`);
 }
+// reasoning-type parts must never be captured — only text parts feed extraction.
+assert.ok(
+  source.includes('part?.type === "text"'),
+  "OpenCode part buffering must filter to text parts only"
+);
 
 function handlerBody(start: string, end: string): string {
   const from = source.indexOf(start);

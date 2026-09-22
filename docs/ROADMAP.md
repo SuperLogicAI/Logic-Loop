@@ -28,16 +28,16 @@ table below until one gets its own PLAN.md.
 | Codex adapter | DONE (Phase 10) | — | OpenCode adapter |
 | Codex adapter follow-ups (identity marker, resume, Interrupt/SessionEnd) | DONE (Phase 16) | — | Codex adapter |
 | Antigravity adapter follow-ups (turn-epoch fix, tool-field normalization) | DONE (Phase 16, Agy 001-002) | — | Antigravity adapter |
-| Antigravity SessionStart/resume | DONE on isolated Plan 025 sprint branch; agy 1.2.4 CLI continuity and app quit/relaunch/Re-enter passed (`docs/TESTING.md` §51); maintainer approved the sprint, merge separate | — | Codex adapter follow-ups (marker/resume infra, DONE), Antigravity turn-epoch fix (DONE) |
-| Antigravity `ask_question` waiting signal | Planned, unscheduled — Agy 004 in `plans/Antigravity_Implementation_Plans.md`; gated on live `PreToolUse` verification | — | Antigravity adapter |
+| Antigravity SessionStart/resume | DONE — merged to `main` via PR #32 (2026-09-16, commit `b92ea19`); agy 1.2.4 CLI continuity and app quit/relaunch/Re-enter passed (`docs/TESTING.md` §51). Row corrected 2026-09-21: previously read "isolated sprint branch, merge separate" — stale, the merge had already happened. | — | Codex adapter follow-ups (marker/resume infra, DONE), Antigravity turn-epoch fix (DONE) |
+| Antigravity `ask_question` waiting signal | DONE (Agy 004) — merged to `main` via PR #32 (2026-09-16, commit `b92ea19`); live-verified with agy 1.2.4 (`docs/TESTING.md` §52). Row corrected 2026-09-21: previously read "Planned, unscheduled" — stale, the merge had already happened. | — | Antigravity adapter |
 | Decisions cleanup (grouped by session, bulk-dismiss) | BUILT (Phase 17) — manual test docs/TESTING.md §27 pending | ~1d | — |
 | Idea Board | BUILT (Phase 18) — manual test docs/TESTING.md §28 pending | ~1.5d | Phase 17 |
 | Decisions empty-state clarity (IDEAS.md item C, second half) | BUILT (Phase 19) — manual test docs/TESTING.md §29 pending | a few hours | — |
 | Idea Board "Now" set (IDEAS.md item F) | BUILT (Phase 20) — manual test docs/TESTING.md §30 pending | a few hours | Phase 18 |
 | Landing-note manual/auto capture (IDEAS.md item E) | DONE (Phase 28) — automated + live matrices pass | ~1d | — |
 | Split-pane tabs | BUILT (Phase 32) — automated gates clean; live matrix pending | ~1d | — |
-| Decision Tracker reconciliation and truthful answer state | Phase 33 implementation in progress; live matrix pending (date this row was written: unknown) | ~1–2d | Phase 32 accepted |
-| First useful session (`plans/033-first-useful-session.md`) | **Numbering note added 2026-09-19, not resolved:** also filed as Plan/Phase 033, dated 2026-09-19 — different scope than the "Decision Tracker reconciliation" row above sharing the same number. Two candidates currently share "033." Reconcile numbering when picking either up; neither row edited/removed pending that. | 2–3d | Plan 032 accepted |
+| Decision Tracker reconciliation and truthful answer state | DONE (Phase 33, 2026-09-11) — row was stale, superseded by later history: manual 11-step matrix passed same day, automatic reconciliation itself was descoped 2026-09-12 (Plan 016, `docs/PROGRESS.md`) after a freeze investigation found it wasn't load-bearing (manual dismiss + Answer-Now + notifications cover it). See `docs/PROGRESS.md` Phase 33/33.1 entries for the full trail. | ~1–2d | Phase 32 accepted |
+| First useful session (`plans/033-first-useful-session.md`) | DONE — Plan 033 ACCEPTED 2026-09-21, merged via PR #44 (#48 for the four live-test findings). **Numbering note resolved 2026-09-21:** the "033" collision above was never a real conflict — `plans/NNN-*.md` (Plan numbers) and `docs/PROGRESS.md` "Phase N" (Phase numbers) are two independent sequences that happen to reuse the same digits; Phase 33 (decision reconciliation, 2026-09-11) and Plan 033 (this row, 2026-09-19/21) are unrelated items that never actually shared a slot. | 2–3d | Plan 032 accepted |
 | Remaining adapters (Gemini, Copilot) | v2 | — | Codex adapter |
 
 Phase boundaries still hard stops. Phase 5 items enter PLAN.md for approval

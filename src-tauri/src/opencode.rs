@@ -9,7 +9,16 @@ const MARKER: &str = "logic-loop-opencode-plugin";
 
 /// Bump when the plugin's translated payload shape changes in a way a reader
 /// must know about, same role as `ingest.rs`'s `HOOK_VERSION`.
-const OPENCODE_PLUGIN_VERSION: u32 = 2;
+/// v3 (Plan 038 Part 1): adds `message.part.updated`/`message.updated`
+/// buffering that posts a synthetic `TranscriptLine` event once a message
+/// completes, feeding decision extraction (`ingest.rs`'s `TranscriptLine`
+/// branch, `decisions.ts`'s `opencode_message` envelope case).
+/// v4 (Plan 038 Part 1, live-test follow-up): a real clarifying question
+/// asked via OpenCode's built-in `question` tool arrives as a tool call,
+/// not a text part — v3's buffering never saw it. Adds a `TranscriptLine`
+/// post from `tool.execute.after` specifically for `input.tool ===
+/// "question"`, reusing `onStop`'s existing assistant-only extraction path.
+const OPENCODE_PLUGIN_VERSION: u32 = 4;
 
 /// OpenCode resolves its global config dir from `$XDG_CONFIG_HOME` or
 /// `~/.config` on every platform, including Windows — no per-OS branch.
@@ -113,9 +122,64 @@ export const LogicLoopAdapter = async ({{ directory }}) => {{
     }}
   }}
 
+  // Buffers `message.part.updated` text parts by part id until their owning
+  // message completes (`message.updated`'s `info.time.completed`), then
+  // flushes one joined-text TranscriptLine per message and forgets it —
+  // bounded, never grows across a long session. Only `type: "text"` parts
+  // are kept: `reasoning` is the model's internal chain-of-thought, never
+  // shown to the user, and must not feed decision extraction (Plan 038
+  // Part 1, live spike 2026-09-21: `message.updated`'s own `info` object
+  // never carries text, only `message.part.updated` does, and a part's
+  // last update — not its first — carries the full accumulated text).
+  const textParts = new Map(); // part.id -> a messageID/text record
+
+  function flushMessage(messageId) {{
+    const pieces = [];
+    for (const [partId, entry] of textParts) {{
+      if (entry.messageID !== messageId) continue;
+      if (entry.text) pieces.push(entry.text);
+      textParts.delete(partId);
+    }}
+    return pieces.join("\n");
+  }}
+
   return {{
     event: async ({{ event }}) => {{
       try {{
+        if (event?.type === "message.part.updated") {{
+          const part = event.properties?.part;
+          if (part?.type === "text" && part.id && part.messageID) {{
+            textParts.set(part.id, {{ messageID: part.messageID, text: part.text ?? "" }});
+          }}
+          return;
+        }}
+        if (event?.type === "message.updated") {{
+          const info = event.properties?.info;
+          const sessionId = event.properties?.sessionID;
+          if (!info?.id || !sessionId) return;
+          if (info.role !== "user" && info.role !== "assistant") return;
+          // Assistant messages stream (reasoning/tool/text parts arrive over
+          // several message.updated firings) and only mark
+          // info.time.completed once the reply is actually final — flushing
+          // any earlier would post a partial reply. User messages never get
+          // a completed timestamp at all (confirmed live, Plan 038 Part 1):
+          // they're created whole, not streamed, so it's safe — and
+          // necessary, nothing else signals "done" — to flush as soon as
+          // their (also non-streamed) text part has actually arrived.
+          // message.updated reliably re-fires for the same id afterward, so
+          // an early user firing before its part lands just no-ops below
+          // (empty buffer) and a later one catches it.
+          if (info.role === "assistant" && !info.time?.completed) return;
+          const text = flushMessage(info.id);
+          if (!text.trim()) return;
+          post({{
+            hook_event_name: "TranscriptLine",
+            session_id: sessionId,
+            cwd: directory,
+            line: JSON.stringify({{ type: "opencode_message", role: info.role, text }}),
+          }});
+          return;
+        }}
         const hookName = EVENT_MAP[event?.type];
         if (!hookName) return;
         const sessionId = sessionIdOf(event.properties);
@@ -144,6 +208,34 @@ export const LogicLoopAdapter = async ({{ directory }}) => {{
           tool_input: input.args,
           tool_response: output,
         }});
+        // OpenCode's built-in `question` tool (packages/opencode/src/tool/
+        // question.txt) is how the agent asks a real clarifying question —
+        // live-confirmed 2026-09-22, a plain-prose "ask me first" prompt
+        // triggered it, not a text reply. It arrives here as a tool call,
+        // never as a message.part.updated text part, so the buffering
+        // above never sees it — this was a real gap in the first version
+        // of this plugin, not a deliberate scope cut. `tool.execute.after`
+        // fires once the user has already answered, so there is no
+        // separate later "user" TranscriptLine to pair this with the way
+        // free-text questions get one; reuses `onStop`'s existing
+        // assistant-only path instead (same one Claude/Codex already rely
+        // on for a turn that ends with no scripted reply) rather than
+        // guessing the answer's own output shape, which is unconfirmed.
+        const args = input.args ?? {{}};
+        if (input.tool === "question" && typeof args.question === "string" && args.question.trim()) {{
+          const opts = Array.isArray(args.options)
+            ? args.options
+                .map((o) => (o && typeof o.label === "string" ? o.label : String(o)))
+                .join(" / ")
+            : "";
+          const text = opts ? `${{args.question}} (${{opts}})` : args.question;
+          post({{
+            hook_event_name: "TranscriptLine",
+            session_id: input.sessionID,
+            cwd: directory,
+            line: JSON.stringify({{ type: "opencode_message", role: "assistant", text }}),
+          }});
+        }}
       }} catch {{
         // fail open
       }}
@@ -254,13 +346,31 @@ pub fn opencode_hooks_remove() -> Result<(), String> {
     write_settings(&settings)
 }
 
+// settings.json's plugin entry is a stable file *path* — toggling the
+// adapter off/on isn't what changes when this file's own version bumps (a
+// Rust code change alone does), so a version bump alone leaves a stale
+// file on disk with no user-visible signal. Confirmed live 2026-09-22: a
+// v2 file survived through the v3/v4 TranscriptLine and question-tool
+// work with `opencode_hooks_status` still reporting `true`, silently
+// skipping all of Plan 038 Part 1's extraction paths. Same class of fix
+// as Agy 004's `antigravity_hooks_status` tightening.
+fn status_from(settings: &serde_json::Value, plugin_file_content: Option<&str>) -> bool {
+    let registered = settings
+        .get("plugin")
+        .and_then(|v| v.as_array())
+        .is_some_and(|arr| arr.iter().any(is_ours));
+    if !registered {
+        return false;
+    }
+    let current_marker = format!("version {OPENCODE_PLUGIN_VERSION}");
+    plugin_file_content.is_some_and(|c| c.contains(&current_marker))
+}
+
 #[tauri::command]
 pub fn opencode_hooks_status() -> Result<bool, String> {
     let settings = read_settings()?;
-    Ok(settings
-        .get("plugin")
-        .and_then(|v| v.as_array())
-        .is_some_and(|arr| arr.iter().any(is_ours)))
+    let content = fs::read_to_string(plugin_path()).ok();
+    Ok(status_from(&settings, content.as_deref()))
 }
 
 #[cfg(test)]
@@ -308,6 +418,33 @@ mod tests {
     }
 
     #[test]
+    fn status_is_false_when_registered_but_the_deployed_file_is_stale_or_missing() {
+        let mut s = serde_json::json!({});
+        apply_setup(&mut s).unwrap();
+
+        assert!(
+            status_from(&s, Some(&format!("...version {OPENCODE_PLUGIN_VERSION}..."))),
+            "registered + current-version file must report enabled"
+        );
+        assert!(
+            !status_from(&s, Some("...version 2...")),
+            "registered but a stale (v2) file on disk must not report enabled"
+        );
+        assert!(
+            !status_from(&s, None),
+            "registered but no deployed file at all must not report enabled"
+        );
+    }
+
+    #[test]
+    fn status_is_false_when_never_registered_even_with_a_current_file() {
+        // Guards against a future refactor accidentally dropping the
+        // registration check once the version check exists.
+        let s = serde_json::json!({});
+        assert!(!status_from(&s, Some(&format!("version {OPENCODE_PLUGIN_VERSION}"))));
+    }
+
+    #[test]
     fn setup_on_empty_settings_creates_plugin_array() {
         let mut s = serde_json::json!({});
         apply_setup(&mut s).unwrap();
@@ -322,5 +459,45 @@ mod tests {
         assert!(src.contains("X-Logic-Loop-Agent\": \"opencode"));
         assert!(src.contains("LOGIC_LOOP_TAB_ID"));
         assert!(src.contains("ingest.env"));
+    }
+
+    /// Plan 038 Part 1: decision extraction plumbing. Only string-presence
+    /// checked here, matching this file's existing style — the generated
+    /// JS's actual runtime behavior (part buffering, completion detection)
+    /// was live-verified against a real opencode process (Plan 038 Part 1
+    /// Step 1 findings, docs/TESTING.md), not re-executed in this suite.
+    #[test]
+    fn plugin_source_buffers_text_parts_and_posts_transcript_lines() {
+        let src = plugin_source();
+        assert!(src.contains("message.part.updated"));
+        assert!(src.contains("message.updated"));
+        assert!(src.contains("TranscriptLine"));
+        assert!(src.contains("opencode_message"));
+        // reasoning-type parts must never be captured into textParts — only
+        // `part?.type === "text"` is checked before buffering.
+        assert!(src.contains(r#"part?.type === "text""#));
+        // An assistant message is only flushed once it's actually done,
+        // never mid-stream; user messages never get a completed timestamp
+        // at all (live-confirmed) so they flush as soon as their text part
+        // has arrived instead.
+        assert!(src.contains("info.time?.completed"));
+        assert!(src.contains(r#"info.role === "assistant" && !info.time?.completed"#));
+    }
+
+    /// v4 follow-up: a real question tool call, found by live-testing Part
+    /// 1's Step 3, not assumed — see the version-comment above
+    /// `OPENCODE_PLUGIN_VERSION` and docs/TESTING.md's §62 addendum.
+    #[test]
+    fn plugin_source_extracts_the_question_tool_as_a_transcript_line() {
+        let src = plugin_source();
+        assert!(src.contains(r#"input.tool === "question""#));
+        assert!(src.contains("args.question"));
+        assert!(src.contains("args.options"));
+        // Reuses the same TranscriptLine/opencode_message wire shape v3
+        // already established — no second extraction path.
+        let tool_handler_start = src.find(r#""tool.execute.after": async"#).unwrap();
+        let tool_handler = &src[tool_handler_start..];
+        assert!(tool_handler.contains("TranscriptLine"));
+        assert!(tool_handler.contains("opencode_message"));
     }
 }

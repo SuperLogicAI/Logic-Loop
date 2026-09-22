@@ -98,7 +98,7 @@ Every adapter normalizes to one wire shape, so a tab running any of them gets th
 | Agent | Activity, state & fan-out | Decision / blocker extraction | Notes |
 | --- | --- | --- | --- |
 | **Claude Code** | ✅ | ✅ | Hooks + JSONL transcript tailing. The reference adapter. Resume/re-entry supported. |
-| **OpenCode** | ✅ | — | In-process plugin translating native events; no transcript file to tail. |
+| **OpenCode** | ✅ | ✅ | In-process plugin translating native events; no transcript file to tail — extraction feeds directly off in-process message content instead, including questions asked via OpenCode's own `question` tool. Resume/re-entry via `opencode -s <id>`, live-verified. |
 | **Codex** | ✅ | ✅ | Hook contract is near-identical to Claude's; registers into `~/.codex/hooks.json`. Carries its own adapter marker, resumes via `codex resume`, handles `Interrupt`/`SessionEnd` lifecycle events, and can back the Sidebar LM extractor. |
 | **[Antigravity](https://github.com/google-antigravity/antigravity-cli)** (`agy`) | ✅ | — | Structured hooks and session re-entry via `agy --conversation <id>`; quit/relaunch and prior-context recall verified with agy 1.2.4. See caveats below. |
 | **[Pi Agent](https://github.com/earendil-works/pi)** (`pi`) | ✅ | — | In-process global TypeScript extension (`~/.pi/agent/extensions/logic-loop.ts`) translating lifecycle events; no separate config file or transcript to tail. Session re-entry via `pi --session <id>`, live-verified ([Plan 026](plans/026-pi-agent-adapter.md)). |
