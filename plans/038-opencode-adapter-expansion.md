@@ -270,6 +270,56 @@ malformed-input rejection, and the schema-drift tripwire recognizing the
 new envelope type, mirroring `codex-transcript-check.ts`'s coverage shape
 for the Codex envelope.
 
+#### Step 3 live test — real gap found, fixed as v4 (2026-09-22)
+
+The maintainer ran the manual test with a prompt designed to make OpenCode
+ask a real clarifying question. It did — but as **`→Asked 1 question`**
+with multichoice options, not plain text, and no Decisions card appeared.
+Investigation (Context7, `/anomalyco/opencode`) found OpenCode ships a
+real built-in **`question` tool**
+(`packages/opencode/src/tool/question.txt`, `QuestionV1.Prompt` schema:
+`question`/`header`/`options`/`multiple`) — structurally the same thing
+this app's own `AskUserQuestion` tool is. It arrives as a **tool call**
+(`tool.execute.after`), never as a `message.part.updated` text part, so
+v3's buffering — by design, correctly — never saw it. This plan's
+original Part 1 scope note ("decisions live in prose, not tool calls")
+was wrong for this one specific tool; excluding tool-call content in
+general was right, conflating that with this one structured-question tool
+was not.
+
+Fixed (v4): `tool.execute.after` now special-cases `input.tool ===
+"question"`, formats `args.question` (+ `args.options`' labels) into one
+line, and posts it as the same `TranscriptLine`/`opencode_message`
+envelope v3 already established — no second extraction path.
+`tool.execute.after` fires only after the user has already answered, so
+there's no separate later "user" line to pair it with the way a free-text
+question gets one; deliberately reuses `onStop`'s existing assistant-only
+path (2s-delayed extraction on `Stop` with `user: null`) instead of
+guessing the answer's own output shape, which was not captured live and
+must not be fabricated.
+
+Verified twice, neither by assumption:
+1. A live-schema-accurate synthetic `tool.execute.after` call
+   (`question`/`header`/`options` exactly matching the documented
+   `QuestionV1.Prompt` shape) fed directly to the actual compiled
+   `plugin_source()` output's real handler (dumped via a throwaway test,
+   not shipped) — produced exactly one `TranscriptLine` post, correctly
+   formatted (`"Which file should the sum helper go in? (utils.ts /
+   math.ts)"`), and confirmed silent for a non-question tool call and for
+   a malformed `question` call missing the `question` field.
+2. A live reproduction attempt (`opencode run`, same prompt) did **not**
+   reliably re-trigger the tool — model choice between plain text and the
+   `question` tool was not deterministic across runs in this environment.
+   The direct-handler test above is the one this fix actually stands on;
+   the live reproduction only confirms the plain-text path still works
+   unchanged.
+
+Answer-side extraction (what the user actually picked) is explicitly
+**not** attempted here — `output`'s real shape for the `question` tool
+was never captured live. If a future pass wants the answer paired
+in the same card rather than relying on the user's next message to close
+it, that needs its own live capture first, not a guess.
+
 ### Step 3: Frontend wiring and manual verification
 
 Decisions panel picks up OpenCode-sourced open questions the same way it

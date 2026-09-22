@@ -3412,6 +3412,43 @@ Automated evidence (2026-09-21):
 - `npm run golden` not run — no extraction-prompt changed, confirmed by
       reading `extractor.rs`/`decisions.ts` before this step, not assumed.
 
+### §62 follow-up — real gap found by the live test, fixed as v4 (2026-09-22)
+
+The maintainer's actual live test (a prompt designed to make OpenCode ask
+a clarifying question) surfaced a real miss: it asked via
+`→Asked 1 question` with multichoice options, not plain text, and no
+Decisions card appeared. Root cause: OpenCode ships a real built-in
+`question` tool (confirmed via upstream docs,
+`packages/opencode/src/tool/question.txt`) — it arrives as a tool call,
+never a text part, so v3's text-only buffering correctly never saw it.
+Full derivation in `plans/038-opencode-adapter-expansion.md` Part 1's
+"Step 3 live test" subsection.
+
+Fixed (v4): `tool.execute.after` now special-cases `input.tool ===
+"question"` and posts the formatted question (+ options) through the
+same `TranscriptLine` path, reusing `onStop`'s existing assistant-only
+extraction (no separate "user reply" line exists for a tool-answered
+question). Answer-side content is explicitly not captured — the
+`question` tool's `output` shape was never seen live; not guessed.
+
+- [x] A live-schema-accurate synthetic `tool.execute.after` call, matching
+      OpenCode's documented `QuestionV1.Prompt` shape exactly, fed
+      directly to the real compiled `plugin_source()` output's actual
+      handler — produced exactly one correctly-formatted `TranscriptLine`
+      post (`"Which file should the sum helper go in? (utils.ts /
+      math.ts)"`), silent for a non-question tool and a malformed
+      `question` call.
+- [x] `cd src-tauri && cargo test --lib` — 134/134, including new
+      `plugin_source_extracts_the_question_tool_as_a_transcript_line`.
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings` clean.
+- [x] `npx tsc --noEmit` clean.
+- [x] `npm run check` — 35/35, including a new `opencode-transcript-check.ts`
+      fixture for the question-tool-formatted text.
+- [x] `npm run build` clean.
+- [x] `git diff --check` clean.
+- **Still pending**: the original Test 1 (real reply, real open question,
+      Decisions panel) re-run against this fix, live, in the app.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*

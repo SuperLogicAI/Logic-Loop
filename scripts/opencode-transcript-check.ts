@@ -34,6 +34,18 @@ assert.equal(textFromTranscriptLine(JSON.stringify({ type: "opencode_message", t
 assert.equal(textFromTranscriptLine("not json"), null);
 assert.equal(textFromTranscriptLine(JSON.stringify({ type: "opencode_message", role: "user" })), null);
 
+// The `question` tool path (Plan 038 Part 1 v4 follow-up) formats its
+// args into the same envelope before posting — decisions.ts sees no
+// difference from a plain-text reply, live-confirmed against the real
+// compiled plugin via a direct handler call (docs/TESTING.md §62).
+const question = textFromTranscriptLine(
+  line("assistant", "Which file should the sum helper go in? (utils.ts / math.ts)")
+);
+assert.deepEqual(question, {
+  role: "assistant",
+  text: "Which file should the sum helper go in? (utils.ts / math.ts)",
+});
+
 // The schema-drift tripwire must recognize this envelope type, or a normal
 // OpenCode session would falsely trip the "transcript schema changed"
 // warning that exists for real file-tailed adapters.

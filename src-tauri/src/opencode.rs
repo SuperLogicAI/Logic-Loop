@@ -13,7 +13,12 @@ const MARKER: &str = "logic-loop-opencode-plugin";
 /// buffering that posts a synthetic `TranscriptLine` event once a message
 /// completes, feeding decision extraction (`ingest.rs`'s `TranscriptLine`
 /// branch, `decisions.ts`'s `opencode_message` envelope case).
-const OPENCODE_PLUGIN_VERSION: u32 = 3;
+/// v4 (Plan 038 Part 1, live-test follow-up): a real clarifying question
+/// asked via OpenCode's built-in `question` tool arrives as a tool call,
+/// not a text part — v3's buffering never saw it. Adds a `TranscriptLine`
+/// post from `tool.execute.after` specifically for `input.tool ===
+/// "question"`, reusing `onStop`'s existing assistant-only extraction path.
+const OPENCODE_PLUGIN_VERSION: u32 = 4;
 
 /// OpenCode resolves its global config dir from `$XDG_CONFIG_HOME` or
 /// `~/.config` on every platform, including Windows — no per-OS branch.
@@ -203,6 +208,34 @@ export const LogicLoopAdapter = async ({{ directory }}) => {{
           tool_input: input.args,
           tool_response: output,
         }});
+        // OpenCode's built-in `question` tool (packages/opencode/src/tool/
+        // question.txt) is how the agent asks a real clarifying question —
+        // live-confirmed 2026-09-22, a plain-prose "ask me first" prompt
+        // triggered it, not a text reply. It arrives here as a tool call,
+        // never as a message.part.updated text part, so the buffering
+        // above never sees it — this was a real gap in the first version
+        // of this plugin, not a deliberate scope cut. `tool.execute.after`
+        // fires once the user has already answered, so there is no
+        // separate later "user" TranscriptLine to pair this with the way
+        // free-text questions get one; reuses `onStop`'s existing
+        // assistant-only path instead (same one Claude/Codex already rely
+        // on for a turn that ends with no scripted reply) rather than
+        // guessing the answer's own output shape, which is unconfirmed.
+        const args = input.args ?? {{}};
+        if (input.tool === "question" && typeof args.question === "string" && args.question.trim()) {{
+          const opts = Array.isArray(args.options)
+            ? args.options
+                .map((o) => (o && typeof o.label === "string" ? o.label : String(o)))
+                .join(" / ")
+            : "";
+          const text = opts ? `${{args.question}} (${{opts}})` : args.question;
+          post({{
+            hook_event_name: "TranscriptLine",
+            session_id: input.sessionID,
+            cwd: directory,
+            line: JSON.stringify({{ type: "opencode_message", role: "assistant", text }}),
+          }});
+        }}
       }} catch {{
         // fail open
       }}
@@ -404,5 +437,22 @@ mod tests {
         // has arrived instead.
         assert!(src.contains("info.time?.completed"));
         assert!(src.contains(r#"info.role === "assistant" && !info.time?.completed"#));
+    }
+
+    /// v4 follow-up: a real question tool call, found by live-testing Part
+    /// 1's Step 3, not assumed — see the version-comment above
+    /// `OPENCODE_PLUGIN_VERSION` and docs/TESTING.md's §62 addendum.
+    #[test]
+    fn plugin_source_extracts_the_question_tool_as_a_transcript_line() {
+        let src = plugin_source();
+        assert!(src.contains(r#"input.tool === "question""#));
+        assert!(src.contains("args.question"));
+        assert!(src.contains("args.options"));
+        // Reuses the same TranscriptLine/opencode_message wire shape v3
+        // already established — no second extraction path.
+        let tool_handler_start = src.find(r#""tool.execute.after": async"#).unwrap();
+        let tool_handler = &src[tool_handler_start..];
+        assert!(tool_handler.contains("TranscriptLine"));
+        assert!(tool_handler.contains("opencode_message"));
     }
 }

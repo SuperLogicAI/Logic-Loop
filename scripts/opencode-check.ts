@@ -66,7 +66,7 @@ for (const command of [
 }
 
 const source = readFileSync("src-tauri/src/opencode.rs", "utf8");
-assert.match(source, /const OPENCODE_PLUGIN_VERSION: u32 = 3;/);
+assert.match(source, /const OPENCODE_PLUGIN_VERSION: u32 = 4;/);
 assert.ok(source.includes('"X-Logic-Loop-Agent": "opencode"'));
 for (const mapping of [
   '"session.created": "SessionStart"',
