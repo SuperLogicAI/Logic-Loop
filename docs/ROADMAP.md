@@ -28,8 +28,8 @@ table below until one gets its own PLAN.md.
 | Codex adapter | DONE (Phase 10) | — | OpenCode adapter |
 | Codex adapter follow-ups (identity marker, resume, Interrupt/SessionEnd) | DONE (Phase 16) | — | Codex adapter |
 | Antigravity adapter follow-ups (turn-epoch fix, tool-field normalization) | DONE (Phase 16, Agy 001-002) | — | Antigravity adapter |
-| Antigravity SessionStart/resume | DONE on isolated Plan 025 sprint branch; agy 1.2.4 CLI continuity and app quit/relaunch/Re-enter passed (`docs/TESTING.md` §51); maintainer approved the sprint, merge separate | — | Codex adapter follow-ups (marker/resume infra, DONE), Antigravity turn-epoch fix (DONE) |
-| Antigravity `ask_question` waiting signal | Planned, unscheduled — Agy 004 in `plans/Antigravity_Implementation_Plans.md`; gated on live `PreToolUse` verification | — | Antigravity adapter |
+| Antigravity SessionStart/resume | DONE — merged to `main` via PR #32 (2026-09-16, commit `b92ea19`); agy 1.2.4 CLI continuity and app quit/relaunch/Re-enter passed (`docs/TESTING.md` §51). Row corrected 2026-09-21: previously read "isolated sprint branch, merge separate" — stale, the merge had already happened. | — | Codex adapter follow-ups (marker/resume infra, DONE), Antigravity turn-epoch fix (DONE) |
+| Antigravity `ask_question` waiting signal | DONE (Agy 004) — merged to `main` via PR #32 (2026-09-16, commit `b92ea19`); live-verified with agy 1.2.4 (`docs/TESTING.md` §52). Row corrected 2026-09-21: previously read "Planned, unscheduled" — stale, the merge had already happened. | — | Antigravity adapter |
 | Decisions cleanup (grouped by session, bulk-dismiss) | BUILT (Phase 17) — manual test docs/TESTING.md §27 pending | ~1d | — |
 | Idea Board | BUILT (Phase 18) — manual test docs/TESTING.md §28 pending | ~1.5d | Phase 17 |
 | Decisions empty-state clarity (IDEAS.md item C, second half) | BUILT (Phase 19) — manual test docs/TESTING.md §29 pending | a few hours | — |
