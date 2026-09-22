@@ -46,7 +46,7 @@
 
 [<img src="docs/assets/logic-loop-ui.png" alt="Logic Loop app with several agent sessions open">](#macos-build-from-source)
 
-Logic Loop is an open-source macOS app, built by [Super Logic AI](https://superlogicai.com), that aids the human's context-switching limits while running several AI coding agent terminal sessions at once — Claude Code, OpenCode, Codex, Antigravity, Pi Agent and DeepSeek Harness today, more adapters planned. Every competing tool tells you what your *agents* are doing. Logic Loop tells you what *you* need to do — and remembers everything you'd otherwise lose in the switch.
+Logic Loop is an open-source, cross-platform desktop app built by [Super Logic AI](https://superlogicai.com). Originally created for macOS, it now supports macOS, Linux, and Windows while helping people manage the context-switching demands of running several AI coding agent terminal sessions at once — Claude Code, OpenCode, Codex, Antigravity, Pi Agent, and DeepSeek Harness today, with more adapters planned. Every competing tool tells you what your *agents* are doing. Logic Loop tells you what *you* need to do — and remembers everything you'd otherwise lose in the switch.
 
 > Agent viewers manage the agents' context. Logic Loop manages yours.
 
