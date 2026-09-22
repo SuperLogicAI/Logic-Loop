@@ -8,7 +8,10 @@ import type { HookPayload } from "../src/types";
 const rust = readFileSync("src-tauri/src/deepseek.rs", "utf8");
 
 assert.match(rust, /const MARKER_FIELD: &str = "logicLoopAdapterVersion";/);
-assert.match(rust, /const DEEPSEEK_ADAPTER_VERSION: u64 = 1;/);
+assert.match(rust, /const DEEPSEEK_ADAPTER_VERSION: u64 = 3;/);
+
+const bundledPackage = JSON.parse(readFileSync("dsh-terminal-app/package.json", "utf8"));
+assert.equal(bundledPackage.logicLoopAdapterVersion, 3);
 assert.match(rust, /pub\(crate\) const PROFILE_NAME: &str = "logic-loop";/);
 
 // The 9 core @deepseek-ai/* packages this plugin depends on directly, all
@@ -57,9 +60,19 @@ assert.ok(
   Object.keys(resources).some((k) => k.includes("dsh-terminal-app/package.json")),
   "tauri.conf.json must bundle dsh-terminal-app as a resource",
 );
+for (const file of ["src/index.js", "src/messages.js", "src/startup.js"]) {
+  assert.ok(
+    Object.keys(resources).some((k) => k.endsWith(`dsh-terminal-app/${file}`)),
+    `tauri.conf.json must bundle dsh-terminal-app/${file}`,
+  );
+}
 assert.ok(
   !Object.keys(resources).some((k) => k.includes("node_modules")),
   "tauri.conf.json must never bundle dsh-terminal-app/node_modules",
+);
+assert.ok(
+  rust.includes('dir.join("src/messages.js").is_file()'),
+  "status must reject an incomplete installed plugin even when its marker is current",
 );
 
 const tsIngest = readFileSync("src/lib/ingest.ts", "utf8");

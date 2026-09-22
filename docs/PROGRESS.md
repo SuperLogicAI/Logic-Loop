@@ -611,3 +611,26 @@ Update this file as phases are accepted.
   after launching the new dev build, the stale-v1 → enable-v2 flow and real Pi
   decision extraction passed live. No extraction prompt or schema changed, so
   golden was not run.
+
+- Phase 40 / Plan 040 (DeepSeek Harness decision extraction): **BUILT
+  2026-09-22; automated gates clean, rebuilt-app live matrix pending.** Literal `PHASE 40 ACCEPTED`
+  received after PR 52 merged. An isolated `DSH_HOME` probe against Harness
+  0.1.5-rc.2 confirmed finalized append-only `assistant/message` events after
+  `whenIdle()`, including tool turns and cross-process resume. Adapter v2 posts
+  explicit `deepseek_message` rows from the exact submitted line and committed
+  visible text only; reasoning, tools/results, attempts, replacements, injected
+  messages, terminal output, and persisted session files remain excluded.
+  All 36 frontend checks, TypeScript, production build, 137/137 non-ignored
+  Rust tests, Clippy with warnings denied, and `git diff --check` pass. The
+  first sandboxed Rust run only failed because the existing LM Studio deadline
+  test could not bind loopback; the required unsandboxed rerun passed.
+  The first rebuilt-app probe found `src/messages.js` missing from the explicit
+  Tauri resource manifest, so Harness could not load the v2 plugin. The fix
+  adds that resource, makes status reject incomplete installs, and bumps the
+  adapter to v3 so the broken v2 deployment is automatically stale.
+  The rebuilt v3 then passed its first real extraction and re-entry test: a
+  Decision card appeared and the resumed model correctly recalled the supplied
+  number `1818`. DeepSeek retains model context but, unlike the other adapters,
+  the custom runner does not replay prior chat text into the terminal; this is
+  now documented as a visible-history UX limitation. Remaining live-matrix rows
+  are still open.

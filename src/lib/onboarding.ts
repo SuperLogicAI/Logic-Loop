@@ -101,9 +101,10 @@ export const ADAPTERS: readonly AdapterMetadata[] = [
     // No shipped first-party or safely-adoptable third-party terminal UI
     // exists upstream (plans/027) — this is Logic Loop's own first-party
     // profile patch (plans/028), not an install of anything DeepSeek ships.
-    // decisions stays false: no extraction prompt targets this adapter.
+    // Decision extraction uses only finalized, appended assistant messages
+    // from the in-memory Harness session plus the exact submitted user line.
     // reentry is true — cross-process `--resume <sessionId>` proven live.
-    capabilities: { activity: true, decisions: false, reentry: true },
+    capabilities: { activity: true, decisions: true, reentry: true },
   },
 ] as const;
 
