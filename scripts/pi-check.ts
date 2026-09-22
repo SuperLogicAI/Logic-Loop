@@ -7,7 +7,7 @@ import type { HookPayload } from "../src/types";
 
 const fullSource = readFileSync("src-tauri/src/pi.rs", "utf8");
 assert.match(fullSource, /const MARKER: &str = "logic-loop-pi-extension";/);
-assert.match(fullSource, /const PI_EXTENSION_VERSION: u32 = 1;/);
+assert.match(fullSource, /const PI_EXTENSION_VERSION: u32 = 2;/);
 
 // Isolate the generated extension's raw string body so these checks can't
 // accidentally pass (or fail) on the surrounding Rust test code, which
@@ -27,11 +27,16 @@ for (const mapping of [
   'hook_event_name: "UserPromptSubmit"',
   'hook_event_name: "PostToolUse"',
   'hook_event_name: "Stop"',
+  'hook_event_name: "TranscriptLine"',
 ]) {
   assert.ok(source.includes(mapping), `missing Pi event mapping: ${mapping}`);
 }
 assert.ok(!source.includes("agent_end"), "must never wire agent_end to anything");
 assert.ok(!source.includes("turn_end"), "must never wire turn_end to anything");
+assert.ok(source.includes('pi.on("message_end"'), "finalized messages must feed extraction");
+assert.ok(source.includes('type: "pi_message"'), "Pi needs its own explicit transcript envelope");
+assert.ok(source.includes('message?.role !== "user" && message?.role !== "assistant"'));
+assert.ok(source.includes('block?.type === "text"'));
 
 for (const pick of [
   'pick("command", ["command"]);',
@@ -51,6 +56,7 @@ function handlerBody(start: string, end: string): string {
 for (const [start, end] of [
   ['pi.on("session_start"', 'pi.on("before_agent_start"'],
   ['pi.on("before_agent_start"', 'pi.on("tool_execution_start"'],
+  ['pi.on("message_end"', 'pi.on("tool_execution_start"'],
   ['pi.on("tool_execution_end"', 'pi.on("agent_settled"'],
   ['pi.on("agent_settled"', 'pi.on("session_shutdown"'],
 ] as const) {

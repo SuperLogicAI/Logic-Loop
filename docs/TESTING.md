@@ -3540,6 +3540,68 @@ before or after this fix.
       fresh tab — real Decisions card confirmed by screenshot. See §62's
       top-level PASS status.
 
+## 63. Pi decision extraction (Plan 039 / Phase 39)
+
+**Status: PASS — live-verified by the maintainer 2026-09-22.** Phase accepted
+with literal `PHASE 39 ACCEPTED`.
+Implementation branch `feat/pi-decision-extraction` starts from PR 51 merge
+`13da7ff`.
+
+### Step 0: redacted Pi 0.85.1 message contract
+
+A disposable extension loaded with `pi -e <temporary path>` recorded only
+event names, roles, content block types, text lengths, session ID, and tool
+IDs — no prompt/reply text, reasoning, tool output, or credentials. Two real
+processes used the same disposable session ID: a plain response, then
+`pi -p --session <id>` with a harmless `pwd` tool call.
+
+| Case | Redacted observed order | Result |
+|---|---|---|
+| Plain reply | `session_start` → `before_agent_start` → user `message_start` → user `message_end[text]` → assistant `message_start[]` → assistant `message_end[text]` → `agent_settled` → `session_shutdown` | PASS — finalized user/assistant text each appeared once |
+| Tool + resumed process | `session_start` → user `message_end[text]` → assistant `message_end[toolCall]` → tool start/end → `message_end(toolResult[text])` → assistant `message_end[text]` → `agent_settled` | PASS — roles and block types safely distinguish visible conversation from tool traffic |
+
+Findings:
+
+- Both user and assistant finalized content are arrays of typed blocks.
+- `message_start` assistant content is empty; it is not a valid extraction
+  source. `message_end` carries the complete visible text.
+- Tool-call rounds produce a finalized assistant message with only a
+  `toolCall` block and a separate `toolResult` role. The shipped reducer accepts
+  only `user`/`assistant` roles and `text` blocks, so both are excluded.
+- No message ID exists on these live shapes. Neither run duplicated a
+  finalized message, so no lossy time/content dedupe was added.
+- Resume retained the exact session ID and the same ordering contract.
+- Existing Plan 026 live evidence covers queued follow-up/retry lifecycle and
+  `agent_settled` as the idle boundary. Phase 39 does not change those handlers.
+
+### Automated implementation evidence
+
+- [x] Pi generated extension version bumped to 2; v1 is stale until explicit
+      re-enable.
+- [x] Finalized message reducer posts `pi_message` synthetic transcript lines
+      through the existing authenticated, tethered, fire-and-forget transport.
+- [x] Rust ingest admits synthetic transcript lines only from OpenCode and Pi.
+- [x] `decisions.ts` recognizes the explicit Pi envelope without changing
+      pairing, reconciliation, queues, schema-drift thresholds, or prompts.
+- [x] `npm run pi:check`, `npm run pi-transcript:check`, onboarding, OpenCode
+      transcript regression, decisions, decision-integrity, and empty-state
+      focused checks pass.
+- [x] `cargo test --lib pi::tests` — 12/12 pass.
+- [x] `cargo test --lib ingest::tests` — 17/17 pass.
+- [x] Live dev-app pass: the rebuilt Phase 39 app correctly showed the installed
+      v1 Pi extension as off/stale; re-enabling deployed v2, and a fresh Pi
+      session produced the expected decision extraction. The maintainer reports
+      the Phase 39 acceptance test passed. Existing Plan 026 live evidence and
+      the full automated regression suite cover unchanged activity, same-cwd
+      binding, retry, re-entry, dead-ingest, OpenCode, and Claude/Codex paths.
+- [x] Full Phase 39 gates: `npm run check` (35/35 scripts),
+      `npx tsc --noEmit`, `npm run build`, `cargo test --lib` (137 passed,
+      one authenticated live Codex meter test ignored), Clippy with warnings
+      denied, and `git diff --check` all clean. The first sandboxed Rust run
+      denied the LM Studio deadline test's loopback bind; the required
+      unsandboxed rerun passed.
+- [x] `npm run golden` deliberately not run — no extractor prompt changed.
+
 ## Quality gates (machine-run, not manual)
 
 - [x] `npx tsc --noEmit` clean. *(rerun 2026-08-18, Phase 9)*

@@ -87,9 +87,10 @@ export const ADAPTERS: readonly AdapterMetadata[] = [
     command: "pi",
     installUrl: "https://pi.dev",
     configLocation: "~/.pi/agent/extensions/logic-loop.ts",
-    // resume_command's pi arm (Build step 4) and its live re-entry gate
-    // (Step 5, docs/TESTING.md §54, 2026-09-18) both now pass.
-    capabilities: { activity: true, decisions: false, reentry: true },
+    // Re-entry passed live in Plan 026. Decision extraction uses finalized
+    // visible message_end text from Pi's in-process extension (Plan 039),
+    // never PTY bytes or Pi's session files.
+    capabilities: { activity: true, decisions: true, reentry: true },
   },
   {
     id: "deepseek",

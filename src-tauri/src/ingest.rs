@@ -103,17 +103,16 @@ pub fn start(app: AppHandle) {
                 continue;
             }
             if let Ok(mut payload) = serde_json::from_str::<serde_json::Value>(&body) {
-                // OpenCode has no transcript file to tail (Plan 038 Part 1):
-                // its in-process plugin assembles a completed message's text
-                // itself and posts it here as a synthetic transcript line,
+                // OpenCode and Pi have no transcript file to tail (Plans 038
+                // and 039): their in-process adapters reduce completed visible
+                // message text and post it here as a synthetic transcript line,
                 // reusing the exact `ingest://transcript` path the real file
                 // tailer already feeds into `decisions.onTranscript` — no
                 // separate extraction pipeline needed. Scoped to the
-                // `opencode` agent marker specifically, not any payload
-                // claiming this event name, matching `is_transcript_path`'s
-                // own per-agent scoping discipline one block below.
+                // only for the explicit closed set below, not any payload
+                // claiming this event name.
                 if payload.get("hook_event_name").and_then(|v| v.as_str()) == Some("TranscriptLine")
-                    && recognized_agent(agent_header.as_deref()) == Some("opencode")
+                    && accepts_synthetic_transcript(recognized_agent(agent_header.as_deref()))
                 {
                     if let (Some(sid), Some(line)) = (
                         payload.get("session_id").and_then(|v| v.as_str()),
@@ -486,6 +485,12 @@ fn recognized_agent(header: Option<&str>) -> Option<&str> {
     header.filter(|a| RECOGNIZED_AGENTS.contains(a))
 }
 
+/// Only adapters whose in-process message reducers have a live-verified
+/// synthetic transcript contract may bypass file tailing.
+fn accepts_synthetic_transcript(agent: Option<&str>) -> bool {
+    matches!(agent, Some("opencode" | "pi"))
+}
+
 const HOOK_EVENTS: [&str; 5] =
     ["Notification", "Stop", "PostToolUse", "UserPromptSubmit", "SessionStart"];
 
@@ -848,6 +853,17 @@ mod tests {
         assert_eq!(recognized_agent(Some("claude")), None);
         assert_eq!(recognized_agent(Some("")), None);
         assert_eq!(recognized_agent(None), None);
+    }
+
+    #[test]
+    fn synthetic_transcripts_accept_only_opencode_and_pi() {
+        assert!(accepts_synthetic_transcript(Some("opencode")));
+        assert!(accepts_synthetic_transcript(Some("pi")));
+        assert!(!accepts_synthetic_transcript(Some("codex")));
+        assert!(!accepts_synthetic_transcript(Some("antigravity")));
+        assert!(!accepts_synthetic_transcript(Some("deepseek")));
+        assert!(!accepts_synthetic_transcript(Some("claude")));
+        assert!(!accepts_synthetic_transcript(None));
     }
 
     #[test]

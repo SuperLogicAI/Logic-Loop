@@ -600,3 +600,14 @@ open. Append-only. Referenced from CLAUDE.md.
   `docs/TESTING.md` §59's new regression subsection.
 
 Update this file as phases are accepted.
+
+- Phase 39 / Plan 039 (Pi decision extraction): **DONE 2026-09-22; live pass
+  confirmed by the maintainer.** Literal `PHASE 39 ACCEPTED` received after PR 51 merged.
+  Pi 0.85.1 live probing confirmed finalized `message_end` text blocks for
+  user/assistant roles and safely distinguishable toolCall/toolResult traffic.
+  The v2 generated extension posts strict `pi_message` synthetic transcript
+  lines; ingest accepts them only from Pi/OpenCode; the existing decision
+  pipeline is reused unchanged. Focused and full TypeScript/Rust gates pass;
+  after launching the new dev build, the stale-v1 → enable-v2 flow and real Pi
+  decision extraction passed live. No extraction prompt or schema changed, so
+  golden was not run.
