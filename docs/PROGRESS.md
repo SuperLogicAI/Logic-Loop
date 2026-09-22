@@ -586,4 +586,17 @@ open. Append-only. Referenced from CLAUDE.md.
   checks as their own small residual matrix rather than carrying all ten
   forward as open debt.
 
+- Hotfix (tab-identity hijack, off-phase): found live 2026-09-22 — a
+  foreign session sharing a tab's `LOGIC_LOOP_TAB_ID` tether (e.g. a one-off
+  second-CLI run as a subprocess inside an existing tab's shell) could
+  overwrite that tab's `agent`/`sessionId`/`agentState`, flipping the Phase
+  35 icon and silently corrupting resume identity. Fixed by extracting the
+  tab-update reducer to `mergeTabIdentity` (`src/lib/ingest.ts`), gated on
+  session ownership (`!t.sessionId || t.sessionId === p.session_id`), not
+  just tether match. Covered by `scripts/tab-identity-check.ts` (wired into
+  `npm run check`); automated gates (`tsc --noEmit`, `cargo clippy`, `npm
+  run check` 34/34, `cargo test --lib` 136/136, `npm run build`, `git diff
+  --check`) all clean. Live confirmation still open — see
+  `docs/TESTING.md` §59's new regression subsection.
+
 Update this file as phases are accepted.

@@ -6,6 +6,7 @@ import type {
   ClaudeStatuslinePayload,
   ClaudeStatuslineStatus,
   HookPayload,
+  Tab,
 } from "../types";
 
 export function hooksSetup(): Promise<void> {
@@ -217,6 +218,38 @@ export function bindSession(
     tabs.find((t) => t.id === activeTabId && t.status === "live" && !boundTabIds.has(t.id))?.id ??
     null
   );
+}
+
+/** Applies one hook event to the tab it's tethered to. Gated on session
+ * ownership, not just tether match: a tab's own bound session drives its
+ * identity/state/cwd as before, but a *different* session sharing the same
+ * `LOGIC_LOOP_TAB_ID` (e.g. a one-off CLI run as a subprocess inside an
+ * existing tab's shell) must not hijack it — no icon flip, no `sessionId`
+ * overwrite. `!t.sessionId` is the one exception: a tab's first-ever
+ * structured event establishes its identity. The raw event still gets
+ * written to `hook_events` regardless (that happens unconditionally,
+ * upstream of this call) — only the tab's displayed state is guarded here. */
+export function mergeTabIdentity(
+  t: Tab,
+  p: HookPayload,
+  cwd: string | undefined,
+  state: AgentState | null,
+  isPromptSubmit: boolean,
+  provenance: "human" | "auto" | undefined,
+  expandCwd: (cwd: string) => string
+): Tab {
+  const owns = !t.sessionId || t.sessionId === p.session_id;
+  if (!owns) return t;
+  const next = cwd && expandCwd(t.cwd) !== cwd ? { ...t, cwd } : t;
+  const withAgent = p.agent && next.agent !== p.agent ? { ...next, agent: p.agent } : next;
+  if (!state) return withAgent;
+  return {
+    ...withAgent,
+    sessionId: p.session_id,
+    agentState: state,
+    lastEventTs: Date.now(),
+    lastTurnAuto: isPromptSubmit ? provenance === "auto" : withAgent.lastTurnAuto,
+  };
 }
 
 // Epoch guard: sessions whose last turn ended with Stop. Late-arriving events
