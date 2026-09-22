@@ -29,7 +29,7 @@
 <p align="center"><strong>Features</strong></p>
 
 <p align="center">
-  <a href="docs/TESTING.md#22-clickable-links-in-terminal-output-2026-08-29"><img src="docs/assets/feature-browser-navigation.svg" alt="Browser Navigation" height="28"></a>
+  <a href="docs/TESTING.md#22-clickable-links-in-terminal-output-2026-08-29"><img src="docs/assets/feature-browser-navigation.svg" alt="Browser-Like Project Tabs" height="28"></a>
   <a href="docs/TESTING.md#9-bookmarks"><img src="docs/assets/feature-bookmark-projects.svg" alt="Bookmark Projects" height="28"></a>
   <a href="plans/008-preserve-tab-presentation-on-reentry.md"><img src="docs/assets/feature-rapid-re-entry.svg" alt="Rapid Re-Entry" height="28"></a>
   <a href="#account-and-usage-meters"><img src="docs/assets/feature-claude-codex-usage-feed.svg" alt="Claude/Codex Usage Feed" height="28"></a>
@@ -39,6 +39,9 @@
   <a href="#decision-debt"><img src="docs/assets/feature-decision-trackers.svg" alt="Decision Trackers" height="28"></a>
   <a href="docs/TESTING.md#28-idea-board-phase-18"><img src="docs/assets/feature-project-idea-boards.svg" alt="Project Idea Boards" height="28"></a>
   <a href="#model-traffic-optional"><img src="docs/assets/feature-local-coding-optimizations.svg" alt="Local Coding Optimizations" height="28"></a>
+  <a href="docs/TESTING.md#34-blockers-bulk-clear-phase-24"><img src="docs/assets/feature-blockers.svg" alt="Blockers Trackers" height="28"></a>
+  <a href="docs/TESTING.md#26-diff-pop-out-from-accomplished-rows-issue-10"><img src="docs/assets/feature-accomplished.svg" alt="Accomplished Trackers" height="28"></a>
+  <a href="docs/TESTING.md#36-cross-project-attention-inbox-phase-26"><img src="docs/assets/feature-attention-inbox.svg" alt="Cross-Project Attention Inbox" height="28"></a>
 </p>
 
 [<img src="docs/assets/logic-loop-ui.png" alt="Logic Loop app with several agent sessions open">](#macos-build-from-source)
