@@ -8,6 +8,7 @@ import { installModelSelection } from "@deepseek-ai/dsh-agent";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { SessionSeq } from "@deepseek-ai/dsh-session";
 import { assertNever } from "@deepseek-ai/dsh-util-values";
+import { assistantMessagesSince, visibleText } from "./messages.js";
 
 /**
  * dsh-terminal-app — a direct core Agent/Session runner over dsh-base, like
@@ -156,6 +157,15 @@ function postEvent(payload) {
     // never let a translation/network error touch the user's session
     if (debug) internals.stderr.write(`logic-loop: postEvent threw: ${e}\n`);
   }
+}
+
+function postTranscriptLine(sessionId, role, text) {
+  postEvent({
+    hook_event_name: "TranscriptLine",
+    session_id: sessionId,
+    cwd: process.cwd(),
+    line: JSON.stringify({ type: "deepseek_message", role, text }),
+  });
 }
 
 /**
@@ -347,11 +357,19 @@ async function run(ctx, config, io) {
       if (text === "") continue;
       const firstSeq = agent.session.seq;
       postEvent({ hook_event_name: "UserPromptSubmit", session_id: sessionId, cwd: process.cwd() });
+      postTranscriptLine(sessionId, "user", text);
       agent.followup(createUserMessage({
         content: [{ type: "text", text }],
         source: { kind: "user" },
       }));
       await agent.whenIdle();
+      const messageSession = {
+        seq: agent.session.seq,
+        eventAt: (seq) => agent.session.eventAt(SessionSeq(seq)),
+      };
+      for (const assistantText of assistantMessagesSince(messageSession, firstSeq)) {
+        postTranscriptLine(sessionId, "assistant", assistantText);
+      }
       reportTurnError(agent.session, firstSeq, io.stderr);
       postEvent({ hook_event_name: "Stop", session_id: sessionId, cwd: process.cwd() });
       await sessions.flush(agent.session);
@@ -380,4 +398,4 @@ function apply(ctx, config) {
   });
 }
 
-export { Config, apply, inject, internals, name };
+export { Config, apply, assistantMessagesSince, inject, internals, name, visibleText };

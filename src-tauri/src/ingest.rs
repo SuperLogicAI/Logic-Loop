@@ -488,7 +488,7 @@ fn recognized_agent(header: Option<&str>) -> Option<&str> {
 /// Only adapters whose in-process message reducers have a live-verified
 /// synthetic transcript contract may bypass file tailing.
 fn accepts_synthetic_transcript(agent: Option<&str>) -> bool {
-    matches!(agent, Some("opencode" | "pi"))
+    matches!(agent, Some("opencode" | "pi" | "deepseek"))
 }
 
 const HOOK_EVENTS: [&str; 5] =
@@ -856,12 +856,12 @@ mod tests {
     }
 
     #[test]
-    fn synthetic_transcripts_accept_only_opencode_and_pi() {
+    fn synthetic_transcripts_accept_only_verified_adapters() {
         assert!(accepts_synthetic_transcript(Some("opencode")));
         assert!(accepts_synthetic_transcript(Some("pi")));
         assert!(!accepts_synthetic_transcript(Some("codex")));
         assert!(!accepts_synthetic_transcript(Some("antigravity")));
-        assert!(!accepts_synthetic_transcript(Some("deepseek")));
+        assert!(accepts_synthetic_transcript(Some("deepseek")));
         assert!(!accepts_synthetic_transcript(Some("claude")));
         assert!(!accepts_synthetic_transcript(None));
     }

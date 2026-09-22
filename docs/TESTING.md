@@ -3696,3 +3696,67 @@ Findings:
       ignored. The home-directory repo regression now uses a temporary `HOME`;
       environment restoration and poisoned-lock recovery prevent it from
       affecting the rest of the suite.
+
+## 64. DeepSeek decision extraction (Plan 040 / Phase 40)
+
+### Live session-event contract — 2026-09-22
+
+Tested with an isolated copy of `~/.dsh` under `/private/tmp`, Harness and core
+packages `0.1.5-rc.2`, and redacted metadata logging only. No production or
+installed-profile source was edited.
+
+| Case | Redacted event order | Result |
+| --- | --- | --- |
+| Plain reply | direct `user/message` append → `assistant/message` append with `[reasoning,text]` → `turn/end completed` | Visible text was complete once, with a stable message ID. |
+| Tool turn | direct user append → assistant `[reasoning,tool-call]` → `tool/call` → `tool/result` → assistant `[reasoning,text]` → completed | Text-only reduction omitted reasoning, tool traffic, and the empty tool-call-only assistant message. |
+| Two turns / one process | second turn began at the next seq and committed its own user and assistant rows | `[firstSeq, session.seq)` was deterministic; no duplicate delivery observed. |
+| Cross-process resume | `--resume` reused the exact session ID and recalled the first reply | The new turn appended after existing history and scanned only its own seq window. |
+
+- [x] The trimmed readline value matched the direct human message. The same
+      `user/message` type also carried injected `agent-instructions`, `plugin`,
+      and `skill-catalog` sources, proving extraction must use the controlled
+      readline string rather than scan user events.
+- [x] A committed assistant event was `assistant/message`, `surfaceOp: append`,
+      with `data.message.role: assistant` and a content array of typed blocks.
+      Joining only string `text` blocks reproduced the visible prose.
+- [x] `agent.whenIdle()` returned after `turn/end`; the post-idle scan therefore
+      saw finalized messages before Logic Loop emitted `Stop` and flushed.
+- [x] No replacements, compaction, duplicate events, or interrupted committed
+      messages appeared in the live matrix. The reducer rejects replacements
+      and interrupted messages explicitly. Failed/retried traffic was not
+      induced against the funded provider; installed package types/source show
+      noncommitted attempts as `assistant/attempt`, which the reducer rejects.
+- [x] Step 0 gate passed. No PTY/stdout/session-file semantics are used.
+
+### Automated and rebuilt-app matrix
+
+- [x] `npm run deepseek-transcript:check` — reducer/envelope/order fixtures pass.
+- [x] `npm run deepseek:check` — adapter v3, complete resource manifest, and
+      installer characterization pass.
+- [x] `cargo test --lib deepseek::tests` — 7/7 pass, including v2 stale/v3 current.
+- [x] Full gates: `npm run check` (36 scripts), `npx tsc --noEmit`, production
+      build, `cargo test --lib` (137 passed, one authenticated live test
+      ignored), Clippy with warnings denied, and `git diff --check`. The first
+      sandboxed Rust run denied the existing LM Studio deadline test's loopback
+      bind; the unsandboxed rerun passed.
+- [ ] Rebuild/relaunch, explicitly Enable incomplete v2 → v3, then run the Plan 040
+      Step 6 live extraction, isolation, failure, re-entry, fail-open, collision,
+      and existing-adapter regression matrix.
+- [x] `npm run golden` deliberately not run; no extractor prompt changed.
+
+### First rebuilt-app live result — 2026-09-22
+
+- [x] Rebuilt v3 installed successfully after the incomplete v2 packaging
+      failure; `dsh --profile logic-loop` booted the custom terminal runner.
+- [x] A real DeepSeek turn produced a correctly bound Decision card in the
+      sidebar (maintainer screenshot evidence).
+- [x] Cross-process re-entry retained conversation context: when asked for a
+      previously supplied number, the resumed model returned `1818` correctly.
+- [x] Known UX limitation recorded: DeepSeek Harness restores model context but
+      the Logic Loop-owned terminal runner does not replay historical chat text
+      into the terminal. The user can continue the conversation, but cannot
+      visually inspect earlier turns after re-entry. Other supported adapters
+      currently restore visible history, so DeepSeek is the exception.
+- [ ] Remaining Plan 040 live rows: reply reconciliation/cancel behavior, tool
+      turn filtering, two-tab isolation, provider failure/retry, dead-ingest
+      fail-open, foreign-directory protection, and existing-adapter smoke tests.

@@ -39,6 +39,7 @@
       "../dsh-terminal-app/LICENSE": "dsh-terminal-app/LICENSE",
       "../dsh-terminal-app/README.md": "dsh-terminal-app/README.md",
       "../dsh-terminal-app/src/index.js": "dsh-terminal-app/src/index.js",
+      "../dsh-terminal-app/src/messages.js": "dsh-terminal-app/src/messages.js",
       "../dsh-terminal-app/src/startup.js": "dsh-terminal-app/src/startup.js"
     }
   }

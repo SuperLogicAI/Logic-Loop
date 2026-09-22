@@ -50,7 +50,8 @@ export function transcriptEnvelopeType(line: string): "recognized" | "unrecogniz
     obj.type === "user" ||
     obj.type === "response_item" ||
     obj.type === "opencode_message" ||
-    obj.type === "pi_message"
+    obj.type === "pi_message" ||
+    obj.type === "deepseek_message"
     ? "recognized"
     : "unrecognized";
 }
@@ -92,7 +93,11 @@ export function textFromTranscriptLine(line: string): { role: string; text: stri
     // this envelope directly, already reduced to plain text in-process (see
     // opencode.rs's `flushMessage`). No block/content-array parsing needed
     // here, unlike Claude/Codex below: there's only ever one shape to read.
-    if (obj.type === "opencode_message" || obj.type === "pi_message") {
+    if (
+      obj.type === "opencode_message" ||
+      obj.type === "pi_message" ||
+      obj.type === "deepseek_message"
+    ) {
       if (obj.role !== "user" && obj.role !== "assistant") return null;
       const text = typeof obj.text === "string" ? obj.text : "";
       if (!text.trim()) return null;
