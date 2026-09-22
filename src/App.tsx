@@ -8,6 +8,7 @@ import {
   bindSession,
   computeProvenance,
   deriveClock,
+  mergeTabIdentity,
   onAdapterWarning,
   onHookEvent,
   onStatusline,
@@ -1037,22 +1038,9 @@ export default function App() {
         .then(scheduleAttentionRefresh)
         .catch(() => undefined); // fail open: attention evidence never affects the terminal
       setTabs((prev) =>
-        prev.map((t) => {
-          if (t.id !== tabId) return t;
-          // keep tab.cwd synced to the agent's project key so panels/badges
-          // query the right project even after an in-shell `cd`. A `cd` within
-          // the same repo is now a no-op here — that's the fix.
-          const next = cwd && expand(t.cwd) !== cwd ? { ...t, cwd } : t;
-          const withAgent = p.agent && next.agent !== p.agent ? { ...next, agent: p.agent } : next;
-          if (!state) return withAgent;
-          return {
-            ...withAgent,
-            sessionId: p.session_id,
-            agentState: state,
-            lastEventTs: Date.now(),
-            lastTurnAuto: isPromptSubmit ? provenance === "auto" : withAgent.lastTurnAuto,
-          };
-        })
+        prev.map((t) =>
+          t.id !== tabId ? t : mergeTabIdentity(t, p, cwd, state, isPromptSubmit, provenance, expand)
+        )
       );
       // Fan-out rollup's "done"/"running" depends on live agentState, so it
       // needs a nudge on every state-bearing hook — not just tab switches —

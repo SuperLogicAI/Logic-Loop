@@ -3177,6 +3177,33 @@ wrote `PHASE 35 APPROVED`; unrun regression cases remain unchecked below.
       close, reorder, scrolling, badges, and glows still work. The two rows
       read as a compact unit without crowding the top border or each other.
 
+### Regression: foreign-session tab-identity hijack (found live 2026-09-22)
+
+Found live: running `opencode run ...` as a one-off subprocess inside a
+Claude-driven tab's shell flipped that tab's icon to OpenCode mid-session,
+because the subprocess inherits `LOGIC_LOOP_TAB_ID` and its hook events
+tethered to the same tab. Fixed by gating `App.tsx`'s tab-update reducer
+(`mergeTabIdentity` in `src/lib/ingest.ts`) on session ownership
+(`!t.sessionId || t.sessionId === p.session_id`), not just tether match.
+Covered by `scripts/tab-identity-check.ts` (`npm run tab-identity:check`),
+but the tether-inheritance mechanism itself is real-process behavior a unit
+test can't exercise — confirm live:
+
+- [x] Open a tab, start Claude, let it reach a real bound session (icon
+      shows Claude). From that same tab's shell, run a one-off command with
+      a different adapter CLI (or `curl` a synthetic hook payload at the
+      ingest server using that tab's real `LOGIC_LOOP_TAB_ID` tether header
+      but a different `session_id` and `X-Logic-Loop-Agent`). Confirm the
+      icon does **not** move and the tab's bound session/resume identity is
+      unaffected, while the foreign event still lands in `hook_events`.
+      Confirmed live 2026-09-22: curl'd a synthetic `SessionStart` (session
+      `foreign-synthetic-session-id`, `X-Logic-Loop-Agent: opencode`) at the
+      tab's real tether. Event landed in `events` (id 188212, agent
+      `opencode`); tab icon stayed Claude; the Claude usage bar (not called
+      out in the original report) also stayed put — `mergeTabIdentity`
+      (`src/lib/ingest.ts:241`) rejects the payload since `t.sessionId !==
+      p.session_id`, so nothing downstream of that gate updates. Full pass.
+
 ## 60. Trust and responsiveness (Plan 032)
 
 Maintainer authorized in-session 2026-09-19 ("Let's start 032"), same
