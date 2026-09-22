@@ -19,7 +19,7 @@ assert.deepEqual(
     { id: "codex", command: "codex", capabilities: { activity: true, decisions: true, reentry: true } },
     { id: "opencode", command: "opencode", capabilities: { activity: true, decisions: true, reentry: true } },
     { id: "antigravity", command: "agy", capabilities: { activity: true, decisions: false, reentry: true } },
-    { id: "pi", command: "pi", capabilities: { activity: true, decisions: false, reentry: true } },
+    { id: "pi", command: "pi", capabilities: { activity: true, decisions: true, reentry: true } },
     { id: "deepseek", command: "dsh --profile logic-loop", capabilities: { activity: true, decisions: false, reentry: true } },
   ]
 );

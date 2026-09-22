@@ -12,7 +12,7 @@ const MARKER: &str = "logic-loop-pi-extension";
 /// way a reader must know about. `pi_hooks_status` only reports "on" for a
 /// file stamped with the current version, same role as `ingest.rs`'s
 /// `HOOK_VERSION` and `opencode.rs`'s `OPENCODE_PLUGIN_VERSION`.
-const PI_EXTENSION_VERSION: u32 = 1;
+const PI_EXTENSION_VERSION: u32 = 2;
 
 /// Pi's documented global extension directory — files dropped here load
 /// automatically with no settings.json entry and no per-project trust
@@ -38,8 +38,9 @@ fn extension_path() -> PathBuf {
 /// port/token doesn't need a Pi `/reload`; POSTs are fire-and-forget with a
 /// short abort timeout and swallowed errors, never awaited from inside a
 /// lifecycle handler, so a stalled or absent ingest server can never delay
-/// the user's actual Pi session. Only bounded, allowlisted fields are ever
-/// sent — no prompt text, tool result text, or full session object.
+/// the user's actual Pi session. Only allowlisted fields are ever sent —
+/// finalized visible user/assistant text plus bounded tool metadata, never
+/// reasoning, tool result text, or a full message/session object.
 ///
 /// Event shapes and the `read`/`bash`/`write` tool arg key names
 /// (`path`, `command`) below are confirmed live against Pi 0.85.1
@@ -84,6 +85,22 @@ function normalizeToolArgs(args) {{
   pick("file_path", ["path", "file_path"]);
   pick("description", ["description"]);
   return out;
+}}
+
+// Pi 0.85.1 live contract (Plan 039 Step 0): message_end fires once for
+// every finalized user/assistant/toolResult message. Assistant tool-call
+// rounds also end messages, but those contain only toolCall blocks. Reduce
+// the finalized message to visible text blocks only; reasoning, tool calls,
+// tool results, images, and future block types never leave the process.
+function visibleMessage(message) {{
+  if (message?.role !== "user" && message?.role !== "assistant") return null;
+  if (!Array.isArray(message.content)) return null;
+  const text = message.content
+    .filter((block) => block?.type === "text" && typeof block.text === "string")
+    .map((block) => block.text)
+    .join("\n");
+  if (!text.trim()) return null;
+  return {{ role: message.role, text }};
 }}
 
 export default function (pi) {{
@@ -149,6 +166,21 @@ export default function (pi) {{
       post({{ hook_event_name: "UserPromptSubmit", ...base }});
     }} catch {{
       // fail open
+    }}
+  }});
+
+  pi.on("message_end", async (event, ctx) => {{
+    try {{
+      const base = rowBase(ctx);
+      const message = visibleMessage(event?.message);
+      if (!base || !message) return;
+      post({{
+        hook_event_name: "TranscriptLine",
+        ...base,
+        line: JSON.stringify({{ type: "pi_message", ...message }}),
+      }});
+    }} catch {{
+      // fail open; returning nothing also guarantees observation only
     }}
   }});
 
@@ -365,10 +397,11 @@ mod tests {
     }
 
     #[test]
-    fn extension_source_maps_the_five_events_and_nothing_else_to_stop() {
+    fn extension_source_maps_the_six_events_and_nothing_else_to_stop() {
         let src = extension_source();
         assert!(src.contains("\"session_start\""));
         assert!(src.contains("\"before_agent_start\""));
+        assert!(src.contains("\"message_end\""));
         assert!(src.contains("\"tool_execution_start\""));
         assert!(src.contains("\"tool_execution_end\""));
         assert!(src.contains("\"agent_settled\""));
@@ -384,14 +417,15 @@ mod tests {
     }
 
     #[test]
-    fn extension_source_never_forwards_prompt_or_result_text() {
+    fn extension_source_forwards_only_visible_final_message_text() {
         let src = extension_source();
-        // The only free-text fields ever posted come from normalizeToolArgs'
-        // bounded allowlist — event.prompt and tool result content must
-        // never reach a `post(...)` call site.
+        assert!(src.contains("function visibleMessage(message)"));
+        assert!(src.contains("message?.role !== \"user\" && message?.role !== \"assistant\""));
+        assert!(src.contains("block?.type === \"text\""));
+        assert!(src.contains("type: \"pi_message\""));
+        assert!(src.contains("hook_event_name: \"TranscriptLine\""));
         assert!(!src.contains("event.prompt"));
         assert!(!src.contains("event.result"));
-        assert!(!src.contains(".content"));
     }
 
     #[test]
