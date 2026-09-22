@@ -2,11 +2,28 @@
 
 ## Status
 
-CANDIDATE — not implemented or approved. Picked up 2026-09-21 while Plan 037
-is paused (Agy quota cooldown; all of 037 waits for Agy specifically, not
-delegated elsewhere). P1/P2 mixed — see per-part status. Depends on: none
-blocking; OpenCode is already a DONE adapter (Phase 8) — this only adds
-features to it.
+**DONE — both parts live-verified PASS, 2026-09-22.** Picked up 2026-09-21
+while Plan 037 is paused (Agy quota cooldown; all of 037 waits for Agy
+specifically, not delegated elsewhere). Depends on: none blocking; OpenCode
+is already a DONE adapter (Phase 8) — this only adds features to it.
+
+- **Part 2 (re-entry)**: live quit/relaunch/Re-enter passed twice back to
+  back against the real app, real TUI resume, real prior context. See
+  `docs/TESTING.md` §61.
+- **Part 1 (extraction)**: live real-question → real Decisions card,
+  confirmed by screenshot, not a one-off (several dismissed cards from the
+  same session). Shipped as three commits (v3 buffering, v4 question-tool
+  follow-up, a status-check staleness fix that turned out to be the actual
+  blocker on the first two live attempts). See `docs/TESTING.md` §62 and
+  its two sub-entries for the full trail, including two real bugs found
+  by live testing rather than assumed away.
+- `onboarding.ts`'s `capabilities.decisions`/`reentry` both flipped to
+  `true` for OpenCode; `README.md`'s OpenCode row updated; the stale
+  `decisionsEmptyReason` hardcoded-to-`"codex"` check (a second, separate
+  bug this testing surfaced) fixed and de-duplicated behind a shared
+  `adapterSupportsDecisions()` helper.
+- Merge/PR not yet done — work is committed on `feat/opencode-adapter-
+  expansion`, not yet pushed or merged to `main`.
 
 ## Why this matters
 

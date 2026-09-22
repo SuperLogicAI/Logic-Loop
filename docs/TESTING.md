@@ -3210,7 +3210,12 @@ Automated evidence (2026-09-19):
 
 ## 61. OpenCode session re-entry, resume-selector wiring (Plan 038 Part 2)
 
-**Status: BUILT, live TUI regression pending.** Maintainer authorized
+**Status: PASS — live-verified 2026-09-22.** The maintainer ran real
+quit/relaunch/Re-enter against a live OpenCode tab in the built app
+**twice back to back**: both times a ghost tab appeared and Re-enter
+correctly resumed the TUI into the same prior conversation.
+`capabilities.reentry` flipped to `true`; `README.md`'s OpenCode row
+updated. Maintainer authorized
 2026-09-21 ("Plan 038 APPROVED"), same in-session precedent as Plans
 016/017/025/026/029/032. See `plans/038-opencode-adapter-expansion.md`
 Part 2.
@@ -3232,16 +3237,18 @@ and silently launched the wrong CLI. Fixed by adding an `"opencode"` arm
 (`opencode -s <sid>; exec <shell> -l`, per `opencode --help`'s top-level
 `-s`/`--session` flag) to `pty.rs`'s closed-set resume selector.
 
-`onboarding.ts`'s `capabilities.reentry` stays `false` for OpenCode —
-that flag only drives the Setup checklist's display text
-(`OnboardingModal.tsx`), not the runtime path, and this repo doesn't flip
-a "supported" claim before a real live pass. **Pending**: quit/relaunch
-the real app with a live OpenCode tab, confirm a ghost tab appears,
-click Re-enter, confirm the TUI resumes into the correct prior
-conversation (the spike above proved the CLI flag works non-interactively
-via `opencode run`, not yet the interactive TUI path the app actually
-launches). Flip `capabilities.reentry` to `true` and update `README.md`'s
-OpenCode row only after that passes.
+**Live pass, 2026-09-22**: quit/relaunch of the real built app with a live
+OpenCode tab produced a ghost tab both times; Re-enter correctly resumed
+the TUI into the same prior conversation both times, confirming the
+non-interactive spike's finding held for the actual interactive path the
+app launches. One real caveat surfaced during the same testing session
+(not specific to re-entry, but discovered alongside it): a ghost tab that
+re-enters a process which started **before** a plugin version bump keeps
+running that process's already-loaded (stale) plugin code — Node doesn't
+hot-reload an in-memory module, so only a genuinely new process picks up
+a newly-deployed plugin file. Not a bug; document as an expected limit —
+after toggling OpenCode off/on (or any future version bump), use a fresh
+tab rather than a re-entered one to confirm the new behavior.
 
 Automated evidence (2026-09-21):
 
@@ -3345,8 +3352,27 @@ lines broke its literal-substring ordering check; reverted to single-line),
 
 ## 62. OpenCode decision/blocker extraction (Plan 038 Part 1)
 
-**Status: BUILT, live in-app manual pass pending.** See
-`plans/038-opencode-adapter-expansion.md` Part 1.
+**Status: PASS — live-verified 2026-09-22.** A real plain-text question
+("Do you want A or B?") produced a real Decisions card in the built app —
+confirmed by screenshot: "NEXT" and "DECISIONS (1)" both showing "Do you
+want A or B?" with answer/context/delegate actions, plus several earlier
+dismissed cards from the same testing session ("Do you like green or
+orange?", etc.), confirming this isn't a one-off. `capabilities.decisions`
+flipped to `true`; `README.md`'s OpenCode row updated. Also fixed:
+`decisionsEmptyReason`'s empty-state message was still hardcoded to
+`agent !== "codex"` — would have kept claiming "not available for this
+agent" for OpenCode forever even with extraction genuinely working.
+Extracted a shared `adapterSupportsDecisions()` in `onboarding.ts`
+(single source of truth off the `ADAPTERS` capabilities record) so this
+can't drift out of sync with a future adapter's flip again.
+
+The two earlier attempts that showed no card (a question-tool call before
+v4 shipped, then a plain-text retry on an already-running re-entered tab)
+are both explained, not unresolved — see the v4 and stale-file
+sub-entries below, and Part 2's §61 caveat about re-entered tabs running
+stale in-memory plugin code.
+
+See `plans/038-opencode-adapter-expansion.md` Part 1.
 
 OpenCode has no transcript file to tail. Its in-process plugin now buffers
 `message.part.updated` text parts by part id and, once a message
@@ -3446,8 +3472,13 @@ question). Answer-side content is explicitly not captured — the
       fixture for the question-tool-formatted text.
 - [x] `npm run build` clean.
 - [x] `git diff --check` clean.
-- **Still pending**: the original Test 1 (real reply, real open question,
-      Decisions panel) re-run against this fix, live, in the app.
+- **Resolved**: re-run against this fix initially still showed no card —
+      root cause was a stale deployed plugin file, not this fix; see the
+      follow-up entry below. Once redeployed, this fix's own logic
+      (question-tool extraction) has not yet been independently re-proven
+      live with a real `question`-tool call specifically (the live pass
+      that finally succeeded used a plain-text question) — the direct-
+      handler test remains this path's load-bearing verification.
 
 ### §62 second follow-up — real root cause was a stale deployed file, not code (2026-09-22)
 
@@ -3478,8 +3509,9 @@ before or after this fix.
 - [x] `npm run check` — 35/35.
 - [x] `npm run build` clean.
 - [x] `git diff --check` clean.
-- **Still pending**: toggle OpenCode off/on in the real app to redeploy
-      the current file, then re-run Test 1 for real.
+- **Resolved, 2026-09-22**: toggled OpenCode off/on, re-ran Test 1 on a
+      fresh tab — real Decisions card confirmed by screenshot. See §62's
+      top-level PASS status.
 
 ## Quality gates (machine-run, not manual)
 

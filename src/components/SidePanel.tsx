@@ -7,6 +7,7 @@ import { generateCommitMessage } from "../lib/commitMessage";
 import { summarizeDelta, type Delta } from "../lib/delta";
 import { collapseNoopRuns, groupIterations, isLoopRun, type Iteration } from "../lib/loop";
 import { deriveClock, formatAge } from "../lib/ingest";
+import { adapterSupportsDecisions } from "../lib/onboarding";
 import { parseBoard, readBoard, spliceCard, writeBoard, type Card } from "../lib/board";
 import { topPlannedCard } from "./IdeaBoard";
 import { PanelIcon } from "./PanelIcon";
@@ -198,7 +199,7 @@ export function decisionsEmptyReason(args: {
   if (args.sessionBlind) {
     return "Can't tell — no transcript for this session (extraction never ran).";
   }
-  if (args.agent && args.agent !== "codex") {
+  if (args.agent && !adapterSupportsDecisions(args.agent)) {
     return "Decision tracking isn't available for this agent yet.";
   }
   return "Nothing waiting on you.";
