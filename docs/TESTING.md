@@ -3208,6 +3208,52 @@ Automated evidence (2026-09-19):
 - [x] `git diff --check`
 - `npm run golden` not run — no extraction-prompt changes.
 
+## 61. OpenCode session re-entry, resume-selector wiring (Plan 038 Part 2)
+
+**Status: BUILT, live TUI regression pending.** Maintainer authorized
+2026-09-21 ("Plan 038 APPROVED"), same in-session precedent as Plans
+016/017/025/026/029/032. See `plans/038-opencode-adapter-expansion.md`
+Part 2.
+
+Live spike (2026-09-21, opencode 1.18.32, non-interactive `opencode run`,
+not the TUI): `opencode run -s <session_id> "..."` in a fresh process
+correctly recalled the prior turn's actual prompt, confirming resume
+works. `session.created` did **not** re-fire on resume (once, total,
+across both processes) — contradicts the upstream doc excerpt this plan
+cited ("runs for both fresh creation and resume replay"); live behavior
+trusted per this repo's standing doc-vs-live rule.
+
+Found while implementing: `App.tsx`'s `SessionStart` binding-write path
+was already fully agent-agnostic (`transcript_path` optional), and
+OpenCode's plugin has emitted a `SessionStart`-mapped event since Phase 8
+— so a ghost tab with "Re-enter" was very likely already appearing for
+OpenCode sessions, but clicking it ran `resume_command`'s Claude fallback
+and silently launched the wrong CLI. Fixed by adding an `"opencode"` arm
+(`opencode -s <sid>; exec <shell> -l`, per `opencode --help`'s top-level
+`-s`/`--session` flag) to `pty.rs`'s closed-set resume selector.
+
+`onboarding.ts`'s `capabilities.reentry` stays `false` for OpenCode —
+that flag only drives the Setup checklist's display text
+(`OnboardingModal.tsx`), not the runtime path, and this repo doesn't flip
+a "supported" claim before a real live pass. **Pending**: quit/relaunch
+the real app with a live OpenCode tab, confirm a ghost tab appears,
+click Re-enter, confirm the TUI resumes into the correct prior
+conversation (the spike above proved the CLI flag works non-interactively
+via `opencode run`, not yet the interactive TUI path the app actually
+launches). Flip `capabilities.reentry` to `true` and update `README.md`'s
+OpenCode row only after that passes.
+
+Automated evidence (2026-09-21):
+
+- [x] `cd src-tauri && cargo test --lib` — 132/132, including new
+      `resume_command_selects_opencode_syntax`.
+- [x] `cd src-tauri && cargo clippy --all-targets -- -D warnings` clean.
+- [x] `npx tsc --noEmit` clean.
+- [x] `npm run check` — all configured scripts pass (exit 0).
+- [x] `npm run build` clean.
+- [x] `git diff --check` clean.
+- `npm run golden` not run — no extraction-prompt changes.
+
 Manual live pass — automated-gate pass above was run without GUI/built-app
 access; the manual steps below were run live by the maintainer afterward,
 on the `npm run tauri dev` build (`target/debug/app`, pid confirmed via
