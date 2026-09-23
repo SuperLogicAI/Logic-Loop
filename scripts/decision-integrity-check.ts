@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { normalizeQuestion } from "../src/lib/repo";
 import { boundedSubmittedReply, matchAnswerNowReply, type ReconciliationCandidate } from "../src/lib/decisionReconciliation";
-import { transcriptEnvelopeType } from "../src/lib/decisions";
+import { textFromTranscriptLine, transcriptEnvelopeType } from "../src/lib/decisions";
 
 const candidates: ReconciliationCandidate[] = [
   { id: 4, question: "Use SQLite or Postgres?", assumption: "Use SQLite", ts: 100 },
@@ -124,6 +124,34 @@ for (const line of [
 }
 assert.equal(transcriptEnvelopeType("not json"), "unparseable");
 assert.equal(transcriptEnvelopeType('{"type":"assistant"'), "unparseable", "a partial line mid-flush is not drift");
+
+// Phase 41: only the visible user request and completed planner reply may
+// enter extraction. Agy's metadata wrappers, thinking, and tool output stay
+// outside the turn pair even when present on an otherwise recognized line.
+const agy = (type: string, status: string, content?: string) =>
+  JSON.stringify({ type, status, content, thinking: "private", tool_calls: [{ name: "run" }] });
+const wrapped = agy(
+  "USER_INPUT",
+  "DONE",
+  "<USER_REQUEST>Which design should we ship?</USER_REQUEST><ADDITIONAL_METADATA>ignore this</ADDITIONAL_METADATA>"
+);
+assert.equal(transcriptEnvelopeType(wrapped), "recognized");
+assert.deepEqual(textFromTranscriptLine(wrapped), { role: "user", text: "Which design should we ship?" });
+assert.equal(textFromTranscriptLine(agy("USER_INPUT", "DONE", "No request tag?")), null);
+assert.equal(textFromTranscriptLine(agy("USER_INPUT", "RUNNING", "<USER_REQUEST>Partial?</USER_REQUEST>")), null);
+assert.deepEqual(textFromTranscriptLine(agy("PLANNER_RESPONSE", "DONE", "Choose the smaller design?")), {
+  role: "assistant",
+  text: "Choose the smaller design?",
+});
+assert.equal(textFromTranscriptLine(agy("PLANNER_RESPONSE", "RUNNING", "Partial?")), null);
+assert.equal(textFromTranscriptLine(agy("PLANNER_RESPONSE", "DONE", "   ")), null);
+for (const type of ["GENERIC", "SYSTEM_MESSAGE", "ERROR_MESSAGE"]) {
+  const line = agy(type, "DONE", "Do not extract this question?");
+  assert.equal(transcriptEnvelopeType(line), "recognized");
+  assert.equal(textFromTranscriptLine(line), null);
+}
+assert.equal(transcriptEnvelopeType(agy("FUTURE_AGY_TYPE", "DONE", "Question?")), "unrecognized");
+assert.equal(transcriptEnvelopeType(JSON.stringify({ type: "USER_INPUT" })), "unrecognized");
 
 // onTranscript must track every line's envelope before it ever looks at
 // extractable text — the drift signal must not depend on a turn's content.

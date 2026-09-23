@@ -242,8 +242,28 @@ fn is_transcript_path(path: &str, agent: Option<&str>) -> bool {
         Some("codex") => crate::home::home()
             .map(|home| is_codex_rollout_path(Path::new(path), Path::new(&home)))
             .unwrap_or(false),
+        Some("antigravity") => crate::home::home()
+            .map(|home| is_antigravity_transcript_path(Path::new(path), Path::new(&home)))
+            .unwrap_or(false),
         Some(_) => false,
     }
+}
+
+fn is_antigravity_transcript_path(path: &Path, home: &Path) -> bool {
+    let root = home.join(".gemini/antigravity-cli/brain");
+    let Ok(relative) = path.strip_prefix(root) else {
+        return false;
+    };
+    let mut components = relative.components();
+    if !matches!(components.next(), Some(std::path::Component::Normal(_))) {
+        return false;
+    }
+    for expected in [".system_generated", "logs", "transcript_full.jsonl"] {
+        if !matches!(components.next(), Some(std::path::Component::Normal(actual)) if actual == expected) {
+            return false;
+        }
+    }
+    components.next().is_none()
 }
 
 fn is_codex_rollout_path(path: &Path, home: &Path) -> bool {
@@ -1030,5 +1050,34 @@ mod tests {
             std::path::Path::new("/Users/x")
         ));
         assert!(!is_transcript_path("", None));
+    }
+
+    #[test]
+    fn antigravity_transcript_path_is_structurally_scoped() {
+        let home = Path::new("test-home");
+        let brain = home.join(".gemini/antigravity-cli/brain");
+        let session = brain.join("session-123");
+        let valid = session.join(".system_generated/logs/transcript_full.jsonl");
+        assert!(is_antigravity_transcript_path(&valid, home));
+        for invalid in [
+            session.join(".system_generated/logs/transcript.jsonl"),
+            session.join("logs/transcript_full.jsonl"),
+            session.join(".system_generated/logs/extra/transcript_full.jsonl"),
+            session.join("../session-456/.system_generated/logs/transcript_full.jsonl"),
+            brain.join(".system_generated/logs/transcript_full.jsonl"),
+            home.join(".gemini/antigravity-cli/other/session-123/.system_generated/logs/transcript_full.jsonl"),
+            Path::new("other-home").join(".gemini/antigravity-cli/brain/session-123/.system_generated/logs/transcript_full.jsonl"),
+        ] {
+            assert!(!is_antigravity_transcript_path(&invalid, home), "{}", invalid.display());
+        }
+        let _env_guard = crate::home::lock_env();
+        let actual_home = crate::home::home().unwrap();
+        let actual_path = Path::new(&actual_home)
+            .join(".gemini/antigravity-cli/brain/session-123/.system_generated/logs/transcript_full.jsonl");
+        let actual_path = actual_path.to_str().unwrap();
+        assert!(is_transcript_path(actual_path, Some("antigravity")));
+        assert!(!is_transcript_path(actual_path, Some("codex")));
+        assert!(!is_transcript_path(actual_path, None));
+        assert!(!is_transcript_path(actual_path, Some("pi")));
     }
 }

@@ -317,6 +317,11 @@ undocumented behavior.
 P2. Smaller and better-understood than Parts A/B — the blocker is a known,
 named gate in existing code, not an unknown CLI contract.
 
+**Phase 41 approved 2026-09-22.** Part C's Step 1 gate passed live on agy
+1.2.8, and Steps 2–3 are built on `feat/antigravity-decision-extraction`.
+Automated checks pass; the real in-app Decisions-card check remains open.
+This supersedes the 2026-09-21 quota pause below for Part C only.
+
 **Blocked 2026-09-21**: `agy` quota exhausted, ~41h cooldown reported by the
 maintainer. Step 1 needs a real live Antigravity session, so it cannot be
 delegated to another adapter — parked until cooldown clears.
@@ -348,12 +353,12 @@ flagged as the real prerequisite.
   falls through to `Some(_) => false`.
 - `src-tauri/src/antigravity.rs:279` — `transcript_path` already populated
   on the relevant translated payloads.
-- Nobody in this codebase has ever inspected the actual content/format of
-  an Antigravity transcript file on disk — unlike Gemini's documented
-  `transcript_path` (Part A), there is no upstream doc reviewed for this
-  yet either; Antigravity's own doc-vs-live track record
-  (`docs/LANDMINES.md`) is the worst of any adapter here, so this needs a
-  live read of a real file before any parsing code, not a docs lookup.
+- Step 1's real agy 1.2.8 probe confirmed an append-only JSONL file at
+  `~/.gemini/antigravity-cli/brain/<conversationId>/.system_generated/logs/
+  transcript_full.jsonl`. `USER_INPUT` carries the submitted text inside
+  `<USER_REQUEST>`, alongside injected metadata; completed
+  `PLANNER_RESPONSE.content` carries the visible assistant reply. The
+  second turn appended to the same file. See `docs/TESTING.md`.
 - `src-tauri/src/extractor.rs` — existing Claude/Codex extraction path;
   reuse its shape, don't fork a parallel pipeline.
 
@@ -364,7 +369,14 @@ flagged as the real prerequisite.
 way `is_codex_rollout_path` scopes Codex's — not a blanket allow),
 `src-tauri/src/antigravity.rs` (if the transcript format needs
 adapter-specific parsing before feeding the shared extraction path),
+`src/lib/decisions.ts` (the shared JSONL envelope reader and drift tripwire),
 `docs/TESTING.md`.
+
+**Phase 41 scope clarification:** `src/lib/onboarding.ts` and its existing
+checks are also required to flip Antigravity's decision capability once
+extraction is enabled. Without it, Setup and the Decisions empty state would
+continue to say the feature is unavailable. `README.md` is required by
+Step 3's documentation. No adapter installer or terminal behavior changes.
 
 **Out of scope**: any change to Claude/Codex/OpenCode extraction; any
 relaxing of invariant #5 (transcript content stays untrusted data, never
@@ -375,6 +387,13 @@ get, no exceptions for a "simpler" adapter.
 ## Steps
 
 ### Step 1 (gate): Live-read a real Antigravity transcript file
+
+**Passed live 2026-09-22.** A fresh agy turn and a re-entered turn produced
+five append-only lines in one `transcript_full.jsonl`: two `USER_INPUT`, two
+completed `PLANNER_RESPONSE`, and one `SYSTEM_MESSAGE`. Earlier lines stayed
+unchanged, and no duplicate `step_index` or `RUNNING` planner rewrite was
+observed. Read-only replay through the new parser recognized all five lines,
+extracted the four visible messages, and ignored the system line.
 
 Run a real Antigravity session, locate the file at the `transcript_path`
 a live hook event actually reports, and read it directly (not through any
@@ -418,9 +437,9 @@ run it speculatively).
 
 ## Done criteria
 
-- [ ] Step 1's live findings recorded (format, directory shape, message
+- [x] Step 1's live findings recorded (format, directory shape, message
       content presence) before any shipped parsing code.
-- [ ] `is_transcript_path` widening is scoped to Antigravity's real
+- [x] `is_transcript_path` widening is scoped to Antigravity's real
       directory structure, not a blanket allow.
 - [ ] A real Antigravity session's open question surfaces in the Decisions
       panel.
