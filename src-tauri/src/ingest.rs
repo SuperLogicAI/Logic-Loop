@@ -4,6 +4,7 @@ use std::fs;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
 pub(crate) const MARKER: &str = "context-terminal/ingest.env";
@@ -26,6 +27,84 @@ pub(crate) fn settings_path() -> PathBuf {
 /// Sessions with an active transcript tailer.
 #[derive(Default)]
 pub struct TailerRegistry(Mutex<HashSet<String>>);
+
+fn write_endpoint(dir: &Path, port: u16, token: &str) -> std::io::Result<()> {
+    fs::create_dir_all(dir)?;
+    let env_file = dir.join("ingest.env");
+    fs::write(&env_file, format!("CT_PORT={port}\nCT_TOKEN={token}\n"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(dir, fs::Permissions::from_mode(0o700))?;
+        fs::set_permissions(&env_file, fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(())
+}
+
+fn endpoint_from_env(content: &str) -> Option<(u16, &str)> {
+    let port = content.lines().find_map(|line| line.strip_prefix("CT_PORT="))?.parse().ok()?;
+    let token = content.lines().find_map(|line| line.strip_prefix("CT_TOKEN="))?;
+    if token.len() != 64 || !token.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    Some((port, token))
+}
+
+fn endpoint_alive(content: &str) -> bool {
+    let Some((port, token)) = endpoint_from_env(content) else {
+        return false;
+    };
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_millis(500)))
+        .build()
+        .into();
+    agent
+        .get(format!("http://127.0.0.1:{port}/health"))
+        .header("Authorization", format!("Bearer {token}"))
+        .call()
+        .is_ok()
+}
+
+/// Another app instance can replace the shared endpoint and then exit, leaving
+/// surviving sessions posting to a dead port. Reclaim only after the same dead
+/// endpoint has been observed twice; a newly started instance gets time to
+/// begin serving before the older one considers it stale.
+fn repair_endpoint_if_stale(
+    dir: &Path,
+    port: u16,
+    token: &str,
+    failed: &mut Option<Option<String>>,
+) {
+    let env_file = dir.join("ingest.env");
+    let own = format!("CT_PORT={port}\nCT_TOKEN={token}\n");
+    let current = fs::read_to_string(&env_file).ok();
+    if current.as_deref() == Some(own.as_str()) || current.as_deref().is_some_and(endpoint_alive) {
+        *failed = None;
+        return;
+    }
+    if failed.as_ref() == Some(&current) {
+        // Check again immediately before writing so a healthy newer
+        // instance is not displaced by a stale observation.
+        if fs::read_to_string(&env_file).ok() == current {
+            if let Err(e) = write_endpoint(dir, port, token) {
+                eprintln!("ingest: cannot restore ingest.env: {e}");
+            }
+        }
+        *failed = None;
+    } else {
+        *failed = Some(current);
+    }
+}
+
+fn watch_endpoint(dir: PathBuf, port: u16, token: String) {
+    std::thread::spawn(move || {
+        let mut failed: Option<Option<String>> = None;
+        loop {
+            std::thread::sleep(Duration::from_secs(2));
+            repair_endpoint_if_stale(&dir, port, &token, &mut failed);
+        }
+    });
+}
 
 /// Start the ingestion server on a random localhost port with a fresh bearer
 /// token; write both to ~/.context-terminal/ingest.env for the hook command.
@@ -51,23 +130,12 @@ pub fn start(app: AppHandle) {
     };
 
     let dir = config_dir();
-    let env_file = dir.join("ingest.env");
-    let write_env = || -> std::io::Result<()> {
-        fs::create_dir_all(&dir)?;
-        fs::write(&env_file, format!("CT_PORT={port}\nCT_TOKEN={token}\n"))?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))?;
-            fs::set_permissions(&env_file, fs::Permissions::from_mode(0o600))?;
-        }
-        Ok(())
-    };
-    if let Err(e) = write_env() {
+    if let Err(e) = write_endpoint(&dir, port, &token) {
         eprintln!("ingest: cannot write ingest.env: {e}");
         return;
     }
 
+    watch_endpoint(dir, port, token.clone());
     std::thread::spawn(move || {
         let expected = format!("Bearer {token}");
         for mut request in server.incoming_requests() {
@@ -77,6 +145,10 @@ pub fn start(app: AppHandle) {
                 .any(|h| h.field.equiv("Authorization") && h.value.as_str() == expected);
             if !authed {
                 let _ = request.respond(tiny_http::Response::empty(401));
+                continue;
+            }
+            if request.url() == "/health" {
+                let _ = request.respond(tiny_http::Response::empty(204));
                 continue;
             }
             // Headers must be read before `as_reader` borrows the request.
@@ -641,6 +713,55 @@ mod tests {
     fn append(path: &Path, contents: &[u8]) {
         let mut f = fs::OpenOptions::new().append(true).open(path).unwrap();
         f.write_all(contents).unwrap();
+    }
+
+    #[test]
+    fn surviving_instance_reclaims_dead_endpoint_after_two_checks() {
+        let dir = temp_path("endpoint-recovery");
+        fs::create_dir(&dir).unwrap();
+        let stale = format!("CT_PORT=1\nCT_TOKEN={}\n", "a".repeat(64));
+        fs::write(dir.join("ingest.env"), &stale).unwrap();
+        let mut failed = None;
+        let own_token = "b".repeat(64);
+
+        repair_endpoint_if_stale(&dir, 42424, &own_token, &mut failed);
+        assert_eq!(fs::read_to_string(dir.join("ingest.env")).unwrap(), stale);
+        repair_endpoint_if_stale(&dir, 42424, &own_token, &mut failed);
+        assert_eq!(
+            fs::read_to_string(dir.join("ingest.env")).unwrap(),
+            format!("CT_PORT=42424\nCT_TOKEN={own_token}\n")
+        );
+
+        fs::remove_file(dir.join("ingest.env")).unwrap();
+        fs::remove_dir(dir).unwrap();
+    }
+
+    #[test]
+    fn surviving_instance_keeps_another_live_endpoint() {
+        let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let port = server.server_addr().to_ip().unwrap().port();
+        let token = "c".repeat(64);
+        let dir = temp_path("endpoint-live");
+        write_endpoint(&dir, port, &token).unwrap();
+        let other = fs::read_to_string(dir.join("ingest.env")).unwrap();
+        let responder = std::thread::spawn(move || {
+            let request = server.recv_timeout(Duration::from_secs(2)).unwrap().unwrap();
+            assert_eq!(request.url(), "/health");
+            assert!(request.headers().iter().any(|header| {
+                header.field.equiv("Authorization")
+                    && header.value.as_str() == format!("Bearer {token}")
+            }));
+            request.respond(tiny_http::Response::empty(204)).unwrap();
+        });
+
+        let mut failed = None;
+        repair_endpoint_if_stale(&dir, 42424, &"d".repeat(64), &mut failed);
+        responder.join().unwrap();
+        assert_eq!(fs::read_to_string(dir.join("ingest.env")).unwrap(), other);
+        assert!(failed.is_none());
+
+        fs::remove_file(dir.join("ingest.env")).unwrap();
+        fs::remove_dir(dir).unwrap();
     }
 
     #[test]
