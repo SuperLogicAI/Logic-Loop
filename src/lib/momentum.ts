@@ -38,7 +38,13 @@ export function computeMomentum(input: MomentumInput): MomentumItem | null {
 
   if (landing) return { label: "landing note", text: landing.body, done: () => onLandingDone(landing) };
   if (oldestOpenDecision)
-    return { label: "decision", text: oldestOpenDecision.question, done: () => onDecisionDone(oldestOpenDecision) };
+    return {
+      label: "decision",
+      // Wrapped like answerNow's prefill (App.tsx) — this is the agent's
+      // question, seeding it verbatim would read as the user asking it back.
+      text: `Re: "${oldestOpenDecision.question}" — `,
+      done: () => onDecisionDone(oldestOpenDecision),
+    };
   if (oldestOpenBlocker)
     return { label: "blocker", text: oldestOpenBlocker.text, done: () => onBlockerDone(oldestOpenBlocker) };
   if (plannedCard)
