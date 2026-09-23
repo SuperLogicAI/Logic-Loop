@@ -3882,3 +3882,51 @@ No duplicate `step_index` or planner `RUNNING` rewrite was observed.
       reached” (about 20 hours until reset). No planner question or completed
       reply was produced, so that attempt was quota-blocked. The three PR CI
       jobs passed.
+
+## 65. Momentum "↳ Ask" action (Plan 043, deterministic tier only)
+
+Phase accepted in-session 2026-09-23. Step 0 found no uniform turn-end error
+signal exists for hook-based adapters (`src/lib/ingest.ts:389` only
+distinguishes `Stop`/`Interrupt`, no reason) and that the DeepSeek Harness's
+own error signal is adapter-owned and out of scope — error-retry and the
+LLM-riding toggle (tier 2) were dropped from this sprint per the plan's own
+fallback, not built blind. Only the deterministic momentum action shipped.
+
+### What shipped
+
+- `src/lib/momentum.ts` (new): `computeMomentum` extracts
+  `SidePanel.tsx`'s prior inline "Next" cascade (landing note → oldest open
+  decision → oldest open blocker → planned board card) into a pure function,
+  behavior unchanged.
+- `SidePanel.tsx`: Next card gets a second action, "↳ Ask", beside the
+  existing "✓ Done". Seeds the active tab's terminal input with
+  `momentum.text` via the new `onSeedInput` prop; does not resolve/advance
+  anything, unlike "✓ Done".
+- `App.tsx`: new `prefillActiveTab` callback, same `ptyWrite`-only prefill
+  discipline as the existing `answerNow` (Decision cards' "Answer Now"),
+  simpler since `SidePanel` already only ever describes the active tab (no
+  session→tab binding lookup needed).
+
+### Automated evidence
+
+- [x] `npm run momentum:check` (new): characterization fixtures prove
+      `computeMomentum` picks the same item the old inline logic would for
+      each source alone and combined (including tie-breaking by oldest
+      `ts`, not array order), that answered decisions/resolved blockers
+      never win, and that `done()` resolves the exact winning row.
+- [x] `npx tsc --noEmit` clean.
+- [x] Full `npm run check` (37 scripts, momentum:check added alongside
+      board:check) — all pass.
+- [x] `npm run build` clean, 95 modules (was 94 before `momentum.ts`).
+- [x] `git status --short` / `git diff --stat` match the plan's Scope:
+      `src/lib/momentum.ts` (new), `scripts/momentum-check.ts` (new),
+      `SidePanel.tsx`, `App.tsx`, `package.json`.
+- Rust side untouched — no `cargo` gates re-run for this change.
+
+### Manual acceptance — pending
+
+Not run this session (no live Tauri app window available in this
+environment). Needs a human pass per the plan's Step 6/Step 2 verify:
+click "↳ Ask" on a Next card with an open decision/blocker present, confirm
+the terminal input receives `momentum.text` without sending, and confirm
+"✓ Done" still resolves the item exactly as before.
