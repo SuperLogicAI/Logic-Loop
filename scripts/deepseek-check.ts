@@ -51,6 +51,15 @@ assert.ok(
 // (works under `tauri dev`, not only a built app), not a raw resource_dir().
 assert.match(rust, /resolve\("dsh-terminal-app", BaseDirectory::Resource\)/);
 
+// Part A: setup shells out to `dsh` and then `npm install`, so it must run off
+// the app's main/event-loop thread via pty::spawn_blocking_result — the same
+// beachball class Plans 017 fixed for the git_* commands.
+assert.match(rust, /pub async fn deepseek_hooks_setup/);
+assert.ok(
+  rust.includes('spawn_blocking_result("deepseek_hooks_setup"'),
+  "deepseek_hooks_setup must be routed through pty::spawn_blocking_result",
+);
+
 // Cross-file wiring.
 assert.ok(readFileSync("src-tauri/src/lib.rs", "utf8").includes("deepseek::deepseek_hooks_setup"));
 

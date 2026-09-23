@@ -208,7 +208,14 @@ fn run(invocation: &[String], args: &[&str]) -> Result<(), String> {
 /// text through this function's `Result`, same fail-open-with-a-clear-error
 /// shape as every other adapter installer in this codebase.
 #[tauri::command]
-pub fn deepseek_hooks_setup(app: AppHandle) -> Result<(), String> {
+pub async fn deepseek_hooks_setup(app: AppHandle) -> Result<(), String> {
+    crate::pty::spawn_blocking_result("deepseek_hooks_setup", move || {
+        deepseek_hooks_setup_blocking(&app)
+    })
+    .await
+}
+
+fn deepseek_hooks_setup_blocking(app: &AppHandle) -> Result<(), String> {
     let home = dsh_home();
     let invocation = dsh_invocation();
     let plugin_dir = plugin_dir(&home);
