@@ -3883,10 +3883,18 @@ fallback, not built blind. Only the deterministic momentum action shipped.
       `SidePanel.tsx`, `App.tsx`, `package.json`.
 - Rust side untouched — no `cargo` gates re-run for this change.
 
-### Manual acceptance — pending
+### Manual acceptance — passed 2026-09-23
 
-Not run this session (no live Tauri app window available in this
-environment). Needs a human pass per the plan's Step 6/Step 2 verify:
-click "↳ Ask" on a Next card with an open decision/blocker present, confirm
-the terminal input receives `momentum.text` without sending, and confirm
-"✓ Done" still resolves the item exactly as before.
+Human pass confirmed: "↳ Ask" on a Next card seeds the terminal input
+without sending, and "✓ Done" still resolves the item exactly as before.
+
+### Fix: decision text was speaker-inverted (found in manual pass)
+
+`momentum.text` for the decision case was `oldestOpenDecision.question`
+verbatim — the agent's own question to the user. Sending it back verbatim
+reads as the user asking the agent that question, not answering it.
+Fixed in `src/lib/momentum.ts` to wrap it the same way `answerNow`
+(App.tsx) already does: `Re: "<question>" — `. Landing/blocker/planned-card
+text left verbatim — those aren't agent-posed questions.
+`momentum-check.ts` assertion updated to match. `momentum:check`,
+`tsc --noEmit`, and full `npm run check` (37 scripts) all clean after.

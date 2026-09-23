@@ -634,8 +634,11 @@ Update this file as phases are accepted.
   the custom runner does not replay prior chat text into the terminal; this is
   now documented as a visible-history UX limitation. Remaining live-matrix rows
   are still open.
-- Phase 43 / Plan 043 (momentum "↳ Ask" action): BUILT 2026-09-23, automated
-  gates clean, live click-through pending. Idea-doc item 3 ("potential next
+- Phase 43 / Plan 043 (momentum "↳ Ask" action): SHIPPED 2026-09-23, automated
+  gates clean, live click-through passed. Manual pass caught a speaker-
+  inversion bug — decision-sourced Next cards seeded the agent's own question
+  verbatim instead of reply-framed; fixed to match `answerNow`'s
+  `Re: "<question>" — ` wrapping. Idea-doc item 3 ("potential next
   actions") was scoped down twice in design discussion before any code: first
   from LLM-only to a deterministic-default design, then caught that
   `SidePanel.tsx`'s existing "Next" momentum card already read the same
