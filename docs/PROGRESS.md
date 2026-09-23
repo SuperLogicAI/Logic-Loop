@@ -634,3 +634,18 @@ Update this file as phases are accepted.
   the custom runner does not replay prior chat text into the terminal; this is
   now documented as a visible-history UX limitation. Remaining live-matrix rows
   are still open.
+- Phase 43 / Plan 043 (momentum "↳ Ask" action): BUILT 2026-09-23, automated
+  gates clean, live click-through pending. Idea-doc item 3 ("potential next
+  actions") was scoped down twice in design discussion before any code: first
+  from LLM-only to a deterministic-default design, then caught that
+  `SidePanel.tsx`'s existing "Next" momentum card already read the same
+  blockers/decisions/board data — corrected to extract that cascade into
+  `src/lib/momentum.ts::computeMomentum` (characterization-tested identical
+  to the prior inline logic) and add a second "↳ Ask" action to the existing
+  card, reusing the `answerNow`/`ptyWrite` prefill pattern rather than
+  building a new component. Step 0 then found no uniform turn-end error
+  signal exists for hook-based adapters, so error-retry and the LLM-riding
+  toggle (tier 2, opt-in, rides the existing per-turn extraction call) were
+  dropped from this sprint rather than built on a guessed contract — they
+  remain recorded in `plans/043-next-action-suggestions.md` for a later
+  increment. See docs/TESTING.md §65.

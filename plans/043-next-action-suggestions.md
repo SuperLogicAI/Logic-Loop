@@ -17,7 +17,11 @@
 
 ## Status
 
-- **Status**: PROPOSED — not yet accepted, not started
+- **Status**: BUILT 2026-09-23 — deterministic momentum "↳ Ask" action only.
+  Phase accepted in-session (same precedent as Plans 023/040). Step 0 cut
+  error-retry and the LLM toggle from this sprint (see findings below);
+  automated gates clean; live click-through pending the maintainer. See
+  docs/TESTING.md §65, docs/PROGRESS.md's Phase 43 entry.
 - **Priority**: P2 — quality-of-life, not adoption-blocking
 - **Effort**: S — deterministic tier is now a small extraction refactor plus
   one new error-retry signal, well under a half day; LLM-riding tier adds
@@ -149,6 +153,9 @@ Repository constraints:
   Done" button on the Next card. Seeds the terminal input with
   `momentum.text` for the session's active tab; does not call
   `finishMomentum`, does not resolve/advance anything.
+- `App.tsx` — a new `prefillActiveTab` callback beside `answerNow`
+  (`App.tsx:1426-1435`), same `ptyWrite` prefill discipline, passed to
+  `SidePanel` as the new `onSeedInput` prop.
 - `src/lib/nextActions.ts` (new) — much smaller than the first draft: pure
   function(s) combining (a) an optional error-retry suggestion for the turn
   that just ended and (b) tier 2's LLM-sourced suggestions when enabled. No
@@ -250,8 +257,42 @@ momentum's exact input shape are confirmed against live code. If the error
 signal doesn't exist uniformly, revise scope to drop error-retry rather than
 fabricate one.
 
-**Verify**: findings recorded in this plan's Current state section before
-Step 1 begins.
+**Findings (2026-09-23):**
+
+1. **No turn-end error signal exists for hook-based adapters.** `src/lib/
+   ingest.ts:389` shows the app only distinguishes `Stop` vs. `Interrupt`
+   hooks — no success/error reason travels through the generic pipeline for
+   Claude/Codex/OpenCode/Pi/Antigravity. The DeepSeek Harness has its own
+   internal `reason.kind === "error"` (`dsh-terminal-app/src/index.js`,
+   `reportTurnError`), but that's adapter-owned, writes only to stderr, and
+   this plan's Scope explicitly excludes touching the Harness runner.
+   **Error-retry is dropped from this sprint** per this step's own stated
+   fallback — no fabricated signal.
+2. Moot given (1): no new retry-text capture is needed this sprint.
+3. Momentum's exact input shape, confirmed at `SidePanel.tsx:254-263`: all
+   four are local `useState` — `blockers: Blocker[]`, `decisions:
+   Decision[]`, `landing: Note | null`, `plannedCard: Card | null`. No
+   props involved; `computeMomentum`'s input type is exactly these four.
+4. **The seed-input mechanism already exists and needs no new plumbing.**
+   `App.tsx:1426-1435`'s `answerNow` — already shipped, already wired to
+   Decision cards' "Answer Now" button (`SidePanel.tsx:1401`) — does exactly
+   "prefill without sending": `ptyWrite(tab.ptyId, text)` + `focusTab`, human
+   still presses Enter. It resolves the tab via a session→tab binding lookup
+   because Decision cards can be answered from a tab other than the one
+   showing the card. Momentum's "↳ Ask" doesn't need that lookup —
+   `SidePanel` is already scoped to the active tab (`cwd`/`sessionId` props
+   describe the active tab specifically) — so it's simpler than `answerNow`,
+   not an equal-complexity sibling of it.
+5. Toggle-host location (tier 2, not this sprint): `ClaudeUsageBlock.tsx` is
+   where `claude_statusline_wrapper_enabled` renders — confirmed for when
+   tier 2 is picked up, not acted on now.
+
+**Revised scope for this sprint**: momentum's "↳ Ask" only (Steps 1-2 below).
+Error-retry and the LLM-riding toggle (Steps 3-4) move to a follow-up
+increment once a real error signal exists / demand justifies the token
+spend — this plan file stays their record, not re-opened as a fresh idea.
+
+**Verify**: findings recorded above before Step 1 begins.
 
 ### Step 1: Extract momentum into a shared pure function (no behavior change)
 
@@ -274,30 +315,28 @@ Step 1 begins.
 in a project with a known open decision/blocker still shows the identical
 item and label it did before the refactor.
 
-### Step 2: "↳ Ask" action on the existing Next card, plus error-retry
+### Step 2: "↳ Ask" action on the existing Next card
 
+Error-retry and the LLM tier are deferred per Step 0's findings — this step
+is now the entire sprint's UI work.
+
+- In `App.tsx`, add a small callback alongside `answerNow`
+  (`App.tsx:1426-1435`) that prefills the *active* tab directly — no
+  session→tab binding lookup needed, since `SidePanel` already only ever
+  describes the active tab: `const prefillActiveTab = useCallback((text:
+  string) => { if (!activeTab) return; void ptyWrite(activeTab.ptyId, text);
+  }, [activeTab]);`. Pass it down as a new `SidePanel` prop, e.g.
+  `onSeedInput: (text: string) => void`.
 - In `SidePanel.tsx`, add an "↳ Ask" button beside the existing "✓ Done"
   button on the Next card (renders only when `momentum` is non-null, same
-  condition as today). Clicking it seeds the terminal input for the
-  session's active tab with `momentum.text` and focuses it — no call to
-  `finishMomentum`, nothing marked resolved.
-- Add `src/lib/nextActions.ts`: `errorRetrySuggestion(input): Suggestion |
-  null`, pure, using the turn-end error signal and retry text Step 0
-  confirmed. Returns `null` when the turn didn't error or the signal isn't
-  available for that adapter.
-- Render the error-retry suggestion (when present) in the small new
-  component from Scope, near the terminal, at turn-Stop. Clicking it seeds
-  the input with the exact prior prompt text; does not resubmit.
-- Clear the error-retry suggestion on the next `UserPromptSubmit` for that
-  session. Momentum's "↳ Ask" has no clear-on-submit behavior — it's tied to
-  standing backlog state, not the just-ended turn, and disappears only when
-  momentum itself becomes `null` (its source resolved).
+  condition as today). `onClick={() => onSeedInput(momentum.text)}` — no
+  call to `finishMomentum`, nothing marked resolved, no `focusTab` needed
+  (the tab showing this panel is already active/focused).
 
-**Verify**: manual — (a) click "↳ Ask" on an existing Next card, confirm
-input is seeded and nothing is marked done; (b) force a turn to end in
-error, confirm the retry suggestion appears near the terminal and seeds the
-exact prior prompt; (c) send a new turn, confirm the retry suggestion
-clears.
+**Verify**: manual — click "↳ Ask" on an existing Next card (open decision
+or blocker present), confirm the terminal's input receives `momentum.text`
+without sending, and confirm "✓ Done" still resolves the item exactly as
+before, unaffected by the new button.
 
 ### Step 3: Extraction schema field (LLM tier, additive only)
 
@@ -381,11 +420,18 @@ Scope-listed paths changed.
 
 ### Step 6: Manual acceptance pass
 
+**Shipped this sprint (rows 1-2) — pending the maintainer, not run in this
+session (no live Tauri window in this environment):**
+
 1. Open decision or blocker present: Next card shows "↳ Ask" beside "✓
    Done"; clicking "↳ Ask" seeds input with `momentum.text` and does not
    mark anything resolved; "✓ Done" still works exactly as before.
 2. Nothing open (no landing note/decision/blocker/planned card): no Next
    card renders — unchanged from current behavior.
+
+**Deferred to the tier-2 follow-up increment (rows 3-6 below) — Steps 3-5
+were not implemented this sprint, kept here as that increment's plan:**
+
 3. Toggle OFF (default): force a turn to end in error → only the error-retry
    suggestion appears near the terminal; no LLM-sourced entries.
 4. Toggle ON: complete a turn where the assistant's reply plausibly suggests
@@ -403,22 +449,32 @@ Scope-listed paths changed.
 
 - Characterization fixtures for `computeMomentum`: each source alone,
   combined, empty → `null`, proven identical to the pre-refactor inline
-  logic.
+  logic. **Shipped**, `scripts/momentum-check.ts`.
 - Pure fixtures for `errorRetrySuggestion`: present/absent, adapters where
-  the signal is unavailable.
+  the signal is unavailable. **Deferred** — Step 0 found no signal to test.
 - Extractor: `next_actions` optional field round-trips; absent/malformed
-  never fails `decisions` parsing.
+  never fails `decisions` parsing. **Deferred** to the tier-2 increment.
 - Repo: toggle getter/setter default-OFF, round-trip, matches the
-  `claude_statusline_wrapper_enabled` test shape.
-- Six-row manual matrix above.
+  `claude_statusline_wrapper_enabled` test shape. **Deferred**.
+- Six-row manual matrix above; rows 1-2 pending, rows 3-6 not yet
+  applicable.
 
 ## Done criteria
 
-- [ ] Step 0 findings recorded before implementation began.
-- [ ] `computeMomentum` extraction is behaviorally identical to the
+**This sprint (deterministic momentum action):**
+
+- [x] Step 0 findings recorded before implementation began.
+- [x] `computeMomentum` extraction is behaviorally identical to the
       pre-refactor inline cascade — proven by `momentum:check`, not assumed.
-- [ ] Momentum's "↳ Ask" ships default-on, zero new token cost, zero new DB
+- [x] Momentum's "↳ Ask" ships default-on, zero new token cost, zero new DB
       read (reuses momentum's existing inputs), invariant #3 clean.
+- [x] Full automated gate list (momentum:check, tsc, full `npm run check`,
+      production build) passes; `git status --short` matches the reduced
+      Scope for this sprint.
+- [ ] Rows 1-2 of the manual matrix — pending the maintainer.
+
+**Deferred to a later increment (error-retry + LLM toggle):**
+
 - [ ] Error-retry ships default-on where the turn-end signal is confirmed
       available, zero token cost.
 - [ ] LLM tier is strictly additive to the existing extraction call, default
