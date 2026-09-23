@@ -96,7 +96,11 @@ const withDecisions = computeMomentum({
   ...resolvers,
 });
 assert.equal(withDecisions?.label, "decision");
-assert.equal(withDecisions?.text, decisionOld.question, "oldest (lowest ts) decision wins, not first-in-array");
+assert.equal(
+  withDecisions?.text,
+  `Re: "${decisionOld.question}" — `,
+  "oldest (lowest ts) decision wins, not first-in-array, and text is reply-framed not verbatim"
+);
 
 // Oldest open blocker beats planned card when no note/decision is open.
 const withBlockers = computeMomentum({
