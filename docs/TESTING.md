@@ -3815,3 +3815,30 @@ trial. It does not change the current Logic Loop phase acceptance status.
       `~/.context-terminal/ingest.env` to its original listener. A harmless
       authenticated request to `/statusline` returned HTTP 204; no relaunch
       was needed.
+
+### Follow-up: forced schema-rejection path, live (2026-09-22)
+
+The review that led to merging this branch asked for one more thing before
+shipping: proof the fail-open path for an invalid `--json-schema` is real,
+not just theoretical.
+
+- [x] Ran the real Claude CLI (v2.1.280) directly with a deliberately
+      malformed schema (`{"type":"object","properties":{"x":"not-a-valid-type"}}`).
+      Result: `Error: --json-schema is not a valid JSON Schema: ...` and
+      `exit 1`, rejected client-side **before any API call** — confirmed no
+      cost was incurred for the invalid attempt (compared directly against a
+      valid-schema call in the same session, which did bill for tokens).
+- [x] Traced the failure through the app: `extractor.rs`'s claude arm checks
+      `!out.status.success()` and returns `Err(...)` (`extractor.rs:315`);
+      `decisions.ts`'s `extract()` catches the rejected `invoke()` and calls
+      `onExtractionFailed(backend, "extraction_failed")` (already wired,
+      pre-existing path shared with other extractor failures); this reaches
+      `App.tsx`'s `adapterWarnings` state and renders in the `SidePanel.tsx`
+      warning strip. No new plumbing needed — the fail-open contract already
+      covered this failure shape.
+- [x] Found the one real gap: `adapterWarningMessage`'s `extraction_failed`
+      text pointed only at "check the ⚙ Sidebar LM backend/model settings,"
+      which is wrong for a schema rejection (a Logic Loop bug, not a user
+      settings problem). Reworded to also name that possibility. `tsc
+      --noEmit` and `npm run build` both clean after the change; no test
+      pins the old wording.
