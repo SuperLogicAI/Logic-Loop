@@ -8,10 +8,10 @@ import type { HookPayload } from "../src/types";
 const rust = readFileSync("src-tauri/src/deepseek.rs", "utf8");
 
 assert.match(rust, /const MARKER_FIELD: &str = "logicLoopAdapterVersion";/);
-assert.match(rust, /const DEEPSEEK_ADAPTER_VERSION: u64 = 3;/);
+assert.match(rust, /const DEEPSEEK_ADAPTER_VERSION: u64 = 5;/);
 
 const bundledPackage = JSON.parse(readFileSync("dsh-terminal-app/package.json", "utf8"));
-assert.equal(bundledPackage.logicLoopAdapterVersion, 3);
+assert.equal(bundledPackage.logicLoopAdapterVersion, 5);
 assert.match(rust, /pub\(crate\) const PROFILE_NAME: &str = "logic-loop";/);
 
 // The 9 core @deepseek-ai/* packages this plugin depends on directly, all
@@ -51,6 +51,15 @@ assert.ok(
 // (works under `tauri dev`, not only a built app), not a raw resource_dir().
 assert.match(rust, /resolve\("dsh-terminal-app", BaseDirectory::Resource\)/);
 
+// Part A: setup shells out to `dsh` and then `npm install`, so it must run off
+// the app's main/event-loop thread via pty::spawn_blocking_result — the same
+// beachball class Plans 017 fixed for the git_* commands.
+assert.match(rust, /pub async fn deepseek_hooks_setup/);
+assert.ok(
+  rust.includes('spawn_blocking_result("deepseek_hooks_setup"'),
+  "deepseek_hooks_setup must be routed through pty::spawn_blocking_result",
+);
+
 // Cross-file wiring.
 assert.ok(readFileSync("src-tauri/src/lib.rs", "utf8").includes("deepseek::deepseek_hooks_setup"));
 
@@ -60,7 +69,7 @@ assert.ok(
   Object.keys(resources).some((k) => k.includes("dsh-terminal-app/package.json")),
   "tauri.conf.json must bundle dsh-terminal-app as a resource",
 );
-for (const file of ["src/index.js", "src/messages.js", "src/startup.js"]) {
+for (const file of ["src/index.js", "src/messages.js", "src/format.js", "src/startup.js"]) {
   assert.ok(
     Object.keys(resources).some((k) => k.endsWith(`dsh-terminal-app/${file}`)),
     `tauri.conf.json must bundle dsh-terminal-app/${file}`,
@@ -73,6 +82,10 @@ assert.ok(
 assert.ok(
   rust.includes('dir.join("src/messages.js").is_file()'),
   "status must reject an incomplete installed plugin even when its marker is current",
+);
+assert.ok(
+  rust.includes('dir.join("src/format.js").is_file()'),
+  "status must require the Part B formatting module too",
 );
 
 const tsIngest = readFileSync("src/lib/ingest.ts", "utf8");
@@ -118,5 +131,16 @@ assert.equal(stateForHook(event("UserPromptSubmit")), "working");
 assert.equal(stateForHook(event("PostToolUse")), "working");
 assert.equal(stateForHook(event("Stop")), "idle");
 assert.equal(stateForHook(event("PostToolUse")), null);
+
+// Part 0 contract: readline must be paused while the agent owns stdout, and
+// resumed only after the next question is set up, or type-ahead leaks into the
+// reply uncolored. Source-order check; the live behavior is a manual test.
+const runner = readFileSync("dsh-terminal-app/src/index.js", "utf8");
+const questionAt = runner.indexOf("rl.question(");
+const resumeAt = runner.indexOf("rl.resume()");
+const pauseAt = runner.indexOf("rl.pause()");
+assert.ok(questionAt >= 0, "runner must call rl.question");
+assert.ok(resumeAt > questionAt, "runner must resume after setting up the prompt");
+assert.ok(pauseAt > resumeAt, "runner must pause readline for the agent turn");
 
 console.log("deepseek-check: all assertions passed");

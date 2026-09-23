@@ -215,7 +215,11 @@ pub struct StatuslineStatus {
 }
 
 #[tauri::command]
-pub fn claude_statusline_status() -> Result<StatuslineStatus, String> {
+pub async fn claude_statusline_status() -> Result<StatuslineStatus, String> {
+    crate::pty::spawn_blocking_result("claude_statusline_status", claude_statusline_status_blocking).await
+}
+
+fn claude_statusline_status_blocking() -> Result<StatuslineStatus, String> {
     let settings = crate::ingest::read_settings()?;
     let wrapper_cmd_value = wrapper_command_value();
     let wrapper_contents = fs::read_to_string(wrapper_path()).ok();

@@ -104,4 +104,14 @@ assert.ok(appSource.includes("void onStatusline("), "App.tsx must subscribe to o
 const sidePanelSource = readFileSync(join(import.meta.dirname, "../src/components/SidePanel.tsx"), "utf-8");
 assert.ok(sidePanelSource.includes("<ClaudeUsageBlock"), "SidePanel must render ClaudeUsageBlock");
 
+// The status probe shells out to `claude --version`, so it must run off the
+// app's main/event-loop thread via pty::spawn_blocking_result (Plan 017's
+// beachball class).
+const statuslineRust = readFileSync(join(import.meta.dirname, "../src-tauri/src/statusline.rs"), "utf-8");
+assert.match(statuslineRust, /pub async fn claude_statusline_status/);
+assert.ok(
+  statuslineRust.includes('spawn_blocking_result("claude_statusline_status"'),
+  "claude_statusline_status must be routed through pty::spawn_blocking_result",
+);
+
 console.log("statusline-check: all assertions passed");

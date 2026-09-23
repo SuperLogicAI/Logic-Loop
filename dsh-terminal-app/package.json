@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "logicLoopAdapterVersion": 3,
+  "logicLoopAdapterVersion": 5,
   "main": "src/index.js",
   "exports": {
     ".": "./src/index.js",
