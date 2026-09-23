@@ -17,11 +17,13 @@
 
 ## Status
 
-- **Status**: BUILT 2026-09-23 — deterministic momentum "↳ Ask" action only.
-  Phase accepted in-session (same precedent as Plans 023/040). Step 0 cut
-  error-retry and the LLM toggle from this sprint (see findings below);
-  automated gates clean; live click-through pending the maintainer. See
-  docs/TESTING.md §65, docs/PROGRESS.md's Phase 43 entry.
+- **Status**: SHIPPED 2026-09-23 — deterministic momentum "↳ Ask" action
+  only. Phase accepted in-session (same precedent as Plans 023/040). Step 0
+  cut error-retry and the LLM toggle from this sprint (see findings below);
+  automated gates clean; live click-through passed the maintainer, who also
+  caught a speaker-inversion bug in decision-sourced `momentum.text` (fixed —
+  wrapped `Re: "<question>" — ` matching `answerNow`). See docs/TESTING.md
+  §65, docs/PROGRESS.md's Phase 43 entry.
 - **Priority**: P2 — quality-of-life, not adoption-blocking
 - **Effort**: S — deterministic tier is now a small extraction refactor plus
   one new error-retry signal, well under a half day; LLM-riding tier adds
@@ -471,7 +473,10 @@ were not implemented this sprint, kept here as that increment's plan:**
 - [x] Full automated gate list (momentum:check, tsc, full `npm run check`,
       production build) passes; `git status --short` matches the reduced
       Scope for this sprint.
-- [ ] Rows 1-2 of the manual matrix — pending the maintainer.
+- [x] Rows 1-2 of the manual matrix — passed 2026-09-23. Manual pass caught
+      a speaker-inversion bug (decision text seeded verbatim instead of
+      reply-framed) — fixed, re-verified, `momentum:check`/`tsc`/full `npm
+      run check` re-run clean.
 
 **Deferred to a later increment (error-retry + LLM toggle):**
 
