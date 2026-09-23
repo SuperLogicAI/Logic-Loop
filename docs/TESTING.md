@@ -3803,8 +3803,15 @@ trial. It does not change the current Logic Loop phase acceptance status.
 - [x] One real Claude golden run with the new `--json-schema` path: 14/14
       pass. This confirms current CLI 2.1.280 accepts the schema and returns
       outputs that pass `parseExtraction`; it does not measure cost savings.
-- [ ] Launch this worktree's build in an isolated app profile and confirm one
-      live Claude Decisions card plus one Codex Decisions card. The existing
-      Logic Loop instance has active sessions; an unisolated second instance
-      would contend for its ingest endpoint. No app install or hook toggles
-      were made during this trial.
+- [x] Launched an approved, separately bundled trial app with a distinct
+      bundle ID. In a disposable Supra folder, Claude Code v2.1.280 produced
+      a Decisions card asking whether to use `--dry-run` or `--simulate`.
+      Codex v0.156.1 produced a second card asking whether to use
+      `logic-loop.config.json` or `loop-logic.config.json`. Both exact
+      questions were visible in the app's Decisions panel. No app install or
+      hook toggles were made.
+- [x] Restore the original app's shared hook ingest endpoint. After closing
+      the trial app, foregrounding the original app rewrote
+      `~/.context-terminal/ingest.env` to its original listener. A harmless
+      authenticated request to `/statusline` returned HTTP 204; no relaunch
+      was needed.

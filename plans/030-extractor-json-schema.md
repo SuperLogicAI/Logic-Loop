@@ -155,9 +155,16 @@ original three-backend description; its implementation is untouched.
   Clippy with warnings denied, and `git diff --check` passed.
 - The one planned real Claude golden run passed 14/14 with `--json-schema`
   and `structured_output`; provider expense was not measured here.
-- A live app check on this worktree is pending. The running production app
-  has active sessions and a second unisolated instance would compete for its
-  shared ingest endpoint. No installation or global hook change was made.
+- A separately bundled trial app (`com.vandershark.context-terminal.supra-schema-trial`)
+  was opened with the maintainer's approval. In a disposable Supra folder,
+  Claude Code v2.1.280 asked a two-option CLI-flag question and Logic Loop
+  displayed it as a Decisions card. Codex v0.156.1 then asked a different
+  two-option config-file question and a second Decisions card appeared.
+  This verifies the new Claude path and unchanged Codex path end to end.
+  The trial app was closed without installing it or changing hook toggles.
+  The trial profile did not isolate the shared ingest endpoint. Bringing the
+  original app to the foreground restored its endpoint file; a harmless
+  authenticated status request returned HTTP 204 from its original listener.
 
-This is build/test evidence, not a claim that the UI path is live-accepted or
-that schema validation improves semantic extraction quality or expense.
+This is build and live UI evidence, not a claim that schema validation
+improves semantic extraction quality or expense.
