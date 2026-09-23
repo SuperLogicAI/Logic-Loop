@@ -180,7 +180,7 @@ export function adapterWarningMessage(w: { agent: string; reason: string }): str
     return `${w.agent}: transcript format doesn't match what this build expects (a CLI update likely changed it) — decision tracking may be broken until Logic Loop is updated`;
   }
   if (w.reason === "extraction_failed") {
-    return `${w.agent}: decision extraction failed — check the ⚙ Sidebar LM backend/model settings`;
+    return `${w.agent}: decision extraction failed — check the ⚙ Sidebar LM backend/model settings, or this may be a Logic Loop bug`;
   }
   return `${w.agent}: adapter warning (${w.reason})`;
 }

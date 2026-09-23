@@ -2,7 +2,7 @@
 // transcript lines, runs the extractor, validates strictly, writes rows.
 // Every failure is swallowed: extraction breaking must never touch terminals.
 import { invoke } from "@tauri-apps/api/core";
-import { buildPrompt, parseExtraction, type TurnPair } from "./extractor";
+import { buildPrompt, parseExtraction, EXTRACTION_SCHEMA, type TurnPair } from "./extractor";
 import { matchAnswerNowReply } from "./decisionReconciliation";
 import { serialize } from "./extractorQueue";
 import * as repo from "./repo";
@@ -164,6 +164,7 @@ async function extract(
       ollamaModel: s.ollamaModel,
       codexModel: s.codexModel,
       model: s.claudeModel,
+      schema: s.backend === "claude" ? EXTRACTION_SCHEMA : undefined,
     });
   } catch (error) {
     // The extraction call itself failed (spawn error, non-JSON reply, CLI

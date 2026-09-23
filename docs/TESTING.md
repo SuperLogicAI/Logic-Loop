@@ -3785,3 +3785,60 @@ authenticated `/health` request; a live newer instance keeps ownership.
 - [ ] With one app instance still open, launch a second instance and close it.
       After a few seconds, confirm the first instance's newly started agent
       sessions still update the tabs and sidebar.
+
+## Supra isolated trial — Plan 030 Claude extractor schema (2026-09-22)
+
+This is a separate, unmerged worktree based on `main` at `b6beb1d`. The
+maintainer explicitly bypassed the ordinary phase sequence for this Supra
+trial. It does not change the current Logic Loop phase acceptance status.
+
+- [x] Rust focused extractor tests: 8 passed, including unchanged no-schema
+      Claude arguments, appended schema arguments, and structured-output
+      precedence/fallback.
+- [x] `npm run check`: 33 scripts passed on this branch's baseline.
+- [x] `npx tsc --noEmit`, `npm run build`,
+      `cargo clippy --all-targets -- -D warnings`, and `git diff --check` pass.
+- [x] `cargo test --lib`: 136 passed; one pre-existing authenticated live
+      meter test ignored.
+- [x] One real Claude golden run with the new `--json-schema` path: 14/14
+      pass. This confirms current CLI 2.1.280 accepts the schema and returns
+      outputs that pass `parseExtraction`; it does not measure cost savings.
+- [x] Launched an approved, separately bundled trial app with a distinct
+      bundle ID. In a disposable Supra folder, Claude Code v2.1.280 produced
+      a Decisions card asking whether to use `--dry-run` or `--simulate`.
+      Codex v0.156.1 produced a second card asking whether to use
+      `logic-loop.config.json` or `loop-logic.config.json`. Both exact
+      questions were visible in the app's Decisions panel. No app install or
+      hook toggles were made.
+- [x] Restore the original app's shared hook ingest endpoint. After closing
+      the trial app, foregrounding the original app rewrote
+      `~/.context-terminal/ingest.env` to its original listener. A harmless
+      authenticated request to `/statusline` returned HTTP 204; no relaunch
+      was needed.
+
+### Follow-up: forced schema-rejection path, live (2026-09-22)
+
+The review that led to merging this branch asked for one more thing before
+shipping: proof the fail-open path for an invalid `--json-schema` is real,
+not just theoretical.
+
+- [x] Ran the real Claude CLI (v2.1.280) directly with a deliberately
+      malformed schema (`{"type":"object","properties":{"x":"not-a-valid-type"}}`).
+      Result: `Error: --json-schema is not a valid JSON Schema: ...` and
+      `exit 1`, rejected client-side **before any API call** — confirmed no
+      cost was incurred for the invalid attempt (compared directly against a
+      valid-schema call in the same session, which did bill for tokens).
+- [x] Traced the failure through the app: `extractor.rs`'s claude arm checks
+      `!out.status.success()` and returns `Err(...)` (`extractor.rs:315`);
+      `decisions.ts`'s `extract()` catches the rejected `invoke()` and calls
+      `onExtractionFailed(backend, "extraction_failed")` (already wired,
+      pre-existing path shared with other extractor failures); this reaches
+      `App.tsx`'s `adapterWarnings` state and renders in the `SidePanel.tsx`
+      warning strip. No new plumbing needed — the fail-open contract already
+      covered this failure shape.
+- [x] Found the one real gap: `adapterWarningMessage`'s `extraction_failed`
+      text pointed only at "check the ⚙ Sidebar LM backend/model settings,"
+      which is wrong for a schema rejection (a Logic Loop bug, not a user
+      settings problem). Reworded to also name that possibility. `tsc
+      --noEmit` and `npm run build` both clean after the change; no test
+      pins the old wording.

@@ -9,7 +9,7 @@
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildPrompt, parseExtraction, type ExtractedDecision } from "../src/lib/extractor";
+import { buildPrompt, parseExtraction, EXTRACTION_SCHEMA, type ExtractedDecision } from "../src/lib/extractor";
 
 interface Fixture {
   assistant: string;
@@ -56,6 +56,8 @@ function runClaude(prompt: string, model: string): string {
       "--no-session-persistence",
       "--system-prompt",
       CLAUDE_SYSTEM_PROMPT,
+      "--json-schema",
+      EXTRACTION_SCHEMA,
     ],
     {
       input: prompt,
@@ -64,7 +66,12 @@ function runClaude(prompt: string, model: string): string {
       env: { ...process.env, LOGIC_LOOP_TAB_ID: EXTRACTOR_TETHER },
     }
   );
-  const parsed = JSON.parse(stdout) as { result?: string };
+  const parsed = JSON.parse(stdout) as { structured_output?: unknown; result?: string };
+  if (parsed.structured_output !== undefined && parsed.structured_output !== null) {
+    return typeof parsed.structured_output === "string"
+      ? parsed.structured_output
+      : JSON.stringify(parsed.structured_output);
+  }
   if (typeof parsed.result !== "string") throw new Error("claude: no result field in json output");
   return parsed.result;
 }

@@ -62,8 +62,8 @@ const CLAUDE_SYSTEM_PROMPT: &str =
 /// description) to ~1.4k — measured live, see PLAN.md's Phase 33.1 table.
 /// `--bare` was considered and rejected: it forces API-key auth and breaks
 /// OAuth / Max-subscription logins.
-fn claude_args(model: &str) -> Vec<String> {
-    vec![
+fn claude_args(model: &str, schema: Option<&str>) -> Vec<String> {
+    let mut args = vec![
         "-p".into(),
         "--output-format".into(),
         "json".into(),
@@ -77,7 +77,11 @@ fn claude_args(model: &str) -> Vec<String> {
         "--no-session-persistence".into(),
         "--system-prompt".into(),
         CLAUDE_SYSTEM_PROMPT.into(),
-    ]
+    ];
+    if let Some(schema) = schema {
+        args.extend(["--json-schema".into(), schema.into()]);
+    }
+    args
 }
 
 fn claude_result(stdout: &[u8]) -> Result<String, String> {
@@ -90,6 +94,12 @@ fn claude_result(stdout: &[u8]) -> Result<String, String> {
             usage.get("cache_creation_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
             usage.get("cache_read_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
         );
+    }
+    if let Some(structured) = value.get("structured_output").filter(|v| !v.is_null()) {
+        return match structured {
+            serde_json::Value::String(text) => Ok(text.clone()),
+            other => Ok(other.to_string()),
+        };
     }
     value
         .get("result")
@@ -213,10 +223,11 @@ pub async fn run_extractor(
     ollama_model: Option<String>,
     codex_model: Option<String>,
     model: Option<String>,
+    schema: Option<String>,
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         run_extractor_blocking(
-            prompt, backend, lmstudio_url, lmstudio_model, ollama_url, ollama_model, codex_model, model,
+            prompt, backend, lmstudio_url, lmstudio_model, ollama_url, ollama_model, codex_model, model, schema,
         )
     })
     .await
@@ -233,6 +244,7 @@ fn run_extractor_blocking(
     ollama_model: Option<String>,
     codex_model: Option<String>,
     model: Option<String>,
+    schema: Option<String>,
 ) -> Result<String, String> {
     let model = model.filter(|m| !m.is_empty()).unwrap_or_else(|| "sonnet".into());
     match backend.as_str() {
@@ -286,7 +298,7 @@ fn run_extractor_blocking(
         }
         _ => {
             let mut child = Command::new(claude_bin())
-                .args(claude_args(&model))
+                .args(claude_args(&model, schema.as_deref()))
                 // The child inherits the user's hooks and will post back to our
                 // ingest server; the tether tells the server to drop it.
                 .env("LOGIC_LOOP_TAB_ID", crate::ingest::EXTRACTOR_TETHER)
@@ -352,7 +364,7 @@ not json
 
     #[test]
     fn claude_args_are_stripped_to_a_bare_json_completion() {
-        let args = claude_args("sonnet");
+        let args = claude_args("sonnet", None);
         assert_eq!(
             args,
             [
@@ -371,11 +383,15 @@ not json
                 CLAUDE_SYSTEM_PROMPT,
             ]
         );
-        assert_eq!(claude_args("haiku")[4], "haiku");
+        assert_eq!(claude_args("haiku", None)[4], "haiku");
+        let schema = r#"{"type":"object"}"#;
+        let mut with_schema = args.clone();
+        with_schema.extend(["--json-schema".into(), schema.into()]);
+        assert_eq!(claude_args("sonnet", Some(schema)), with_schema);
     }
 
     #[test]
-    fn claude_result_extracts_result_field_and_tolerates_missing_usage() {
+    fn claude_result_prefers_structured_output_and_falls_back_to_result() {
         assert_eq!(
             claude_result(br#"{"result":"{\"decisions\":[]}"}"#).unwrap(),
             r#"{"decisions":[]}"#
@@ -383,6 +399,22 @@ not json
         assert_eq!(
             claude_result(br#"{"usage":{"input_tokens":2},"result":"ok"}"#).unwrap(),
             "ok"
+        );
+        assert_eq!(
+            claude_result(br#"{"structured_output":{"decisions":[]}}"#).unwrap(),
+            r#"{"decisions":[]}"#
+        );
+        assert_eq!(
+            claude_result(br#"{"structured_output":"{\"decisions\":[]}"}"#).unwrap(),
+            r#"{"decisions":[]}"#
+        );
+        assert_eq!(
+            claude_result(br#"{"structured_output":{"decisions":[]},"result":"wrong"}"#).unwrap(),
+            r#"{"decisions":[]}"#
+        );
+        assert_eq!(
+            claude_result(br#"{"structured_output":null,"result":"fallback"}"#).unwrap(),
+            "fallback"
         );
         assert!(claude_result(b"not json").is_err());
         assert!(claude_result(br#"{"usage":{}}"#).is_err(), "missing result field");
