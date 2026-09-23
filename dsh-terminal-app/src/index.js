@@ -8,6 +8,7 @@ import { installModelSelection } from "@deepseek-ai/dsh-agent";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { SessionSeq } from "@deepseek-ai/dsh-session";
 import { assertNever } from "@deepseek-ai/dsh-util-values";
+import { SGR, createStyler, paint, sanitizeForTerminal, shouldUseColor } from "./format.js";
 import { assistantMessagesSince, visibleText } from "./messages.js";
 
 /**
@@ -30,10 +31,9 @@ import { assistantMessagesSince, visibleText } from "./messages.js";
  * those happen inside `agent.whenIdle()`'s black box.
  */
 
-// ponytail: plain ANSI SGR, no chalk/kleur dep for two constants.
-const USER_BLUE = "\x1b[38;2;77;106;254m"; // #4d6afe
-const DIM = "\x1b[38;2;123;134;149m"; // #7b8695
-const RESET = "\x1b[0m";
+// Display-only styling lives in ./format.js (Plan 042 Part B): 24-bit SGR
+// constants, the TTY/NO_COLOR gate, sanitization for untrusted text, and the
+// fence-aware styler. Nothing here feeds extraction.
 
 const name = "terminal-runner";
 const inject = ["agentDefaultModel", "agents", "sessions"];
@@ -214,20 +214,42 @@ function observeToolCalls(ctx, session, sessionId) {
  * Stream only the assistant's final text to stdout, mirroring
  * dsh-headless's own streamReasoning shape but targeting text-delta chunks
  * and "text" blocks instead of reasoning ones.
+ *
+ * Display-only: every delta is sanitized before it is printed and passed
+ * through the fence-aware styler. On the first visible text of a reply it
+ * prints one blank line and a brand gutter marker; a reasoning-only or
+ * tool-only turn never prints one.
  * @param ctx - plugin context carrying the live Assistant frame feed.
  * @param agent - the exact Agent whose stream belongs to this invocation.
  * @param stdout - output sink.
+ * @param color - SGR gate computed in run() (TTY/NO_COLOR/FORCE_COLOR).
  * @returns a disposer that also terminates an unterminated output line.
  */
-function streamAssistantText(ctx, agent, stdout) {
+function streamAssistantText(ctx, agent, stdout, color) {
   let open = false;
   let endsWithNewline = true;
+  let styler = null;
+
+  const startReply = () => {
+    if (open) return;
+    open = true;
+    endsWithNewline = false;
+    stdout.write("\n");
+    stdout.write(`${paint("\u258c", SGR.brand, color)} `);
+    styler = createStyler(color);
+  };
+
   const close = () => {
     if (!open) return;
+    const out = styler.flush();
+    if (out) stdout.write(out);
     if (!endsWithNewline) stdout.write("\n");
+    if (color) stdout.write(SGR.reset);
     open = false;
+    styler = null;
     endsWithNewline = true;
   };
+
   const dispose = ctx.on("agent/assistant-stream", ({ agent: subject, frame }) => {
     if (subject !== agent) return;
     if (frame.type === "start") {
@@ -240,12 +262,15 @@ function streamAssistantText(ctx, agent, stdout) {
     }
     const chunk = frame.chunk;
     switch (chunk.type) {
-      case "text-delta":
-        if (chunk.text === "") return;
-        open = true;
-        stdout.write(chunk.text);
-        endsWithNewline = chunk.text.endsWith("\n");
+      case "text-delta": {
+        const sanitized = sanitizeForTerminal(chunk.text);
+        if (sanitized === "") return;
+        startReply();
+        const out = styler.push(sanitized);
+        if (out) stdout.write(out);
+        endsWithNewline = sanitized.endsWith("\n");
         return;
+      }
       case "block-start":
         if (chunk.blockType !== "text") close();
         return;
@@ -278,15 +303,16 @@ function streamAssistantText(ctx, agent, stdout) {
  * @param session - the agent's Session to read events from.
  * @param firstSeq - the sequence number the turn started at.
  * @param stderr - output sink.
+ * @param color - SGR gate computed in run().
  */
-function reportTurnError(session, firstSeq, stderr) {
+function reportTurnError(session, firstSeq, stderr, color) {
   const length = session.seq;
   for (let seq = firstSeq; seq < length; seq++) {
     const event = session.eventAt(SessionSeq(seq));
     if (event === undefined) continue;
     if (event.type === "turn/end" && event.data.reason?.kind === "error") {
       const { code, message } = event.data.reason.error;
-      stderr.write(`dsh: ${code}: ${message}\n`);
+      stderr.write(paint(`dsh: ${sanitizeForTerminal(`${code}: ${message}`)}`, SGR.error, color) + "\n");
     }
   }
 }
@@ -329,7 +355,17 @@ async function run(ctx, config, io) {
   postEvent({ hook_event_name: "SessionStart", session_id: sessionId, cwd: process.cwd() });
   const stopObserving = observeToolCalls(ctx, agent.session, sessionId);
 
-  const stopStream = streamAssistantText(ctx, agent, io.stdout);
+  // One gate for the whole run: plain output when piped or NO_COLOR is set.
+  const color = shouldUseColor({
+    isTTY: io.stdout.isTTY,
+    noColor: process.env.NO_COLOR,
+    forceColor: process.env.FORCE_COLOR,
+  });
+  // No reset after "> ": readline echoes the typed line in the brand color
+  // until the explicit reset below the answer (Part 0's deferred type-ahead).
+  const PROMPT = color ? `${SGR.brand}> ` : "> ";
+
+  const stopStream = streamAssistantText(ctx, agent, io.stdout, color);
   const rl = createInterface({ input: io.stdin, output: io.stdout });
 
   // readline/promises' question() does not reject on its own when stdin
@@ -338,13 +374,13 @@ async function run(ctx, config, io) {
   const stdinEnded = new AbortController();
   io.stdin.once("end", () => stdinEnded.abort());
 
-  io.stdout.write(`dsh terminal — session ${sessionId}\n`);
-  io.stdout.write("Type a message and press Enter. /exit quits.\n\n");
+  io.stdout.write(paint(`dsh terminal — session ${sessionId}\n`, SGR.brand, color));
+  io.stdout.write(paint("Type a message and press Enter. /exit quits.\n\n", SGR.dim, color));
 
   // One dim line per turn while the agent owns stdout. Readline is paused for
   // the turn, so the runner cannot see queued keys without a full TUI — keep
   // this a static hint, not a per-keystroke readout.
-  const WORKING_HINT = `${DIM}· working — typing is queued until this reply finishes${RESET}\n`;
+  const WORKING_HINT = paint("· working — typing is queued until this reply finishes", SGR.dim, color) + "\n";
 
   try {
     for (;;) {
@@ -354,13 +390,13 @@ async function run(ctx, config, io) {
         // assistant streams are buffered by the PTY instead of echoed,
         // uncolored, into the reply. Set up the question first, then resume,
         // so any buffered input renders at the prompt rather than before it.
-        const answer = rl.question(`${USER_BLUE}> `, { signal: stdinEnded.signal });
+        const answer = rl.question(PROMPT, { signal: stdinEnded.signal });
         rl.resume();
         line = await answer;
       } catch {
         break; // stdin closed (EOF / Ctrl-D) or aborted above
       }
-      io.stdout.write(`${RESET}\n`);
+      io.stdout.write(color ? `${SGR.reset}\n` : "\n");
       const text = line.trim();
       if (text === "/exit") break;
       if (text === "") continue;
@@ -382,7 +418,7 @@ async function run(ctx, config, io) {
       for (const assistantText of assistantMessagesSince(messageSession, firstSeq)) {
         postTranscriptLine(sessionId, "assistant", assistantText);
       }
-      reportTurnError(agent.session, firstSeq, io.stderr);
+      reportTurnError(agent.session, firstSeq, io.stderr, color);
       postEvent({ hook_event_name: "Stop", session_id: sessionId, cwd: process.cwd() });
       await sessions.flush(agent.session);
       io.stdout.write("\n");

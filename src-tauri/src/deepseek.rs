@@ -13,7 +13,7 @@ use tauri::{AppHandle, Manager};
 /// file. Bump this when the plugin's translated payload shape changes in a
 /// way a reader must know about.
 const MARKER_FIELD: &str = "logicLoopAdapterVersion";
-const DEEPSEEK_ADAPTER_VERSION: u64 = 4;
+const DEEPSEEK_ADAPTER_VERSION: u64 = 5;
 
 /// The Logic-Loop-owned `dsh` profile every install shares. Derived from the
 /// shipped `headless` bundle (Plan 028 Step 0: its base layer is the same
@@ -334,6 +334,7 @@ pub fn deepseek_hooks_status() -> Result<bool, String> {
         .is_ok_and(|source| plugin_is_ours(&source) && plugin_has_current_version(&source))
         && dir.join("src/index.js").is_file()
         && dir.join("src/messages.js").is_file()
+        && dir.join("src/format.js").is_file()
         && dir.join("src/startup.js").is_file())
 }
 
@@ -341,8 +342,8 @@ pub fn deepseek_hooks_status() -> Result<bool, String> {
 mod tests {
     use super::*;
 
-    const OWNED: &str = r#"{"name":"dsh-terminal-app","logicLoopAdapterVersion":4,"dependencies":{}}"#;
-    const STALE: &str = r#"{"name":"dsh-terminal-app","logicLoopAdapterVersion":3,"dependencies":{}}"#;
+    const OWNED: &str = r#"{"name":"dsh-terminal-app","logicLoopAdapterVersion":5,"dependencies":{}}"#;
+    const STALE: &str = r#"{"name":"dsh-terminal-app","logicLoopAdapterVersion":4,"dependencies":{}}"#;
     const FOREIGN: &str = r#"{"name":"someone-elses-package","dependencies":{}}"#;
 
     #[test]
