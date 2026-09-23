@@ -3760,3 +3760,28 @@ installed-profile source was edited.
 - [ ] Remaining Plan 040 live rows: reply reconciliation/cancel behavior, tool
       turn filtering, two-tab isolation, provider failure/retry, dead-ingest
       fail-open, foreign-directory protection, and existing-adapter smoke tests.
+
+## Ingest endpoint recovery regression — 2026-09-22
+
+After the OpenCode, Pi, and DeepSeek work, newly opened Claude, Codex,
+OpenCode, Pi, and DeepSeek tabs all showed grey status and stopped feeding
+notifications and sidebar cards. Read-only live diagnosis found the running
+app listening on port 55883, while `~/.context-terminal/ingest.env` still
+pointed to port 56669, which had no listener. Hook registrations for Claude
+and Codex were present, but the latest persisted hook was at 08:43; later
+tab activity was persisted. The surviving app process started at 08:19 and
+the endpoint file was overwritten at 08:33, consistent with a second app
+instance taking ownership of the shared endpoint and later exiting.
+
+The code now checks whether another instance's advertised endpoint is alive
+and reclaims the shared endpoint after two failed checks. The check uses an
+authenticated `/health` request; a live newer instance keeps ownership.
+
+- [x] Focused Rust tests: dead endpoint is reclaimed after two checks; live
+      endpoint remains untouched.
+- [ ] After installing the rebuilt app and relaunching it, start Claude and
+      Codex sessions in fresh tabs. Confirm their status bulbs, notifications,
+      decisions, blockers, and “Since you left” cards update.
+- [ ] With one app instance still open, launch a second instance and close it.
+      After a few seconds, confirm the first instance's newly started agent
+      sessions still update the tabs and sidebar.
