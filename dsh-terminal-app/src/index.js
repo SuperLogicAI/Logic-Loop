@@ -32,6 +32,7 @@ import { assistantMessagesSince, visibleText } from "./messages.js";
 
 // ponytail: plain ANSI SGR, no chalk/kleur dep for two constants.
 const USER_BLUE = "\x1b[38;2;77;106;254m"; // #4d6afe
+const DIM = "\x1b[38;2;123;134;149m"; // #7b8695
 const RESET = "\x1b[0m";
 
 const name = "terminal-runner";
@@ -340,14 +341,22 @@ async function run(ctx, config, io) {
   io.stdout.write(`dsh terminal — session ${sessionId}\n`);
   io.stdout.write("Type a message and press Enter. /exit quits.\n\n");
 
+  // One dim line per turn while the agent owns stdout. Readline is paused for
+  // the turn, so the runner cannot see queued keys without a full TUI — keep
+  // this a static hint, not a per-keystroke readout.
+  const WORKING_HINT = `${DIM}· working — typing is queued until this reply finishes${RESET}\n`;
+
   try {
     for (;;) {
       let line;
       try {
-        // Color left open (no reset) after "> " so the terminal echoes the
-        // user's own typed characters in the same blue — belt-and-suspenders
-        // distinction from the assistant's default-colored reply below.
-        line = await rl.question(`${USER_BLUE}> `, { signal: stdinEnded.signal });
+        // Pause readline for the turn (below) so keystrokes typed while the
+        // assistant streams are buffered by the PTY instead of echoed,
+        // uncolored, into the reply. Set up the question first, then resume,
+        // so any buffered input renders at the prompt rather than before it.
+        const answer = rl.question(`${USER_BLUE}> `, { signal: stdinEnded.signal });
+        rl.resume();
+        line = await answer;
       } catch {
         break; // stdin closed (EOF / Ctrl-D) or aborted above
       }
@@ -355,6 +364,9 @@ async function run(ctx, config, io) {
       const text = line.trim();
       if (text === "/exit") break;
       if (text === "") continue;
+      // Agent turn: readline must not echo queued input into the reply.
+      rl.pause();
+      io.stdout.write(WORKING_HINT);
       const firstSeq = agent.session.seq;
       postEvent({ hook_event_name: "UserPromptSubmit", session_id: sessionId, cwd: process.cwd() });
       postTranscriptLine(sessionId, "user", text);

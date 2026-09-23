@@ -8,10 +8,10 @@ import type { HookPayload } from "../src/types";
 const rust = readFileSync("src-tauri/src/deepseek.rs", "utf8");
 
 assert.match(rust, /const MARKER_FIELD: &str = "logicLoopAdapterVersion";/);
-assert.match(rust, /const DEEPSEEK_ADAPTER_VERSION: u64 = 3;/);
+assert.match(rust, /const DEEPSEEK_ADAPTER_VERSION: u64 = 4;/);
 
 const bundledPackage = JSON.parse(readFileSync("dsh-terminal-app/package.json", "utf8"));
-assert.equal(bundledPackage.logicLoopAdapterVersion, 3);
+assert.equal(bundledPackage.logicLoopAdapterVersion, 4);
 assert.match(rust, /pub\(crate\) const PROFILE_NAME: &str = "logic-loop";/);
 
 // The 9 core @deepseek-ai/* packages this plugin depends on directly, all
@@ -118,5 +118,16 @@ assert.equal(stateForHook(event("UserPromptSubmit")), "working");
 assert.equal(stateForHook(event("PostToolUse")), "working");
 assert.equal(stateForHook(event("Stop")), "idle");
 assert.equal(stateForHook(event("PostToolUse")), null);
+
+// Part 0 contract: readline must be paused while the agent owns stdout, and
+// resumed only after the next question is set up, or type-ahead leaks into the
+// reply uncolored. Source-order check; the live behavior is a manual test.
+const runner = readFileSync("dsh-terminal-app/src/index.js", "utf8");
+const questionAt = runner.indexOf("rl.question(");
+const resumeAt = runner.indexOf("rl.resume()");
+const pauseAt = runner.indexOf("rl.pause()");
+assert.ok(questionAt >= 0, "runner must call rl.question");
+assert.ok(resumeAt > questionAt, "runner must resume after setting up the prompt");
+assert.ok(pauseAt > resumeAt, "runner must pause readline for the agent turn");
 
 console.log("deepseek-check: all assertions passed");
