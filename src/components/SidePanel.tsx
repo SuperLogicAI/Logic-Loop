@@ -9,6 +9,7 @@ import { collapseNoopRuns, groupIterations, isLoopRun, type Iteration } from "..
 import { deriveClock, formatAge } from "../lib/ingest";
 import { adapterSupportsDecisions } from "../lib/onboarding";
 import { parseBoard, readBoard, spliceCard, writeBoard, type Card } from "../lib/board";
+import { computeMomentum } from "../lib/momentum";
 import { topPlannedCard } from "./IdeaBoard";
 import { PanelIcon } from "./PanelIcon";
 import { SidebarLmControl } from "./SidebarLmControl";
@@ -77,6 +78,7 @@ interface Props {
   onDecisionsChanged: () => void;
   onAttentionChanged: () => void;
   onAnswerNow: (d: Decision) => void; // prefill terminal — user still hits Enter
+  onSeedInput: (text: string) => void; // prefill the active tab's terminal — user still hits Enter
   onMuteChanged: () => void; // App's notify-hot-path mute cache needs a refresh
   attentionCount: number;
   attentionLoading: boolean;
@@ -237,6 +239,7 @@ export function SidePanel({
   onDecisionsChanged,
   onAttentionChanged,
   onAnswerNow,
+  onSeedInput,
   onMuteChanged,
   attentionCount,
   attentionLoading,
@@ -621,42 +624,27 @@ export function SidePanel({
   };
 
   // Momentum: latest open landing note → oldest open decision → oldest open
-  // blocker. Nothing open → no card. Done advances to the next candidate.
+  // blocker → planned card. Nothing open → no card. Cascade lives in
+  // src/lib/momentum.ts (Plan 043) so it can be reused/tested outside this
+  // component; the resolvers below still own the actual writes.
   const doneRef = useRef<HTMLButtonElement>(null);
-  const oldestOpenDecision = decisions
-    .filter((d) => d.status === "open")
-    .reduce<Decision | null>((a, d) => (!a || d.ts < a.ts ? d : a), null);
-  const oldestOpenBlocker = blockers
-    .filter((b) => b.resolved === 0)
-    .reduce<Blocker | null>((a, b) => (!a || b.ts < a.ts ? b : a), null);
-  const momentum: { label: string; text: string; done: () => Promise<void> } | null = landing
-    ? { label: "landing note", text: landing.body, done: () => repo.setNoteStatus(landing.id, "done") }
-    : oldestOpenDecision
-      ? {
-          label: "decision",
-          text: oldestOpenDecision.question,
-          done: () => repo.setDecisionStatus(oldestOpenDecision.id, "answered"),
-        }
-      : oldestOpenBlocker
-        ? {
-            label: "blocker",
-            text: oldestOpenBlocker.text,
-            done: () => repo.setBlockerResolved(oldestOpenBlocker.id, true),
-          }
-        : plannedCard
-          ? {
-              label: "planned",
-              text: plannedCard.next ?? plannedCard.title,
-              // Done advances the card into the next column rather than
-              // clearing it — the intent isn't finished, the work started.
-              // Also clears `now`: acted on, the slot frees up for the next pick.
-              done: async () => {
-                const fresh = await readBoard(cwd);
-                const match = parseBoard(fresh).find((c) => c.title === plannedCard.title) ?? plannedCard;
-                await writeBoard(cwd, spliceCard(fresh, { ...match, status: "building", now: false }));
-              },
-            }
-          : null;
+  const momentum = computeMomentum({
+    landing,
+    decisions,
+    blockers,
+    plannedCard,
+    onLandingDone: (n) => repo.setNoteStatus(n.id, "done"),
+    onDecisionDone: (d) => repo.setDecisionStatus(d.id, "answered"),
+    onBlockerDone: (b) => repo.setBlockerResolved(b.id, true),
+    // Done advances the card into the next column rather than clearing it —
+    // the intent isn't finished, the work started. Also clears `now`: acted
+    // on, the slot frees up for the next pick.
+    onPlannedCardDone: async (card) => {
+      const fresh = await readBoard(cwd);
+      const match = parseBoard(fresh).find((c) => c.title === card.title) ?? card;
+      await writeBoard(cwd, spliceCard(fresh, { ...match, status: "building", now: false }));
+    },
+  });
 
   const finishMomentum = async () => {
     if (!momentum) return;
@@ -1322,13 +1310,22 @@ export function SidePanel({
             </span>
           </h2>
           <p className="mb-2 break-words text-zinc-200">{momentum.text}</p>
-          <button
-            ref={doneRef}
-            className="ml-auto block rounded bg-yellow-400 px-2.5 py-1 font-medium text-zinc-950 hover:bg-yellow-300"
-            onClick={() => void finishMomentum()}
-          >
-            ✓ Done
-          </button>
+          <div className="ml-auto flex w-fit gap-1.5">
+            <button
+              className="rounded border border-yellow-400/40 px-2.5 py-1 font-medium text-yellow-300 hover:bg-yellow-400/10"
+              title="Prefill this in the terminal — you still hit Enter"
+              onClick={() => onSeedInput(momentum.text)}
+            >
+              ↳ Ask
+            </button>
+            <button
+              ref={doneRef}
+              className="rounded bg-yellow-400 px-2.5 py-1 font-medium text-zinc-950 hover:bg-yellow-300"
+              onClick={() => void finishMomentum()}
+            >
+              ✓ Done
+            </button>
+          </div>
         </section>
       )}
 

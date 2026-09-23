@@ -1434,6 +1434,17 @@ export default function App() {
     [focusTab]
   );
 
+  // Momentum's "↳ Ask" (Plan 043): prefill only, same discipline as
+  // answerNow above. No focusTab/binding lookup needed — SidePanel already
+  // describes the active tab, this can only ever be the tab already shown.
+  const prefillActiveTab = useCallback(
+    (text: string) => {
+      if (!activeTab || activeTab.status !== "live") return;
+      void ptyWrite(activeTab.ptyId, text);
+    },
+    [activeTab]
+  );
+
   return (
     <div className="flex h-screen flex-col bg-zinc-900">
       {/* Custom titlebar (native one hidden via titleBarStyle: Overlay).
@@ -1511,6 +1522,7 @@ export default function App() {
             onDecisionsChanged={refreshDecisionCounts}
             onAttentionChanged={scheduleAttentionRefresh}
             onAnswerNow={answerNow}
+            onSeedInput={prefillActiveTab}
             onMuteChanged={refreshMutedProjects}
             attentionCount={attentionViews.active.length}
             attentionLoading={attentionLoading}
