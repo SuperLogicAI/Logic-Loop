@@ -2,9 +2,11 @@
 
 ## Phase gate
 
-**NOT AUTHORIZED.** No implementation until the maintainer approves this
-plan. Not a numbered phase — a small, additive hardening of one existing
-call path, same shape as Plans 016/017/018. Origin: `docs/IDEAS.md`
+**ISOLATED SUPRA EXPERIMENT AUTHORIZED 2026-09-22.** The maintainer explicitly
+directed a separate worktree and bypassed the normal phase sequence for this
+trial. The branch remains unmerged pending a value decision. This is not a
+numbered Logic Loop phase or acceptance of the current Phase 41 work.
+Origin: `docs/IDEAS.md`
 "Mid-September Idea Runway" item 1, planned 2026-09-18 against
 `origin/main` at `80f1d65`.
 
@@ -21,7 +23,8 @@ Checked live against Claude Code CLI docs (code.claude.com/docs, fetched
   `not valid JSON` and `must be a JSON object`.
 - **Version floor: v2.1.205.** Before it, an invalid schema was *silently
   ignored* and returned unstructured text. Local CLI is v2.1.270, past the
-  floor — but the app cannot assume the user's CLI is. See Risk 1.
+  floor — but the app cannot assume the user's CLI is. See Risk 1. The
+  installed CLI for this trial is v2.1.280.
 - `format` (e.g. `"format": "email"`) is accepted as an annotation and not
   enforced. Irrelevant to our schemas; noted so nobody adds one expecting
   validation.
@@ -33,11 +36,10 @@ class of bug from Phase 33.1 for good" and proposes to "drop the fence
 tolerance entirely." Two parts of that are wrong and the plan does not
 follow them:
 
-1. **Fence tolerance cannot be dropped.** `run_extractor` has three
-   backends (`extractor.rs:205` — `claude`, `codex`, `lmstudio`). Only
-   Claude has `--json-schema`. Codex CLI 0.154.0 has no equivalent (Phase
-   34's audit found none), and LM Studio is arbitrary local models. The
-   shared strip at `src/lib/extractor.ts:60` still serves both. It stays.
+1. **Fence tolerance cannot be dropped.** `run_extractor` now has four
+   backends (`claude`, `codex`, `lmstudio`, `ollama`). Only the Claude
+   decisions path in this plan uses `--json-schema`. The shared strip in
+   `src/lib/extractor.ts` still serves the others. It stays.
 2. **This does not reopen haiku for extraction.** Phase 33.1 rejected haiku
    on extraction for a reproducible ~1-in-7 **false positive** on
    `09-question-in-code` — extracting a decision from a question inside a
@@ -129,6 +131,33 @@ reply is a JSON object.
 `claude_args(model, None)` is provably byte-identical to today's vector;
 the decisions path passes a schema and reads `structured_output`, serializing
 non-string JSON values before validation;
-`parseExtraction` and all three backends behave unchanged; golden 14/14 on
+`parseExtraction` and the non-Claude backends behave unchanged; golden 14/14 on
 sonnet; gates clean; one live Claude extraction and one live Codex
 extraction observed.
+
+## Isolated Supra sprint result — 2026-09-22
+
+Branch `feat/extractor-json-schema` in a separate worktree, based on `main`
+at `b6beb1d`. The maintainer will decide whether to merge it. The scope was
+extended to `src/lib/extractor.ts` and `scripts/golden.ts` so the app and
+golden runner share exactly one schema and the golden run exercises the new
+Claude output path. Ollama's presence is baseline drift from this plan's
+original three-backend description; its implementation is untouched.
+
+- `claude_args(..., None)` retains the original argument vector; `Some`
+  appends `--json-schema`. Rust tests cover both paths and object/string/
+  absent/conflicting `structured_output` cases.
+- Decision extraction passes the shared schema only for the Claude backend.
+  Other extractor callers and backends remain on the existing path, including
+  fence-tolerant `parseExtraction`.
+- `npx tsc --noEmit`, production build, `npm run check` (33 scripts on this
+  `main` baseline), `cargo test --lib` (136 passed, one existing ignored),
+  Clippy with warnings denied, and `git diff --check` passed.
+- The one planned real Claude golden run passed 14/14 with `--json-schema`
+  and `structured_output`; provider expense was not measured here.
+- A live app check on this worktree is pending. The running production app
+  has active sessions and a second unisolated instance would compete for its
+  shared ingest endpoint. No installation or global hook change was made.
+
+This is build/test evidence, not a claim that the UI path is live-accepted or
+that schema validation improves semantic extraction quality or expense.

@@ -3785,3 +3785,26 @@ authenticated `/health` request; a live newer instance keeps ownership.
 - [ ] With one app instance still open, launch a second instance and close it.
       After a few seconds, confirm the first instance's newly started agent
       sessions still update the tabs and sidebar.
+
+## Supra isolated trial — Plan 030 Claude extractor schema (2026-09-22)
+
+This is a separate, unmerged worktree based on `main` at `b6beb1d`. The
+maintainer explicitly bypassed the ordinary phase sequence for this Supra
+trial. It does not change the current Logic Loop phase acceptance status.
+
+- [x] Rust focused extractor tests: 8 passed, including unchanged no-schema
+      Claude arguments, appended schema arguments, and structured-output
+      precedence/fallback.
+- [x] `npm run check`: 33 scripts passed on this branch's baseline.
+- [x] `npx tsc --noEmit`, `npm run build`,
+      `cargo clippy --all-targets -- -D warnings`, and `git diff --check` pass.
+- [x] `cargo test --lib`: 136 passed; one pre-existing authenticated live
+      meter test ignored.
+- [x] One real Claude golden run with the new `--json-schema` path: 14/14
+      pass. This confirms current CLI 2.1.280 accepts the schema and returns
+      outputs that pass `parseExtraction`; it does not measure cost savings.
+- [ ] Launch this worktree's build in an isolated app profile and confirm one
+      live Claude Decisions card plus one Codex Decisions card. The existing
+      Logic Loop instance has active sessions; an unisolated second instance
+      would contend for its ingest endpoint. No app install or hook toggles
+      were made during this trial.

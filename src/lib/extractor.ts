@@ -13,6 +13,28 @@ export interface ExtractedDecision {
   agent_assumption: string | null;
 }
 
+export const EXTRACTION_SCHEMA = JSON.stringify({
+  type: "object",
+  properties: {
+    decisions: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          question: { type: "string" },
+          answered: { type: "boolean" },
+          user_answer: { type: ["string", "null"] },
+          agent_assumption: { type: ["string", "null"] },
+        },
+        required: ["question", "answered", "user_answer", "agent_assumption"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["decisions"],
+  additionalProperties: false,
+});
+
 export function buildPrompt(pair: TurnPair): string {
   return `You extract decision points from an AI coding agent's conversation.
 You are building a historical record of every decision the agent surfaced —
