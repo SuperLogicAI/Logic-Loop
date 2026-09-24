@@ -335,3 +335,23 @@ fix is ever reverted or bypassed. Referenced from CLAUDE.md.
   this and either unset the var first or launch from a plain shell.
   Likely explains a previously-unresolved mystery from Plan 017's addendum
   (below) with an identical symptom shape.
+- **Schema-drift tripwire (`decisions.ts`) false-tripped on CLI v2.1.281's new
+  `attachment` envelope.** Found 2026-09-24: user had multiple dev environments
+  running against the app at once and hit "claude: transcript format doesn't
+  match what this build expects" on a normal session — no real schema break.
+  Root cause: CLI v2.1.281 (up from v2.1.270, which is what the tripwire's own
+  recognized-envelope list was built against) started emitting `type:
+  "attachment"` lines for hook_success/environment/model/deferred_tools_delta
+  side-channel events, interleaved between real assistant/user turns.
+  `transcriptEnvelopeType()` didn't know that shape, so every attachment line
+  counted as "unrecognized"; one ordinary 110-line session hit a 21-line
+  consecutive streak against them alone (threshold is 20) — no concurrency
+  needed to reproduce, multiple dev envs just made it more likely by adding
+  more hook traffic. Fixed by adding `attachment` to the recognized set —
+  same treatment as a tool-only turn: no extractable text, not a schema
+  break. Once the tripwire fires for a session it doesn't self-clear (by
+  design — fire once, not per line); dismiss the warning banner and restart
+  after picking up a fix like this one. Next time the CLI adds a new
+  envelope `type` for a side-channel event, expect the same false trip and
+  check `transcriptEnvelopeType()`'s recognized list first before assuming
+  a real schema break.

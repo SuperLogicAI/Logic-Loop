@@ -30,6 +30,14 @@ const assistantBuf = new Map<string, PendingAssistant>(); // session_id -> pendi
 // THRESHOLD is generous enough to absorb a session's small number of
 // non-message lines (summaries, system prompts) at start without firing on a
 // healthy, unchanged transcript.
+//
+// Recurrence 2026-09-24: CLI v2.1.281 (up from v2.1.270 above) added a
+// `type: "attachment"` envelope — hook_success/environment/model/
+// deferred_tools_delta side-channel lines interleaved between real turns.
+// A single ordinary session hit a 21-line unrecognized streak from these
+// alone (no concurrency needed), false-tripping the warning. Added to the
+// recognized set below since it's the same "no extractable text, not a
+// schema break" case tool-only turns already are.
 const SCHEMA_DRIFT_THRESHOLD = 20;
 const unrecognizedStreak = new Map<string, number>(); // session_id -> consecutive unrecognized-envelope lines
 const driftWarned = new Set<string>(); // session_id already warned — fire once, not per line
@@ -61,6 +69,7 @@ export function transcriptEnvelopeType(line: string): "recognized" | "unrecogniz
     obj.type === "opencode_message" ||
     obj.type === "pi_message" ||
     obj.type === "deepseek_message" ||
+    obj.type === "attachment" ||
     isAntigravityEnvelope(obj)
     ? "recognized"
     : "unrecognized";
