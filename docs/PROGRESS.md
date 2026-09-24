@@ -634,3 +634,11 @@ Update this file as phases are accepted.
   the custom runner does not replay prior chat text into the terminal; this is
   now documented as a visible-history UX limitation. Remaining live-matrix rows
   are still open.
+
+- Phase 41 / Plan 037 Part C (Antigravity decision extraction): **DONE
+  2026-09-24.** Literal `PHASE 41 ACCEPTED` received 2026-09-22. Scoped
+  Antigravity transcript path gate + parser reuse the existing decision
+  pipeline. First live check (2026-09-22, agy 1.2.8) was quota-blocked;
+  retest 2026-09-24 on agy 1.2.9 passed — a real Antigravity question became
+  a Decisions card in the correct project. Rebased on #56/#57 with all gates
+  clean (`npm run check`, `tsc`, 140 Rust tests, clippy); merged via PR #55.

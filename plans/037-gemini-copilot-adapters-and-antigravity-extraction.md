@@ -8,6 +8,10 @@
 
 ## Status
 
+**Part C DONE 2026-09-24** — merged via PR #55; live Decisions-card check
+passed on agy 1.2.9 (`docs/TESTING.md`, Phase 41). Parts A/B tabled
+2026-09-22 (Gemini) and split to Plan 041 (Copilot). Original status below.
+
 CANDIDATE — not implemented or approved. P1/P2 mixed (see per-item status
 below); effort **L overall** — each new adapter is "Codex/OpenCode-sized,
 not a small patch" per this repo's own standing guidance
