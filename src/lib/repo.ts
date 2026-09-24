@@ -728,6 +728,12 @@ export async function dismissSession(sessionId: string): Promise<void> {
   ]);
 }
 
+/** Dismiss every open decision for one project, across all session clusters. */
+export async function dismissAllDecisions(cwd: string): Promise<void> {
+  const d = await getDb();
+  await d.execute("UPDATE decisions SET status = 'dismissed' WHERE cwd = $1 AND status = 'open'", [cwd]);
+}
+
 /** Pure grouping step for the open-decisions list, newest cluster first.
  * Exported for `decisions-check.ts` — no DB round trip needed since
  * `listDecisions` already has everything. */
@@ -988,6 +994,11 @@ export async function listNotes(cwd: string, kind: Note["kind"]): Promise<Note[]
 export async function setNoteStatus(id: number, status: Note["status"]): Promise<void> {
   const d = await getDb();
   await d.execute("UPDATE notes SET status = $1 WHERE id = $2", [status, id]);
+}
+
+export async function updateNote(id: number, body: string): Promise<void> {
+  const d = await getDb();
+  await d.execute("UPDATE notes SET body = $1 WHERE id = $2", [body, id]);
 }
 
 /** Momentum + residue: the most recent open landing note for a project, if any. */
