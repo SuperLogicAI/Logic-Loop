@@ -3871,11 +3871,14 @@ No duplicate `step_index` or planner `RUNNING` rewrite was observed.
 - [x] `npm run check`, `npx tsc --noEmit`, `npm run build`,
       `cargo test --lib` (140 passed, 1 ignored), and
       `cargo clippy --all-targets -- -D warnings` pass.
-- [ ] Confirm a real Antigravity open question becomes a Decisions card in the
-      correct project. On 2026-09-22, the rebuilt `/Applications/Logic Loop.app`
+- [x] Confirm a real Antigravity open question becomes a Decisions card in the
+      correct project. PASS 2026-09-24 (maintainer-reported): dev build of
+      this branch via `npm run tauri dev`, agy 1.2.9, a real Antigravity
+      question surfaced as a Decisions card in the correct project. Earlier
+      attempt: on 2026-09-22, the rebuilt `/Applications/Logic Loop.app`
       was launched and a fresh Antigravity tab opened via Setup in an isolated
       `/private/tmp` project. The folder trust prompt was cleared and agy 1.2.8
       reached its prompt, but the requested turn returned “Individual quota
       reached” (about 20 hours until reset). No planner question or completed
-      reply was produced, so this GUI extraction check remains unverified;
-      retry after quota resets. The three PR CI jobs passed.
+      reply was produced, so that attempt was quota-blocked. The three PR CI
+      jobs passed.
