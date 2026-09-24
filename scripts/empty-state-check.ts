@@ -8,11 +8,10 @@ const base = { isUnboundFanOutChild: false, sessionBlind: false, agent: undefine
 // Confirmed empty: Claude, bound, transcript readable.
 assert.match(decisionsEmptyReason(base), /^Nothing waiting on you\.$/);
 
-// Codex and OpenCode (Plan 038 Part 1, live-verified 2026-09-22) support
-// extraction; Antigravity does not yet (Plan 037 Part C).
+// Antigravity extraction is supported by its scoped JSONL tailer (Phase 41).
 assert.match(decisionsEmptyReason({ ...base, agent: "codex" }), /^Nothing waiting on you\.$/);
 assert.match(decisionsEmptyReason({ ...base, agent: "opencode" }), /^Nothing waiting on you\.$/);
-assert.match(decisionsEmptyReason({ ...base, agent: "antigravity" }), /isn't available for this agent/);
+assert.match(decisionsEmptyReason({ ...base, agent: "antigravity" }), /^Nothing waiting on you\.$/);
 
 // Blind session outranks the non-Claude-agent reason (transcript absence is
 // the more specific, more actionable fact when both are true).

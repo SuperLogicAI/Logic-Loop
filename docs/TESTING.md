@@ -3842,3 +3842,43 @@ not just theoretical.
       settings problem). Reworded to also name that possibility. `tsc
       --noEmit` and `npm run build` both clean after the change; no test
       pins the old wording.
+
+## Phase 41 — Antigravity decision extraction
+
+`PHASE 41 ACCEPTED` 2026-09-22. Plan 037 Part C's live transcript-shape
+gate passed before implementation. This build adds the scoped Antigravity
+transcript path, parser, and the matching Setup/empty-state capability flag (a necessary
+plan-scope addition so the UI does not claim extraction is unavailable).
+
+Step 1 evidence, agy 1.2.8 on 2026-09-22: a fresh `agy --print` turn and a
+second turn through `agy --conversation <id>` appended to the same
+`~/.gemini/antigravity-cli/brain/<id>/.system_generated/logs/
+transcript_full.jsonl`. The file grew from two to five lines; the original
+lines remained byte-identical. It contained two `USER_INPUT` records with
+visible prompt text inside `<USER_REQUEST>`, two `PLANNER_RESPONSE` records
+with visible reply `content` and `status: DONE`, plus a `SYSTEM_MESSAGE`.
+No duplicate `step_index` or planner `RUNNING` rewrite was observed.
+
+- [x] Scoped path test accepts the verified `brain/<conversationId>/
+      .system_generated/logs/transcript_full.jsonl` shape and rejects other
+      agents, roots, parents, and filenames.
+- [x] Parser checks extract only completed `<USER_REQUEST>` and visible
+      `PLANNER_RESPONSE.content`; metadata wrappers, thinking, tools, and
+      non-completed lines are excluded.
+- [x] Read-only replay of the Step 1 real transcript through the new parser:
+      5/5 envelopes recognized, 2 user requests and 2 visible planner replies
+      extracted, 1 system line ignored. No transcript text was printed.
+- [x] `npm run check`, `npx tsc --noEmit`, `npm run build`,
+      `cargo test --lib` (140 passed, 1 ignored), and
+      `cargo clippy --all-targets -- -D warnings` pass.
+- [x] Confirm a real Antigravity open question becomes a Decisions card in the
+      correct project. PASS 2026-09-24 (maintainer-reported): dev build of
+      this branch via `npm run tauri dev`, agy 1.2.9, a real Antigravity
+      question surfaced as a Decisions card in the correct project. Earlier
+      attempt: on 2026-09-22, the rebuilt `/Applications/Logic Loop.app`
+      was launched and a fresh Antigravity tab opened via Setup in an isolated
+      `/private/tmp` project. The folder trust prompt was cleared and agy 1.2.8
+      reached its prompt, but the requested turn returned “Individual quota
+      reached” (about 20 hours until reset). No planner question or completed
+      reply was produced, so that attempt was quota-blocked. The three PR CI
+      jobs passed.

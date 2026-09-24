@@ -79,7 +79,7 @@ export const ADAPTERS: readonly AdapterMetadata[] = [
     command: "agy",
     installUrl: "https://antigravity.google/product/antigravity-cli/",
     configLocation: "~/.gemini/config/hooks.json",
-    capabilities: { activity: true, decisions: false, reentry: true },
+    capabilities: { activity: true, decisions: true, reentry: true },
   },
   {
     id: "pi",

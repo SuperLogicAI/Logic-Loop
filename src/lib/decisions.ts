@@ -34,15 +34,24 @@ const SCHEMA_DRIFT_THRESHOLD = 20;
 const unrecognizedStreak = new Map<string, number>(); // session_id -> consecutive unrecognized-envelope lines
 const driftWarned = new Set<string>(); // session_id already warned — fire once, not per line
 
+function isAntigravityEnvelope(obj: { type?: unknown; status?: unknown }): boolean {
+  return (obj.type === "USER_INPUT" ||
+    obj.type === "PLANNER_RESPONSE" ||
+    obj.type === "GENERIC" ||
+    obj.type === "SYSTEM_MESSAGE" ||
+    obj.type === "ERROR_MESSAGE") &&
+    (obj.status === "DONE" || obj.status === "RUNNING" || obj.status === "ERROR");
+}
+
 /** Whether a transcript line's own envelope is one this module knows how to
  * read at all, independent of whether that particular line carries
  * extractable text. A line that fails to parse as JSON at all (e.g. a
  * partial line mid-flush) is neither — it must not reset or extend the
  * streak, since that's ordinary tailing noise, not a schema signal. */
 export function transcriptEnvelopeType(line: string): "recognized" | "unrecognized" | "unparseable" {
-  let obj: { type?: unknown };
+  let obj: { type?: unknown; status?: unknown };
   try {
-    obj = JSON.parse(line) as { type?: unknown };
+    obj = JSON.parse(line) as { type?: unknown; status?: unknown };
   } catch {
     return "unparseable";
   }
@@ -51,7 +60,8 @@ export function transcriptEnvelopeType(line: string): "recognized" | "unrecogniz
     obj.type === "response_item" ||
     obj.type === "opencode_message" ||
     obj.type === "pi_message" ||
-    obj.type === "deepseek_message"
+    obj.type === "deepseek_message" ||
+    isAntigravityEnvelope(obj)
     ? "recognized"
     : "unrecognized";
 }
@@ -80,6 +90,8 @@ export function textFromTranscriptLine(line: string): { role: string; text: stri
   try {
     const obj = JSON.parse(line) as {
       type?: string;
+      status?: unknown;
+      content?: unknown;
       role?: string;
       text?: unknown;
       message?: { content?: unknown };
@@ -89,6 +101,16 @@ export function textFromTranscriptLine(line: string): { role: string; text: stri
         content?: unknown;
       };
     };
+    if (isAntigravityEnvelope(obj)) {
+      if (obj.status !== "DONE" || typeof obj.content !== "string") return null;
+      if (obj.type === "USER_INPUT") {
+        const request = obj.content.match(/<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/)?.[1];
+        return request?.trim() ? { role: "user", text: request } : null;
+      }
+      return obj.type === "PLANNER_RESPONSE" && obj.content.trim()
+        ? { role: "assistant", text: obj.content }
+        : null;
+    }
     // OpenCode's plugin (Plan 038 Part 1) has no transcript file — it posts
     // this envelope directly, already reduced to plain text in-process (see
     // opencode.rs's `flushMessage`). No block/content-array parsing needed
