@@ -1439,3 +1439,91 @@ preserved); `tsc --noEmit`, clippy clean; a manual §-entry in
 new `claude` session in that dir mentions the decision when asked "what
 has been decided here?" → remove import → file stops regenerating → git
 diff shows only the one line removed from CLAUDE.md.
+
+---
+
+# DeepSeek Harness / dsh-terminal-app — polish ideas (2026-09-22)
+
+Source: the Plan 042 polish sprint (type-ahead fix, non-blocking adapter
+install, readable terminal presentation). Plan 042 shipped and is
+live-verified; everything below was **deliberately deferred**, not broken.
+Each is a candidate with no PLAN.md yet — promote one to the ROADMAP table
+when it gets its own approval. The runner is first-party
+(`dsh-terminal-app`, `src/index.js` + `format.js`), so all of the
+presentation work is in our control and none of it may touch the
+extraction path (semantic data comes from the structured
+`deepseek_message` events, never the rendered output).
+
+## Presentation — the deferred Part B extras
+
+The plan's maintenance notes name these explicitly. `format.js` already
+provides the palette, the TTY/`NO_COLOR` gate, the sanitizer, and a
+fence-aware styler; these build on that without a new dependency.
+
+- **Syntax highlighting inside fenced code.** The styler already
+  classifies fenced blocks as `SGR.code`; a small tokenizer for the common
+  languages (js/ts/rust/json/sh) would make code replies materially more
+  readable. Keep the byte-preservation contract; only the fenced-content
+  path changes.
+- **Inline markdown:** bold/italic, inline `code`, links. Replies currently
+  render markdown literally, so prose reads as source. A line-level
+  transform outside fences is enough; skip inside fenced blocks.
+- **Tables.** DeepSeek emits markdown tables that currently read as raw
+  pipes. A column aligner (measure visible widths, pad) is the biggest win
+  for structured replies but the most complex, since it needs whole-table
+  buffering before anything renders.
+- **Persistent status line.** One dim row for model / turn state / token
+  usage, replacing the per-turn `· working — typing is queued…` hint. Needs
+  cursor save/restore so it doesn't fight the assistant stream.
+- **Per-turn usage line.** The runner already receives `usage` chunks and
+  ignores them (`index.js`). A dim `· tokens in X / out Y` after a reply is
+  cheap and honest.
+- **Configurable theme.** The palette assumes Logic Loop's `#1e2127`
+  background; the soft `#dbe2ec` prose is tuned for dark. A profile setting
+  or env override would let the `logic-loop` profile run in a light terminal.
+
+## Reasoning / activity visibility
+
+- **Dim "thinking" indicator while `reasoning-delta` streams.** The runner
+  hides reasoning entirely and prints nothing until visible text or a tool
+  call, so a slow reasoning turn looks stalled. A single dim `⋯ thinking`
+  line, cleared when text starts, shows liveness without exposing reasoning
+  content.
+- **Tool-call activity lines.** `observeToolCalls` posts `PostToolUse` but
+  prints nothing, so a tool-heavy turn is a blank screen. One dim line per
+  call (`· tool: <name>`) with a ✓/✗ on result. Sanitize the tool name
+  first — it is untrusted like any agent text.
+
+## Type-ahead follow-ups (from Part 0)
+
+- **A real multi-line type-ahead queue.** Part 0 pauses `readline` for the
+  turn so keystrokes can't leak into the reply. Known edge case: if more
+  than one complete line is queued, only the first submits the next prompt
+  and the rest can be dropped (the runner has no interface-level `line`
+  listener). Single-line is the supported case; a small queue would make
+  multi-line paste-during-generation safe.
+- **Live queued-input feedback.** Echo is deferred while the agent works,
+  so typing shows nothing until the prompt returns (just a static one-line
+  hint). A custom raw-mode reader could echo queued characters in brand
+  color on a reserved row; bigger change, only if the static hint proves
+  insufficient.
+
+## Deploy / DX
+
+- **Surface "runner update available" more clearly.** A `dsh-terminal-app`
+  change bumps `logicLoopAdapterVersion`; the app detects staleness but the
+  user still has to re-Enable, and any running tab keeps its old in-memory
+  plugin until a fresh tab opens. That trap cost two false "the fix
+  failed" tests during Plan 042. An explicit "adapter update available —
+  re-enable and open a new tab" state in Setup / the status bar would
+  remove it.
+
+## Cross-cutting (not DeepSeek-specific)
+
+- **One-frame query duplication on window resize.** A wrapped `readline`
+  input line re-rendered one row short after a pane resize (captured
+  2026-09-22 10.19.20 PM; the user-query tail stayed on screen and the full
+  line reprinted below it). Judged agent-agnostic — it affects any wrapped
+  `readline` input, not just dsh — so it was left out of Plan 042. Needs its
+  own investigation, most likely by owning the line rendering or making the
+  prompt width-safe.
