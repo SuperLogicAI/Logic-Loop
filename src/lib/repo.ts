@@ -996,6 +996,11 @@ export async function setNoteStatus(id: number, status: Note["status"]): Promise
   await d.execute("UPDATE notes SET status = $1 WHERE id = $2", [status, id]);
 }
 
+export async function updateNote(id: number, body: string): Promise<void> {
+  const d = await getDb();
+  await d.execute("UPDATE notes SET body = $1 WHERE id = $2", [body, id]);
+}
+
 /** Momentum + residue: the most recent open landing note for a project, if any. */
 export async function latestLandingNote(cwd: string): Promise<Note | null> {
   const d = await getDb();

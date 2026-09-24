@@ -270,6 +270,7 @@ export function SidePanel({
   const seededTopSessionRef = useRef<string | null>(null);
   const [draft, setDraft] = useState("");
   const [noteDraft, setNoteDraft] = useState("");
+  const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
   const [landingCapture, setLandingCapture] = useState(false);
   const [landingModeSaving, setLandingModeSaving] = useState(false);
   const [landingModeError, setLandingModeError] = useState(false);
@@ -597,7 +598,12 @@ export function SidePanel({
   const addQuickNote = async () => {
     const text = noteDraft.trim();
     if (!text) return;
-    await repo.addNote(cwd, landingCapture ? "landing" : "residue", text, sessionId);
+    if (editingNoteId !== null) {
+      await repo.updateNote(editingNoteId, text);
+      setEditingNoteId(null);
+    } else {
+      await repo.addNote(cwd, landingCapture ? "landing" : "residue", text, sessionId);
+    }
     setNoteDraft("");
     setLandingCapture(false);
     await reload();
@@ -611,6 +617,12 @@ export function SidePanel({
   const dismissNote = async (n: Note) => {
     await repo.setNoteStatus(n.id, "done");
     await reload();
+  };
+
+  const startEditNote = (n: Note) => {
+    setEditingNoteId(n.id);
+    setNoteDraft(n.body);
+    requestAnimationFrame(() => noteInputRef.current?.focus());
   };
 
   const changeLandingMode = async (next: LandingNoteMode) => {
@@ -1202,21 +1214,27 @@ export function SidePanel({
           </button>
         </div>
         {landingModeError && <p className="mb-2 text-orange-300">Couldn’t save landing-note mode.</p>}
-        <input
-          ref={noteInputRef}
-          className={`w-full rounded px-2 py-1 text-zinc-200 outline-none placeholder:text-zinc-600 ${
-            landingCapture ? "mb-1 border-2 border-transparent" : "mb-2 border border-zinc-100 bg-zinc-800"
-          }`}
-          style={
-            landingCapture
-              ? { background: `linear-gradient(#27272a, #27272a) padding-box, ${SUBTLE_RAINBOW_BORDER} border-box` }
-              : undefined
-          }
-          placeholder={landingCapture ? "Leave a landing note for this project…" : "Leave a note for this project…"}
-          value={noteDraft}
-          onChange={(e) => setNoteDraft(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && void addQuickNote()}
-        />
+        <div className={`relative ${landingCapture ? "mb-1" : "mb-2"}`}>
+          <PanelIcon
+            name="leave-note"
+            className="pointer-events-none absolute top-1/2 left-2 h-4 w-4 -translate-y-1/2 text-zinc-600"
+          />
+          <input
+            ref={noteInputRef}
+            className={`w-full rounded py-1 pr-2 pl-7 text-zinc-200 outline-none placeholder:text-zinc-500 ${
+              landingCapture ? "border-2 border-transparent" : "border border-zinc-100 bg-zinc-800"
+            }`}
+            style={
+              landingCapture
+                ? { background: `linear-gradient(#27272a, #27272a) padding-box, ${SUBTLE_RAINBOW_BORDER} border-box` }
+                : undefined
+            }
+            placeholder={landingCapture ? "Leave a landing note for this project…" : "Leave a note for this project…"}
+            value={noteDraft}
+            onChange={(e) => setNoteDraft(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && void addQuickNote()}
+          />
+        </div>
         {landingCapture && (
           <p className="mb-2 text-zinc-400">What's the next physical action here when you come back?</p>
         )}
@@ -1226,7 +1244,11 @@ export function SidePanel({
           <ul className="flex flex-col gap-1">
             {notes.map((n) => (
               <li key={n.id} className="flex items-start gap-2">
+                <PanelIcon name="note" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-300" />
                 <span className="min-w-0 flex-1 break-words text-zinc-400">{n.body}</span>
+                <button className="shrink-0 text-zinc-600 hover:text-zinc-200" title="Edit" onClick={() => startEditNote(n)}>
+                  <PanelIcon name="edit-note" className="h-4 w-4" />
+                </button>
                 <button className="shrink-0 text-zinc-600 hover:text-zinc-200" title="Clear" onClick={() => void dismissNote(n)}>
                   ✕
                 </button>
