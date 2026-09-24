@@ -35,9 +35,17 @@ const assistantBuf = new Map<string, PendingAssistant>(); // session_id -> pendi
 // `type: "attachment"` envelope — hook_success/environment/model/
 // deferred_tools_delta side-channel lines interleaved between real turns.
 // A single ordinary session hit a 21-line unrecognized streak from these
-// alone (no concurrency needed), false-tripping the warning. Added to the
-// recognized set below since it's the same "no extractable text, not a
-// schema break" case tool-only turns already are.
+// alone (no concurrency needed), false-tripping the warning. Tried judging
+// by shape instead (ignore any line with no role-shaped field, allowlist
+// nothing) to survive future CLI additions without a code change — but
+// that's exactly what the 2026-09-12 catastrophe looked like too: when the
+// CLI stopped emitting `assistant`/`user` at all, every line it wrote
+// (last-prompt/mode/permission-mode/atis-latch/bridge-session) also had no
+// role field anywhere. A shape check would have silently defeated the
+// tripwire in the one scenario it exists for. So this stays a named
+// allowlist, updated by hand each time a new benign side-channel type
+// ships (see decision-integrity-check.ts's regression test, which pins the
+// 2026-09-12 types as still-must-flag — never add those here).
 const SCHEMA_DRIFT_THRESHOLD = 20;
 const unrecognizedStreak = new Map<string, number>(); // session_id -> consecutive unrecognized-envelope lines
 const driftWarned = new Set<string>(); // session_id already warned — fire once, not per line
@@ -73,6 +81,16 @@ export function transcriptEnvelopeType(line: string): "recognized" | "unrecogniz
     isAntigravityEnvelope(obj)
     ? "recognized"
     : "unrecognized";
+}
+
+/** Manual re-arm for the schema-drift warning banner's Retry button. Global,
+ * not per-session — the warning itself already collapses every session for
+ * an agent into one row (dedup by agent+reason in App.tsx), so there's no
+ * per-session id to target. Cheap and fail-open: if the drift was real, the
+ * next SCHEMA_DRIFT_THRESHOLD unrecognized lines just re-fire it. */
+export function resetSchemaDrift(): void {
+  unrecognizedStreak.clear();
+  driftWarned.clear();
 }
 
 function trackSchemaDrift(

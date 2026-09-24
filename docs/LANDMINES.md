@@ -350,8 +350,22 @@ fix is ever reverted or bypassed. Referenced from CLAUDE.md.
   more hook traffic. Fixed by adding `attachment` to the recognized set —
   same treatment as a tool-only turn: no extractable text, not a schema
   break. Once the tripwire fires for a session it doesn't self-clear (by
-  design — fire once, not per line); dismiss the warning banner and restart
-  after picking up a fix like this one. Next time the CLI adds a new
+  design — fire once, not per line); the warning banner now has a Retry
+  button (`decisions.resetSchemaDrift()`, wired via `onRetrySchemaDriftWarning`
+  in App.tsx/SidePanel.tsx) that clears `unrecognizedStreak`/`driftWarned`
+  globally and hides the row — if the drift is real it just re-fires after
+  another `SCHEMA_DRIFT_THRESHOLD` unrecognized lines, since there's no way
+  for the running build to learn an unknown envelope shape at runtime; the
+  actual fix still requires a new release. Next time the CLI adds a new
   envelope `type` for a side-channel event, expect the same false trip and
   check `transcriptEnvelopeType()`'s recognized list first before assuming
-  a real schema break.
+  a real schema break. **Tried and reverted the same day:** a shape-based
+  heuristic ("ignore any line with no role-shaped field, no allowlist
+  needed") looked like it would survive future CLI additions without a code
+  change, but `decision-integrity-check.ts`'s existing regression test
+  caught that it silently defeats the tripwire's original purpose — the
+  2026-09-12 catastrophe types (`last-prompt`/`mode`/`permission-mode`/
+  `atis-latch`/`bridge-session`) also have no role field, and that was the
+  one real scenario (CLI drops `assistant`/`user` entirely) this tripwire
+  exists to catch. Stayed a named allowlist. Run `npm run check` (now
+  includes `schema-drift:check`) before trusting any future change here.

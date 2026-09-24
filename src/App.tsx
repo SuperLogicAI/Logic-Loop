@@ -178,6 +178,15 @@ export default function App() {
   const dismissAdapterWarning = useCallback((agent: string, reason: string) => {
     setAdapterWarnings((prev) => prev.filter((w) => !(w.agent === agent && w.reason === reason)));
   }, []);
+  // Retry on the schema-drift banner: re-arm detection and hide the warning
+  // optimistically. If the drift is real it just re-fires after another
+  // SCHEMA_DRIFT_THRESHOLD unrecognized lines — this can't patch unknown CLI
+  // output, only clear a possibly-stale/false trip so the user isn't stuck
+  // staring at a warning from before the running build picked up a fix.
+  const retrySchemaDriftWarning = useCallback((agent: string) => {
+    decisions.resetSchemaDrift();
+    setAdapterWarnings((prev) => prev.filter((w) => !(w.agent === agent && w.reason === "transcript_schema_unrecognized")));
+  }, []);
   // Plan 023: latest mirrored Claude statusLine snapshot per session_id. Live
   // gauge state, never persisted to SQLite — overwritten on every rerun.
   const [claudeStatusline, setClaudeStatusline] = useState<Record<string, ClaudeStatuslineSnapshot>>({});
@@ -1513,6 +1522,7 @@ export default function App() {
             blindPaths={Object.values(blindSessions)}
             adapterWarnings={adapterWarnings}
             onDismissAdapterWarning={dismissAdapterWarning}
+            onRetrySchemaDriftWarning={retrySchemaDriftWarning}
             sessionBlind={!!(activeTab.sessionId && blindSessions[activeTab.sessionId])}
             agent={activeTab.agent}
             fanOut={fanOutRollups}

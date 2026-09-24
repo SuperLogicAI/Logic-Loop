@@ -69,6 +69,7 @@ interface Props {
   blindPaths: string[]; // transcripts that failed to open — panels are incomplete
   adapterWarnings?: Array<{ agent: string; reason: string }>; // adapter setup warnings (e.g. foreign PostToolUse collision)
   onDismissAdapterWarning?: (agent: string, reason: string) => void; // manual × close on a warning strip entry
+  onRetrySchemaDriftWarning?: (agent: string) => void; // re-arm detection and hide the "transcript_schema_unrecognized" row, in case it was a stale/false trip
   sessionBlind: boolean; // active tab's own session has no transcript — decisions may be missed, not confirmed absent
   agent?: string; // active tab's adapter marker ("codex"/"opencode"/"antigravity"), undefined for plain Claude
   fanOut: FanOutRollup[]; // every fan-out group the active tab belongs to (as parent, possibly several; as child, at most one), oldest first
@@ -230,6 +231,7 @@ export function SidePanel({
   blindPaths,
   adapterWarnings = [],
   onDismissAdapterWarning,
+  onRetrySchemaDriftWarning,
   sessionBlind,
   agent,
   fanOut,
@@ -981,6 +983,16 @@ export function SidePanel({
         >
           <WarningIcon className="h-7 w-7 shrink-0 text-orange-300" />
           <span className="min-w-0 flex-1 leading-4">{adapterWarningMessage(w)}</span>
+          {w.reason === "transcript_schema_unrecognized" && onRetrySchemaDriftWarning && (
+            <button
+              type="button"
+              onClick={() => onRetrySchemaDriftWarning(w.agent)}
+              title="Re-check now — clears this warning; it returns on its own if the schema drift is still there"
+              className="shrink-0 rounded border border-orange-300/50 px-1.5 py-0.5 text-orange-200 hover:bg-orange-400/10 hover:text-orange-100"
+            >
+              Retry
+            </button>
+          )}
           {onDismissAdapterWarning && (
             <button
               type="button"
