@@ -267,6 +267,7 @@ export function SidePanel({
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
   const [plannedCard, setPlannedCard] = useState<Card | null>(null);
   const seededCwdRef = useRef<string | null>(null);
+  const seededTopSessionRef = useRef<string | null>(null);
   const [draft, setDraft] = useState("");
   const [noteDraft, setNoteDraft] = useState("");
   const [landingCapture, setLandingCapture] = useState(false);
@@ -705,18 +706,31 @@ export function SidePanel({
       delta.lastWords !== "");
   const hasWarnings = adapterWarnings.length > 0 || blindPaths.length > 0 || sessionBlind;
 
-  // Most recent cluster expanded by default, older ones collapsed — reseed
-  // only when the active project changes, so a manual toggle survives a
-  // decisions refetch (new decision landing, a dismiss) within the same cwd.
+  // Most recent cluster expanded by default, older ones collapsed. Reseeds
+  // whenever the top cluster itself changes (new project, or a new/dismissed
+  // session takes over slot 0) — not just once per cwd, since an early fetch
+  // can settle on a stale top before extraction finishes landing the real
+  // one. A manual toggle on a cluster that's already on top still survives
+  // (we only ever add to expandedSessions here, never remove).
   useEffect(() => {
-    if (seededCwdRef.current === cwd) return;
-    if (decisionGroups.length === 0) return; // wait for the real fetch, not an empty first render
-    seededCwdRef.current = cwd;
-    setExpandedSessions(new Set([decisionGroups[0].session_id]));
+    if (seededCwdRef.current !== cwd) {
+      seededCwdRef.current = cwd;
+      seededTopSessionRef.current = null;
+    }
+    const top = decisionGroups[0]?.session_id;
+    if (!top || top === seededTopSessionRef.current) return;
+    seededTopSessionRef.current = top;
+    setExpandedSessions((prev) => new Set(prev).add(top));
   }, [cwd, decisionGroups]);
 
   const dismissSessionCluster = async (sessionId: string) => {
     await repo.dismissSession(sessionId);
+    await reload();
+    onDecisionsChanged();
+  };
+
+  const dismissAllDecisionsForProject = async () => {
+    await repo.dismissAllDecisions(cwd);
     await reload();
     onDecisionsChanged();
   };
@@ -1317,7 +1331,15 @@ export function SidePanel({
           <h2 className="mb-1 flex items-center gap-1.5 font-semibold tracking-wide text-yellow-300 uppercase">
             <Chevron collapsed={false} className="text-yellow-300" />
             <PanelIcon name="next" className="h-4 w-4" rainbow={!lockIn && momentum.label === "landing note"} /> Next
-            <span className="ml-auto font-normal text-[10px] normal-case text-zinc-500">
+            <span
+              className={`ml-auto font-normal text-[10px] normal-case ${
+                momentum.label === "decision"
+                  ? "text-orange-400"
+                  : momentum.label === "blocker"
+                    ? "text-red-400"
+                    : "text-zinc-500"
+              }`}
+            >
               {!lockIn && momentum.label === "landing note" ? <RainbowText text={momentum.label} /> : momentum.label}
             </span>
           </h2>
@@ -1349,6 +1371,18 @@ export function SidePanel({
           <Chevron collapsed={collapsed.has("decisions")} className="text-orange-400/85" />
           <PanelIcon name="decisions" className="h-3.5 w-3.5" />
           Decisions {openDecisions.length > 0 && `(${openDecisions.length})`}
+          {openDecisions.length > 1 && (
+            <button
+              className="ml-auto font-normal text-[10px] text-orange-700 normal-case hover:text-orange-400"
+              title="Dismiss every open decision in this project"
+              onClick={(e) => {
+                e.stopPropagation();
+                void dismissAllDecisionsForProject();
+              }}
+            >
+              dismiss all
+            </button>
+          )}
         </h2>
         {!collapsed.has("decisions") && (
           <>
@@ -1381,13 +1415,13 @@ export function SidePanel({
                       {g.n > 1 && (
                         <button
                           className="ml-auto text-yellow-700 hover:text-yellow-400"
-                          title="Dismiss all in this session — not real decisions"
+                          title="Dismiss this batch — not real decisions"
                           onClick={(e) => {
                             e.stopPropagation();
                             void dismissSessionCluster(g.session_id);
                           }}
                         >
-                          dismiss all
+                          dismiss batch
                         </button>
                       )}
                     </div>
