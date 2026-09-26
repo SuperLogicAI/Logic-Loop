@@ -660,3 +660,17 @@ Update this file as phases are accepted.
   dropped from this sprint rather than built on a guessed contract — they
   remain recorded in `plans/043-next-action-suggestions.md` for a later
   increment. See docs/TESTING.md §65.
+- Phase 44 / Plan 044 (Codex tab identity with a shared daemon): **ACCEPTED
+  2026-09-26** (literal `PHASE 44 ACCEPTED`). Root cause: Codex CLI 0.157
+  (installed 2026-09-25) auto-starts a shared app-server daemon, and hooks run
+  in the daemon's environment, so every bare `codex` reported the tab that
+  first started the daemon. Fix: Setup and re-entry launch `codex --no-daemon`;
+  zsh tabs get app-owned `ZDOTDIR` startup files (under `~/.context-terminal/zsh/`)
+  that source the user's own and define a `codex` function adding the flag
+  once. No user dotfiles, PATH, Codex config, or daemon touched. Same-tab
+  session takeover was built, found unsafe in review (Codex run by Claude's
+  Codex plugin inherits the Claude tab's tether), and reverted before release.
+  Live §66 matrix passed: + tab, two tabs in one folder, bookmark, Setup +
+  Re-enter, Claude tab with Codex plugin, shell preservation, daemon untouched.
+  Deferred: launch registry + in-tab session replacement, bash/fish. Open:
+  side-panel cards reported not working after close + Re-enter (unconfirmed).

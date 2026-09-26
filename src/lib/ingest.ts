@@ -161,19 +161,21 @@ export interface BindCandidate {
   id: string;
   cwd: string; // already the expanded project key
   status: string;
+  sessionId?: string;
   agentState?: AgentState;
 }
 
-/** Location to persist for a tethered SessionStart. Agy can omit
- * workspacePaths; only its exact, live tab may supply the missing project. */
+/** Location to persist for a tethered SessionStart. Every adapter needs an
+ * exact, live tab that is unclaimed or already owns this session. Agy can omit
+ * workspacePaths, so its tab may supply the missing project. */
 export function sessionBindingLocation(
   p: HookPayload,
   projectKey: string | undefined,
-  tab?: { id: string; cwd: string; status: string }
+  tab?: { id: string; cwd: string; status: string; sessionId?: string }
 ): { cwd: string; projectKey: string } | null {
   if (!p.tab_id) return null;
-  // A late hook from a closed agy tab must not reactivate its binding.
-  if (p.agent === "antigravity" && (tab?.id !== p.tab_id || tab.status !== "live")) return null;
+  if (tab?.id !== p.tab_id || tab.status !== "live") return null;
+  if (tab.sessionId && tab.sessionId !== p.session_id) return null;
   if (p.cwd && projectKey) return { cwd: p.cwd, projectKey };
   if (p.agent === "antigravity" && tab?.cwd) {
     return { cwd: tab.cwd, projectKey: tab.cwd };
@@ -186,8 +188,8 @@ export function sessionBindingLocation(
  *
  * Tether first: the PTY carries `LOGIC_LOOP_TAB_ID`, hooks echo it back, so the
  * answer is exact — including two tabs open on the same repo, which cwd
- * matching always got wrong. cwd matching survives as a fallback because
- * sessions started in an outside terminal carry no tether.
+ * matching always got wrong. cwd matching survives for other adapters, but
+ * Codex requires a tether: its shared daemon can send another client's ID.
  */
 export function bindSession(
   p: HookPayload,
@@ -196,13 +198,17 @@ export function bindSession(
 ): string | null {
   if (typeof p.tab_id === "string") {
     const tethered = tabs.find((t) => t.id === p.tab_id);
-    if (tethered) return tethered.id;
+    if (tethered?.status === "live" && (!tethered.sessionId || tethered.sessionId === p.session_id)) return tethered.id;
     // Tethered to a tab that's since closed: do not fall through to cwd, or the
     // dead tab's events land on whatever unbound tab happens to match.
     return null;
   }
+  // Codex's shared daemon can emit hooks with another client's inherited
+  // tether. An untethered Codex event has no exact client identity either.
+  if (p.agent === "codex") return null;
   const { boundTabIds, activeTabId, projectKey } = opts;
   if (!projectKey) return null;
+  const liveTabs = tabs.filter((t) => t.status === "live");
   // A filesystem root is never a real project: it means the session was started
   // somewhere with no meaningful cwd. Binding it would overwrite the tab's cwd
   // with a key that matches nothing, blanking the panel. Untethered + rootless =
@@ -211,11 +217,11 @@ export function bindSession(
   // `C:\dev\proj` too, which fails far more quietly than the bug it fixes.
   if (/^(?:[/\\]|[A-Za-z]:[/\\]?)$/.test(projectKey)) return null;
   return (
-    tabs.find((t) => t.cwd === projectKey && !boundTabIds.has(t.id))?.id ??
-    tabs.find((t) => t.cwd === projectKey)?.id ??
+    liveTabs.find((t) => t.cwd === projectKey && !boundTabIds.has(t.id))?.id ??
+    liveTabs.find((t) => t.cwd === projectKey)?.id ??
     // else the active tab — the user `cd`ed away from the tab's spawn cwd
     // before running claude, and they're typing in it now.
-    tabs.find((t) => t.id === activeTabId && t.status === "live" && !boundTabIds.has(t.id))?.id ??
+    liveTabs.find((t) => t.id === activeTabId && !boundTabIds.has(t.id))?.id ??
     null
   );
 }
@@ -389,12 +395,17 @@ export function isTerminalResult(p: HookPayload): boolean {
   return !isSubagentHook(p) && (p.hook_event_name === "Stop" || p.hook_event_name === "Interrupt");
 }
 
-/** Freeze the trusted identity attached to a normalized hook before work is
- * queued. The hook tether wins over a later cwd fallback binding. */
-export function sourceContextForHook(p: HookPayload, matchedTabId?: string): AttentionSourceContext {
+/** Freeze the tab identity attached to a hook before work is queued. App.tsx
+ * passes only a verified live match; raw tethers remain available for other
+ * callers that have not resolved a tab yet. */
+export function sourceContextForHook(
+  p: HookPayload,
+  matchedTabId?: string,
+  verifiedMatchOnly = false
+): AttentionSourceContext {
   return {
     sessionId: p.session_id,
-    tabId: p.tab_id ?? matchedTabId,
+    tabId: verifiedMatchOnly ? matchedTabId : p.tab_id ?? matchedTabId,
     agent: p.agent,
     actorId: typeof p["agent_id"] === "string" && p["agent_id"] ? p["agent_id"] : undefined,
   };

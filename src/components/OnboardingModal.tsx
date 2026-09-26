@@ -335,10 +335,11 @@ export function OnboardingModal({
                     </div>
                     {adapter.id === "codex" && (
                       <p className="mt-1 text-[11px] text-zinc-500">
-                        Launch <span className="font-mono">codex</span> from the project directory you want to
-                        track — Logic Loop reads the session's reported working directory as-is. First session
-                        may also show Codex's own "Hooks need review" trust prompt — choose Trust all and
-                        continue.
+                        Select Codex above and Start session to launch it for the chosen folder.
+                        In a zsh tab, plain <span className="font-mono">codex</span> works too; other shells
+                        need <span className="font-mono">codex --no-daemon</span>.
+                        First session may show Codex's own "Hooks need review" trust prompt — choose
+                        Trust all and continue.
                       </p>
                     )}
                     {state.error && (

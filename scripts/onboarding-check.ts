@@ -16,7 +16,7 @@ assert.deepEqual(
   ADAPTERS.map(({ id, command, capabilities }) => ({ id, command, capabilities })),
   [
     { id: "claude", command: "claude", capabilities: { activity: true, decisions: true, reentry: true } },
-    { id: "codex", command: "codex", capabilities: { activity: true, decisions: true, reentry: true } },
+    { id: "codex", command: "codex --no-daemon", capabilities: { activity: true, decisions: true, reentry: true } },
     { id: "opencode", command: "opencode", capabilities: { activity: true, decisions: true, reentry: true } },
     { id: "antigravity", command: "agy", capabilities: { activity: true, decisions: true, reentry: true } },
     { id: "pi", command: "pi", capabilities: { activity: true, decisions: true, reentry: true } },

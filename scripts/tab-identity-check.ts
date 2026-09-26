@@ -83,4 +83,19 @@ assert.equal(updated.cwd, `${REPO}/src`, "own session's cwd sync did not apply")
 assert.equal(updated.agentState, "waiting");
 assert.equal(updated.lastTurnAuto, true);
 
+// --- Plan 044: no session takeover. Codex run by Claude's Codex plugin
+// inherits the Claude tab's tether; its SessionStart must not flip the tab. ---
+const claudeTab = tab({ sessionId: "s-claude", agent: "claude", agentState: "working" });
+const pluginCodex = mergeTabIdentity(
+  claudeTab,
+  ev({ session_id: "s-codex", agent: "codex", tab_id: "tab-1" }),
+  undefined,
+  null,
+  false,
+  undefined,
+  noExpand
+);
+assert.equal(pluginCodex.agent, "claude", "Codex plugin session flipped a Claude tab");
+assert.equal(pluginCodex.sessionId, "s-claude", "Codex plugin session took over a Claude tab");
+
 console.log("tab-identity-check: all assertions passed");

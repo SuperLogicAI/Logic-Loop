@@ -4,6 +4,28 @@ Gotchas found live, with root cause and fix. Check before touching related
 code — most of these are non-obvious and will bite again if the underlying
 fix is ever reverted or bypassed. Referenced from CLAUDE.md.
 
+- **Codex 0.157 shared daemon does not preserve a terminal tab's identity in
+  hooks.** Its hooks run under the daemon's startup environment, so a later
+  interactive `codex` in another tab can emit the first tab's
+  `LOGIC_LOOP_TAB_ID`. There is no client tab ID in the hook payload. Setup and
+  re-entry must launch `codex --no-daemon` so the hook inherits the client
+  process's own tab ID. zsh tabs get this for bare `codex` too:
+  `pty_spawn` points `ZDOTDIR` at `~/.context-terminal/zsh/`, whose files
+  source the user's own and then define a `codex` function adding
+  `--no-daemon` once (Codex rejects the flag twice, so the function checks
+  argv, never the joined `$*`). A user `alias codex=...` still wins and
+  bypasses it; so do `/opt/homebrew/bin/codex`, bash/fish tabs, and shells
+  spawned before the upgrade. Any of those can start the shared daemon with
+  that tab's ID baked in, and a later client of that daemon can claim that
+  tab while it is live and unbound (Re-enter revives ghost-tab IDs, so
+  relaunching the app does not clear it). **Never let a tethered SessionStart
+  take over a tab that already owns a session** — tried and reverted
+  2026-09-26: Codex run by Claude's Codex plugin inherits the Claude tab's
+  tether and would flip that tab to Codex. Do not bind untethered Codex hooks by cwd,
+  especially when two tabs share one project. This does not repair an already
+  running shared-daemon Codex session; start a fresh no-daemon session. Do not
+  restart the user's shared daemon to work around this.
+
 - WebGL addon only on the visible terminal; hidden tabs use DOM renderer
   (webview GPU-context cap ~8–16). Keep the context-loss handler.
 - `~/.claude/settings.json` writes must stay idempotent and byte-identical
