@@ -44,6 +44,8 @@ assert.equal(
   "fallback-tab",
   "cwd fallback binding was not retained when the hook had no tether"
 );
+assert.equal(sourceContextForHook(hook("Stop", { tab_id: "stale-daemon-tab" }), undefined, true).tabId, undefined);
+assert.equal(sourceContextForHook(hook("Stop", { tab_id: "stale-daemon-tab" }), "verified-tab", true).tabId, "verified-tab");
 
 // The shared stall contract is strict: exactly three minutes is not stalled.
 const now = 1_000_000;

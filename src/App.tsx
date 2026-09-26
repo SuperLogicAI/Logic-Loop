@@ -932,6 +932,13 @@ export default function App() {
         sessionCwd.set(p.session_id, projectKey);
       }
       let tabId = bindings.get(p.session_id);
+      if (tabId) {
+        const owner = tabsRef.current.find((t) => t.id === tabId);
+        if (!owner || owner.status !== "live" || (owner.sessionId && owner.sessionId !== p.session_id)) {
+          bindings.delete(p.session_id);
+          tabId = undefined;
+        }
+      }
       if (!tabId) {
         const match = bindSession(
           p,
@@ -947,7 +954,7 @@ export default function App() {
           bindings.set(p.session_id, tabId);
         }
       }
-      const sourceContext = sourceContextForHook(p, tabId);
+      const sourceContext = sourceContextForHook(p, tabId, true);
       sessionContexts.set(p.session_id, sourceContext);
       // Re-entry write path: only tethered sessions (started by this app) are
       // ours to resume — an outside terminal's SessionStart carries no tab_id.
@@ -959,7 +966,7 @@ export default function App() {
         const location = sessionBindingLocation(
           p,
           projectKey,
-          bindingTab ? { id: bindingTab.id, cwd: expand(bindingTab.cwd), status: bindingTab.status } : undefined
+          bindingTab ? { id: bindingTab.id, cwd: expand(bindingTab.cwd), status: bindingTab.status, sessionId: bindingTab.sessionId } : undefined
         );
         if (location) {
           void repo

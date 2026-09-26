@@ -11,8 +11,8 @@ function ev(extra: Record<string, unknown> = {}): HookPayload {
   return { hook_event_name: "UserPromptSubmit", session_id: "s1", ...extra };
 }
 
-// SessionStart persistence needs a real location. Only Antigravity may
-// recover a missing native cwd from its exact, live tether.
+// SessionStart persistence needs an exact live owner. Only Antigravity may
+// recover a missing native cwd from that tab.
 assert.deepEqual(
   sessionBindingLocation(ev({ agent: "antigravity", tab_id: "tab-1", cwd: `${REPO}/src` }), REPO, tab("tab-1")),
   { cwd: `${REPO}/src`, projectKey: REPO }
@@ -31,6 +31,9 @@ assert.deepEqual(
   sessionBindingLocation(ev({ agent: "codex", tab_id: "tab-1", cwd: REPO }), REPO, tab("tab-1")),
   { cwd: REPO, projectKey: REPO }
 );
+for (const candidate of [undefined, tab("tab-2"), { ...tab("tab-1"), status: "dead" }, { ...tab("tab-1"), sessionId: "other" }]) {
+  assert.equal(sessionBindingLocation(ev({ agent: "codex", tab_id: "tab-1", cwd: REPO }), REPO, candidate), null);
+}
 
 const bind = (
   p: HookPayload,
@@ -48,6 +51,7 @@ const bind = (
 const two = [tab("tab-1"), tab("tab-2")];
 assert.equal(bind(ev({ tab_id: "tab-2" }), two), "tab-2", "tether ignored");
 assert.equal(bind(ev({ tab_id: "tab-1" }), two), "tab-1", "tether ignored");
+assert.equal(bind(ev({ agent: "codex", tab_id: "tab-2" }), two), "tab-2", "Codex exact tether ignored");
 // Tether wins even when the tab is already bound and another is free.
 assert.equal(
   bind(ev({ tab_id: "tab-1" }), two, { bound: ["tab-1"] }),
@@ -78,6 +82,9 @@ assert.equal(
   null,
   "stale tether fell through to cwd matching"
 );
+assert.equal(bind(ev({ tab_id: "tab-1" }), [{ ...tab("tab-1"), status: "dead" }, tab("tab-2")]), null);
+assert.equal(bind(ev({ tab_id: "tab-1" }), [{ ...tab("tab-1"), sessionId: "other" }, tab("tab-2")]), null);
+assert.equal(bind(ev({ agent: "codex" }), two), null, "outside Codex session cannot use cwd fallback");
 // No cwd and no tether → unbindable, not "whatever is active".
 assert.equal(bind(ev(), two, { active: "tab-1", projectKey: undefined }), null);
 // Different repo, no active tab → no bind.
@@ -124,5 +131,16 @@ assert.equal(
   null,
   "bound a session to an exited tab"
 );
+assert.equal(bind(ev(), [{ ...tab("tab-1"), status: "dead" }]), null, "dead tab matched cwd fallback");
+
+// --- Plan 044: no session takeover. A tethered Codex SessionStart for a tab
+// that already owns another session is refused: it may be a stale shared
+// daemon, or Codex run by Claude's Codex plugin inside a Claude tab. ---
+const start = (extra: Record<string, unknown>) =>
+  ev({ hook_event_name: "SessionStart", session_id: "s-new", tab_id: "tab-1", cwd: REPO, ...extra });
+const ownedOld = { ...tab("tab-1"), sessionId: "s-old" };
+assert.equal(bind(start({ agent: "codex" }), [ownedOld]), null, "Codex SessionStart took over a bound tab");
+assert.equal(sessionBindingLocation(start({ agent: "codex" }), REPO, ownedOld), null, "takeover persisted for re-entry");
+assert.equal(bind(start({ agent: "codex" }), [tab("tab-1")]), "tab-1", "fresh Codex tab did not bind");
 
 console.log("bind-check: all assertions passed");

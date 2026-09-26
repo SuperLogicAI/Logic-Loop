@@ -3938,3 +3938,169 @@ Fixed in `src/lib/momentum.ts` to wrap it the same way `answerNow`
 text left verbatim — those aren't agent-posed questions.
 `momentum-check.ts` assertion updated to match. `momentum:check`,
 `tsc --noEmit`, and full `npm run check` (37 scripts) all clean after.
+
+## 66. Codex tab identity with a shared daemon (Phase 44, 2026-09-26)
+
+Live diagnosis on the installed app: Codex hooks arrived at the correct Logic
+Loop ingest server, but their tab header came from an older tab's shared Codex
+daemon, while the current interactive CLI had the new tab's environment. The
+fresh tab stayed grey with no Codex icon, usage meter, or active Attention
+route. Antigravity recovered after the maintainer enabled its hooks toggle.
+
+The Phase 44 implementation changes Logic Loop's Setup command and Codex
+re-entry command to `codex --no-daemon`, which keeps each interactive client's
+backend and hook environment local to its terminal. Tethered binding and
+SessionStart persistence now require a live tab that owns the session;
+untethered Codex hooks are not assigned by cwd. A bare `codex` typed into a
+shell can still attach to the shared daemon and has no exact hook identity.
+Existing shared-daemon sessions need to be restarted with `--no-daemon`.
+
+Automated checks passed: focused binding, tab identity, onboarding, and
+Attention-state checks; `npm run opencode:check`, full `npm run check`,
+`npx tsc --noEmit`, `npm run build`, `cargo test --lib` (140 passed, 1
+ignored), `cargo clippy --all-targets -- -D warnings`, and `git diff --check`.
+The sandbox initially denied tsx IPC pipes and two Rust localhost socket
+fixtures; the named npm and Rust gates passed when rerun with those sandbox
+restrictions lifted. No live Codex turn was run by this check.
+
+Manual rebuilt-app matrix pending:
+
+Later maintainer confirmation, 2026-09-26: **Setup → Codex → Start session**
+works in the rebuilt app and the session is tethered. This supersedes the
+earlier uncertainty about that launch path. Blue/green status, icon, usage
+meter, and the rest of the rebuilt-app matrix were not separately reported,
+so the checkbox below remains open. Ordinary `codex` typed in a +/⌘T shell
+or a bookmarked-folder shell still takes the shared-daemon path and is not
+fixed by Setup's launch command. Phase 44 needs a revised shell-launch plan
+before those paths can be accepted.
+
+Maintainer follow-up, 2026-09-26: launching `codex --no-daemon` manually in
+the **old** build had already fixed the observed tab behavior before the 03:01
+rebuild. This is a live confirmation of the launch-command remedy, separate
+from the later rebuilt-app Setup attempt. The maintainer does not need an
+immediate repeat test. Keep the rebuilt-app matrix below unchecked until its
+specific Setup, binding, status, and meter observations are verified.
+Setup's Codex help text was also corrected to direct users to the Codex Start
+session choice and show `codex --no-daemon` for plain shell tabs. This copy
+change is source-only until a later rebuild; no immediate rebuild or retest was
+requested.
+
+### 03:11–03:13 rebuilt-app attempt — failed, 2026-09-26
+
+The installed `/Applications/Logic Loop.app/Contents/MacOS/app` is byte-for-byte
+the 03:01 release binary (`fd22c71e…` SHA-256); its embedded frontend asset is
+`index-DLNL4ETh.js`, whose Setup Codex choice is `codex --no-daemon`. The
+Setup handler passes that choice as `launchCmd` to `pty_spawn`, which writes it
+to the new PTY. This proves the installed Setup **code path**, but no surviving
+process record proves which choice was selected or which command the 03:11 and
+03:13 shells actually executed.
+
+Read-only database metadata confirms two Codex sessions started at 03:11:18
+and 03:13:32 HST. Every hook, including both SessionStart events, carried
+`4f97374a-e024-4262-b818-15cd02d59c82`; neither session has a
+`session_bindings` row. The still-running shared app-server daemon (PID 73993,
+started 00:16) and its manager (PID 72707) have that exact
+`LOGIC_LOOP_TAB_ID` in their environments. The hook command sends its own
+`$LOGIC_LOOP_TAB_ID` as the tab header, so the old tether is consistent with
+hooks launched by that shared server. The 03:11–03:13 CLI and hook processes
+have exited; their argv, inherited environments, and server connections were
+not captured. Consequently this evidence does **not** establish that
+`--no-daemon` failed in a Setup client, or that the test actually launched it.
+
+Endpoint ownership for those two events is also unproven. All instances use
+the same database, while each app process emits hooks only to its own window.
+The current `~/.context-terminal/ingest.env` was last written at 03:14:54
+and advertises port 53655, which has no listener now; it cannot identify the
+03:11–03:13 endpoint owner. No Logic Loop process was running during this
+diagnostic inspection. A database row alone cannot prove the rebuilt window
+received an event.
+
+The smallest Phase 44 implementation remains the in-tree Setup/re-entry
+`--no-daemon` launch and strict tether binding; the failed attempt does not
+yet justify another source change. When live acceptance testing resumes, run
+with exactly one default-profile Logic Loop instance and capture, without
+tokens or content:
+the app PID and ingest listener owner, Setup's selected command, the spawned
+Codex client PID/argv and `LOGIC_LOOP_TAB_ID`, its embedded or shared server
+connection, the hook process's `LOGIC_LOOP_TAB_ID`, and the new session ID and
+exact binding. Submit one short turn and watch blue working, then green idle,
+Codex icon, and usage meter. Continue the matrix below only after that check
+passes. Automatic approval review rejected an attempted UI open of Logic Loop
+because that action can launch a default-profile instance; no app was opened
+or connection stopped during this inspection.
+
+Post-diagnosis gates: focused binding, onboarding, tab-identity, and
+Attention-state checks passed; `npm run opencode:check`, full `npm run check`,
+`npx tsc --noEmit`, `npm run build`, `cargo test --lib` (140 passed, 1 ignored),
+and `cargo clippy --all-targets -- -D warnings` passed. The first sandboxed
+focused check could not create tsx's IPC pipe; it and the remaining npm checks
+passed outside that restriction. No live manual item is marked passed.
+
+### Revision: bare `codex` in zsh tabs (built 2026-09-26)
+
+Plan 044's approved revision. zsh tabs spawn with `ZDOTDIR` pointed at
+app-written `~/.context-terminal/zsh/` files that source the user's own
+startup files, hand `ZDOTDIR` back, and define `codex` to add `--no-daemon`
+once (a user's own `codex` alias/function wins). Same-tab session takeover was
+built, found unsafe in review (Codex from Claude's Codex plugin would flip a
+Claude tab), and reverted before release; first-session-wins is unchanged.
+
+Automated evidence: `pty::tests::zsh_integration_wraps_codex_once_and_keeps_user_startup`
+runs a real interactive zsh: bare `codex` gains the flag, `codex --no-daemon
+resume 'a b'` arrives as exactly `[--no-daemon][resume][a b]`, and a user
+`.zshenv`-moved `ZDOTDIR`, `.zshrc` alias, and `HISTFILE` survive.
+`bind:check` and `tab-identity:check` assert a Codex SessionStart cannot take
+over a bound tab, including a Claude tab. Gate results are recorded in the
+phase report. No live item below is marked passed yet.
+
+Live matrix (one Logic Loop instance, rebuilt app; leave the shared daemon
+running and note its PID/start time before and after):
+
+- [x] **First, alone:** + tab → type bare `codex` → prompt. Codex icon, blue
+      then green, usage meter, exact binding. Stop here if it fails.
+      **Pass 2026-09-26 05:04** (tether `f7a777d7`, own session; retested
+      05:35 as `9ded0328`). No post-install hook carried the stale daemon
+      tether `4f97374a`.
+- [x] Second + tab in the same directory, bare `codex`; alternate prompts.
+      Each tab keeps its own session, dot, and meter.
+      **Pass 05:06** (`a55550d4`, distinct session; decisions tagged to each
+      tab). The shared side panel is by design: panels are project-scoped
+      SQL views, so two tabs in one folder show one project's panel (retest
+      tab in `~` got its own panel because it was a different folder).
+- [x] Bookmark tab → bare `codex` → binds. **Pass 05:09** (`deaff55e`).
+- [x] Setup → Codex → Start session, and Re-enter a Codex session: no
+      "cannot be used multiple times" error. **Pass 05:13/05:14** (Setup
+      `2d2afb47`; Re-enter resumed the same session into `7244a147`).
+- [x] In a Claude tab, run something that uses the Codex plugin; the tab stays
+      Claude. **Pass 05:21:** the plugin's Codex session (`01a0de4e`) carried
+      the Claude tab's tether `4eb21f63`, was refused, and its blocker
+      ("command not found: python" from Codex's own `zsh -c` tool call, not
+      the Logic Loop startup files, which contain no `python`) stayed unrouted.
+- [ ] Exit Codex and re-run it in the same tab: stays on the first session
+      (known limit, same as before 0.157). Note it; don't fail on it.
+      **Observed 05:23:** exit + `resume` of the same session in `7244a147`
+      re-bound normally (same session keeps ownership). Two bare relaunches
+      that exited before a prompt emitted SessionEnd-only sessions and were
+      correctly ignored. Maintainer later placed the side-panel card issue at
+      test 4's second half (close a Codex tab → Re-enter). Unconfirmed and
+      not investigated in Phase 44; carried as an open follow-up.
+
+**Phase 44 accepted 2026-09-26** (literal `PHASE 44 ACCEPTED`).
+- [x] Your zsh prompt, aliases, and history (↑) look normal in a new tab.
+      **Pass 2026-09-26:** prompt, ↑ history, `$ZDOTDIR` (user's), `$HISTFILE`,
+      `type codex` (shell function), and alias count match Terminal.app.
+- [x] Daemon PID/start time unchanged. **Pass:** shared daemon PID 73993
+      (started 00:16:57) and its supervisor PID 72707 (00:11:51) are the same
+      processes seen before the rebuild; Logic Loop never touched them.
+
+- [ ] In a fresh Setup Codex tab, submit a prompt; confirm the Codex icon and
+      blue working dot appear, then the green idle dot and usage meter. Check
+      that a new Attention item routes to this tab when one is produced.
+- [ ] Start two Setup Codex tabs in the same project and alternate prompts;
+      each must keep its own session, dot, and meter.
+- [ ] Run `codex --no-daemon` from a plain Logic Loop shell, then re-enter its
+      session after relaunch; confirm the exact tab is restored.
+- [ ] Start Codex outside Logic Loop; it must not claim a Logic Loop tab.
+- [ ] Close a Codex tab; late hooks must not create an active re-entry row.
+- [ ] Start a new Antigravity process with hooks enabled and verify its icon
+      and blue/green activity state still work.

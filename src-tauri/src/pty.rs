@@ -238,7 +238,7 @@ fn valid_resume_id(sid: &str) -> bool {
 /// at the call site.
 fn resume_command(agent: Option<&str>, sid: &str, shell: &str) -> String {
     match agent {
-        Some("codex") => format!("codex resume {sid}; exec {shell} -l"),
+        Some("codex") => format!("codex --no-daemon resume {sid}; exec {shell} -l"),
         Some("antigravity") => format!("agy --conversation {sid}; exec {shell} -l"),
         Some("pi") => format!("pi --session {sid}; exec {shell} -l"),
         // `opencode`'s default (TUI) command accepts `-s <id>` directly,
@@ -277,6 +277,70 @@ fn spawn_ordered_writer(mut writer: Box<dyn Write + Send>) -> mpsc::Sender<Vec<u
         }
     });
     tx
+}
+
+/// Plan 044: Codex 0.157 auto-starts a shared app-server daemon and runs hooks
+/// in *its* environment, so a bare `codex` typed in a tab reports whichever
+/// tab first started the daemon. zsh tabs route startup through these
+/// app-owned files: each sources the user's own, then `.zshrc` hands ZDOTDIR
+/// back (their `.zlogin` and child shells run as normal) and defines `codex`
+/// to add `--no-daemon` once, so hooks inherit this tab's tether. No user
+/// dotfile, PATH, or Codex config is touched.
+const ZSH_FILES: [(&str, &str); 4] = [
+    (
+        ".zshenv",
+        "# Logic Loop (Plan 044). A user .zshenv may move ZDOTDIR; keep that answer.\n\
+         _ll_zd=$ZDOTDIR; ZDOTDIR=$LOGIC_LOOP_USER_ZDOTDIR\n\
+         [[ -f $ZDOTDIR/.zshenv ]] && builtin source $ZDOTDIR/.zshenv\n\
+         LOGIC_LOOP_USER_ZDOTDIR=$ZDOTDIR; ZDOTDIR=$_ll_zd; unset _ll_zd\n",
+    ),
+    (
+        ".zprofile",
+        "# Logic Loop (Plan 044)\n\
+         _ll_zd=$ZDOTDIR; ZDOTDIR=$LOGIC_LOOP_USER_ZDOTDIR\n\
+         [[ -f $ZDOTDIR/.zprofile ]] && builtin source $ZDOTDIR/.zprofile\n\
+         ZDOTDIR=$_ll_zd; unset _ll_zd\n",
+    ),
+    (
+        ".zshrc",
+        "# Logic Loop (Plan 044). Repoint HISTFILE only if /etc/zshrc aimed it here.\n\
+         _ll_zd=$ZDOTDIR; ZDOTDIR=$LOGIC_LOOP_USER_ZDOTDIR\n\
+         [[ $HISTFILE == $_ll_zd/* ]] && HISTFILE=$ZDOTDIR/.zsh_history; unset _ll_zd\n\
+         [[ -f $ZDOTDIR/.zshrc ]] && builtin source $ZDOTDIR/.zshrc\n\
+         # A user's own `codex` alias or function wins (see docs/LANDMINES.md);\n\
+         # `function` form so an alias can't mangle this definition.\n\
+         (( $+functions[codex] )) || function codex {\n\
+         \x20 if (( ${@[(Ie)--no-daemon]} )); then command codex \"$@\"; else command codex --no-daemon \"$@\"; fi\n\
+         }\n",
+    ),
+    (
+        // Only reached by the non-interactive `-c` resume shell; interactive
+        // shells read the user's own .zlogin once .zshrc restored ZDOTDIR.
+        ".zlogin",
+        "# Logic Loop (Plan 044)\n\
+         _ll_zd=$ZDOTDIR; ZDOTDIR=$LOGIC_LOOP_USER_ZDOTDIR\n\
+         [[ -f $ZDOTDIR/.zlogin ]] && builtin source $ZDOTDIR/.zlogin\n\
+         ZDOTDIR=$_ll_zd; unset _ll_zd\n",
+    ),
+];
+
+/// Writes the zsh integration under `<home>/.context-terminal/zsh`. None on
+/// any failure: the tab then spawns a plain zsh (fail open, invariant #2).
+fn write_zsh_integration(home: &std::path::Path) -> Option<std::path::PathBuf> {
+    let dir = home.join(".context-terminal/zsh");
+    std::fs::create_dir_all(&dir).ok()?;
+    for (name, body) in ZSH_FILES {
+        let path = dir.join(name);
+        if std::fs::read_to_string(&path).ok().as_deref() == Some(body) {
+            continue;
+        }
+        // tmp + rename: fan-out spawns several tabs at once, and no zsh may
+        // source a half-written file.
+        let tmp = dir.join(format!("{name}.{:?}.tmp", std::thread::current().id()));
+        std::fs::write(&tmp, body).ok()?;
+        std::fs::rename(&tmp, &path).ok()?;
+    }
+    Some(dir)
 }
 
 // Each param is a flat named field on the JS `invoke("pty_spawn", {...})`
@@ -332,6 +396,16 @@ pub fn pty_spawn(
     // is exact instead of guessed from cwd (two tabs on one repo bound wrong).
     if let Some(tab_id) = tab_id {
         cmd.env("LOGIC_LOOP_TAB_ID", tab_id);
+    }
+    // ponytail: zsh only (macOS default); bash/fish tabs keep bare `codex` unbound.
+    if std::path::Path::new(&shell).file_name().is_some_and(|n| n == "zsh") {
+        if let Some(home) = crate::home::home() {
+            if let Some(dir) = write_zsh_integration(std::path::Path::new(&home)) {
+                let user_zdotdir = std::env::var("ZDOTDIR").ok().filter(|z| !z.is_empty()).unwrap_or(home);
+                cmd.env("LOGIC_LOOP_USER_ZDOTDIR", user_zdotdir);
+                cmd.env("ZDOTDIR", dir);
+            }
+        }
     }
     if let Some(cwd) = cwd {
         cmd.cwd(cwd);
@@ -882,7 +956,7 @@ fn git_pr_create_blocking(cwd: String, title: String, body: String) -> Result<St
 mod tests {
     use super::{
         canon, has_own_repo, project_key, resolve_spawn_cwd, resume_command, spawn_ordered_writer,
-        valid_resume_id, validate_project_dir,
+        valid_resume_id, validate_project_dir, write_zsh_integration,
     };
     use std::io::Write;
     use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
@@ -1041,7 +1115,7 @@ mod tests {
     fn resume_command_selects_codex_syntax() {
         assert_eq!(
             resume_command(Some("codex"), "abc-123", "/bin/zsh"),
-            "codex resume abc-123; exec /bin/zsh -l"
+            "codex --no-daemon resume abc-123; exec /bin/zsh -l"
         );
     }
 
@@ -1200,5 +1274,47 @@ mod tests {
 
         std::fs::remove_dir_all(&scratch).unwrap();
         std::fs::remove_dir_all(&home).unwrap();
+    }
+
+    /// Plan 044: a real interactive zsh through the integration sources the
+    /// user's files (including a ZDOTDIR moved by their .zshenv), hands
+    /// ZDOTDIR back, and wraps `codex` with exactly one `--no-daemon`.
+    #[test]
+    fn zsh_integration_wraps_codex_once_and_keeps_user_startup() {
+        if !std::path::Path::new("/bin/zsh").exists() {
+            return;
+        }
+        let home = std::env::temp_dir().join(format!("ll-zsh-home-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let cfg = home.join("cfg");
+        let bin = home.join("bin");
+        std::fs::create_dir_all(&cfg).unwrap();
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(home.join(".zshenv"), "ZDOTDIR=$HOME/cfg\n").unwrap();
+        std::fs::write(cfg.join(".zshrc"), "path=($HOME/bin $path)\nalias llmark='echo user-rc'\n").unwrap();
+        let fake = bin.join("codex");
+        std::fs::write(&fake, "#!/bin/sh\nprintf 'argv:'; printf '[%s]' \"$@\"; echo\n").unwrap();
+        std::process::Command::new("chmod").arg("+x").arg(&fake).status().unwrap();
+        let dir = write_zsh_integration(&home).expect("integration written");
+
+        let out = std::process::Command::new("/bin/zsh")
+            .args(["-l", "-i", "-c"])
+            .arg("codex; codex --no-daemon resume 'a b'; llmark; echo zd:$ZDOTDIR; echo hf:$HISTFILE")
+            .env_clear()
+            .env("HOME", &home)
+            .env("PATH", "/usr/bin:/bin")
+            .env("ZDOTDIR", &dir)
+            .env("LOGIC_LOOP_USER_ZDOTDIR", &home)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let lines: Vec<&str> = stdout.lines().collect();
+        let cfg = cfg.to_str().unwrap();
+        assert!(lines.contains(&"argv:[--no-daemon]"), "bare codex not wrapped: {stdout}");
+        assert!(lines.contains(&"argv:[--no-daemon][resume][a b]"), "flag duplicated or args lost: {stdout}");
+        assert!(lines.contains(&"user-rc"), "user .zshrc alias missing: {stdout}");
+        assert!(lines.contains(&format!("zd:{cfg}").as_str()), "ZDOTDIR not handed back: {stdout}");
+        assert!(lines.contains(&format!("hf:{cfg}/.zsh_history").as_str()), "HISTFILE left in app dir: {stdout}");
+        let _ = std::fs::remove_dir_all(&home);
     }
 }

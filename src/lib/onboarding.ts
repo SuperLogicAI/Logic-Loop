@@ -52,7 +52,7 @@ export const ADAPTERS: readonly AdapterMetadata[] = [
   {
     id: "codex",
     label: "Codex",
-    command: "codex",
+    command: "codex --no-daemon",
     installUrl: "https://openai.com/codex/",
     configLocation: "~/.codex/hooks.json",
     capabilities: { activity: true, decisions: true, reentry: true },
