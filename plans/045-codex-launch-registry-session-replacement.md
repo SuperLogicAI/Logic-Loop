@@ -17,8 +17,8 @@
 
 ## Status
 
-- **Status**: PROPOSED 2026-09-26. Not started. Decision A settled 2026-09-26
-  (Yes; see Step 3).
+- **Status**: IN PROGRESS. `PHASE 45 ACCEPTED` 2026-09-26. Step 0 done
+  (stop condition 1 hit; scope B chosen). Decision A: Yes (see Step 3).
 - **Priority**: P2. The user-visible gap has a workaround (open a new tab).
 - **Effort**: M–L. Step 0 spike is ~half a day; the build is 2–3 focused
   days plus the live matrix.
@@ -55,8 +55,10 @@ fields. This plan adds the missing evidence.
 
 A Codex session may bind or replace a tab's session only with proof that
 it came from a launch Logic Loop registered for that tab's current PTY.
-Within one launch, an in-TUI session change (`/new`, `/resume`) may replace
-the session, but a child session (nested `codex exec`) may not. All other
+Within one launch, an in-TUI session change (`/clear`, `/resume`, `/fork`)
+may replace the session, but a child session (nested `codex exec`) may
+not. `/new` is unsupported: it emits the same `startup` source as a child
+(Step 0). All other
 adapters keep first-session-wins unchanged.
 
 ## Non-negotiables
@@ -116,6 +118,58 @@ prefix, and the process tree) — no prompts or transcripts.
   rule is unsound. Stop and revise.
 
 Record the Step 0 table in this plan before building.
+
+### Step 0 results (2026-09-26, Codex CLI 0.157.0)
+
+**Harness:** a local capture listener on a scratch port. Codex ran with
+`HOME` pointed at a scratch dir holding its own `ingest.env`, and
+`CODEX_HOME=~/.codex` (real auth and trusted hooks, hook command
+unchanged). Tether: `spiketab:<case>`. The capture logged event name,
+`source`, session-id tail, `agent_id` presence, and tether only. The
+default-profile ingest received nothing. TUI cases used
+`codex --no-daemon -s read-only -a never`, driven in a private PTY. The
+first `codex exec` also ran under `sandbox-exec` with both daemon sockets
+denied.
+
+| # | Finding |
+|---|---|
+| 0.1 | `source` values: first prompt → `startup`; **`/new` → `startup`** (new id); `/clear` → `clear` (new id); in-TUI `/resume` → `resume` (the picked id); `/fork` → `fork` (new id); `/compact` → `compact` (same id). **A `codex exec` child → `startup`** (new id). The schema enum is `startup \| resume \| clear \| compact \| fork`. Old threads stay open after `/new`/`/clear`: their `SessionEnd` fires at TUI exit, or when a `/resume` picks away from them. The Claude-plugin case was not run: the launch ID is never exported into the shell, so the plugin's Codex always carries a plain tether (`launch: "none"`), whatever `source` it sends. |
+| 0.2 | Shell-tool children **inherit `LOGIC_LOOP_TAB_ID` verbatim**. The agent's `printenv` showed the launch-suffixed value, so a nested `codex exec` carries the parent's launch ID. `codex exec` has no `--no-daemon` flag and never touched the daemon socket (no sandbox denials): it runs embedded, and its hooks run in its own env. Stripping the variable from children via `-c shell_environment_policy.exclude=[…]` or `-c shell.environment_policy.exclude=[…]` had **no effect** in 0.157. Hooks kept the tether either way. |
+| 0.3 | `SessionStart` is **lazy**. Nothing fires at TUI start (no event in 8–10 s idle). It fires about 20 ms before the first `UserPromptSubmit`. `/new` likewise emits nothing until the next prompt. |
+| 0.4 | Not run. It needs a hook-command change (trust re-prompt); see the decision below. |
+| 0.5 | Pass. A zsh `{ command … } always { … }` block runs cleanup on normal exit (status 0), SIGTERM (143), and SIGINT (130), with the status preserved. The Codex TUI's raw mode means `^C` is normally a byte, not a signal. |
+
+**Stop conditions:**
+- **Condition 1 triggered.** `/new` and a nested `codex exec` both send
+  `startup`, and 0.2 shows the child carries the same launch ID. No hook
+  field separates them.
+- **Condition 2 did not trigger.** A child needs an agent turn, and a turn
+  needs a prompt, which fires the TUI's own lazy `SessionStart` first. So
+  "first `SessionStart` of a launch wins" is sound.
+
+**Side effects:** two `/new` runs picked "New worktree" in the 0.157
+dialog ("Where should the new conversation run?"). That created two clean,
+detached managed worktrees at `~/.codex/worktrees/{9e37,a1ea}`.
+Separately, about 15 spike sessions were written to `~/.codex/sessions`.
+Pending: the maintainer decides whether to clean up either one.
+The `/new` dialog defaults to "Current checkout". Step 5's test 2 and any
+scripted driving must press Enter on it.
+
+**Scope decision — B (maintainer, 2026-09-26; relayed via a sibling
+session):** in-launch replacement per condition 1. Step 3's table and
+Step 5 test 2 below are revised for B. The options were:
+- **A — plan fallback (relaunch-only):** any later `current`
+  `SessionStart` in a launch is rejected. `/new`, `/clear`, `/resume`, and
+  `/fork` all leave the tab on the launch's first session.
+- **B — source allowlist:** a later `current` `SessionStart` replaces the
+  session only when `source` is `clear`, `resume`, or `fork`. `startup` is
+  rejected, which covers `/new` and every plain child `codex exec`. Residual
+  risk: an agent that runs `codex exec resume`/`fork` as a child would flip
+  the tab. That is rare, the tab stays Codex, and the next relaunch heals
+  it. The live DB shows `clear` used 19 times.
+- **C — hook PID ancestry (0.4):** supports `/new` too, but the hook
+  command must change, so every Codex user gets the hook-trust prompt
+  again.
 
 ## Step 1 — Launch registry (Rust)
 
@@ -201,8 +255,9 @@ inherits it.
   | any | `none` | unbound | binds, first-session-wins (today; Decision A) |
   | any | `none` | bound | first-session-wins (today) |
   | first `SessionStart` of this launch | `current` | any | binds; replaces the tab's prior session |
-  | later `SessionStart`, in-TUI source (per 0.1) | `current` | owned by this launch | replaces |
-  | later `SessionStart`, child source (per 0.1) | `current` | any | rejected |
+  | later `SessionStart`, `source` ∈ {`clear`, `resume`, `fork`} | `current` | owned by this launch | replaces (`/clear`, in-TUI `/resume`, `/fork`) |
+  | later `SessionStart`, `source` = `startup` (or absent/unknown) | `current` | any | rejected (`/new` and child `codex exec` are indistinguishable, per 0.1) |
+  | `SessionStart`, `source` = `compact` | `current` | owns session | applies; same session id, no replacement |
   | non-`SessionStart` | `current` | owns session | applies (today) |
 
   The tab records which launch owns its current session (new `Tab` field,
@@ -272,8 +327,11 @@ Use a single default-profile instance and leave the shared daemon running.
 
 1. + tab → `codex` → prompt → exit → `codex` → prompt: the tab follows the
    new session; Re-enter lists only the new one.
-2. `/new` inside Codex: the tab follows (or, per the Step 0 stop condition,
-   stays and is documented).
+2. Inside one launch (answer "Current checkout" in `/new`'s dialog):
+   `/clear` → prompt: the tab follows. In-TUI `/resume` of an older session
+   → prompt: the tab follows. `/fork` → prompt: the tab follows. `/new` →
+   prompt: the tab **stays** on its current session (unsupported, per
+   Step 0). `/compact`: no change.
 3. Inside Codex, have the agent run `codex exec "echo hi"`: the tab does not
    switch.
 4. Claude tab → Codex plugin run: stays Claude.
