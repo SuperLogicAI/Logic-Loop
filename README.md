@@ -8,6 +8,8 @@
 
 <p align="center">Effortlessly switch between multiple concurrent AI coding agent terminal sessions.</p>
 
+<p align="center"><strong>Tried it?</strong> <a href="https://github.com/SuperLogicAI/Logic-Loop/issues/new?template=feedback.md">Tell me where it broke</a> · <a href="https://github.com/SuperLogicAI/Logic-Loop/discussions">Discussions</a></p>
+
 ---
 
 <p align="center">
