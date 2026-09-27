@@ -4244,3 +4244,82 @@ checkout**; "New worktree" creates `~/.codex/worktrees/…`.
 - [x] 10. bash: fresh tab → `bash` → `codex --no-daemon` → prompt: the tab
       binds (`launch=none`). **Pass 2026-09-27:** `llcx 1` showed tab
       `d5e9e251`, `launch=none`, `source=startup`.
+
+## 68. Codex cleanup: decision ownership and re-entry (Phase 46, 2026-09-27)
+
+**Code and data inspection (completed):** The prior Decisions section read
+every row for a project, by design since Phase 17. Stored rows carry
+`session_id` and, where available, `tab_id`: read-only inspection of the
+active profile found 685 historical decisions in this project across 168
+sessions and 65 tab IDs (363 older rows lack a tab ID). The new side-panel
+query, tab badge, and bulk dismiss select the active tab's tether or its
+bound session. That session clause includes older untagged rows and a
+conversation resumed in a new tab. The global Attention inbox stays
+project-wide. A keyed panel result prevents the previous tab's cards from
+appearing while a new tab's query loads. Answer Now now accepts the active
+live tab's exact persisted session ID when the in-memory binding cache has
+not yet been filled by Codex's lazy first `SessionStart`.
+
+The §67 re-entry session emitted `SessionStart` first under `88ceb50f`, then
+under `e99c8b6b`; the active binding moved to the second tether. Code paths
+for same-tab Restart/Re-enter and app-relaunch ghost tabs preserve the
+original tether, while opening a fresh tab creates a UUID. The observed ID
+change is consistent with closing the old tab and resuming in a new one.
+
+The §67 `/quit` session emitted `SessionEnd` before the stale-daemon test.
+`stateForHook` maps it to `idle`, rendered green; earlier §16 coverage
+defines green as idle/done on exit. No state fix was made without evidence
+of a missing hook or an agreed change to that display contract.
+
+**Automated checks (completed):** `decisions-check` covers two tabs in one
+folder, same-tab prior sessions, a resumed session, legacy untagged rows,
+an unbound new tab, and safe Answer Now routing before a resumed session's
+first hook. All 39 TypeScript check scripts passed via
+`node --import tsx` (`tsx`'s CLI socket was denied in the sandbox), as did
+`npx tsc --noEmit`, `npm run build`, Rust tests (151 passed, 1 ignored on
+the unsandboxed rerun after loopback bind denial), Clippy, and
+`git diff --check`. No extraction prompt changed; `golden` was not run.
+
+**Installed-app manual run (2026-09-27):** Used computer control in the
+installed Logic Loop app with Codex 0.157.1 and disposable tabs in
+`/private/tmp/logic-loop-phase46-scratch`. Existing work tabs were untouched.
+Read-only inspection of the local SQLite profile corroborated the UI; no
+transcript content was logged.
+
+- [x] Made distinct decisions in two Codex tabs in the same folder. Each
+      Decisions section and badge showed only its own card (one each), while
+      Attention showed both. Switching tabs showed a brief empty state while
+      the new query loaded, with no sibling card flash. Answer Now prefilled
+      the owning live terminal in each tab; drafts were cleared unsent.
+- [x] Created a second card in tab A, then used its `dismiss all`. Both A
+      rows became `dismissed`; tab B's row stayed `open` and visible with
+      badge 1. Read-only SQLite rows were 1932 and 1934 for A, 1933 for B.
+- [x] Ran `/quit` in bound tab A. `hook:SessionEnd` was stored and the dot
+      stayed green `idle` at the shell. Re-entered the same tab and submitted
+      a prompt; the dot went blue `working`, then green `idle`.
+- [x] Same-tab process exit and Re-enter kept tether `02172db0` and session
+      `01a0e373` (prefixes). SQLite shows `SessionStart` sources `startup`,
+      `resume`, `resume`, all under that tether. Explicitly closing tab B and
+      opening a fresh tab changed tether `988bb937` to `e97a8006`; resuming
+      Codex kept session `01a0e379`. After the first prompt, B's open card
+      followed the session and Answer Now prefilled the fresh tab.
+- [x] Exited tab A's shell and used its dead-tab Re-enter control. The card
+      remained visible and Answer Now prefilled tab A before the next lazy
+      `SessionStart`; the draft was cleared unsent. This did not reproduce
+      the §66 failure for a restored live tab.
+- [x] App quit/relaunch and ghost-tab Re-enter: the maintainer quit and
+      reopened Logic Loop after the work session finished. Tab A's ghost
+      Re-enter resumed session `01a0e373`; the next `SessionStart` retained
+      tether `02172db0`. The other scratch ghost retained tether `e97a8006`
+      (checked with `printenv LOGIC_LOOP_TAB_ID`) and its open card remained
+      visible. Re-enter resumed Codex session `01a0e379`; Answer Now
+      prefilled that restored terminal before its first new hook. The draft
+      was cleared unsent.
+- [x] Dead-tab Answer Now: after `/quit` and shell `exit` in the fresh tab,
+      the card stayed visible; clicking Answer Now left the `Process exited`
+      overlay in place and sent no input.
+- [x] Active-tab session mismatch: the focused routing check covers this
+      rejection path. The Decisions section hides cards from other sessions,
+      so there is no normal live panel click path for the mismatch.
+
+The maintainer approved Phase 46 on 2026-09-27 after reviewing this run.

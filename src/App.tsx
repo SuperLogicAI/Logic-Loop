@@ -25,6 +25,7 @@ import {
 } from "./lib/ingest";
 import { detectBlockers } from "./lib/detectors";
 import * as decisions from "./lib/decisions";
+import { decisionReplyTab } from "./lib/decisionRouting";
 import { initNotifications, notify, requestNotifications } from "./lib/notify";
 import { adapterIdForHook, type AdapterId } from "./lib/onboarding";
 import { IdeaBoard } from "./components/IdeaBoard";
@@ -401,7 +402,7 @@ export default function App() {
     [expand]
   );
 
-  const [decisionCountsByCwd, setDecisionCountsByCwd] = useState<Record<string, number>>({});
+  const [openDecisionOwners, setOpenDecisionOwners] = useState<repo.DecisionOwner[]>([]);
 
   const refreshBlockerCounts = useCallback(() => {
     void repo.blockerCounts().then(setBlockerCountsByCwd).catch(() => undefined);
@@ -409,7 +410,7 @@ export default function App() {
   }, [scheduleAttentionRefresh]);
 
   const refreshDecisionCounts = useCallback(() => {
-    void repo.decisionCounts().then(setDecisionCountsByCwd).catch(() => undefined);
+    void repo.openDecisionOwners().then(setOpenDecisionOwners).catch(() => undefined);
     setPanelRefresh((n) => n + 1);
     scheduleAttentionRefresh();
   }, [scheduleAttentionRefresh]);
@@ -1458,7 +1459,7 @@ export default function App() {
   const answerNow = useCallback(
     (d: Decision) => {
       const tabId = bindingsRef.current.get(d.session_id);
-      const tab = tabsRef.current.find((t) => t.id === tabId && t.status === "live");
+      const tab = decisionReplyTab(tabsRef.current, d.session_id, tabId, activeIdRef.current);
       if (!tab) return;
       focusTab(tab.id);
       void ptyWrite(tab.ptyId, `Re: "${d.question}" — `);
@@ -1500,7 +1501,7 @@ export default function App() {
         onIsolateLoop={() => activeTab && setIsolateLoopModalOpen(true)}
         onReorder={reorderTabs}
         blockerCount={(t) => blockerCountsByCwd[expand(t.cwd)] ?? 0}
-        decisionCount={(t) => decisionCountsByCwd[expand(t.cwd)] ?? 0}
+        decisionCount={(t) => repo.decisionCountForTab(openDecisionOwners, expand(t.cwd), t.id, t.sessionId ?? null)}
         unclaimed={(t) => unseenStops.has(t.id)}
         isFanOutChild={(t) => fanOutChildIds.has(t.id)}
         isFanOutParent={(t) => fanOutParentIds.has(t.id)}

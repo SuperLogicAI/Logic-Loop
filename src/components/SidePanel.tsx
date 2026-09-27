@@ -257,7 +257,11 @@ export function SidePanel({
   const [unclaimed, setUnclaimed] = useState<{ session_id: string; ts: number }[]>([]);
   const [commits, setCommits] = useState<Commit[]>([]);
   const [blockers, setBlockers] = useState<Blocker[]>([]);
-  const [decisions, setDecisions] = useState<Decision[]>([]);
+  // The component survives tab switches. Keep the loaded owner beside its
+  // rows so the previous tab's cards cannot flash while the new query runs.
+  const decisionScope = JSON.stringify([cwd, tabTether, sessionId]);
+  const [decisionView, setDecisionView] = useState<{ scope: string; rows: Decision[] }>({ scope: "", rows: [] });
+  const decisions = decisionView.scope === decisionScope ? decisionView.rows : [];
   const [delta, setDelta] = useState<Delta | null>(null); // since-you-left digest (Phase 14a)
   const [loopIterations, setLoopIterations] = useState<Iteration[] | null>(null); // loop digest (Phase 15), null = flat delta shape
   const [landing, setLanding] = useState<Note | null>(null); // active project, momentum
@@ -386,7 +390,7 @@ export function SidePanel({
       repo.listToolEvents(cwd).catch(() => []),
       repo.listBlockers(cwd).catch(() => []),
       invoke<Commit[]>("git_log", { cwd, limit: 15 }).catch(() => []),
-      repo.listDecisions(cwd).catch(() => []),
+      repo.listDecisions(cwd, tabTether, sessionId).catch(() => []),
       repo.latestLandingNote(cwd).catch(() => null),
       repo.listNotes(cwd, "residue").catch(() => []),
       repo.unclaimedResults(cwd).catch(() => []),
@@ -398,10 +402,10 @@ export function SidePanel({
     setToolEvents(isUnboundFanOutChild ? [] : repo.scopeBySession(te, sessionId));
     setBlockers(bl);
     setCommits(gl);
-    // Not scoped to sessionId, unlike toolEvents: Phase 17's clustering
-    // (decisionGroups below) exists specifically to show every session's
-    // open decisions for this project, not just the active tab's own.
-    setDecisions(isUnboundFanOutChild ? [] : dc);
+    // The repo query keeps this tab's rows and any rows from the bound
+    // session, including a conversation resumed in a new tab. Phase 17's
+    // clustering still groups the visible rows by session.
+    setDecisionView({ scope: decisionScope, rows: isUnboundFanOutChild ? [] : dc });
     setLanding(ln);
     setNotes(nt.filter((n) => n.status === "open").slice(0, 3));
     setUnclaimed(uc);
@@ -437,7 +441,7 @@ export function SidePanel({
         setLoopIterations(isLoopRun(iters) ? iters : null);
       }
     }
-  }, [cwd, sessionId, isUnboundFanOutChild, tabTether]);
+  }, [cwd, sessionId, isUnboundFanOutChild, tabTether, decisionScope]);
 
   useEffect(() => {
     void reload();
@@ -741,8 +745,8 @@ export function SidePanel({
     onDecisionsChanged();
   };
 
-  const dismissAllDecisionsForProject = async () => {
-    await repo.dismissAllDecisions(cwd);
+  const dismissAllDecisionsForTab = async () => {
+    await repo.dismissAllDecisions(cwd, tabTether, sessionId);
     await reload();
     onDecisionsChanged();
   };
@@ -1396,10 +1400,10 @@ export function SidePanel({
           {openDecisions.length > 1 && (
             <button
               className="ml-auto font-normal text-[10px] text-orange-700 normal-case hover:text-orange-400"
-              title="Dismiss every open decision in this project"
+              title="Dismiss every open decision shown in this tab"
               onClick={(e) => {
                 e.stopPropagation();
-                void dismissAllDecisionsForProject();
+                void dismissAllDecisionsForTab();
               }}
             >
               dismiss all
