@@ -4104,3 +4104,57 @@ running and note its PID/start time before and after):
 - [ ] Close a Codex tab; late hooks must not create an active re-entry row.
 - [ ] Start a new Antigravity process with hooks enabled and verify its icon
       and blue/green activity state still work.
+
+## 67. Codex launch registry and in-tab session replacement (Phase 45, 2026-09-26)
+
+Plan 045. Each managed Codex run registers a launch for its tab's PTY and
+carries it as `LOGIC_LOOP_TAB_ID=<tab>:<launch>`. A registered launch's
+first `SessionStart` replaces the tab's session. Within one launch, only
+`/clear`, in-TUI `/resume`, and `/fork` replace. `/new` does not (Step 0:
+it sends the same `startup` source as a child `codex exec`). Launch-less
+Codex events still bind an unbound tab (Decision A).
+
+Automated evidence: `launch::tests` (registry, verdicts, PTY death),
+`ingest::tests::{tether_split_and_launch_verdicts,launch_endpoint_registers_retires_and_rejects}`,
+`pty::tests::{codex_launch_prefix_registers_for_live_tethered_pty_only,zsh_wrapper_registers_passes_through_and_fails_open}`
+(a real interactive zsh against a local listener: one `/launch` + one
+`/launch/end`, passthrough makes no request, the id never leaks into the
+shell, and an unreachable app launches untracked). `bind:check` covers every
+row of Plan 045's Step 3 table plus stale daemon, plugin, two-tab,
+heal-path, and other-adapter cases. `tab-identity:check` covers state
+clearing on replacement and the new session's first prompt. Gates: full
+`npm run check`, `npx tsc --noEmit`, `npm run build`, `cargo test --lib`
+(151 passed, 1 ignored), `cargo clippy --all-targets -- -D warnings`,
+`git diff --check`. No live item below is marked passed yet.
+
+Live matrix (rebuilt app, one default-profile instance). Leave the shared
+daemon running, and note its PID and start time before and after. In
+`/new`'s "Where should the new conversation run?" dialog, pick **Current
+checkout**; "New worktree" creates `~/.codex/worktrees/…`.
+
+- [ ] 1. + tab → `codex` → prompt → exit → `codex` → prompt: the tab follows
+      the new session (dot, meter); Re-enter lists only the new one.
+- [ ] 2. In one launch: `/clear` → prompt: follows. In-TUI `/resume` of an
+      older session → prompt: follows. `/fork` → prompt: follows. `/new` →
+      prompt: **stays** on the current session (expected). `/compact`: no
+      change.
+- [ ] 3. Inside Codex, have the agent run `codex exec "echo hi"`: the tab
+      does not switch.
+- [ ] 4. Claude tab → run something that uses the Codex plugin: stays Claude.
+- [ ] 5. Setup → Codex (zsh tab), and Re-enter: both bind; exit + re-run
+      replaces. Setup's first hook shows `launch: "current"` (no double
+      wrap).
+- [ ] 6. Outside terminal, bare `codex` through the shared daemon: claims
+      nothing. Synthetic stale-daemon event (plain tether) to a live bound
+      tab and a live unbound tab: the bound tab is unchanged; the unbound tab
+      binds (Decision A). Then bare `codex` + prompt in that tab: it switches
+      to the new session.
+- [ ] 7. Two tabs in one folder, each re-run twice: no cross-talk.
+- [ ] 8. Registration failure: in a zsh tab run `LOGIC_LOOP_PTY_GEN=999999
+      codex` (`/launch` answers 409). Codex still launches, untracked. (The
+      wrapper re-reads `ingest.env`, so overriding `CT_PORT` in the shell
+      does nothing; the Rust test covers an unreachable port.)
+- [ ] 9. Daemon PID and start time unchanged; zsh prompt, history, and
+      aliases intact.
+- [ ] 10. bash tab (a scratch instance launched with `SHELL=/bin/bash`):
+      manual `codex --no-daemon` → prompt: the tab binds.

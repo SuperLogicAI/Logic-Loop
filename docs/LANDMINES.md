@@ -19,12 +19,31 @@ fix is ever reverted or bypassed. Referenced from CLAUDE.md.
   that tab's ID baked in, and a later client of that daemon can claim that
   tab while it is live and unbound (Re-enter revives ghost-tab IDs, so
   relaunching the app does not clear it). **Never let a tethered SessionStart
-  take over a tab that already owns a session** — tried and reverted
-  2026-09-26: Codex run by Claude's Codex plugin inherits the Claude tab's
-  tether and would flip that tab to Codex. Do not bind untethered Codex hooks by cwd,
+  take over a tab that already owns a session on hook fields alone** — tried
+  and reverted 2026-09-26: Codex run by Claude's Codex plugin inherits the
+  Claude tab's tether and would flip that tab to Codex. Plan 045's only
+  exception is a *registered launch* (next entry). Do not bind untethered Codex hooks by cwd,
   especially when two tabs share one project. This does not repair an already
   running shared-daemon Codex session; start a fresh no-daemon session. Do not
   restart the user's shared daemon to work around this.
+
+- **Codex session replacement needs a registered launch (Plan 045).** Each
+  managed Codex run carries `LOGIC_LOOP_TAB_ID=<tab>:<launch>` as a *prefix*
+  on that one command (zsh wrapper, Setup/fan-out `launch_cmd`, re-entry
+  `resume_command`), never `cmd.env`. Exporting it would leak the launch id
+  into the shell that outlives Codex and into a later Claude's Codex plugin.
+  Ingest splits the header on the first `:` before anything else reads it.
+  `codexLaunchDecision` (`src/lib/ingest.ts`) is the only replacement rule:
+  within one launch, only `SessionStart.source` `clear`/`resume`/`fork`
+  replaces. **`/new` and a child `codex exec` both send `startup`**, and
+  children inherit the tether verbatim (verified live on 0.157). Stripping it
+  via `-c shell_environment_policy.exclude` / `shell.environment_policy.exclude`
+  does not work. Do not "fix" `/new` by trusting `startup`. The zsh wrapper
+  must pass a tether that already has a `:` through untouched; otherwise
+  Setup's typed command gets wrapped twice (`<tab>:<id>:<id2>` → unknown →
+  never binds). Codex 0.157's `/new` opens a "Current checkout / New worktree"
+  dialog. Scripted or typed input there can create a managed worktree under
+  `~/.codex/worktrees/`.
 
 - WebGL addon only on the visible terminal; hidden tabs use DOM renderer
   (webview GPU-context cap ~8–16). Keep the context-loss handler.

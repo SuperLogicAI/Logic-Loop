@@ -17,8 +17,13 @@
 
 ## Status
 
-- **Status**: IN PROGRESS. `PHASE 45 ACCEPTED` 2026-09-26. Step 0 done
-  (stop condition 1 hit; scope B chosen). Decision A: Yes (see Step 3).
+- **Status**: BUILT, awaiting the Step 5 live matrix (`docs/TESTING.md` §67).
+  `PHASE 45 ACCEPTED` 2026-09-26. Step 0 done (stop condition 1 hit; scope B
+  chosen). Steps 1–4 landed in `0e906d5` and `6e133b9`, with all gates green.
+  Decision A: Yes (see Step 3). Implementation note: the registry lives
+  beside the PTY map (`PtyManager.launches`, `src-tauri/src/launch.rs`), not
+  in ingest state, so PTY death retires launches without a cross-module
+  hook. Ingest reaches it through `app.state`.
 - **Priority**: P2. The user-visible gap has a workaround (open a new tab).
 - **Effort**: M–L. Step 0 spike is ~half a day; the build is 2–3 focused
   days plus the live matrix.
@@ -347,8 +352,10 @@ Use a single default-profile instance and leave the shared daemon running.
     `pty_spawn` reads `$SHELL`): manual `codex --no-daemon` → prompt: the
     tab binds (Decision A keeps this path).
 7. Two tabs in one folder, each re-run twice: no cross-talk.
-8. Registration failure: in a scratch zsh tab, override `CT_PORT` to a
-   closed port and run `codex`. Codex still launches (untracked).
+8. Registration failure: `LOGIC_LOOP_PTY_GEN=999999 codex` in a zsh tab
+   (`/launch` → 409). Codex still launches (untracked). Overriding `CT_PORT`
+   does nothing, because the wrapper re-reads `ingest.env`. The Rust test
+   covers an unreachable port.
 9. Daemon PID/start time unchanged; zsh prompt/history/aliases intact.
 
 ## Alternatives considered
