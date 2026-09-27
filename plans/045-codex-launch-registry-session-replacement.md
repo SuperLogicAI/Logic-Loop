@@ -348,9 +348,10 @@ Use a single default-profile instance and leave the shared daemon running.
    a live unbound tab): the bound tab is unchanged, and the unbound tab
    binds (Decision A: Yes). Then run bare `codex` in the unbound tab and
    prompt: the tab switches to the new session.
-10. bash tab (a scratch instance launched with `SHELL=/bin/bash`, since
-    `pty_spawn` reads `$SHELL`): manual `codex --no-daemon` → prompt: the
-    tab binds (Decision A keeps this path).
+10. bash: fresh tab → `bash` → `codex --no-daemon` → prompt: the tab binds
+    (Decision A keeps this path). Revised 2026-09-26 from "scratch instance
+    launched with `SHELL=/bin/bash`": a `bash` subshell has no wrapper and
+    passes the plain tether, which is the same case.
 7. Two tabs in one folder, each re-run twice: no cross-talk.
 8. Registration failure: `LOGIC_LOOP_PTY_GEN=999999 codex` in a zsh tab
    (`/launch` → 409). Codex still launches (untracked). Overriding `CT_PORT`
