@@ -81,6 +81,9 @@ export interface Tab {
    * `agent` field so a resumed/restarted tab can pick the right resume
    * command. Undefined for Claude and any adapter with no marker yet. */
   agent?: string;
+  /** Plan 045: the Codex launch that owns `sessionId`, when a registered
+   * launch bound it. In memory only — launches die with their PTY. */
+  launchId?: string;
 }
 
 export interface Blocker {
@@ -269,6 +272,12 @@ export interface HookPayload {
    * Distinct from a payload's own `agent_id` field, which identifies a
    * *subagent* within a session and is unrelated to adapter identity. */
   agent?: "codex" | string;
+  /** Plan 045, app-derived from a `<tab>:<launch>` tether: whether the launch
+   * is registered for this tab and live. `none` = plain tether. Only present
+   * on tethered events. */
+  launch?: "current" | "retired" | "unknown" | "none";
+  /** Plan 045: the opaque launch id from the tether, when one was present. */
+  launch_id?: string;
   [key: string]: unknown;
 }
 

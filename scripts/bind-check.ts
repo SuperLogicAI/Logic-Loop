@@ -143,4 +143,65 @@ assert.equal(bind(start({ agent: "codex" }), [ownedOld]), null, "Codex SessionSt
 assert.equal(sessionBindingLocation(start({ agent: "codex" }), REPO, ownedOld), null, "takeover persisted for re-entry");
 assert.equal(bind(start({ agent: "codex" }), [tab("tab-1")]), "tab-1", "fresh Codex tab did not bind");
 
+// --- Plan 045: launch-scoped Codex binding (Step 3 table). ---
+const L1 = "launch-one-0001";
+const L2 = "launch-two-0002";
+const cx = (extra: Record<string, unknown>) => start({ agent: "codex", ...extra });
+const ownedByL1 = { ...ownedOld, launchId: L1 };
+const unbound = tab("tab-1");
+
+// Unknown/retired launch: never binds or replaces; the tab's own session still applies.
+for (const launch of ["unknown", "retired"]) {
+  assert.equal(bind(cx({ launch, launch_id: L1 }), [unbound]), null, `${launch} launch bound an unbound tab`);
+  assert.equal(bind(cx({ launch, launch_id: L1 }), [ownedOld]), null, `${launch} launch replaced a bound tab`);
+  assert.equal(sessionBindingLocation(cx({ launch, launch_id: L1 }), REPO, unbound), null);
+  assert.equal(
+    bind(cx({ launch, launch_id: L1, hook_event_name: "Stop", session_id: "s-old" }), [ownedOld]),
+    "tab-1",
+    `${launch} launch dropped the tab's own session events`
+  );
+}
+// Plain tether (none): Decision A — binds an unbound tab, first-session-wins otherwise.
+assert.equal(bind(cx({ launch: "none" }), [unbound]), "tab-1", "Decision A: plain Codex did not bind an unbound tab");
+assert.equal(bind(cx({ launch: "none" }), [ownedOld]), null, "plain Codex took over a bound tab");
+// A registered launch's first SessionStart binds or replaces, and persists.
+assert.equal(bind(cx({ launch: "current", launch_id: L1 }), [unbound]), "tab-1");
+assert.equal(bind(cx({ launch: "current", launch_id: L1 }), [ownedOld]), "tab-1", "relaunch did not replace");
+assert.equal(bind(cx({ launch: "current", launch_id: L2 }), [ownedByL1]), "tab-1", "new launch did not replace the old launch's session");
+assert.deepEqual(sessionBindingLocation(cx({ launch: "current", launch_id: L2 }), REPO, ownedByL1), { cwd: REPO, projectKey: REPO });
+// Within one launch: clear/resume/fork replace; startup (`/new` or a child `codex exec`) does not.
+for (const source of ["clear", "resume", "fork"]) {
+  assert.equal(bind(cx({ launch: "current", launch_id: L1, source }), [ownedByL1]), "tab-1", `${source} did not replace`);
+}
+for (const source of ["startup", "compact", undefined]) {
+  assert.equal(bind(cx({ launch: "current", launch_id: L1, source }), [ownedByL1]), null, `${source} replaced within a launch`);
+  assert.equal(sessionBindingLocation(cx({ launch: "current", launch_id: L1, source }), REPO, ownedByL1), null);
+}
+// Same session (e.g. compact) is just the tab's own event.
+assert.equal(bind(cx({ launch: "current", launch_id: L1, source: "compact", session_id: "s-old" }), [ownedByL1]), "tab-1");
+// Non-SessionStart events never replace, even from the current launch.
+assert.equal(bind(cx({ launch: "current", launch_id: L1, hook_event_name: "UserPromptSubmit" }), [ownedByL1]), null);
+// Subagents never replace.
+assert.equal(bind(cx({ launch: "current", launch_id: L2, agent_id: "sub-1" }), [ownedByL1]), null, "subagent replaced");
+// Stale shared daemon: plain tether then an unknown launch, against bound and unbound tabs.
+assert.equal(bind(cx({ launch: "none" }), [ownedByL1]), null, "stale daemon took over a bound tab");
+assert.equal(bind(cx({ launch: "unknown", launch_id: "stale-launch-9" }), [ownedByL1]), null);
+assert.equal(bind(cx({ launch: "unknown", launch_id: "stale-launch-9" }), [unbound]), null);
+// Heal path (Decision A): a plain claim on an unbound tab is replaced by the next registered launch.
+assert.equal(bind(cx({ launch: "current", launch_id: L1, session_id: "s-real" }), [{ ...unbound, sessionId: "s-stale" }]), "tab-1");
+// Claude tab + Codex run by Claude's Codex plugin (plain tether) stays Claude.
+assert.equal(bind(cx({ launch: "none", session_id: "s-plugin" }), [{ ...tab("tab-1"), sessionId: "s-claude" }]), null);
+// Two tabs, one folder, two launches: each binds only its own tab.
+const pair = [{ ...tab("tab-1"), sessionId: "a", launchId: L1 }, { ...tab("tab-2"), sessionId: "b", launchId: L2 }];
+assert.equal(bind(cx({ tab_id: "tab-2", launch: "current", launch_id: "launch-new-0003" }), pair), "tab-2");
+assert.equal(bind(cx({ tab_id: "tab-1", launch: "unknown", launch_id: L2 }), pair), null, "one tab's launch bound another tab");
+// Other adapters keep first-session-wins even if a launch field were present.
+for (const agent of [undefined, "opencode", "pi", "antigravity", "deepseek"]) {
+  assert.equal(
+    bind(start({ agent, launch: "current", launch_id: L2 }), [ownedByL1]),
+    null,
+    `${agent ?? "claude"} lost first-session-wins`
+  );
+}
+
 console.log("bind-check: all assertions passed");

@@ -163,6 +163,35 @@ export interface BindCandidate {
   status: string;
   sessionId?: string;
   agentState?: AgentState;
+  launchId?: string;
+}
+
+export type LaunchDecision = "replace" | "reject" | "default";
+
+// Step 0 (Plan 045): `/new` and a child `codex exec` both start with
+// `startup`, so only these in-TUI sources may replace within one launch.
+const REPLACING_SOURCES = new Set(["clear", "resume", "fork"]);
+
+/**
+ * Plan 045: the launch rule for a tethered Codex event against its tab.
+ * `bindSession`, `sessionBindingLocation`, and `mergeTabIdentity` all defer to
+ * it, so binding is still decided in one place.
+ * - The tab's own session, non-Codex, or untethered: `default` (today's rules).
+ * - Unknown/retired launch: `reject` — never binds or replaces.
+ * - Plain tether (`none`): `default`, first-session-wins (Decision A).
+ * - Registered launch, `SessionStart`: this launch's first one `replace`s
+ *   whatever the tab held; a later one replaces only for clear/resume/fork.
+ *   Subagents never replace.
+ */
+export function codexLaunchDecision(
+  p: HookPayload,
+  tab: { sessionId?: string; launchId?: string }
+): LaunchDecision {
+  if (p.agent !== "codex" || !p.tab_id || tab.sessionId === p.session_id) return "default";
+  if (p.launch === "unknown" || p.launch === "retired") return "reject";
+  if (p.launch !== "current" || p.hook_event_name !== "SessionStart" || isSubagentHook(p)) return "default";
+  if (tab.launchId !== p.launch_id) return "replace";
+  return typeof p["source"] === "string" && REPLACING_SOURCES.has(p["source"]) ? "replace" : "reject";
 }
 
 /** Location to persist for a tethered SessionStart. Every adapter needs an
@@ -171,11 +200,13 @@ export interface BindCandidate {
 export function sessionBindingLocation(
   p: HookPayload,
   projectKey: string | undefined,
-  tab?: { id: string; cwd: string; status: string; sessionId?: string }
+  tab?: { id: string; cwd: string; status: string; sessionId?: string; launchId?: string }
 ): { cwd: string; projectKey: string } | null {
   if (!p.tab_id) return null;
   if (tab?.id !== p.tab_id || tab.status !== "live") return null;
-  if (tab.sessionId && tab.sessionId !== p.session_id) return null;
+  const decision = codexLaunchDecision(p, tab);
+  if (decision === "reject") return null;
+  if (decision !== "replace" && tab.sessionId && tab.sessionId !== p.session_id) return null;
   if (p.cwd && projectKey) return { cwd: p.cwd, projectKey };
   if (p.agent === "antigravity" && tab?.cwd) {
     return { cwd: tab.cwd, projectKey: tab.cwd };
@@ -198,10 +229,13 @@ export function bindSession(
 ): string | null {
   if (typeof p.tab_id === "string") {
     const tethered = tabs.find((t) => t.id === p.tab_id);
-    if (tethered?.status === "live" && (!tethered.sessionId || tethered.sessionId === p.session_id)) return tethered.id;
     // Tethered to a tab that's since closed: do not fall through to cwd, or the
     // dead tab's events land on whatever unbound tab happens to match.
-    return null;
+    if (tethered?.status !== "live") return null;
+    const decision = codexLaunchDecision(p, tethered);
+    if (decision === "replace") return tethered.id;
+    if (decision === "reject") return null;
+    return !tethered.sessionId || tethered.sessionId === p.session_id ? tethered.id : null;
   }
   // Codex's shared daemon can emit hooks with another client's inherited
   // tether. An untethered Codex event has no exact client identity either.
@@ -244,6 +278,20 @@ export function mergeTabIdentity(
   provenance: "human" | "auto" | undefined,
   expandCwd: (cwd: string) => string
 ): Tab {
+  const decision = codexLaunchDecision(p, t);
+  if (decision === "reject") return t;
+  if (decision === "replace") {
+    // Plan 045: a new session takes the tab even though `SessionStart` maps
+    // to no state; otherwise its first prompt would fail ownership below.
+    t = {
+      ...t,
+      sessionId: p.session_id,
+      launchId: p.launch_id,
+      agentState: undefined,
+      lastEventTs: undefined,
+      lastTurnAuto: undefined,
+    };
+  }
   const owns = !t.sessionId || t.sessionId === p.session_id;
   if (!owns) return t;
   const next = cwd && expandCwd(t.cwd) !== cwd ? { ...t, cwd } : t;
