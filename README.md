@@ -25,6 +25,7 @@
   <a href="https://claude.com/claude-code"><img src="docs/assets/agent-claude.svg" alt="Claude" height="28"></a>
   <a href="https://github.com/openai/codex"><img src="docs/assets/agent-codex.svg" alt="Codex" height="28"></a>
   <a href="https://www.npmjs.com/package/@deepseek-ai/dsh"><img src="docs/assets/agent-deepseek.svg" alt="DeepSeek" height="28"></a>
+  <a href="https://opencode.ai"><img src="docs/assets/agent-opencode.svg" alt="OpenCode" height="28"></a>
   <a href="https://github.com/earendil-works/pi"><img src="docs/assets/agent-pi.svg" alt="Pi" height="28"></a>
 </p>
 
