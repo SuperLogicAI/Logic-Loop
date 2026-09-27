@@ -304,8 +304,8 @@ export async function listToolEvents(cwd: string, limit = 50): Promise<ToolEvent
 
 /** Scope cwd-wide rows down to one tab's own session. Fan-out siblings (and
  * any two tabs open on the same project) share a cwd, so the project-wide
- * queries above return every session's rows — this is the filter that keeps
- * a tab's panel from showing a sibling's decisions/tool activity.
+ * queries above return every session's rows — this filters tool activity and
+ * the since-left digest; the main Decisions query uses tab/session ownership.
  * `sessionId` null (no hook has bound a session to this tab yet — a plain
  * shell with no agent, or a tab that hasn't reported in) falls back to the
  * unfiltered cwd-wide list, matching the existing untethered-session
@@ -641,12 +641,16 @@ export async function insertDecision(
   );
 }
 
-export async function listDecisions(cwd: string): Promise<Decision[]> {
+/** The active tab owns rows tagged with its tether, plus rows from its
+ * current session (including legacy rows and a session resumed in a new tab).
+ * Project-wide obligations remain in the Attention inbox. */
+export async function listDecisions(cwd: string, tabId: string, sessionId: string | null): Promise<Decision[]> {
   const d = await getDb();
   return d.select<Decision[]>(
-    `SELECT * FROM decisions WHERE cwd = $1
+    `SELECT * FROM decisions
+     WHERE cwd = $1 AND (tab_id = $2 OR ($3 IS NOT NULL AND session_id = $3))
      ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, ts DESC LIMIT 100`,
-    [cwd]
+    [cwd, tabId, sessionId]
   );
 }
 
@@ -691,13 +695,31 @@ export async function answerOpenDecisions(
   return result.rowsAffected;
 }
 
-/** Tab badges: open-decision count per project cwd. */
-export async function decisionCounts(): Promise<Record<string, number>> {
+export interface DecisionOwner {
+  cwd: string;
+  tab_id: string | null;
+  session_id: string;
+}
+
+/** The badge and panel use the same ownership rule. A resumed session can
+ * match both clauses, but it must count only once. */
+export function decisionCountForTab(
+  rows: readonly DecisionOwner[],
+  cwd: string,
+  tabId: string,
+  sessionId: string | null
+): number {
+  return rows.filter((row) =>
+    row.cwd === cwd && (row.tab_id === tabId || (sessionId !== null && row.session_id === sessionId))
+  ).length;
+}
+
+/** Minimal open-decision ownership rows for tab badges. */
+export async function openDecisionOwners(): Promise<DecisionOwner[]> {
   const d = await getDb();
-  const rows = await d.select<{ cwd: string; n: number }[]>(
-    "SELECT cwd, count(*) AS n FROM decisions WHERE status = 'open' GROUP BY cwd"
+  return d.select<DecisionOwner[]>(
+    "SELECT cwd, tab_id, session_id FROM decisions WHERE status = 'open'"
   );
-  return Object.fromEntries(rows.map((r) => [r.cwd, r.n]));
 }
 
 export interface DecisionSessionGroup {
@@ -728,10 +750,15 @@ export async function dismissSession(sessionId: string): Promise<void> {
   ]);
 }
 
-/** Dismiss every open decision for one project, across all session clusters. */
-export async function dismissAllDecisions(cwd: string): Promise<void> {
+/** Dismiss the decisions visible in one tab, across its session clusters. */
+export async function dismissAllDecisions(cwd: string, tabId: string, sessionId: string | null): Promise<void> {
   const d = await getDb();
-  await d.execute("UPDATE decisions SET status = 'dismissed' WHERE cwd = $1 AND status = 'open'", [cwd]);
+  await d.execute(
+    `UPDATE decisions SET status = 'dismissed'
+     WHERE cwd = $1 AND status = 'open'
+       AND (tab_id = $2 OR ($3 IS NOT NULL AND session_id = $3))`,
+    [cwd, tabId, sessionId]
+  );
 }
 
 /** Pure grouping step for the open-decisions list, newest cluster first.

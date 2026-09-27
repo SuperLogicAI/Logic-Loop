@@ -17,7 +17,8 @@
 
 ## Status
 
-- **Status**: BUILT, awaiting the Step 5 live matrix (`docs/TESTING.md` §67).
+- **Status**: ACCEPTED 2026-09-27. The Step 5 live matrix passed all 10 items
+  (`docs/TESTING.md` §67). Follow-up observations are scoped in Plan 046.
   `PHASE 45 ACCEPTED` 2026-09-26. Step 0 done (stop condition 1 hit; scope B
   chosen). Steps 1–4 landed in `0e906d5` and `6e133b9`, with all gates green.
   Decision A: Yes (see Step 3). Implementation note: the registry lives

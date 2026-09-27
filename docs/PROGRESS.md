@@ -694,3 +694,22 @@ Update this file as phases are accepted.
   follow-up, not confirmed as bugs: tab id changing across Setup Re-enter
   while session id persists, and decision cards appearing shared across two
   tabs in one folder. See docs/TESTING.md §67.
+- Phase 46 / Plan 046 (Codex cleanup investigation): **APPROVED 2026-09-27**;
+  literal `PHASE 46 ACCEPTED` authorized implementation and `PHASE 46
+  APPROVED` closed the phase. Read-only code and
+  SQLite inspection found the cross-tab Decisions display comes from the
+  Phase 17 project-wide query; stored rows retain session/tab identity.
+  The maintainer chose owning-tab cards: the Decisions section, badge, and
+  bulk dismiss now use tab/session ownership, while Attention remains
+  project-wide. Answer Now can route to an active restored tab with the
+  exact persisted session before Codex's first lazy hook; the panel guards
+  against stale card rows during tab switches. The §67 tab-ID change matches
+  close-then-new-tab resume, while same-tab restart and app ghost restoration
+  reuse the tether. `SessionEnd` maps to green idle by the existing state
+  contract. Focused/full frontend checks, TypeScript, build, 151 Rust tests,
+  Clippy, and diff check pass. Computer-controlled testing in the installed
+  app confirmed owning-tab decisions and badges, global Attention, scoped
+  bulk dismiss, Answer Now, same-tab Re-enter, fresh-tab session resume,
+  and app quit/relaunch ghost restoration. The active-tab session mismatch
+  has no normal live panel click path and passed its focused routing check.
+  See docs/TESTING.md §68.

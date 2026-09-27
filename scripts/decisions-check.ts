@@ -1,7 +1,8 @@
 // Self-check for the Phase 17 decisions-by-session grouping. Run: npm run decisions:check
 import { strict as assert } from "node:assert";
-import { groupDecisionsBySession } from "../src/lib/repo";
-import type { Decision } from "../src/types";
+import { decisionCountForTab, groupDecisionsBySession } from "../src/lib/repo";
+import { decisionReplyTab } from "../src/lib/decisionRouting";
+import type { Decision, Tab } from "../src/types";
 
 const d = (id: number, session_id: string, ts: number): Decision => ({
   id,
@@ -49,5 +50,30 @@ const old = grouped.find((g) => g.session_id === "old")!;
 assert.equal(old.n, 2);
 assert.equal(old.min_ts, 100);
 assert.equal(old.max_ts, 200);
+
+// A shared project has separate tab badges. A row tagged to the tab and its
+// current session counts once; a resumed session reaches its earlier row in a
+// new tab, and a legacy row with no tab tag needs that session match.
+const owners = [
+  { cwd: "/repo", tab_id: "tab-a", session_id: "old-a" },
+  { cwd: "/repo", tab_id: "tab-a", session_id: "current-a" },
+  { cwd: "/repo", tab_id: "tab-b", session_id: "current-b" },
+  { cwd: "/repo", tab_id: null, session_id: "current-a" },
+  { cwd: "/elsewhere", tab_id: "tab-a", session_id: "current-a" },
+];
+assert.equal(decisionCountForTab(owners, "/repo", "tab-a", "current-a"), 3);
+assert.equal(decisionCountForTab(owners, "/repo", "tab-b", "current-b"), 1);
+assert.equal(decisionCountForTab(owners, "/repo", "tab-new", "current-a"), 2);
+assert.equal(decisionCountForTab(owners, "/repo", "tab-new", null), 0);
+
+const tab = (id: string, sessionId: string | undefined, status: Tab["status"] = "live"): Tab => ({
+  id, sessionId, status, ptyId: 1, title: id, cwd: "/repo", color: "#000000",
+});
+const tabs = [tab("old", "old-session", "dead"), tab("restored", "session-a"), tab("sibling", "session-b")];
+assert.equal(decisionReplyTab(tabs, "session-a", undefined, "restored")?.id, "restored");
+assert.equal(decisionReplyTab(tabs, "session-a", "old", "restored")?.id, "restored");
+assert.equal(decisionReplyTab(tabs, "session-a", undefined, "sibling"), null);
+assert.equal(decisionReplyTab(tabs, "old-session", "old", "sibling"), null);
+assert.equal(decisionReplyTab(tabs, "session-b", "sibling", "restored")?.id, "sibling");
 
 console.log("decisions-check: all assertions passed");
