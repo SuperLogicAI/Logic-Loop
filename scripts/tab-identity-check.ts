@@ -98,4 +98,32 @@ const pluginCodex = mergeTabIdentity(
 assert.equal(pluginCodex.agent, "claude", "Codex plugin session flipped a Claude tab");
 assert.equal(pluginCodex.sessionId, "s-claude", "Codex plugin session took over a Claude tab");
 
+// --- Plan 045: a registered Codex launch replaces the tab's session. ---
+const merge = (t: Tab, extra: Record<string, unknown>, state: Tab["agentState"] | null = null, prompt = false) =>
+  mergeTabIdentity(t, ev({ agent: "codex", tab_id: "tab-1", ...extra }), undefined, state ?? null, prompt, undefined, noExpand);
+const oldCodex = tab({ sessionId: "s-old", agent: "codex", launchId: "launch-a-0001", agentState: "idle", lastEventTs: 1, lastTurnAuto: true });
+const replaced = merge(oldCodex, { session_id: "s-new", launch: "current", launch_id: "launch-b-0002", source: "startup" });
+assert.equal(replaced.sessionId, "s-new", "relaunch did not replace the session");
+assert.equal(replaced.launchId, "launch-b-0002");
+assert.equal(replaced.agentState, undefined, "old state survived replacement");
+assert.equal(replaced.lastEventTs, undefined);
+assert.equal(replaced.lastTurnAuto, undefined);
+// The new session's first prompt passes ownership.
+const prompted = merge(replaced, { session_id: "s-new", hook_event_name: "UserPromptSubmit", launch: "current", launch_id: "launch-b-0002" }, "working", true);
+assert.equal(prompted.agentState, "working", "new session's first prompt failed ownership");
+// Late events from the old session and the old (retired) launch are ignored.
+const lateOld = merge(prompted, { session_id: "s-old", hook_event_name: "Stop", launch: "retired", launch_id: "launch-a-0001" }, "idle");
+assert.equal(lateOld.sessionId, "s-new");
+assert.equal(lateOld.agentState, "working", "old session's late Stop changed the tab");
+// A child `codex exec` in the same launch (startup) cannot take the tab.
+const child = merge(prompted, { session_id: "s-child", launch: "current", launch_id: "launch-b-0002", source: "startup" });
+assert.equal(child.sessionId, "s-new", "child codex exec took over the tab");
+// `/clear` in the same launch does.
+const cleared = merge(prompted, { session_id: "s-cleared", launch: "current", launch_id: "launch-b-0002", source: "clear" });
+assert.equal(cleared.sessionId, "s-cleared");
+assert.equal(cleared.agentState, undefined);
+// An unknown launch never establishes identity on a fresh tab.
+const ghost = merge(tab(), { session_id: "s-ghost", launch: "unknown", launch_id: "launch-x-0009" }, "working");
+assert.equal(ghost.sessionId, undefined, "unknown launch bound a fresh tab");
+
 console.log("tab-identity-check: all assertions passed");

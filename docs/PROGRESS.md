@@ -674,3 +674,23 @@ Update this file as phases are accepted.
   Re-enter, Claude tab with Codex plugin, shell preservation, daemon untouched.
   Deferred: launch registry + in-tab session replacement, bash/fish. Open:
   side-panel cards reported not working after close + Re-enter (unconfirmed).
+- Phase 45 / Plan 045 (Codex launch registry and in-tab session
+  replacement): **ACCEPTED 2026-09-27** (literal `PHASE 45 ACCEPTED`). Each
+  managed Codex run registers a launch for its tab's PTY and carries it as
+  `LOGIC_LOOP_TAB_ID=<tab>:<launch>`; a registered launch's first
+  `SessionStart` replaces the tab's session. Within one launch, only
+  `/clear`, in-TUI `/resume`, and `/fork` replace — `/new` does not (Step 0:
+  it sends the same `startup` source as a child `codex exec`). Launch-less
+  Codex events still bind an unbound tab (Decision A). Live §67 matrix
+  passed all 10 items 2026-09-27: relaunch replaces, in-TUI switches,
+  child exec doesn't switch the tab, Claude/Codex plugin stays Claude,
+  Setup + Re-enter (`source=resume` on re-enter, session id preserved),
+  stale-daemon fakes (bound tab unaffected, unbound tab binds per Decision
+  A), two tabs no cross-talk, registration failure fails open
+  (`launch=none`, Codex still works), daemon/shell untouched across
+  rebuild, bash plain tether. Finding, not yet root-caused: tab A's idle
+  dot stayed green after `/quit`, before any stale-daemon event — separate
+  from the stale-daemon binding logic itself, which passed. Also flagged for
+  follow-up, not confirmed as bugs: tab id changing across Setup Re-enter
+  while session id persists, and decision cards appearing shared across two
+  tabs in one folder. See docs/TESTING.md §67.

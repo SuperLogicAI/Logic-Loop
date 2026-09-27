@@ -4104,3 +4104,143 @@ running and note its PID/start time before and after):
 - [ ] Close a Codex tab; late hooks must not create an active re-entry row.
 - [ ] Start a new Antigravity process with hooks enabled and verify its icon
       and blue/green activity state still work.
+
+## 67. Codex launch registry and in-tab session replacement (Phase 45, 2026-09-26)
+
+Plan 045. Each managed Codex run registers a launch for its tab's PTY and
+carries it as `LOGIC_LOOP_TAB_ID=<tab>:<launch>`. A registered launch's
+first `SessionStart` replaces the tab's session. Within one launch, only
+`/clear`, in-TUI `/resume`, and `/fork` replace. `/new` does not (Step 0:
+it sends the same `startup` source as a child `codex exec`). Launch-less
+Codex events still bind an unbound tab (Decision A).
+
+Automated evidence: `launch::tests` (registry, verdicts, PTY death),
+`ingest::tests::{tether_split_and_launch_verdicts,launch_endpoint_registers_retires_and_rejects}`,
+`pty::tests::{codex_launch_prefix_registers_for_live_tethered_pty_only,zsh_wrapper_registers_passes_through_and_fails_open}`
+(a real interactive zsh against a local listener: one `/launch` + one
+`/launch/end`, passthrough makes no request, the id never leaks into the
+shell, and an unreachable app launches untracked). `bind:check` covers every
+row of Plan 045's Step 3 table plus stale daemon, plugin, two-tab,
+heal-path, and other-adapter cases. `tab-identity:check` covers state
+clearing on replacement and the new session's first prompt. Gates: full
+`npm run check`, `npx tsc --noEmit`, `npm run build`, `cargo test --lib`
+(151 passed, 1 ignored), `cargo clippy --all-targets -- -D warnings`,
+`git diff --check`.
+
+Live matrix items 1-10 below: **passed 2026-09-27**. Finding from the run:
+tab A's dot stayed green after `/quit` in test 6, before any stale-daemon
+fake was sent — the idle state doesn't reset on quit. Separate from the
+stale-daemon binding logic under test (that part passed: both synthetic
+`204`s landed correctly, B picked up the Codex icon per Decision A, and B's
+real `codex` prompt then bound it). Not yet root-caused; carry as an open
+follow-up.
+
+### Quick run guide (≈20 min, rebuilt app)
+
+Before rebuilding, note the daemon: `ps -o pid,lstart -p 73993`.
+
+**Setup, once per tab you check from.** Paste these two helpers. They are
+read-only, except `llstale`, which posts one fake hook:
+
+```sh
+# Last N Codex session starts: time, tab (8 chars), launch verdict, source, session tail
+llcx() { sqlite3 -readonly -column -header ~/Library/Application\ Support/com.vandershark.context-terminal/context-terminal.db "SELECT datetime(ts/1000,'unixepoch','localtime') at, substr(json_extract(payload_json,'\$.tab_id'),1,8) tab, json_extract(payload_json,'\$.launch') launch, json_extract(payload_json,'\$.source') source, substr(session_id,-6) sid FROM events WHERE type='hook:SessionStart' AND json_extract(payload_json,'\$.agent')='codex' ORDER BY id DESC LIMIT ${1:-5};"; }
+# Fake a stale-daemon SessionStart (plain tether) for tab id $1
+llstale() { ( . ~/.context-terminal/ingest.env; curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $CT_TOKEN" -H "X-Logic-Loop-Tab: $1" -H "X-Logic-Loop-Agent: codex" --data-binary "{\"hook_event_name\":\"SessionStart\",\"session_id\":\"stale-test-$RANDOM\",\"source\":\"startup\",\"cwd\":\"$PWD\"}" "http://127.0.0.1:$CT_PORT/event" ) }
+```
+
+A tab's id: `echo $LOGIC_LOOP_TAB_ID` in its shell. "Tab follows" means its
+dot goes blue, then green, on the new session's prompts. Any `codex` prompt
+can be "reply ok".
+
+1. **Relaunch replaces.** Open a + tab, run `codex` → prompt → `/quit` →
+   `codex` → prompt. The tab follows. `llcx 2` shows two rows for this tab,
+   both `launch=current`, with different `sid`.
+2. **In-TUI switches** (same Codex):
+   - `/clear` → prompt: follows (`source=clear`).
+   - `/resume` → pick an older session → prompt: follows (`resume`).
+   - `/fork` → prompt: follows (`fork`).
+   - `/new` → pick **Current checkout** → prompt: the dot does **not**
+     react. That is expected: `/new` is unsupported.
+   - `/compact`: nothing changes.
+3. **Child exec.** Ask Codex to run `codex exec "echo hi"` (approve it). The
+   tab keeps its session: `llcx 1` shows the child as a `startup` row, and
+   your next prompt still drives the dot.
+4. **Plugin in Claude.** In a Claude tab, run `/codex:review` or anything
+   that uses the Codex plugin. The tab stays Claude (icon unchanged).
+5. **Setup + Re-enter.** Setup → Codex → Start → prompt: binds, and
+   `llcx 1` shows `launch=current` (not `unknown`, so no double wrap).
+   `/quit` → `codex` → prompt: follows. Close the tab → Re-enter it →
+   prompt: binds (`source=resume`, `launch=current`).
+6. **Stale daemon.**
+   - Tab A: `codex` → prompt → `/quit`. It is now bound. Note its id.
+   - Tab B: a fresh + tab. Note its id.
+   - From either tab: `llstale <A-id>` then `llstale <B-id>`. Each prints
+     `204`.
+   - Expected: A is unchanged. B shows the Codex icon (Decision A).
+   - In B: `codex` → prompt. B follows the real session.
+   - Also: in Terminal.app, run bare `codex` → prompt. No Logic Loop tab
+     changes. (The one exception is tab `4f97374a`, the daemon's baked-in
+     tether: if that tab is live and unbound, it may bind by design.)
+7. **Two tabs, one folder.** Two + tabs in the same repo. In each: `codex`
+   → prompt → `/quit` → `codex` → prompt. Alternate prompts: each dot
+   reacts only to its own tab.
+8. **Registration failure.** In a fresh tab, run
+   `LOGIC_LOOP_PTY_GEN=999999 codex` → prompt. Codex works normally, and
+   `llcx 1` shows `launch=none` (untracked; it still binds per Decision A).
+9. **Nothing else disturbed.** `ps -o pid,lstart -p 73993` matches your
+   pre-rebuild note. The zsh prompt, ↑ history, and aliases look normal.
+10. **bash (plain tether).** In a fresh + tab, type `bash`, then
+    `codex --no-daemon` → prompt. The tab binds, and `llcx 1` shows
+    `launch=none`. Inside `bash` there is no wrapper, so this is the same
+    case as a bash tab.
+
+Live matrix (rebuilt app, one default-profile instance). Leave the shared
+daemon running, and note its PID and start time before and after. In
+`/new`'s "Where should the new conversation run?" dialog, pick **Current
+checkout**; "New worktree" creates `~/.codex/worktrees/…`.
+
+- [x] 1. + tab → `codex` → prompt → exit → `codex` → prompt: the tab follows
+      the new session (dot, meter); Re-enter lists only the new one.
+      **Pass 2026-09-27:** `llcx 2` showed tab `e468f9eb` twice, both
+      `launch=current`, sids `101b5e`→`708ea1`.
+- [x] 2. In one launch: `/clear` → prompt: follows. In-TUI `/resume` of an
+      older session → prompt: follows. `/fork` → prompt: follows. `/new` →
+      prompt: **stays** on the current session (expected). `/compact`: no
+      change. **Pass 2026-09-27.**
+- [x] 3. Inside Codex, have the agent run `codex exec "echo hi"`: the tab
+      does not switch. **Pass 2026-09-27:** `llcx 1` showed the child as a
+      `source=startup` row (tab `f53e7172`, sid `f41a6d`).
+- [x] 4. Claude tab → run something that uses the Codex plugin: stays Claude.
+      **Pass 2026-09-27.**
+- [x] 5. Setup → Codex (zsh tab), and Re-enter: both bind; exit + re-run
+      replaces. Setup's first hook shows `launch: "current"` (no double
+      wrap). **Pass 2026-09-27:** post-close-reenter row showed
+      `source=resume`, `launch=current`, sid unchanged (`ddb03b`). Note: the
+      tab id changed across the re-enter (`88ceb50f`→`e99c8b6b`) while the
+      session id stayed the same — confirm this is intended (fresh tab id
+      per Re-enter, continuity tracked via session id) rather than a miss.
+- [x] 6. Outside terminal, bare `codex` through the shared daemon: claims
+      nothing. Synthetic stale-daemon event (plain tether) to a live bound
+      tab and a live unbound tab: the bound tab is unchanged; the unbound tab
+      binds (Decision A). Then bare `codex` + prompt in that tab: it switches
+      to the new session. **Pass 2026-09-27:** both fakes returned `204`;
+      bound tab A unaffected; unbound tab B picked up the Codex icon, then
+      bound to its real session (`llcx 1`: tab `aa7192da`, `current`,
+      `startup`, sid `01dd6b`). **Finding:** tab A's dot stayed green after
+      `/quit`, before either fake was sent — idle state not resetting on
+      quit. Unrelated to the stale-daemon logic itself; open follow-up.
+- [x] 7. Two tabs in one folder, each re-run twice: no cross-talk.
+      **Pass 2026-09-27.** Note: decision cards appeared shared between the
+      two tabs — confirm whether that's expected.
+- [x] 8. Registration failure: in a zsh tab run `LOGIC_LOOP_PTY_GEN=999999
+      codex` (`/launch` answers 409). Codex still launches, untracked. (The
+      wrapper re-reads `ingest.env`, so overriding `CT_PORT` in the shell
+      does nothing; the Rust test covers an unreachable port.) **Pass
+      2026-09-27:** `llcx 1` showed `launch=none`.
+- [x] 9. Daemon PID and start time unchanged; zsh prompt, history, and
+      aliases intact. **Pass 2026-09-27:** PID 73993, `Sat Sep 26 00:16:57
+      2026` — matches pre-rebuild note exactly.
+- [x] 10. bash: fresh tab → `bash` → `codex --no-daemon` → prompt: the tab
+      binds (`launch=none`). **Pass 2026-09-27:** `llcx 1` showed tab
+      `d5e9e251`, `launch=none`, `source=startup`.

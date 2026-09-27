@@ -5,7 +5,7 @@ use std::io::{Read, Write};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 /// Runs `f` on tokio's blocking-thread pool instead of the calling thread.
 /// Every plain `pub fn` Tauri command runs on the app's main/event-loop
@@ -64,6 +64,8 @@ pub struct PtySession {
 pub struct PtyManager {
     sessions: Mutex<HashMap<u32, Arc<Mutex<PtySession>>>>,
     next_id: AtomicU32,
+    /// Plan 045: which tethered PTYs are live and which Codex launches they host.
+    pub launches: crate::launch::LaunchRegistry,
 }
 
 /// child.kill() alone can leave the shell alive (observed orphan zsh after
@@ -91,6 +93,7 @@ impl PtyManager {
             Ok(mut sessions) => sessions.drain().map(|(_, s)| s).collect(),
             Err(_) => return,
         };
+        self.launches.close_all();
         for s in drained {
             if let Ok(mut session) = s.lock() {
                 kill_session(&mut session);
@@ -236,9 +239,9 @@ fn valid_resume_id(sid: &str) -> bool {
 /// accept an arbitrary command string here — `sid` is still the only
 /// variable part, and `valid_resume_id` remains the shell-injection boundary
 /// at the call site.
-fn resume_command(agent: Option<&str>, sid: &str, shell: &str) -> String {
+fn resume_command(agent: Option<&str>, sid: &str, shell: &str, codex_launch: &str) -> String {
     match agent {
-        Some("codex") => format!("codex --no-daemon resume {sid}; exec {shell} -l"),
+        Some("codex") => format!("{codex_launch}codex --no-daemon resume {sid}; exec {shell} -l"),
         Some("antigravity") => format!("agy --conversation {sid}; exec {shell} -l"),
         Some("pi") => format!("pi --session {sid}; exec {shell} -l"),
         // `opencode`'s default (TUI) command accepts `-s <id>` directly,
@@ -256,6 +259,29 @@ fn resume_command(agent: Option<&str>, sid: &str, shell: &str) -> String {
             "npx --yes @deepseek-ai/dsh --profile logic-loop --resume {sid}; exec {shell} -l"
         ),
         _ => format!("claude --resume {sid}; exec {shell} -l"),
+    }
+}
+
+/// Tab ids reach a shell command line inside the Codex launch prefix; they are
+/// UUIDs we minted, so anything else just launches untracked.
+fn valid_tab_id(tab_id: &str) -> bool {
+    (1..=64).contains(&tab_id.len()) && tab_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+}
+
+/// Setup (`codex --no-daemon`) and a fan-out `cmd` whose first word is `codex`.
+fn is_codex_command(cmd: &str) -> bool {
+    cmd.split_whitespace().next() == Some("codex")
+}
+
+/// Plan 045: register a launch for (`tab_id`, `pty`) in-process and return the
+/// `LOGIC_LOOP_TAB_ID=<tab>:<launch> ` prefix for that one command. It is a
+/// prefix, never `cmd.env`, so the shell that outlives Codex (and any Claude
+/// run in it later) keeps the plain tether. Empty = untracked (fail open).
+fn codex_launch_prefix(reg: &crate::launch::LaunchRegistry, tab_id: Option<&str>, pty: u32) -> String {
+    let Some(tab) = tab_id.filter(|t| valid_tab_id(t)) else { return String::new() };
+    match crate::launch::new_launch_id() {
+        Some(id) if reg.register(tab, pty, &id) => format!("LOGIC_LOOP_TAB_ID={tab}:{id} "),
+        _ => String::new(),
     }
 }
 
@@ -303,15 +329,31 @@ const ZSH_FILES: [(&str, &str); 4] = [
     ),
     (
         ".zshrc",
+        concat!(
         "# Logic Loop (Plan 044). Repoint HISTFILE only if /etc/zshrc aimed it here.\n\
          _ll_zd=$ZDOTDIR; ZDOTDIR=$LOGIC_LOOP_USER_ZDOTDIR\n\
          [[ $HISTFILE == $_ll_zd/* ]] && HISTFILE=$ZDOTDIR/.zsh_history; unset _ll_zd\n\
          [[ -f $ZDOTDIR/.zshrc ]] && builtin source $ZDOTDIR/.zshrc\n\
          # A user's own `codex` alias or function wins (see docs/LANDMINES.md);\n\
-         # `function` form so an alias can't mangle this definition.\n\
-         (( $+functions[codex] )) || function codex {\n\
-         \x20 if (( ${@[(Ie)--no-daemon]} )); then command codex \"$@\"; else command codex --no-daemon \"$@\"; fi\n\
-         }\n",
+         # `function` form so an alias can't mangle this definition.\n",
+        // Plan 045: each run registers a launch for this tab's PTY and carries
+        // it only into the Codex child as `<tab>:<launch>`. An id already in
+        // the tether (Setup's typed command, registered by Rust) or an
+        // untethered shell passes through. Any failure launches untracked.
+        r#"(( $+functions[codex] )) || function codex {
+  local -a _ll_a; (( ${@[(Ie)--no-daemon]} )) || _ll_a=(--no-daemon)
+  local _ll_id= _ll_env=$HOME/.context-terminal/ingest.env
+  [[ -n $LOGIC_LOOP_TAB_ID && $LOGIC_LOOP_TAB_ID != *:* && -n $LOGIC_LOOP_PTY_GEN ]] && _ll_id=$(uuidgen 2>/dev/null)
+  if [[ -n $_ll_id ]] && ( . $_ll_env && curl -sf -m 1 -H "Authorization: Bearer $CT_TOKEN" --data-binary "{\"tab_id\":\"$LOGIC_LOOP_TAB_ID\",\"pty_gen\":\"$LOGIC_LOOP_PTY_GEN\",\"launch_id\":\"$_ll_id\"}" "http://127.0.0.1:$CT_PORT/launch" ) >/dev/null 2>&1; then
+    { LOGIC_LOOP_TAB_ID=$LOGIC_LOOP_TAB_ID:$_ll_id command codex $_ll_a "$@" } always {
+      ( . $_ll_env && curl -sf -m 1 -H "Authorization: Bearer $CT_TOKEN" --data-binary "{\"launch_id\":\"$_ll_id\"}" "http://127.0.0.1:$CT_PORT/launch/end" ) >/dev/null 2>&1
+    }
+  else
+    command codex $_ll_a "$@"
+  fi
+}
+"#
+        ),
     ),
     (
         // Only reached by the non-interactive `-c` resume shell; interactive
@@ -369,6 +411,17 @@ pub fn pty_spawn(
     strict_cwd: Option<bool>,
 ) -> Result<u32, String> {
     let cwd = resolve_spawn_cwd(cwd, strict_cwd.unwrap_or(false))?;
+    // Plan 045: reserved before anything is built, so the shell can be told
+    // its PTY id and launches can be registered against it before they run.
+    // A failed spawn burns one id; ids only need to be unique.
+    let id = state.next_id.fetch_add(1, Ordering::SeqCst);
+    if let Some(tab_id) = &tab_id {
+        state.launches.pty_opened(id, tab_id);
+    }
+    let spawn_failed = |e: String| {
+        state.launches.pty_closed(id);
+        e
+    };
 
     let pty_system = native_pty_system();
     let pair = pty_system
@@ -378,7 +431,7 @@ pub fn pty_spawn(
             pixel_width: 0,
             pixel_height: 0,
         })
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| spawn_failed(e.to_string()))?;
 
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
     let mut cmd = CommandBuilder::new(&shell);
@@ -388,14 +441,21 @@ pub fn pty_spawn(
     // `claude` that isn't on PATH, or a session that can't resume, still
     // falls through to an interactive shell via the trailing `exec`.
     if let Some(sid) = resume_session.filter(|s| valid_resume_id(s)) {
+        let codex_launch = if resume_agent.as_deref() == Some("codex") {
+            codex_launch_prefix(&state.launches, tab_id.as_deref(), id)
+        } else {
+            String::new()
+        };
         cmd.arg("-c");
-        cmd.arg(resume_command(resume_agent.as_deref(), &sid, &shell));
+        cmd.arg(resume_command(resume_agent.as_deref(), &sid, &shell, &codex_launch));
     }
     cmd.env("TERM", "xterm-256color");
     // Tab tether: hooks inherit this and echo it back, so session→tab binding
     // is exact instead of guessed from cwd (two tabs on one repo bound wrong).
-    if let Some(tab_id) = tab_id {
+    if let Some(tab_id) = &tab_id {
         cmd.env("LOGIC_LOOP_TAB_ID", tab_id);
+        // The zsh wrapper registers launches as (tab, PTY id).
+        cmd.env("LOGIC_LOOP_PTY_GEN", id.to_string());
     }
     // ponytail: zsh only (macOS default); bash/fish tabs keep bare `codex` unbound.
     if std::path::Path::new(&shell).file_name().is_some_and(|n| n == "zsh") {
@@ -411,11 +471,11 @@ pub fn pty_spawn(
         cmd.cwd(cwd);
     }
 
-    let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+    let child = pair.slave.spawn_command(cmd).map_err(|e| spawn_failed(e.to_string()))?;
     drop(pair.slave);
 
-    let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
-    let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+    let mut reader = pair.master.try_clone_reader().map_err(|e| spawn_failed(e.to_string()))?;
+    let writer = pair.master.take_writer().map_err(|e| spawn_failed(e.to_string()))?;
     let writer_tx = spawn_ordered_writer(writer);
 
     // Fan-out launch command (invariant #4, reworded 2026-08-15): written
@@ -426,11 +486,17 @@ pub fn pty_spawn(
     // being called carefully. Fail open: a bad command just errors inside
     // the shell like a mistyped one would.
     if let Some(c) = launch_cmd.filter(|c| !c.is_empty()) {
-        let _ = writer_tx.send(format!("{c}\n").into_bytes());
+        // Plan 045: a Codex launch carries its registered id; the zsh wrapper
+        // sees the `:` and passes it through instead of adding a second one.
+        let codex_launch = if is_codex_command(&c) {
+            codex_launch_prefix(&state.launches, tab_id.as_deref(), id)
+        } else {
+            String::new()
+        };
+        let _ = writer_tx.send(format!("{codex_launch}{c}\n").into_bytes());
     }
 
-    let id = state.next_id.fetch_add(1, Ordering::SeqCst);
-    state.sessions.lock().map_err(|e| e.to_string())?.insert(
+    state.sessions.lock().map_err(|e| spawn_failed(e.to_string()))?.insert(
         id,
         Arc::new(Mutex::new(PtySession {
             master: pair.master,
@@ -451,6 +517,7 @@ pub fn pty_spawn(
                 }
             }
         }
+        app.state::<PtyManager>().launches.pty_closed(id);
         let _ = app.emit(&format!("pty://exit/{id}"), ());
     });
 
@@ -499,6 +566,7 @@ pub fn pty_resize(state: State<'_, PtyManager>, id: u32, cols: u16, rows: u16) -
 
 #[tauri::command]
 pub fn pty_kill(state: State<'_, PtyManager>, id: u32) -> Result<(), String> {
+    state.launches.pty_closed(id);
     let removed = state.sessions.lock().map_err(|e| e.to_string())?.remove(&id);
     if let Some(session) = removed {
         if let Ok(mut session) = session.lock() {
@@ -955,9 +1023,10 @@ fn git_pr_create_blocking(cwd: String, title: String, body: String) -> Result<St
 #[cfg(test)]
 mod tests {
     use super::{
-        canon, has_own_repo, project_key, resolve_spawn_cwd, resume_command, spawn_ordered_writer,
-        valid_resume_id, validate_project_dir, write_zsh_integration,
+        canon, codex_launch_prefix, has_own_repo, is_codex_command, project_key, resolve_spawn_cwd,
+        resume_command, spawn_ordered_writer, valid_resume_id, validate_project_dir, write_zsh_integration,
     };
+    use crate::launch::{LaunchRegistry, Verdict};
     use std::io::Write;
     use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
     use std::sync::{Arc, Mutex};
@@ -1114,7 +1183,7 @@ mod tests {
     #[test]
     fn resume_command_selects_codex_syntax() {
         assert_eq!(
-            resume_command(Some("codex"), "abc-123", "/bin/zsh"),
+            resume_command(Some("codex"), "abc-123", "/bin/zsh", ""),
             "codex --no-daemon resume abc-123; exec /bin/zsh -l"
         );
     }
@@ -1122,7 +1191,7 @@ mod tests {
     #[test]
     fn resume_command_selects_antigravity_syntax() {
         assert_eq!(
-            resume_command(Some("antigravity"), "abc-123", "/bin/zsh"),
+            resume_command(Some("antigravity"), "abc-123", "/bin/zsh", ""),
             "agy --conversation abc-123; exec /bin/zsh -l"
         );
     }
@@ -1130,7 +1199,7 @@ mod tests {
     #[test]
     fn resume_command_selects_pi_syntax() {
         assert_eq!(
-            resume_command(Some("pi"), "abc-123", "/bin/zsh"),
+            resume_command(Some("pi"), "abc-123", "/bin/zsh", ""),
             "pi --session abc-123; exec /bin/zsh -l"
         );
     }
@@ -1138,7 +1207,7 @@ mod tests {
     #[test]
     fn resume_command_selects_opencode_syntax() {
         assert_eq!(
-            resume_command(Some("opencode"), "abc-123", "/bin/zsh"),
+            resume_command(Some("opencode"), "abc-123", "/bin/zsh", ""),
             "opencode -s abc-123; exec /bin/zsh -l"
         );
     }
@@ -1146,7 +1215,7 @@ mod tests {
     #[test]
     fn resume_command_selects_deepseek_syntax() {
         assert_eq!(
-            resume_command(Some("deepseek"), "abc-123", "/bin/zsh"),
+            resume_command(Some("deepseek"), "abc-123", "/bin/zsh", ""),
             "npx --yes @deepseek-ai/dsh --profile logic-loop --resume abc-123; exec /bin/zsh -l"
         );
     }
@@ -1154,11 +1223,11 @@ mod tests {
     #[test]
     fn resume_command_defaults_to_claude_syntax() {
         assert_eq!(
-            resume_command(None, "abc-123", "/bin/zsh"),
+            resume_command(None, "abc-123", "/bin/zsh", ""),
             "claude --resume abc-123; exec /bin/zsh -l"
         );
         assert_eq!(
-            resume_command(Some("some-future-agent"), "abc-123", "/bin/zsh"),
+            resume_command(Some("some-future-agent"), "abc-123", "/bin/zsh", ""),
             "claude --resume abc-123; exec /bin/zsh -l",
             "an unrecognized agent must not be guessed a command, and must not fall through to no resume at all"
         );
@@ -1315,6 +1384,104 @@ mod tests {
         assert!(lines.contains(&"user-rc"), "user .zshrc alias missing: {stdout}");
         assert!(lines.contains(&format!("zd:{cfg}").as_str()), "ZDOTDIR not handed back: {stdout}");
         assert!(lines.contains(&format!("hf:{cfg}/.zsh_history").as_str()), "HISTFILE left in app dir: {stdout}");
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// Plan 045: in-process registration for Setup/fan-out and re-entry.
+    #[test]
+    fn codex_launch_prefix_registers_for_live_tethered_pty_only() {
+        let reg = LaunchRegistry::default();
+        reg.pty_opened(4, "tab-a");
+        let prefix = codex_launch_prefix(&reg, Some("tab-a"), 4);
+        let id = prefix
+            .strip_prefix("LOGIC_LOOP_TAB_ID=tab-a:")
+            .and_then(|r| r.strip_suffix(' '))
+            .expect("prefix shape");
+        assert_eq!(reg.verdict("tab-a", id), Verdict::Current, "registered before the command runs");
+        assert_eq!(codex_launch_prefix(&reg, None, 4), "", "untethered PTY: untracked");
+        assert_eq!(codex_launch_prefix(&reg, Some("tab-a"), 5), "", "dead PTY: untracked");
+        assert_eq!(codex_launch_prefix(&reg, Some("tab a;rm"), 4), "", "unsafe tab id never reaches the shell");
+        assert_eq!(
+            resume_command(Some("codex"), "abc-123", "/bin/zsh", &prefix),
+            format!("LOGIC_LOOP_TAB_ID=tab-a:{id} codex --no-daemon resume abc-123; exec /bin/zsh -l")
+        );
+    }
+
+    #[test]
+    fn only_codex_launch_commands_get_a_launch() {
+        assert!(is_codex_command("codex --no-daemon"));
+        assert!(is_codex_command("  codex"));
+        assert!(!is_codex_command("claude"));
+        assert!(!is_codex_command("codexx"));
+        assert!(!is_codex_command("echo codex"));
+    }
+
+    /// Plan 045: the zsh wrapper registers a launch, carries it only into the
+    /// Codex child, retires it on exit, passes an already-registered tether
+    /// through untouched, and launches untracked when the app is unreachable.
+    #[test]
+    fn zsh_wrapper_registers_passes_through_and_fails_open() {
+        if !std::path::Path::new("/bin/zsh").exists() || !std::path::Path::new("/usr/bin/uuidgen").exists() {
+            return;
+        }
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let seen: Arc<Mutex<Vec<String>>> = Arc::default();
+        let seen_srv = seen.clone();
+        std::thread::spawn(move || {
+            use std::io::Read;
+            for mut conn in listener.incoming().flatten() {
+                let mut buf = [0u8; 4096];
+                let n = conn.read(&mut buf).unwrap_or(0);
+                let req = String::from_utf8_lossy(&buf[..n]).to_string();
+                let line = req.lines().next().unwrap_or("").to_string();
+                let body = req.split("\r\n\r\n").nth(1).unwrap_or("").to_string();
+                seen_srv.lock().unwrap().push(format!("{line} {body}"));
+                let _ = conn.write_all(b"HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n");
+            }
+        });
+
+        let home = std::env::temp_dir().join(format!("ll-zsh-launch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let bin = home.join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::create_dir_all(home.join(".context-terminal")).unwrap();
+        std::fs::write(home.join(".zshrc"), "path=($HOME/bin $path)\n").unwrap();
+        let fake = bin.join("codex");
+        std::fs::write(&fake, "#!/bin/sh\necho \"tether:$LOGIC_LOOP_TAB_ID\"\n").unwrap();
+        std::process::Command::new("chmod").arg("+x").arg(&fake).status().unwrap();
+        let dir = write_zsh_integration(&home).expect("integration written");
+        let run = |ct_port: u16| {
+            std::fs::write(home.join(".context-terminal/ingest.env"), format!("CT_PORT={ct_port}\nCT_TOKEN=t\n")).unwrap();
+            let out = std::process::Command::new("/bin/zsh")
+                .args(["-l", "-i", "-c"])
+                .arg("codex; LOGIC_LOOP_TAB_ID=tab-a:preset1234 codex; echo after:$LOGIC_LOOP_TAB_ID")
+                .env_clear()
+                .env("HOME", &home)
+                .env("PATH", "/usr/bin:/bin")
+                .env("ZDOTDIR", &dir)
+                .env("LOGIC_LOOP_USER_ZDOTDIR", &home)
+                .env("LOGIC_LOOP_TAB_ID", "tab-a")
+                .env("LOGIC_LOOP_PTY_GEN", "5")
+                .output()
+                .unwrap();
+            String::from_utf8_lossy(&out.stdout).to_string()
+        };
+
+        let stdout = run(port);
+        let lines: Vec<&str> = stdout.lines().collect();
+        let launched = lines.iter().find_map(|l| l.strip_prefix("tether:tab-a:")).expect("launch id carried");
+        assert_eq!(launched.len(), 36, "uuidgen id, single suffix: {stdout}");
+        assert!(lines.contains(&"tether:tab-a:preset1234"), "registered tether not passed through: {stdout}");
+        assert!(lines.contains(&"after:tab-a"), "launch id leaked into the shell: {stdout}");
+        let reqs = seen.lock().unwrap().clone();
+        assert_eq!(reqs.len(), 2, "one register + one end, none for passthrough: {reqs:?}");
+        assert!(reqs[0].starts_with("POST /launch HTTP") && reqs[0].contains(r#""pty_gen":"5""#) && reqs[0].contains(launched));
+        assert!(reqs[1].starts_with("POST /launch/end HTTP") && reqs[1].contains(launched));
+
+        let closed = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let stdout = run(closed);
+        assert!(stdout.lines().any(|l| l == "tether:tab-a"), "unreachable app must launch untracked: {stdout}");
         let _ = std::fs::remove_dir_all(&home);
     }
 }

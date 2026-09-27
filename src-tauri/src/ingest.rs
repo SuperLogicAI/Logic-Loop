@@ -5,7 +5,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 pub(crate) const MARKER: &str = "context-terminal/ingest.env";
 
@@ -151,8 +151,21 @@ pub fn start(app: AppHandle) {
                 let _ = request.respond(tiny_http::Response::empty(204));
                 continue;
             }
+            if request.url().starts_with("/launch") {
+                let url = request.url().to_string();
+                let mut body = String::new();
+                let status = if request.as_reader().take(4096).read_to_string(&mut body).is_ok() {
+                    launch_request(&app.state::<crate::pty::PtyManager>().launches, &url, &body)
+                } else {
+                    400
+                };
+                let _ = request.respond(tiny_http::Response::empty(status));
+                continue;
+            }
             // Headers must be read before `as_reader` borrows the request.
-            let tab_id = header_value(&request, "X-Logic-Loop-Tab");
+            // Plan 045: split `<tab>:<launch>` first, so every consumer below
+            // (extractor check, statusline, `tab_id`) sees the plain tab id.
+            let (tab_id, launch_id) = split_tether(header_value(&request, "X-Logic-Loop-Tab"));
             // Our own extractor child — never ingest it, or the app observes
             // itself and the loop feeds forever.
             if tab_id.as_deref() == Some(EXTRACTOR_TETHER) {
@@ -215,6 +228,11 @@ pub fn start(app: AppHandle) {
                     // Absent tether (session started outside the app) stays
                     // absent — the frontend falls back to cwd matching.
                     if let Some(tab) = tab_id.filter(|t| !t.is_empty()) {
+                        let launches = &app.state::<crate::pty::PtyManager>().launches;
+                        obj.insert("launch".into(), launch_verdict(launches, &tab, launch_id.as_deref()).into());
+                        if let Some(id) = launch_id {
+                            obj.insert("launch_id".into(), id.into());
+                        }
                         obj.insert("tab_id".into(), tab.into());
                     }
                     // Missing header = version 0, today's shape. Recorded only;
@@ -295,6 +313,51 @@ fn is_codex_rollout_path(path: &Path, home: &Path) -> bool {
 
 fn is_fixed_digits(value: &str, length: usize) -> bool {
     value.len() == length && value.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// Plan 045: `X-Logic-Loop-Tab` is `<tab>` or `<tab>:<launch>`. Split on the
+/// first `:`; tab ids never contain one.
+fn split_tether(header: Option<String>) -> (Option<String>, Option<String>) {
+    match header {
+        Some(h) => match h.split_once(':') {
+            Some((tab, launch)) => (Some(tab.to_string()), Some(launch.to_string())),
+            None => (Some(h), None),
+        },
+        None => (None, None),
+    }
+}
+
+/// The app-derived `launch` field: `none` (plain tether), else the registry's
+/// verdict. A malformed id is `unknown`, so it can never bind.
+fn launch_verdict(reg: &crate::launch::LaunchRegistry, tab: &str, launch_id: Option<&str>) -> &'static str {
+    match launch_id {
+        None => "none",
+        Some(id) if !crate::launch::valid_launch_id(id) => "unknown",
+        Some(id) => reg.verdict(tab, id).as_str(),
+    }
+}
+
+/// Plan 045: the zsh wrapper's launch registration (`/launch`) and exit
+/// (`/launch/end`). Setup and re-entry register in-process instead. Any
+/// failure is only a status code; the wrapper launches Codex regardless.
+fn launch_request(reg: &crate::launch::LaunchRegistry, url: &str, body: &str) -> u16 {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(body) else { return 400 };
+    let Some(launch_id) = v.get("launch_id").and_then(|x| x.as_str()) else { return 400 };
+    match url {
+        "/launch/end" => {
+            reg.retire(launch_id);
+            204
+        }
+        "/launch" => {
+            // The shell posts `$LOGIC_LOOP_PTY_GEN` as a string; accept either form.
+            let pty = v.get("pty_gen").and_then(|x| x.as_u64().or_else(|| x.as_str()?.parse().ok()));
+            match (v.get("tab_id").and_then(|x| x.as_str()), pty.and_then(|p| u32::try_from(p).ok())) {
+                (Some(tab), Some(pty)) if reg.register(tab, pty, launch_id) => 204,
+                _ => 409,
+            }
+        }
+        _ => 404,
+    }
 }
 
 fn header_value(request: &tiny_http::Request, name: &'static str) -> Option<String> {
@@ -907,6 +970,44 @@ mod tests {
                 "SessionStart": [{ "hooks": [{ "type": "command", "command": "caveman-mode" }] }]
             }
         })
+    }
+
+    #[test]
+    fn tether_split_and_launch_verdicts() {
+        let s = |h: &str| split_tether(Some(h.to_string()));
+        assert_eq!(s("tab-a"), (Some("tab-a".into()), None));
+        assert_eq!(s("tab-a:abc"), (Some("tab-a".into()), Some("abc".into())));
+        assert_eq!(s("tab-a:x:y"), (Some("tab-a".into()), Some("x:y".into())), "double wrap stays one bad id");
+        assert_eq!(split_tether(None), (None, None));
+        assert_eq!(s(EXTRACTOR_TETHER).0.as_deref(), Some(EXTRACTOR_TETHER), "extractor check still matches");
+
+        let reg = crate::launch::LaunchRegistry::default();
+        reg.pty_opened(1, "tab-a");
+        let id = "0123456789abcdef";
+        assert!(reg.register("tab-a", 1, id));
+        assert_eq!(launch_verdict(&reg, "tab-a", None), "none");
+        assert_eq!(launch_verdict(&reg, "tab-a", Some(id)), "current");
+        assert_eq!(launch_verdict(&reg, "tab-b", Some(id)), "unknown");
+        assert_eq!(launch_verdict(&reg, "tab-a", Some("x:y")), "unknown");
+        reg.pty_closed(1);
+        assert_eq!(launch_verdict(&reg, "tab-a", Some(id)), "retired");
+    }
+
+    #[test]
+    fn launch_endpoint_registers_retires_and_rejects() {
+        let reg = crate::launch::LaunchRegistry::default();
+        reg.pty_opened(3, "tab-a");
+        let id = "0123456789abcdef";
+        let body = |tab: &str, pty: &str| format!(r#"{{"tab_id":"{tab}","pty_gen":{pty},"launch_id":"{id}"}}"#);
+        assert_eq!(launch_request(&reg, "/launch", "not json"), 400);
+        assert_eq!(launch_request(&reg, "/launch", r#"{"tab_id":"tab-a","pty_gen":3}"#), 400);
+        assert_eq!(launch_request(&reg, "/launch", &body("tab-b", "3")), 409, "wrong tab");
+        assert_eq!(launch_request(&reg, "/launch", &body("tab-a", "4")), 409, "dead pty");
+        assert_eq!(launch_request(&reg, "/launch", &body("tab-a", "\"3\"")), 204, "string pty_gen from the shell");
+        assert_eq!(reg.verdict("tab-a", id), crate::launch::Verdict::Current);
+        assert_eq!(launch_request(&reg, "/launch/end", &format!(r#"{{"launch_id":"{id}"}}"#)), 204);
+        assert_eq!(reg.verdict("tab-a", id), crate::launch::Verdict::Retired);
+        assert_eq!(launch_request(&reg, "/launchpad", &body("tab-a", "3")), 404);
     }
 
     #[test]

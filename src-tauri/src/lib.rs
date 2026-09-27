@@ -6,6 +6,7 @@ mod codex;
 mod codex_meter;
 mod home;
 mod ingest;
+mod launch;
 mod opencode;
 mod pi;
 mod pty;

@@ -6,6 +6,7 @@ import { homeDir } from "@tauri-apps/api/path";
 import { ask } from "@tauri-apps/plugin-dialog";
 import {
   bindSession,
+  codexLaunchDecision,
   computeProvenance,
   deriveClock,
   mergeTabIdentity,
@@ -966,19 +967,34 @@ export default function App() {
         const location = sessionBindingLocation(
           p,
           projectKey,
-          bindingTab ? { id: bindingTab.id, cwd: expand(bindingTab.cwd), status: bindingTab.status, sessionId: bindingTab.sessionId } : undefined
+          bindingTab
+            ? { id: bindingTab.id, cwd: expand(bindingTab.cwd), status: bindingTab.status, sessionId: bindingTab.sessionId, launchId: bindingTab.launchId }
+            : undefined
         );
+        // Plan 045: a Codex launch replacing the tab's session retires the
+        // old re-entry rows first, then writes the new one — in that order.
+        const replacing = !!bindingTab && tabId === bindingTab.id && codexLaunchDecision(p, bindingTab) === "replace";
+        if (replacing) {
+          // tabsRef syncs on render; the new session's first prompt can arrive
+          // before that, and the owner check above would drop it.
+          tabsRef.current = tabsRef.current.map((t) =>
+            t.id === tabId ? { ...t, sessionId: p.session_id, launchId: p.launch_id } : t
+          );
+        }
         if (location) {
-          void repo
-            .upsertSessionBinding(
-              p.session_id,
-              p.tab_id,
-              location.projectKey,
-              location.cwd,
-              p.transcript_path ?? "",
-              p.agent,
-              bindingTab?.title,
-              bindingTab?.color
+          const tether = p.tab_id;
+          void (replacing ? repo.deactivateSessionBinding(tether) : Promise.resolve())
+            .then(() =>
+              repo.upsertSessionBinding(
+                p.session_id,
+                tether,
+                location.projectKey,
+                location.cwd,
+                p.transcript_path ?? "",
+                p.agent,
+                bindingTab?.title,
+                bindingTab?.color
+              )
             )
             .catch(() => undefined); // fail open, same as addEvent above
         }
