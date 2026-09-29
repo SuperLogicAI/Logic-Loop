@@ -180,6 +180,7 @@ export function IdeaBoard({ cwd }: Props) {
   if (collapsed) {
     return (
       <div
+        data-tour-target="idea-board"
         className="flex h-7 shrink-0 cursor-pointer items-center gap-1.5 border-t border-zinc-800 bg-zinc-900 px-3 text-xs text-zinc-500 hover:text-zinc-300"
         onClick={toggleCollapsed}
       >
@@ -202,7 +203,11 @@ export function IdeaBoard({ cwd }: Props) {
   }
 
   return (
-    <div className="relative flex shrink-0 flex-col border-t border-zinc-800 bg-zinc-900 text-xs text-zinc-300" style={{ height }}>
+    <div
+      data-tour-target="idea-board"
+      className="relative flex shrink-0 flex-col border-t border-zinc-800 bg-zinc-900 text-xs text-zinc-300"
+      style={{ height }}
+    >
       <div
         className="absolute inset-x-0 top-0 z-10 h-1.5 -mt-0.5 cursor-row-resize hover:bg-zinc-600/60 active:bg-zinc-500"
         onPointerDown={onResizePointerDown}

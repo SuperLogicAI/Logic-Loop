@@ -961,6 +961,7 @@ export function SidePanel({
         </div>
         <button
           type="button"
+          data-tour-target="attention"
           aria-label={`Open Attention Inbox${attentionCount ? `, ${attentionCount} items` : ""}`}
           title={attentionStale ? "Open Attention Inbox (data may be stale)" : "Open Attention Inbox (⌘K)"}
           className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-sky-400 ${lockIn ? "text-zinc-500" : attentionStale ? "text-orange-300" : attentionCount > 0 ? "text-sky-300" : "text-zinc-600"}`}
@@ -1082,7 +1083,7 @@ export function SidePanel({
           delta.stops > 0 ||
           delta.decisions.length > 0 ||
           delta.lastWords !== "") && (
-        <section ref={sinceLeftRef} className="scroll-mt-3 rounded-lg border border-teal-500/30 bg-teal-400/5 p-3">
+        <section ref={sinceLeftRef} data-tour-target="since-left" className="scroll-mt-3 rounded-lg border border-teal-500/30 bg-teal-400/5 p-3">
           <h2
             className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-teal-300 uppercase select-none"
             onClick={() => toggleSection("since-left")}
@@ -1335,6 +1336,7 @@ export function SidePanel({
       {momentum && (
         <section
           ref={nextRef}
+          data-tour-target="next"
           className={
             momentum.label === "landing note"
               ? "rounded-lg p-3"
@@ -1389,7 +1391,7 @@ export function SidePanel({
         </section>
       )}
 
-      <section ref={decisionsRef} className="scroll-mt-3">
+      <section ref={decisionsRef} data-tour-target="decisions" className="scroll-mt-3">
         <h2
           className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-orange-400 uppercase select-none"
           onClick={() => toggleSection("decisions")}
@@ -1499,7 +1501,7 @@ export function SidePanel({
         )}
       </section>
 
-      <section ref={blockersRef} className="scroll-mt-3">
+      <section ref={blockersRef} data-tour-target="blockers" className="scroll-mt-3">
         <h2
           className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-red-400 uppercase select-none"
           onClick={() => toggleSection("blockers")}
@@ -1596,7 +1598,7 @@ export function SidePanel({
         )}
       </section>
 
-      <section ref={accomplishedRef} className="scroll-mt-3">
+      <section ref={accomplishedRef} data-tour-target="accomplished" className="scroll-mt-3">
         <h2
           className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-emerald-400 uppercase select-none"
           onClick={() => toggleSection("accomplished")}

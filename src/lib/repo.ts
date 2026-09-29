@@ -857,6 +857,21 @@ export async function setOnboardingVersion(version: number): Promise<void> {
   await setSetting(ONBOARDING_VERSION_KEY, String(safeVersion));
 }
 
+// Separate key from ONBOARDING_VERSION on purpose (Phase 47): dismissing
+// Setup and having seen the feature tour are different facts — a future
+// tour redesign should be able to re-show itself without re-forcing Setup,
+// and vice versa.
+const TOUR_VERSION_KEY = "tour_version";
+
+export async function getTourVersion(): Promise<number> {
+  return parseOnboardingVersion(await getSetting(TOUR_VERSION_KEY));
+}
+
+export async function setTourVersion(version: number): Promise<void> {
+  const safeVersion = Number.isSafeInteger(version) && version >= 0 ? version : 0;
+  await setSetting(TOUR_VERSION_KEY, String(safeVersion));
+}
+
 // Separate from ONBOARDING_VERSION on purpose: version tracks whether the
 // setup checklist has been seen, this tracks whether any session has ever
 // actually been launched. A profile can dismiss setup without launching
