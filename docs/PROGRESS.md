@@ -694,6 +694,30 @@ Update this file as phases are accepted.
   follow-up, not confirmed as bugs: tab id changing across Setup Re-enter
   while session id persists, and decision cards appearing shared across two
   tabs in one folder. See docs/TESTING.md §67.
+- Phase 47 / Plan 047 (first-run guided feature tour): **PHASE 47 ACCEPTED
+  2026-09-28**, build complete same day, closure pending a live manual pass.
+  Added a skippable, spotlight-style tour (`src/components/FeatureTour.tsx`)
+  over the real side-panel sections — Decisions, Since You Left,
+  Accomplished, Blockers, Next, Idea Board, Attention Inbox, header controls
+  — via `data-tour-target` DOM attributes, dropping any step whose target
+  isn't mounted rather than showing it broken. Deliberately does not seed
+  fake data into any panel (would violate architecture invariant 3 — panels
+  stay dumb SQL views over real events); the tour's own cards carry static
+  explanatory copy instead. Gated by a new `tour_version` setting
+  (`src/lib/repo.ts`), independent of `onboarding_version` on purpose, same
+  reasoning already documented for `has_launched_session`. Auto-starts once
+  after Setup closes on a stale/fresh `tour_version`; reopenable any time via
+  a new "Tour" header button next to "Setup." `npx tsc --noEmit`, Clippy,
+  151 Rust tests, the full `npm run check` (38 scripts), `npm run build`,
+  and `git diff --check` all pass. A computer-controlled installed-app pass
+  on 2026-09-28 exercised seven mounted cards and found three issues:
+  compact-panel launch captured only two steps, a tall Blockers target put
+  its card offscreen, and Tab escaped the tour dialog. The rebuilt app passed
+  all three regression checks plus click-through, keyboard navigation,
+  narrow-window positioning, and saved-version behavior after relaunch and
+  Setup close. Fresh-profile auto-start and a real Since You Left digest
+  remain untested. See docs/TESTING.md §69; Phase 47 remains open for those
+  two live cases.
 - Phase 46 / Plan 046 (Codex cleanup investigation): **APPROVED 2026-09-27**;
   literal `PHASE 46 ACCEPTED` authorized implementation and `PHASE 46
   APPROVED` closed the phase. Read-only code and

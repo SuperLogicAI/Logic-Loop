@@ -4323,3 +4323,83 @@ transcript content was logged.
       so there is no normal live panel click path for the mismatch.
 
 The maintainer approved Phase 46 on 2026-09-27 after reviewing this run.
+
+## 69. First-run guided feature tour (Phase 47, 2026-09-28)
+
+**Automated checks (completed):** `npx tsc --noEmit`, `cd src-tauri && cargo
+clippy --all-targets -- -D warnings && cargo test --lib` (151 passed, 1
+ignored), `npm run check` (all 38 scripts), `npm run build`, and
+`git diff --check` all pass. No extraction prompt changed; `golden` was not
+run, per plan.
+
+No fake data is seeded into any panel — the tour spotlights the real
+`data-tour-target` DOM regions in `SidePanel.tsx`, `IdeaBoard.tsx`, and
+`AgentStatusBar.tsx` and layers static explanatory copy over them. Steps
+whose target isn't mounted (Since You Left / Next only render once there's
+something to show) are dropped from the active step list at tour-open time,
+never shown broken. `tour_version` (`src/lib/repo.ts`) is independent of
+`onboarding_version`, mirroring the existing pattern.
+
+**Installed-app manual runs: partial, 2026-09-28.** Computer control of the
+rebuilt macOS app exercised the existing populated profile. The three initial
+failures passed on the rebuilt version; fresh-profile and digest cases remain.
+
+- [ ] Fresh profile (empty `~/.context-terminal/` DB): Setup closes → tour
+      auto-starts on card 1/N, panel forced to expanded if it wasn't.
+- [x] Click `›` through every card; counter and card content update; last
+      card reads "Done" instead of `›`.
+- [x] `‹` disabled on card 1, enabled after advancing; steps back correctly.
+- [x] "Skip tour" and `×` both close immediately from a later/first card.
+- [x] `Esc` closes; `→` advances and `←` goes back with any tour control
+      focused. `Enter` activates a focused button or advances from elsewhere.
+- [x] Reopen via the header "Tour" button (next to "Setup") restarts at card
+      1 regardless of `tour_version` state when the panel is already expanded.
+- [x] Resize to a narrow window mid-tour: no crash; the tour still closes
+      cleanly with Esc.
+- [ ] A profile with real activity (open decisions, an unresolved blocker,
+      a recent since-you-left digest) reopening the tour manually sees the
+      conditional cards (Since You Left, Next) included.
+- [x] Quit and relaunch after completing the tour once: it does not
+      auto-start again.
+
+**Observed passes:** With the context_terminal project open, the tour showed
+7 cards; Since You Left was absent because no digest was mounted. The counter,
+titles, and explanatory copy changed through all 7 cards; the final button
+read "Done" and closed the overlay. Previous, Right Arrow, Left Arrow, Enter,
+Skip tour, Close tour, and Esc worked. Next and Blockers were included with
+real project activity; empty Decisions stayed an honest empty state. The
+window narrowed from about 1190px to 780px during the tour without a crash,
+and Esc closed it. The window was restored to its original width.
+
+**Failures in the first installed build (resolved in the rebuild):**
+
+- Starting Tour from compact mode expanded the panel but showed only 2 cards
+  (Idea Board and Header controls). The expanded panel's other targets became
+  visible immediately afterward, yet the step list stayed at 2 until the
+  tour was closed and reopened. `FeatureTour` snapshots targets during its
+  initial render, before the panel expansion mounts them.
+- The Blockers card was entirely offscreen above the window in both the
+  1190px and 780px layouts when the Blockers section was taller than the
+  viewport. Its spotlight and accessibility content appeared, and keyboard
+  Right Arrow advanced, but the card and its buttons were not visible.
+- Keyboard focus escaped the open tour: after reopening it, Tab from the
+  header Tour button focused the underlying "agy on" toggle. Arrow keys still
+  advanced the tour because the handler listens on `window`, but the overlay
+  did not keep focus within its controls.
+
+**Rebuilt-app pass:** The maintainer rebuilt and relaunched the app after the
+first run completed a tour; no tour auto-started. Closing Setup on this saved
+profile also left the tour closed. Starting Tour from compact mode expanded
+the panel and opened on Decisions with 7 cards. Tab cycled only among Skip,
+Close, and Next; Right Arrow worked while Skip had focus and Left Arrow while
+Close had focus. On the context_terminal
+project with 8 real blockers, the Blockers card stayed visible at both
+about 1190px and 780px window widths. Clicking through all 7 available cards
+updated the counter and content; Done closed the overlay. The window was
+restored to its original width.
+
+**Still untested:** A disposable fresh profile and its Setup-close
+auto-start; the Since You Left card with a real digest. The current profile
+has existing data and no mounted digest. The first run cancelled Quit when
+the app warned that it would terminate an active session; the maintainer
+subsequently rebuilt and relaunched it before this second pass.

@@ -85,6 +85,7 @@ interface Props {
   onForceOpenHandled: () => void;
   onLaunch: (cwd: string, cmd: string | undefined, name: string) => Promise<string>;
   onSetupClose: () => void;
+  onOpenTour: () => void;
 }
 
 export function AgentStatusBar({
@@ -106,6 +107,7 @@ export function AgentStatusBar({
   onForceOpenHandled,
   onLaunch,
   onSetupClose,
+  onOpenTour,
 }: Props) {
   const [adapterStates, setAdapterStates] = useState(initialAdapterStates);
   const [setupOpen, setSetupOpen] = useState(false);
@@ -194,7 +196,7 @@ export function AgentStatusBar({
 
   return (
     <>
-      <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-zinc-800 px-1.5">
+      <div data-tour-target="header-controls" className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-zinc-800 px-1.5">
         <div className="flex shrink-0 items-center gap-1.5">
           <button
             type="button"
@@ -262,6 +264,9 @@ export function AgentStatusBar({
         <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 overflow-x-auto">
           <button type="button" onClick={() => setSetupOpen(true)} className="flex h-6 shrink-0 items-center rounded-full border border-zinc-700 px-3 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-sky-400">
             Setup
+          </button>
+          <button type="button" onClick={onOpenTour} className="flex h-6 shrink-0 items-center rounded-full border border-zinc-700 px-3 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-sky-400">
+            Tour
           </button>
           {(["antigravity", "claude", "codex", "deepseek", "opencode", "pi"] as const).map((id) => {
             const state = adapterStates[id];

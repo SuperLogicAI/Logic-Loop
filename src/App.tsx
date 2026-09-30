@@ -35,6 +35,7 @@ import { LandingNoteModal } from "./components/LandingNoteModal";
 import { FanOutModal } from "./components/FanOutModal";
 import { IsolateLoopModal } from "./components/IsolateLoopModal";
 import { AttentionInbox } from "./components/AttentionInbox";
+import { FeatureTour, TOUR_VERSION } from "./components/FeatureTour";
 import { ModelTraffic } from "./components/ModelTraffic";
 import type { ClaudeStatuslineSnapshot, Decision } from "./types";
 import { ptyWrite } from "./lib/pty";
@@ -143,6 +144,7 @@ export default function App() {
   const [attentionRefresh, setAttentionRefresh] = useState(0);
   const [attentionOpen, setAttentionOpen] = useState(false);
   const [trafficOpen, setTrafficOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
   const attentionRefreshPendingRef = useRef(false);
   const scheduleAttentionRefresh = useCallback(() => {
     if (attentionRefreshPendingRef.current) return;
@@ -462,6 +464,31 @@ export default function App() {
   const openHomeTabIfNoneOpen = useCallback(() => {
     if (tabsRef.current.length === 0) void openTab();
   }, [openTab]);
+
+  // Fires every time Setup closes, not just on first run — a no-op for a
+  // profile that's already seen the current TOUR_VERSION (Phase 47).
+  const handleSetupClose = useCallback(() => {
+    openHomeTabIfNoneOpen();
+    void repo
+      .getTourVersion()
+      .then((version) => {
+        if (version < TOUR_VERSION) {
+          showPanelMode("expanded");
+          setTourOpen(true);
+        }
+      })
+      .catch(() => undefined);
+  }, [openHomeTabIfNoneOpen, showPanelMode]);
+
+  const openTour = useCallback(() => {
+    showPanelMode("expanded");
+    setTourOpen(true);
+  }, [showPanelMode]);
+
+  const closeTour = useCallback(() => {
+    setTourOpen(false);
+    void repo.setTourVersion(TOUR_VERSION).catch(() => undefined);
+  }, []);
 
   const toggleSplit = useCallback((orientation: SplitOrientation) => {
     if (splitPaneIdsRef.current) {
@@ -1591,7 +1618,8 @@ export default function App() {
             forceOpen={forceSetupOpen}
             onForceOpenHandled={() => setForceSetupOpen(false)}
             onLaunch={(cwd, cmd, name) => openTab({ cwd, cmd, name, strictCwd: true })}
-            onSetupClose={openHomeTabIfNoneOpen}
+            onSetupClose={handleSetupClose}
+            onOpenTour={openTour}
           />
           <div className={`flex min-h-0 flex-1 ${splitPaneIds && splitOrientation === "vertical" ? "flex-col" : ""}`}>
             {tabs.map((tab) => {
@@ -1665,6 +1693,7 @@ export default function App() {
         />
       )}
       {trafficOpen && <ModelTraffic onClose={() => setTrafficOpen(false)} />}
+      {tourOpen && <FeatureTour onClose={closeTour} />}
     </div>
   );
 }
