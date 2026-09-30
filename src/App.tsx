@@ -1109,7 +1109,11 @@ export default function App() {
 
       const muted = cwd ? mutedProjectsRef.current.has(cwd) : false;
       const nudgeLabel = cwd ? (cwd.split("/").filter(Boolean).pop() ?? cwd) : "Logic Loop";
-      const viewedId = () => visibleTabIdsRef.current.has(tabId) ? tabId : activeIdRef.current;
+      // No fallback to activeIdRef.current: activeId is already included in
+      // visibleTabIdsRef whenever a workspace pane is actually shown (Plan
+      // 048), so a tab absent from that set is never "viewed" — including
+      // when a non-workspace surface (Home) leaves it empty on purpose.
+      const viewedId = () => visibleTabIdsRef.current.has(tabId) ? tabId : null;
       const canNotify = () => shouldNotify(tabId, viewedId(), document.hasFocus(), muted, lockInRef.current);
 
       // Waiting-edge only — a hook can re-fire (e.g. an idle reminder) while
@@ -1300,7 +1304,8 @@ export default function App() {
         nudgedStallRef.current.add(tab.id);
         const cwd = expand(tab.cwd);
         const muted = mutedProjectsRef.current.has(cwd);
-        const viewedId = visibleTabIdsRef.current.has(tab.id) ? tab.id : activeIdRef.current;
+        // Same no-fallback rule as the ingestion effect's viewedId() above.
+        const viewedId = visibleTabIdsRef.current.has(tab.id) ? tab.id : null;
         if (shouldNotify(tab.id, viewedId, document.hasFocus(), muted, lockInRef.current)) {
           notify("Agent quiet 3m", cwd.split("/").filter(Boolean).pop() ?? cwd);
         }

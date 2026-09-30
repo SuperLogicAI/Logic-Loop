@@ -10,6 +10,16 @@ export type AgentState = "working" | "waiting" | "idle" | "error";
 
 export type PanelMode = "expanded" | "compact" | "hidden";
 
+/** Plan 048: which app-level screen is showing. Terminals stay mounted and
+ * running under every kind — this only gates what counts as "visible" for
+ * claim/notify purposes (see `effectiveVisibleTerminalIds` in splitView.ts).
+ * `activeId`/`splitPaneIds` are untouched by a surface change, so returning
+ * to "workspace" restores the same pane(s) without a respawn. */
+export type AppSurface =
+  | { kind: "workspace" }
+  | { kind: "home" }
+  | { kind: "project"; projectKey: string };
+
 export type AttentionKind = "decision" | "waiting" | "stalled" | "result" | "blocker";
 
 /** Source identity captured at ingestion time. It is deliberately distinct

@@ -1,3 +1,5 @@
+import type { AppSurface } from "../types";
+
 export type SplitPaneIds = [string, string];
 export type SplitOrientation = "horizontal" | "vertical";
 
@@ -21,4 +23,16 @@ export function visibleTerminalIds(
 ): string[] {
   if (pair) return pair;
   return activeId ? [activeId] : [];
+}
+
+/** Plan 048: same as `visibleTerminalIds`, but empty outside the "workspace"
+ * surface — Home and Project Overview show no live pane, even though
+ * `activeId`/`pair` still point at one for when the user comes back. */
+export function effectiveVisibleTerminalIds(
+  surface: AppSurface,
+  activeId: string | null,
+  pair: SplitPaneIds | null
+): string[] {
+  if (surface.kind !== "workspace") return [];
+  return visibleTerminalIds(activeId, pair);
 }
