@@ -66,6 +66,7 @@ import {
   type VisiblePanelMode,
 } from "./lib/panelLayout";
 import type {
+  AppSurface,
   AttentionEvidence,
   AttentionSourceContext,
   Bookmark,
@@ -79,12 +80,14 @@ import type {
 import { PALETTE } from "./types";
 import { landingDepartureAction } from "./lib/landingMode";
 import {
+  effectiveVisibleTerminalIds,
   selectIntoSplit,
   splitContains,
   type SplitOrientation,
   visibleTerminalIds,
   type SplitPaneIds,
 } from "./lib/splitView";
+import { HomeDashboard } from "./components/HomeDashboard";
 import {
   isLockInActive,
   shouldExpireTimedLockIn,
@@ -105,12 +108,25 @@ export default function App() {
   activeIdRef.current = activeId;
   const splitPaneIdsRef = useRef(splitPaneIds);
   splitPaneIdsRef.current = splitPaneIds;
-  const visibleTabIds = new Set(visibleTerminalIds(activeId, splitPaneIds));
+  // Plan 048: which app-level screen is showing. Only "workspace" shows a
+  // live terminal pane — see effectiveVisibleTerminalIds below. Changing
+  // surface never touches activeId/splitPaneIds, so returning to "workspace"
+  // restores the same pane(s) with no PTY remount (architecture invariant).
+  const [surface, setSurface] = useState<AppSurface>({ kind: "workspace" });
+  const surfaceRef = useRef(surface);
+  surfaceRef.current = surface;
+  const openHome = useCallback(() => setSurface({ kind: "home" }), []);
+  const visibleTabIds = new Set(effectiveVisibleTerminalIds(surface, activeId, splitPaneIds));
   const visibleTabIdsRef = useRef(visibleTabIds);
   visibleTabIdsRef.current = visibleTabIds;
   const focusTab = useCallback((tabId: string) => {
     setSplitPaneIds((pair) => selectIntoSplit(pair, activeIdRef.current, tabId));
     setActiveId(tabId);
+    // Every caller of focusTab is a human picking a specific tab to look at
+    // (tab-bar click, ⌃Tab, Answer Now routing, Attention's "Open tab", a
+    // fan-out member click) — always a return to the workspace, so this is
+    // the one place that needs to know about it (invariant 4's reuse rule).
+    setSurface({ kind: "workspace" });
   }, []);
   const didInit = useRef(false);
   // One browser process is one Attention observation run. Later inbox queries
@@ -1419,9 +1435,36 @@ export default function App() {
     }
     // Switching to a flagged tab while the window isn't focused (e.g. via a
     // background automation) must not silently claim it — same rule the
-    // focus-listener follows.
-    if (activeId && document.hasFocus()) claimTab(activeId);
+    // focus-listener follows. Also gated on the workspace surface: closing
+    // the active tab while Home is open still fires this effect (activeId
+    // moves to whatever tab is next), but nobody is looking at a terminal
+    // right now, so nothing should be claimed.
+    if (activeId && surfaceRef.current.kind === "workspace" && document.hasFocus()) claimTab(activeId);
   }, [activeId, expand, maybePromptLanding, claimTab, markTabLeft]);
+
+  // Surface transitions (Plan 048): entering Home/Project records tab_left
+  // for whatever was visible a moment ago; returning to the workspace claims
+  // whatever's visible now, if focused. Separate from the tab-switch effect
+  // above because a Home -> workspace return can leave activeId unchanged
+  // (no tab-change effect fires for that today) and because "just closed the
+  // active tab while on Home" must go through that effect's own guard above,
+  // not this one.
+  const prevSurfaceKindRef = useRef(surface.kind);
+  useEffect(() => {
+    const prevKind = prevSurfaceKindRef.current;
+    prevSurfaceKindRef.current = surface.kind;
+    if (prevKind === surface.kind) return;
+    if (prevKind === "workspace") {
+      for (const id of visibleTerminalIds(activeIdRef.current, splitPaneIdsRef.current)) {
+        const tab = tabsRef.current.find((t) => t.id === id);
+        if (tab) markTabLeft(tab);
+      }
+    } else if (surface.kind === "workspace" && document.hasFocus()) {
+      for (const id of visibleTerminalIds(activeIdRef.current, splitPaneIdsRef.current)) {
+        claimTab(id);
+      }
+    }
+  }, [surface, markTabLeft, claimTab]);
 
   // Since-you-left anchor, blur half: Cmd-Tabbing to another app leaves the
   // active tab without switching activeId, so the tab-switch effect above
@@ -1485,6 +1528,18 @@ export default function App() {
     focusTab(tab.id);
   }, [focusTab]);
 
+  // Home's "Open"/"Start session" (Plan 048): an existing tab for this
+  // project — live or a restorable ghost, same as clicking it in the tab bar
+  // — wins over starting a second one. No separate spawn path (invariant 4).
+  const openProjectFromHome = useCallback(
+    (projectKey: string) => {
+      const existing = tabsRef.current.find((t) => expand(t.cwd) === projectKey);
+      if (existing) focusTab(existing.id);
+      else void openTab({ cwd: projectKey });
+    },
+    [expand, focusTab, openTab]
+  );
+
   // Answer-now prefill: writes only a draft into the bound tab's terminal.
   // A structured submitted transcript reply is the sole automatic evidence
   // that can mark the decision answered.
@@ -1526,6 +1581,8 @@ export default function App() {
         tabs={tabs}
         activeId={activeId}
         visibleIds={visibleTabIds}
+        homeActive={surface.kind === "home"}
+        onOpenHome={openHome}
         onSelect={focusTab}
         onClose={closeTab}
         onNew={() => void openTab()}
@@ -1562,7 +1619,7 @@ export default function App() {
         onReorder={reorderBookmarks}
       />
       <div className="flex min-h-0 flex-1">
-        {panelMode !== "hidden" && activeTab && (
+        {surface.kind === "workspace" && panelMode !== "hidden" && activeTab && (
           <SidePanel
             mode={panelMode}
             onModeChange={showPanelMode}
@@ -1600,7 +1657,7 @@ export default function App() {
             codexMeter={activeTab.sessionId ? codexMeterBySession[activeTab.sessionId] ?? null : null}
           />
         )}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className={`flex min-h-0 min-w-0 flex-1 flex-col ${surface.kind !== "workspace" ? "hidden" : ""}`}>
           <AgentStatusBar
             panelMode={panelMode}
             onTogglePanel={togglePanel}
@@ -1646,6 +1703,16 @@ export default function App() {
           </div>
           {activeTab && <IdeaBoard cwd={expand(activeTab.cwd)} />}
         </div>
+        {surface.kind !== "workspace" && (
+          <HomeDashboard
+            tabs={tabs}
+            expand={expand}
+            activeTab={activeTab}
+            openDecisionOwners={openDecisionOwners}
+            onOpenProject={openProjectFromHome}
+            onContinue={focusTab}
+          />
+        )}
       </div>
       {landingPrompt && (
         <LandingNoteModal

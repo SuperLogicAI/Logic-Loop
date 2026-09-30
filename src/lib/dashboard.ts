@@ -3,6 +3,108 @@
 // eventually the Home/Overview components) gather rows; this module turns
 // them into numbers and strings a panel can render, deterministically.
 import type { AgentState } from "../types";
+import type { ProjectCatalogEntry } from "./repo";
+
+// --- Home project cards (Plan 048 §3) ---
+
+/** Narrow, pure-friendly view of a live/ghost tab — App.tsx maps its full
+ * `Tab[]` down to this before calling `buildProjectCards`, same shape as
+ * `attention.ts`'s `AttentionTabSnapshot`. */
+export interface HomeTabSummary {
+  projectKey: string;
+  status: "live" | "dead";
+  agentState?: AgentState;
+}
+
+export interface ProjectCardViewModel {
+  projectKey: string;
+  pinned: boolean;
+  archived: boolean;
+  bookmarked: boolean;
+  purpose: string | null;
+  lastActivityAt: number | null;
+  workingCount: number;
+  waitingCount: number;
+  /** A live or restorable (ghost) tab exists for this project — whether Open
+   * routes to an existing session or has to start a new one. */
+  hasAnyTab: boolean;
+  /** Eligible for Home's "Show older projects" fold: 30+ days since the last
+   * recorded activity, not pinned or bookmarked. Always false when there's no
+   * activity on record at all — that's "no activity recorded yet", a
+   * different empty state, not "old" (Plan 048 §3). */
+  olderProject: boolean;
+}
+
+const OLDER_PROJECT_CUTOFF_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** Archived and "has work in flight" are independent facts on the resulting
+ * card — archiving a project never hides that it still has a live tab (Plan
+ * 048 §3: "archived project with a live session — still shown as Working,
+ * labeled Archived"). Neither flag here suppresses the other. */
+export function buildProjectCards(
+  catalog: readonly ProjectCatalogEntry[],
+  tabs: readonly HomeTabSummary[],
+  now: number
+): ProjectCardViewModel[] {
+  const tabsByProject = new Map<string, HomeTabSummary[]>();
+  for (const tab of tabs) {
+    const list = tabsByProject.get(tab.projectKey);
+    if (list) list.push(tab);
+    else tabsByProject.set(tab.projectKey, [tab]);
+  }
+
+  return catalog.map((entry) => {
+    const projectTabs = tabsByProject.get(entry.projectKey) ?? [];
+    const liveTabs = projectTabs.filter((t) => t.status === "live");
+    return {
+      projectKey: entry.projectKey,
+      pinned: entry.pinned,
+      archived: entry.archived,
+      bookmarked: entry.bookmarked,
+      purpose: entry.purpose,
+      lastActivityAt: entry.lastActivityAt,
+      workingCount: liveTabs.filter((t) => t.agentState === "working").length,
+      waitingCount: liveTabs.filter((t) => t.agentState === "waiting").length,
+      hasAnyTab: projectTabs.length > 0 || entry.hasActiveSessionBinding,
+      olderProject:
+        !entry.pinned &&
+        !entry.bookmarked &&
+        entry.lastActivityAt !== null &&
+        now - entry.lastActivityAt > OLDER_PROJECT_CUTOFF_MS,
+    };
+  });
+}
+
+/** Home's card order: pinned first, then most recently active, then project
+ * key — deterministic so a live data refresh never reorders the card under
+ * the pointer/focus (Plan 048 §3). The only place cards get ordered; a
+ * caller re-sorting elsewhere would defeat that stability. */
+export function sortProjectCards(cards: readonly ProjectCardViewModel[]): ProjectCardViewModel[] {
+  return [...cards].sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+    const aTs = a.lastActivityAt ?? -Infinity;
+    const bTs = b.lastActivityAt ?? -Infinity;
+    if (aTs !== bTs) return bTs - aTs;
+    return a.projectKey.localeCompare(b.projectKey);
+  });
+}
+
+function basenameOf(projectKey: string): string {
+  const segments = projectKey.split("/").filter(Boolean);
+  return segments[segments.length - 1] ?? projectKey;
+}
+
+/** Card display name: basename, with the immediate parent directory appended
+ * only when another project in the same set shares that basename (Plan 048
+ * §3: "name (basename; parent dir appended on collision)"). */
+export function projectDisplayName(projectKey: string, allProjectKeys: readonly string[]): string {
+  const base = basenameOf(projectKey);
+  const collides = allProjectKeys.some((other) => other !== projectKey && basenameOf(other) === base);
+  if (!collides) return base;
+  const segments = projectKey.split("/").filter(Boolean);
+  const parent = segments[segments.length - 2];
+  return parent ? `${parent}/${base}` : base;
+}
 
 // --- Agent time (Plan 048 §4) ---
 

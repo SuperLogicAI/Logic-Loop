@@ -4,7 +4,14 @@ import { readFileSync } from "node:fs";
 import { effectiveVisibleTerminalIds, visibleTerminalIds } from "../src/lib/splitView";
 import { shouldFlagUnclaimed } from "../src/lib/ingest";
 import { buildProjectCatalog } from "../src/lib/repo";
-import { buildUpdateMarkdown, observedAgentTime } from "../src/lib/dashboard";
+import {
+  buildProjectCards,
+  buildUpdateMarkdown,
+  observedAgentTime,
+  projectDisplayName,
+  sortProjectCards,
+} from "../src/lib/dashboard";
+import type { ProjectCatalogEntry } from "../src/lib/repo";
 import type { SplitPaneIds } from "../src/lib/splitView";
 
 const pair: SplitPaneIds = ["left", "right"];
@@ -115,6 +122,14 @@ const settingsOnly = buildProjectCatalog([], [], [], [{ key: "project_pinned:/ne
 assert.deepEqual(settingsOnly.map((e) => e.projectKey), ["/new-repo"]);
 assert.equal(settingsOnly[0].pinned, true);
 assert.equal(settingsOnly[0].hasActiveSessionBinding, false);
+assert.equal(settingsOnly[0].bookmarked, false);
+
+// A bookmarked project with no other activity is flagged bookmarked, which
+// Home uses to exempt it from the 30-day older-projects cutoff.
+const bookmarkedOnly = buildProjectCatalog([], ["/bookmarked-repo"], [], []);
+assert.equal(bookmarkedOnly.length, 1);
+assert.equal(bookmarkedOnly[0].bookmarked, true);
+assert.equal(bookmarkedOnly[0].pinned, false);
 
 // --- observedAgentTime (Step 4) ---
 
@@ -213,5 +228,81 @@ const multilineProgress = buildUpdateMarkdown({
 assert.ok(multilineProgress.includes("- Booking form added"));
 assert.ok(!multilineProgress.includes("/Users/dev/repo"), "a file path past the first line must not appear");
 assert.ok(!multilineProgress.includes("npm test"), "command text past the first line must not appear");
+
+// --- buildProjectCards / sortProjectCards (closing the two Step 3 verify
+// bullets deferred to land with this shaping layer) ---
+
+function catalogEntry(overrides: Partial<ProjectCatalogEntry>): ProjectCatalogEntry {
+  return {
+    projectKey: "/repo",
+    pinned: false,
+    archived: false,
+    bookmarked: false,
+    purpose: null,
+    hasActiveSessionBinding: false,
+    firstSeenAt: null,
+    lastActivityAt: null,
+    ...overrides,
+  };
+}
+
+const NOW = Date.parse("2026-09-29T00:00:00Z");
+
+// Archived project with a live "working" tab: still counted as Working, and
+// still labeled Archived — neither suppresses the other on the card.
+const archivedCards = buildProjectCards(
+  [catalogEntry({ projectKey: "/repo", archived: true, lastActivityAt: NOW })],
+  [{ projectKey: "/repo", status: "live", agentState: "working" }],
+  NOW
+);
+assert.equal(archivedCards[0].archived, true);
+assert.equal(archivedCards[0].workingCount, 1, "an archived project's live working tab must still be counted");
+
+// Older-projects cutoff: 31 days idle and unpinned/unbookmarked is eligible
+// for the fold; pinned or bookmarked is exempt regardless of age; no
+// activity on record at all is "no activity yet", not "old".
+const DAY_MS = 24 * 60 * 60 * 1000;
+const cutoffCards = buildProjectCards(
+  [
+    catalogEntry({ projectKey: "/old", lastActivityAt: NOW - 31 * DAY_MS }),
+    catalogEntry({ projectKey: "/old-but-pinned", pinned: true, lastActivityAt: NOW - 31 * DAY_MS }),
+    catalogEntry({ projectKey: "/old-but-bookmarked", bookmarked: true, lastActivityAt: NOW - 31 * DAY_MS }),
+    catalogEntry({ projectKey: "/recent", lastActivityAt: NOW - 1 * DAY_MS }),
+    catalogEntry({ projectKey: "/never-active", lastActivityAt: null }),
+  ],
+  [],
+  NOW
+);
+const byKey = Object.fromEntries(cutoffCards.map((c) => [c.projectKey, c]));
+assert.equal(byKey["/old"].olderProject, true);
+assert.equal(byKey["/old-but-pinned"].olderProject, false, "pinned must exempt from the cutoff");
+assert.equal(byKey["/old-but-bookmarked"].olderProject, false, "bookmarked must exempt from the cutoff");
+assert.equal(byKey["/recent"].olderProject, false);
+assert.equal(byKey["/never-active"].olderProject, false, "no activity on record is not the same as old");
+
+// Sort: pinned first, then most recently active, then project key —
+// deterministic given the same input, regardless of input order.
+const unsorted = buildProjectCards(
+  [
+    catalogEntry({ projectKey: "/b-recent", lastActivityAt: NOW - 1 * DAY_MS }),
+    catalogEntry({ projectKey: "/a-pinned", pinned: true, lastActivityAt: NOW - 10 * DAY_MS }),
+    catalogEntry({ projectKey: "/c-older", lastActivityAt: NOW - 5 * DAY_MS }),
+  ],
+  [],
+  NOW
+);
+assert.deepEqual(
+  sortProjectCards(unsorted).map((c) => c.projectKey),
+  ["/a-pinned", "/b-recent", "/c-older"]
+);
+
+// --- projectDisplayName ---
+
+const noCollision = ["/Users/a/harbor", "/Users/a/other-repo"];
+assert.equal(projectDisplayName("/Users/a/harbor", noCollision), "harbor");
+
+const collision = ["/Users/a/proj", "/Users/b/proj"];
+assert.equal(projectDisplayName("/Users/a/proj", collision), "a/proj");
+assert.equal(projectDisplayName("/Users/b/proj", collision), "b/proj");
 
 console.log("dashboard-check: all assertions passed");

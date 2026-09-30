@@ -1443,6 +1443,10 @@ export interface ProjectCatalogEntry {
   projectKey: string;
   pinned: boolean;
   archived: boolean;
+  /** Exempts a project from Home's 30-day "older projects" cutoff alongside
+   * `pinned` (Plan 048 §3) — a bookmarked project stays a deliberate
+   * shortcut even if nothing's happened there in a while. */
+  bookmarked: boolean;
   purpose: string | null;
   /** A session bound to this project and not explicitly closed (this is a
    * DB-only proxy for "work in flight" — `session_bindings.active` survives
@@ -1476,7 +1480,8 @@ export function buildProjectCatalog(
     if (!row.key) continue;
     byKey.set(row.key, { firstSeenAt: row.first_seen_at, lastActivityAt: row.last_activity_at });
   }
-  for (const key of bookmarkKeys) {
+  const bookmarked = new Set(bookmarkKeys);
+  for (const key of bookmarked) {
     if (!byKey.has(key)) byKey.set(key, { firstSeenAt: 0, lastActivityAt: 0 });
   }
 
@@ -1505,6 +1510,7 @@ export function buildProjectCatalog(
     projectKey,
     pinned: pinned.has(projectKey),
     archived: archived.has(projectKey),
+    bookmarked: bookmarked.has(projectKey),
     purpose: purpose.get(projectKey) ?? null,
     hasActiveSessionBinding: activeByKey.get(projectKey) ?? false,
     firstSeenAt: ts.firstSeenAt || null,

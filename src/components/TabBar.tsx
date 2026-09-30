@@ -53,6 +53,10 @@ interface Props {
   tabs: Tab[];
   activeId: string | null;
   visibleIds: Set<string>;
+  /** Plan 048: whether Home is the currently showing surface — the entry's
+   * own selected/pressed state, independent of any tab's activeId. */
+  homeActive: boolean;
+  onOpenHome: () => void;
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
   onNew: () => void;
@@ -90,6 +94,8 @@ export function TabBar({
   tabs,
   activeId,
   visibleIds,
+  homeActive,
+  onOpenHome,
   onSelect,
   onClose,
   onNew,
@@ -125,6 +131,18 @@ export function TabBar({
       onPointerLeave={() => setDragId(null)}
       className="flex select-none items-end gap-1 bg-zinc-900"
     >
+      <button
+        type="button"
+        data-tauri-drag-region="false"
+        aria-pressed={homeActive}
+        title="Home"
+        onClick={onOpenHome}
+        className={`mb-0.5 ml-2 shrink-0 rounded-md px-2.5 py-1 text-sm ${
+          homeActive ? "bg-zinc-700 text-zinc-100" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+        }`}
+      >
+        Home
+      </button>
       {/* overflow-x-auto forces the y-axis to clip too, so the glow's
           bleed needs its padding inside THIS box, not the outer wrapper —
           the last tab's rightward bleed (and the first tab's leftward
