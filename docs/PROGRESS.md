@@ -716,8 +716,9 @@ Update this file as phases are accepted.
   all three regression checks plus click-through, keyboard navigation,
   narrow-window positioning, and saved-version behavior after relaunch and
   Setup close. Fresh-profile auto-start and a real Since You Left digest
-  remain untested. See docs/TESTING.md §69; Phase 47 remains open for those
-  two live cases.
+  remained untested at commit time. See docs/TESTING.md §69. **Closed
+  2026-09-29**: maintainer wrote the literal `PHASE 47 ACCEPTED`, covering
+  the two outstanding live cases.
 - Phase 46 / Plan 046 (Codex cleanup investigation): **APPROVED 2026-09-27**;
   literal `PHASE 46 ACCEPTED` authorized implementation and `PHASE 46
   APPROVED` closed the phase. Read-only code and
@@ -737,3 +738,12 @@ Update this file as phases are accepted.
   and app quit/relaunch ghost restoration. The active-tab session mismatch
   has no normal live panel click path and passed its focused routing check.
   See docs/TESTING.md §68.
+- Phase 48 / Plan 048 (Home dashboard and Project Overview): **APPROVED
+  2026-09-29** (literal `PHASE 48 APPROVED`, given alongside `PHASE 47
+  ACCEPTED` in the same message). Origin: one external user-feedback session,
+  2026-09-25. Adds a Home surface and per-project Overview reading only
+  existing tables (bookmarks, session_bindings, decisions, blockers, notes,
+  attention_state_observed, git_log, board) — no migration. Keeps Inbox as an
+  optional triage view. See `plans/048-project-dashboard.md` for the full
+  spec, §5 for the numbered implementation sequence, §7 for manual checks to
+  land in docs/TESTING.md before close. Build starting.

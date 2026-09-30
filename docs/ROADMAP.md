@@ -39,6 +39,8 @@ table below until one gets its own PLAN.md.
 | Decision Tracker reconciliation and truthful answer state | DONE (Phase 33, 2026-09-11) — row was stale, superseded by later history: manual 11-step matrix passed same day, automatic reconciliation itself was descoped 2026-09-12 (Plan 016, `docs/PROGRESS.md`) after a freeze investigation found it wasn't load-bearing (manual dismiss + Answer-Now + notifications cover it). See `docs/PROGRESS.md` Phase 33/33.1 entries for the full trail. | ~1–2d | Phase 32 accepted |
 | First useful session (`plans/033-first-useful-session.md`) | DONE — Plan 033 ACCEPTED 2026-09-21, merged via PR #44 (#48 for the four live-test findings). **Numbering note resolved 2026-09-21:** the "033" collision above was never a real conflict — `plans/NNN-*.md` (Plan numbers) and `docs/PROGRESS.md` "Phase N" (Phase numbers) are two independent sequences that happen to reuse the same digits; Phase 33 (decision reconciliation, 2026-09-11) and Plan 033 (this row, 2026-09-19/21) are unrelated items that never actually shared a slot. | 2–3d | Plan 032 accepted |
 | Remaining adapters (Gemini, Copilot) | v2 | — | Codex adapter |
+| Home dashboard + Project Overview (`plans/048-project-dashboard.md`) | ACCEPTED 2026-09-29 (`PHASE 48 APPROVED`) — Phase 48, build in progress | 4–6d | Phase 47 accepted |
+| Project dashboard follow-ons (see section below) | Unscheduled | — | Plan 048 accepted |
 
 Phase boundaries still hard stops. Phase 5 items enter PLAN.md for approval
 before build, per process rules.
@@ -586,3 +588,23 @@ once, against real line numbers, so the port phase doesn't re-survey.
 written when there's a machine to run it on. `scripts/reinstall.sh` is
 macOS-only (`lsregister`, `/Applications`); a Windows equivalent is optional,
 the installer covers it.
+
+## Project dashboard follow-ons — after Plan 048
+
+Deferred from Plan 048 (2026-09-29, external user-feedback session). Each
+needs its own plan; order by what real users hit after 048 ships.
+
+- **Project context (RAID):** purpose, milestone, human-set status, risks,
+  assumptions, issues, dependencies. Append-only; reference existing
+  decisions/blockers by ID, don't copy them. Feeds richer Copy update.
+- **Templates:** previewable local board templates (e.g. small-business site)
+  that never overwrite an existing board. Needs stable card `id:` metadata first.
+- **Board views:** grid alongside the board. Burndown needs dated status
+  transitions and Gantt needs start/due dates — capture those first; never
+  reconstruct trends from current state or commit volume.
+- **GitHub context:** remote link, PR/CI state, PR creation. Spike first:
+  existing `gh` auth, no new token store.
+- **Spend + human time:** spike for one trustworthy per-project token source
+  (current Claude/Codex meters are account-wide). Unknown ≠ zero; estimated ≠
+  invoiced. Optional manual time tracker. No attribution → no cost UI.
+- **Opt-in LLM summaries:** ingestion-time only, cited, deterministic fallback.

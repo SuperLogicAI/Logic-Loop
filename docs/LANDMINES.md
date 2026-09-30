@@ -410,3 +410,29 @@ fix is ever reverted or bypassed. Referenced from CLAUDE.md.
   one real scenario (CLI drops `assistant`/`user` entirely) this tripwire
   exists to catch. Stayed a named allowlist. Run `npm run check` (now
   includes `schema-drift:check`) before trusting any future change here.
+
+- **Copy-paste out of a Claude Code pane silently breaks long commands
+  (found 2026-09-27).** Two distinct bugs were conflated live before the
+  second one was found — both matter, keep both entries in mind:
+  (1) Claude Code's own CLI TUI hard-wraps long output lines to fit the
+  reported terminal column count — it writes a real `\r\n` at the wrap point
+  (needed for its box-drawing chrome), not a terminal soft-wrap. `@xterm/xterm`
+  tracks *soft*-wrapped rows via `isWrapped` and correctly omits the `\n`
+  when you copy across them, but a hard-wrapped row is, from the PTY's point
+  of view, two real lines — copy/paste (Logic Loop, Terminal.app, iTerm2,
+  anything) reproduces the break. Not fixable by patching xterm selection
+  logic. Candidate fixes, none built: default Claude Code panes to a wider
+  column count; or a "copy last message" action reading the *unwrapped* text
+  from the ingested JSONL transcript (`extractor.ts` already has this
+  pre-wrap) instead of PTY-rendered text — consistent with invariant #1.
+  (2) **Separately, and this is what actually broke the 2026-09-27 repro**:
+  macOS screenshot filenames use U+202F (NARROW NO-BREAK SPACE) before
+  "AM"/"PM", not a normal space (e.g. `Screenshot 2026-09-27 at
+  5.53.03 PM.png`). It renders identically to a normal space in every
+  terminal/editor, so a filename typed or pasted with a regular space
+  silently fails to match — `cp`, `open`, anything doing exact string
+  comparison gets `No such file or directory` even though `ls`/`find` show
+  what looks like the identical name. `find -iname "*<partial, space-free
+  segment>*"` sidesteps it since glob matching a partial pattern doesn't
+  require the exact character; resolve the path that way instead of typing
+  the full filename whenever a screenshot path is involved.
