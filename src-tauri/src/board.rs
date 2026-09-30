@@ -65,6 +65,45 @@ pub async fn write_board(project_key: String, content: String) -> Result<(), Str
     crate::pty::spawn_blocking_result("write_board", move || write_board_blocking(project_key, content)).await
 }
 
+/// Plan 048: a passive read for the Project Overview card, distinct from
+/// `read_board` — that command seeds an example board on first read, which
+/// is right for opening the Idea Board panel but wrong for a dashboard that
+/// might render a card for a project never opened there. Never writes, never
+/// creates a directory, and tells missing apart from empty apart from a real
+/// read error so the UI can show "Example board"/"no board yet"/an error
+/// instead of quietly rendering zero counts for all three.
+#[derive(Debug, serde::Serialize)]
+#[serde(tag = "state", rename_all = "camelCase")]
+pub enum BoardPeek {
+    Ready { content: String },
+    Missing,
+    Error { message: String },
+}
+
+// Required by spawn_blocking_or_default's T: Default bound (the blocking-task
+// panic path) — distinct from Missing, since a panic is not "no board here".
+impl Default for BoardPeek {
+    fn default() -> Self {
+        BoardPeek::Error { message: "board read task panicked".to_string() }
+    }
+}
+
+#[tauri::command]
+pub async fn peek_board(project_key: String) -> BoardPeek {
+    crate::pty::spawn_blocking_or_default(move || peek_board_blocking(project_key)).await
+}
+
+fn peek_board_blocking(project_key: String) -> BoardPeek {
+    if !std::path::Path::new(&project_key).is_dir() {
+        return BoardPeek::Missing;
+    }
+    match std::fs::read_to_string(board_path(&project_key)) {
+        Ok(content) => BoardPeek::Ready { content },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => BoardPeek::Missing,
+        Err(e) => BoardPeek::Error { message: e.to_string() },
+    }
+}
+
 fn write_board_blocking(project_key: String, content: String) -> Result<(), String> {
     if !std::path::Path::new(&project_key).is_dir() {
         return Err(format!("\"{project_key}\" is not a folder Logic Loop can open"));
@@ -137,6 +176,62 @@ mod tests {
 
         write_board_blocking(key.clone(), "## card one\nstatus: idea\n".into()).unwrap();
         assert_eq!(read_board_blocking(key.clone()), "## card one\nstatus: idea\n");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn peek_missing_project_dir_reports_missing_and_creates_nothing() {
+        let dir = std::env::temp_dir().join(format!("logic-loop-board-test-peek-nodir-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let key = dir.to_string_lossy().into_owned();
+
+        assert!(matches!(peek_board_blocking(key), BoardPeek::Missing));
+        assert!(!dir.exists(), "peek must not create a nonexistent project dir");
+    }
+
+    #[test]
+    fn peek_missing_board_reports_missing_without_seeding() {
+        // The behavior that distinguishes peek_board from read_board: no
+        // example-board write as a side effect of a passive read.
+        let dir = std::env::temp_dir().join(format!("logic-loop-board-test-peek-noboard-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let key = dir.to_string_lossy().into_owned();
+
+        assert!(matches!(peek_board_blocking(key.clone()), BoardPeek::Missing));
+        assert!(!board_path(&key).exists(), "peek must never seed board.md");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn peek_existing_board_returns_ready_with_content() {
+        let dir = std::env::temp_dir().join(format!("logic-loop-board-test-peek-ready-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let key = dir.to_string_lossy().into_owned();
+        write_board_blocking(key.clone(), "## card one\nstatus: idea\n".into()).unwrap();
+
+        match peek_board_blocking(key) {
+            BoardPeek::Ready { content } => assert_eq!(content, "## card one\nstatus: idea\n"),
+            other => panic!("expected Ready, got {other:?}"),
+        }
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn peek_unreadable_board_path_reports_error_not_missing() {
+        // board.md exists as a directory instead of a file — a real read
+        // error distinct from "missing" (no file) and "empty" (empty file).
+        let dir = std::env::temp_dir().join(format!("logic-loop-board-test-peek-err-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let key = dir.to_string_lossy().into_owned();
+        std::fs::create_dir_all(board_path(&key)).unwrap();
+
+        assert!(matches!(peek_board_blocking(key), BoardPeek::Error { .. }));
 
         std::fs::remove_dir_all(&dir).ok();
     }

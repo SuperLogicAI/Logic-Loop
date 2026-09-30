@@ -310,6 +310,7 @@ pub fn run() {
             clipboard::clipboard_image_path,
             board::read_board,
             board::write_board,
+            board::peek_board,
             safe_router_traffic::read_safe_router_traffic
         ])
         .on_window_event(|window, event| {
