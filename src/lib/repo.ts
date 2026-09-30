@@ -23,6 +23,7 @@ import type { ReconciliationCandidate } from "./decisionReconciliation";
 import { boundedSubmittedReply } from "./decisionReconciliation";
 import { clampPanelWidth, parsePanelMode, type VisiblePanelMode } from "./panelLayout";
 import { parseLandingNoteMode } from "./landingMode";
+import { projectKeyOf } from "./pty";
 
 let db: Database | null = null;
 
@@ -1369,4 +1370,182 @@ export async function allWorktreeTabIds(): Promise<string[]> {
   const d = await getDb();
   const rows = await d.select<{ tab_id: string }[]>("SELECT tab_id FROM worktree_tabs");
   return rows.map((r) => r.tab_id);
+}
+
+// --- Plan 048 (Home dashboard): per-project pin/archive/purpose, same
+// settings-table prefix pattern as mute_notifications:/board_collapsed:. ---
+
+const PROJECT_PINNED_PREFIX = "project_pinned:";
+const PROJECT_ARCHIVED_PREFIX = "project_archived:";
+const PROJECT_PURPOSE_PREFIX = "project_purpose:";
+
+export async function isProjectPinned(cwd: string): Promise<boolean> {
+  const d = await getDb();
+  const rows = await d.select<{ value: string }[]>("SELECT value FROM settings WHERE key = $1", [
+    PROJECT_PINNED_PREFIX + cwd,
+  ]);
+  return rows[0]?.value === "1";
+}
+
+export async function setProjectPinned(cwd: string, pinned: boolean): Promise<void> {
+  await setSetting(PROJECT_PINNED_PREFIX + cwd, pinned ? "1" : "0");
+}
+
+export async function isProjectArchived(cwd: string): Promise<boolean> {
+  const d = await getDb();
+  const rows = await d.select<{ value: string }[]>("SELECT value FROM settings WHERE key = $1", [
+    PROJECT_ARCHIVED_PREFIX + cwd,
+  ]);
+  return rows[0]?.value === "1";
+}
+
+/** Archiving/unarchiving is organization only — never touches a live
+ * session, the board file, or any other project data (Plan 048 §3 Actions). */
+export async function setProjectArchived(cwd: string, archived: boolean): Promise<void> {
+  await setSetting(PROJECT_ARCHIVED_PREFIX + cwd, archived ? "1" : "0");
+}
+
+export async function getProjectPurpose(cwd: string): Promise<string | null> {
+  return getSetting(PROJECT_PURPOSE_PREFIX + cwd);
+}
+
+export async function setProjectPurpose(cwd: string, purpose: string): Promise<void> {
+  await setSetting(PROJECT_PURPOSE_PREFIX + cwd, purpose);
+}
+
+// --- Plan 048: Home start surface + Inbox badge — global shell prefs, same
+// table as panel layout above. ---
+
+const HOME_START_SURFACE_KEY = "home_start_surface";
+
+export async function getHomeStartSurface(): Promise<"home" | "workspace"> {
+  return (await getSetting(HOME_START_SURFACE_KEY)) === "home" ? "home" : "workspace";
+}
+
+export async function setHomeStartSurface(value: "home" | "workspace"): Promise<void> {
+  await setSetting(HOME_START_SURFACE_KEY, value);
+}
+
+const INBOX_BADGE_KEY = "inbox_badge";
+
+export async function getInboxBadgeEnabled(): Promise<boolean> {
+  return (await getSetting(INBOX_BADGE_KEY)) !== "0"; // on by default
+}
+
+export async function setInboxBadgeEnabled(enabled: boolean): Promise<void> {
+  await setSetting(INBOX_BADGE_KEY, enabled ? "1" : "0");
+}
+
+// --- Plan 048: project catalog. One repo-wide read of every project key the
+// app has any record of — the Home screen's card list. ---
+
+export interface ProjectCatalogEntry {
+  projectKey: string;
+  pinned: boolean;
+  archived: boolean;
+  purpose: string | null;
+  /** A session bound to this project and not explicitly closed (this is a
+   * DB-only proxy for "work in flight" — `session_bindings.active` survives
+   * a relaunch but says nothing about whether a PTY is live right now. The
+   * caller overlays real tab state on top; never treat this alone as
+   * "currently running" — see Plan 048 §4.) */
+  hasActiveSessionBinding: boolean;
+  firstSeenAt: number | null;
+  lastActivityAt: number | null;
+}
+
+interface ProjectKeyActivityRow {
+  key: string;
+  first_seen_at: number;
+  last_activity_at: number;
+}
+
+/** Pure merge step, split out from `listProjectCatalog` the same way
+ * `latestPerTether`/`findGroupsForTab` are split from their DB callers — so
+ * the canonicalization/flag-combination logic is testable without a live
+ * DB. `bookmarkKeys` must already be resolved (see `listProjectCatalog`);
+ * this function does no further canonicalization of its own. */
+export function buildProjectCatalog(
+  activity: ProjectKeyActivityRow[],
+  bookmarkKeys: string[],
+  activeRows: { project_key: string; any_active: number }[],
+  settingsRows: { key: string; value: string }[]
+): ProjectCatalogEntry[] {
+  const byKey = new Map<string, { firstSeenAt: number; lastActivityAt: number }>();
+  for (const row of activity) {
+    if (!row.key) continue;
+    byKey.set(row.key, { firstSeenAt: row.first_seen_at, lastActivityAt: row.last_activity_at });
+  }
+  for (const key of bookmarkKeys) {
+    if (!byKey.has(key)) byKey.set(key, { firstSeenAt: 0, lastActivityAt: 0 });
+  }
+
+  const activeByKey = new Map(activeRows.map((r) => [r.project_key, r.any_active === 1]));
+
+  const pinned = new Set<string>();
+  const archived = new Set<string>();
+  const purpose = new Map<string, string>();
+  for (const row of settingsRows) {
+    if (row.key.startsWith(PROJECT_PINNED_PREFIX)) {
+      if (row.value === "1") pinned.add(row.key.slice(PROJECT_PINNED_PREFIX.length));
+    } else if (row.key.startsWith(PROJECT_ARCHIVED_PREFIX)) {
+      if (row.value === "1") archived.add(row.key.slice(PROJECT_ARCHIVED_PREFIX.length));
+    } else if (row.key.startsWith(PROJECT_PURPOSE_PREFIX)) {
+      purpose.set(row.key.slice(PROJECT_PURPOSE_PREFIX.length), row.value);
+    }
+  }
+  // A project only pinned/archived/purposed by hand, with no other activity
+  // row anywhere (e.g. archived before it was ever bookmarked), still belongs
+  // in the catalog.
+  for (const key of [...pinned, ...archived, ...purpose.keys()]) {
+    if (!byKey.has(key)) byKey.set(key, { firstSeenAt: 0, lastActivityAt: 0 });
+  }
+
+  return [...byKey.entries()].map(([projectKey, ts]) => ({
+    projectKey,
+    pinned: pinned.has(projectKey),
+    archived: archived.has(projectKey),
+    purpose: purpose.get(projectKey) ?? null,
+    hasActiveSessionBinding: activeByKey.get(projectKey) ?? false,
+    firstSeenAt: ts.firstSeenAt || null,
+    lastActivityAt: ts.lastActivityAt || null,
+  }));
+}
+
+/** Distinct project keys unioned from every table that carries one, plus
+ * bookmarks and pin/archive/purpose settings for a project with no other
+ * activity yet. `bookmarks.cwd` is the one source stored via
+ * `canonicalizeCwd` rather than the server-derived `project_key`
+ * (`BookmarksBar`'s `onAdd` in App.tsx) — a bookmark aimed at a subdirectory
+ * needs `projectKeyOf` here to land under the same catalog entry as a tab
+ * opened at the repo root. Every other source already writes the
+ * server-derived key, so no further canonicalization is needed for those. */
+export async function listProjectCatalog(): Promise<ProjectCatalogEntry[]> {
+  const d = await getDb();
+  const activity = await d.select<ProjectKeyActivityRow[]>(
+    `SELECT key, MIN(ts) AS first_seen_at, MAX(ts) AS last_activity_at FROM (
+       SELECT project_key AS key, updated_at AS ts FROM session_bindings
+       UNION ALL
+       SELECT cwd, ts FROM decisions
+       UNION ALL
+       SELECT cwd, ts FROM blockers
+       UNION ALL
+       SELECT cwd, ts FROM notes
+       UNION ALL
+       SELECT json_extract(payload_json, '$.project_key'), ts FROM events
+       WHERE type = 'attention_state_observed' AND json_extract(payload_json, '$.project_key') IS NOT NULL
+     )
+     WHERE key IS NOT NULL AND key != ''
+     GROUP BY key`
+  );
+  const bookmarkRows = await d.select<{ cwd: string }[]>("SELECT DISTINCT cwd FROM bookmarks");
+  const bookmarkKeys = await Promise.all(bookmarkRows.map((r) => projectKeyOf(r.cwd).catch(() => r.cwd)));
+  const activeRows = await d.select<{ project_key: string; any_active: number }[]>(
+    "SELECT project_key, MAX(active) AS any_active FROM session_bindings GROUP BY project_key"
+  );
+  const settingsRows = await d.select<{ key: string; value: string }[]>(
+    "SELECT key, value FROM settings WHERE key LIKE $1 OR key LIKE $2 OR key LIKE $3",
+    [PROJECT_PINNED_PREFIX + "%", PROJECT_ARCHIVED_PREFIX + "%", PROJECT_PURPOSE_PREFIX + "%"]
+  );
+  return buildProjectCatalog(activity, bookmarkKeys, activeRows, settingsRows);
 }

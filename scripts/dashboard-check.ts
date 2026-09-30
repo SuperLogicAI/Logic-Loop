@@ -1,8 +1,9 @@
-// Self-check for Plan 048's surface/visibility plumbing. Run: npm run dashboard:check
+// Self-check for Plan 048's dashboard plumbing. Run: npm run dashboard:check
 import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import { effectiveVisibleTerminalIds, visibleTerminalIds } from "../src/lib/splitView";
 import { shouldFlagUnclaimed } from "../src/lib/ingest";
+import { buildProjectCatalog } from "../src/lib/repo";
 import type { SplitPaneIds } from "../src/lib/splitView";
 
 const pair: SplitPaneIds = ["left", "right"];
@@ -60,5 +61,58 @@ assert.doesNotMatch(
 );
 assert.match(app, /visibleTabIdsRef\.current\.has\(tabId\) \? tabId : null/);
 assert.match(app, /visibleTabIdsRef\.current\.has\(tab\.id\) \? tab\.id : null/);
+
+// --- listProjectCatalog's pure merge step (Step 3) ---
+
+// Same-name folders at different paths must stay distinct catalog entries —
+// nothing collapses by basename here, only by the full canonical key string.
+const sameName = buildProjectCatalog(
+  [
+    { key: "/Users/a/proj", first_seen_at: 100, last_activity_at: 100 },
+    { key: "/Users/b/proj", first_seen_at: 200, last_activity_at: 200 },
+  ],
+  [],
+  [],
+  []
+);
+assert.deepEqual(
+  sameName.map((e) => e.projectKey).sort(),
+  ["/Users/a/proj", "/Users/b/proj"].sort()
+);
+
+// A bookmark resolved to a subdirectory's repo root (the caller's job, via
+// projectKeyOf — see listProjectCatalog) must land on the SAME catalog entry
+// as activity already recorded at that root, not a second row.
+const subdirMerge = buildProjectCatalog(
+  [{ key: "/repo", first_seen_at: 100, last_activity_at: 500 }],
+  ["/repo"], // already-resolved: projectKeyOf("/repo/src/sub") -> "/repo"
+  [],
+  []
+);
+assert.equal(subdirMerge.length, 1, "a resolved bookmark key must merge into the existing root entry");
+assert.equal(subdirMerge[0].lastActivityAt, 500, "merge must not clobber the activity already on record");
+
+// Archived and "has an active session binding" are independent flags —
+// archiving a project must not erase or hide that it still has one.
+const archivedWithSession = buildProjectCatalog(
+  [{ key: "/repo", first_seen_at: 100, last_activity_at: 100 }],
+  [],
+  [{ project_key: "/repo", any_active: 1 }],
+  [{ key: "project_archived:/repo", value: "1" }]
+);
+assert.equal(archivedWithSession.length, 1);
+assert.equal(archivedWithSession[0].archived, true);
+assert.equal(
+  archivedWithSession[0].hasActiveSessionBinding,
+  true,
+  "archiving must not suppress the active-session-binding fact"
+);
+
+// A project known only by a pin/archive/purpose setting (no bookmark, no
+// session, no decision/blocker/note yet) still gets a catalog row.
+const settingsOnly = buildProjectCatalog([], [], [], [{ key: "project_pinned:/new-repo", value: "1" }]);
+assert.deepEqual(settingsOnly.map((e) => e.projectKey), ["/new-repo"]);
+assert.equal(settingsOnly[0].pinned, true);
+assert.equal(settingsOnly[0].hasActiveSessionBinding, false);
 
 console.log("dashboard-check: all assertions passed");
