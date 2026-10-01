@@ -198,9 +198,38 @@ Dogfood afterwards with the maintainer, the current active user, and the feedbac
 - [ ] No browse action spawns, kills, writes to, claims, or remounts a terminal; no board file created by viewing.
 - [ ] No fabricated health, completion %, spend, or empty-on-error display.
 - [ ] Inbox, board editor, split view, session routing, and startup preference pass existing checks and §7.
-- [ ] Gates exit 0: `npm run check`, `npx tsc --noEmit`, `npm run build`, `cd src-tauri && cargo test --lib && cargo clippy --all-targets -- -D warnings`, `git diff --check`. No `npm run golden` (no extraction-prompt changes).
+- [x] Gates exit 0: `npm run check`, `npx tsc --noEmit`, `npm run build`, `cd src-tauri && cargo test --lib && cargo clippy --all-targets -- -D warnings`, `git diff --check`. No `npm run golden` (no extraction-prompt changes). Verified after every commit, 2026-09-30.
 - [ ] §7 results recorded with versions; unrun items disclosed.
 - [ ] Maintainer writes the phase acceptance token.
+
+## 10. Implementation notes after build (2026-09-30)
+
+Built across 8 commits on `phase-47-feature-tour`, all 7 §5 steps landed.
+Deviations and simplifications versus this document, for the live pass to
+weigh in on:
+
+- **§3 card actions.** Each card has one action ("Open" → Project Overview),
+  not separate Open/Continue buttons — Overview's single Continue/Start
+  session button covers routing to the workspace, so the ambiguous-tabs
+  chooser this doc calls for was never needed yet. If dogfooding wants a
+  faster path than Home → Overview → Continue, add the second button and
+  chooser then, not speculatively now.
+- **§3 Inbox relabel.** Left as "Inbox" — this doc marks the "Activity"
+  rename as needing explicit approval, not decided here.
+- **Home start surface.** `getHomeStartSurface`/`setHomeStartSurface` exist
+  in `repo.ts`; nothing in the UI reads or writes the setting yet, so every
+  profile still starts on the workspace regardless of the setting's value.
+- **§1's "Pick up here" / "Needs a choice" real-data note:** confirmed live
+  against this repo's own open decisions and blockers while building, not
+  yet against the feedback-session participant's project.
+- A genuine bug found and fixed while wiring Step 5a, not called out in §5's
+  text: the tab-switch effect's trailing `claimTab(activeId)` fires on any
+  `activeId` change, including one caused by closing the active tab while
+  Home is open — would have wrongly claimed a tab nobody was looking at.
+  Gated on the workspace surface.
+
+See `docs/TESTING.md` §70 for the manual checklist (not yet run) and
+`docs/PROGRESS.md`'s Phase 48 entry for the full per-step commit summary.
 
 ## 9. Out of scope
 

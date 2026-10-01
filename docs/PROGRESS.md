@@ -746,4 +746,26 @@ Update this file as phases are accepted.
   attention_state_observed, git_log, board) — no migration. Keeps Inbox as an
   optional triage view. See `plans/048-project-dashboard.md` for the full
   spec, §5 for the numbered implementation sequence, §7 for manual checks to
-  land in docs/TESTING.md before close. Build starting.
+  land in docs/TESTING.md before close.
+
+  **Build complete 2026-09-30, closure pending a live manual pass.** All 7
+  implementation steps landed across 8 commits: surface/visibility plumbing
+  (new `AppSurface` type, `effectiveVisibleTerminalIds`, and a real fix —
+  `viewedId()`'s `activeIdRef.current` fallback would have silently marked a
+  Home-surface background result as viewed, changed to `null`); a read-only
+  `peek_board` Rust command distinct from `read_board`'s seed-on-missing
+  behavior; `listProjectCatalog` unioning every table that carries a project
+  key plus per-row `projectKeyOf` resolution for bookmarks; pure shaping in
+  the new `src/lib/dashboard.ts` (`observedAgentTime`, `buildUpdateMarkdown`,
+  `buildProjectCards`, `projectDisplayName`); the Home screen and Project
+  Overview themselves (`HomeDashboard.tsx`, `ProjectOverview.tsx`,
+  `CopyUpdateModal.tsx`, `DashboardErrorBoundary.tsx`); and Inbox/tour
+  wiring (`attention` icon replacing `global-mail-*`, `inbox_badge`
+  setting, a new opening tour card, `TOUR_VERSION` 1 → 2). Simplified versus
+  the full §3 spec: no per-card "Continue" button or its ambiguous-tabs
+  chooser, and the "Inbox" → "Activity" relabel was left for the explicit
+  approval the plan calls for. `npx tsc --noEmit`, the full `npm run check`
+  (39 scripts, incl. new `dashboard:check`), `npm run build`, `git diff
+  --check`, and `cargo clippy`/`cargo test --lib` (155 passed) all pass after
+  every commit. See `docs/TESTING.md` §70 for the manual checklist — none of
+  it run yet.

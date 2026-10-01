@@ -4403,3 +4403,76 @@ auto-start; the Since You Left card with a real digest. The current profile
 has existing data and no mounted digest. The first run cancelled Quit when
 the app warned that it would terminate an active session; the maintainer
 subsequently rebuilt and relaunched it before this second pass.
+
+## 70. Home dashboard and Project Overview (Phase 48, 2026-09-30)
+
+**Automated checks (completed):** `npx tsc --noEmit`, `cd src-tauri && cargo
+clippy --all-targets -- -D warnings && cargo test --lib` (155 passed, 1
+ignored — 4 new in `board.rs`), `npm run check` (39 scripts, incl. new
+`dashboard:check`), `npm run build`, and `git diff --check` all pass after
+every commit in this phase. No extraction prompt changed; `golden` not run.
+
+Scope actually shipped vs. `plans/048-project-dashboard.md` §3 — read this
+before the live pass, several things are simplified:
+
+- Home: header line, a Continue callout for the current workspace pane
+  (`activeId` itself), search, All/Working/Needs a choice/Archived filters,
+  the 30-day older-projects fold (exempts pinned/bookmarked), one card
+  action ("Open" → Project Overview, not a second "Continue" button).
+- Project Overview: Needs a choice (routed via `resolveAttentionRoute`),
+  Pick up here (`computeMomentum`, read-only), Work log (Today/7d/30d,
+  per-session agent excerpt + file/turn counts + local commits), Plan
+  (`peek_board`/`parseBoard`, Now card + status counts, "Example board"
+  detection), Agent time (`observedAgentTime`, hidden with no observations),
+  Workspaces (live tabs + closed-but-resumable sessions), Pin/Archive/edit
+  purpose, Copy update.
+- **Not built:** the per-card "Continue" button and its ambiguous-multiple-
+  tabs chooser (Overview's single Continue/Start session button covers the
+  common case); the ⌘/Ctrl+K "Activity" relabel (marked in the plan as
+  needing explicit approval); Inbox archive-all-unavailable and badge-prefs
+  UI beyond the one Home header toggle.
+- Inbox: `attention`-icon swap and `inbox_badge` setting are both live;
+  `AttentionInbox` itself, its archive/backlog controls, and ⌘/Ctrl+K are
+  unchanged per plan.
+- Tour: new opening "Home" card targets the tab bar button; `TOUR_VERSION`
+  bumped 1 → 2.
+
+**Installed-app manual pass: not yet run.**
+
+- [ ] Fresh profile: starts on the workspace as before (Home's
+      `home_start_surface` setting exists in `repo.ts` but nothing in the UI
+      writes it yet — "Start in: Home" is not wired to a setting toggle in
+      this phase, only the accessor).
+- [ ] Open Home mid-session with a live agent running in a background tab:
+      let it finish while Home is open, then switch back to that tab — the
+      result stays unclaimed until the tab is actually shown, no PTY input,
+      process/output intact.
+- [ ] Return from Home to a split workspace and to a single one (including
+      returning to the same `activeId`): focus and xterm sizing recover, no
+      respawn, no flash.
+- [ ] Several projects with a mix of live tabs, closed-but-resumable
+      sessions, and bookmark-only (no session) entries: card counts and the
+      "N closed" Workspaces line match; close the last tab for a project —
+      the project and its history remain in the catalog.
+- [ ] A project with an open decision: Overview's "Go to workspace" routes
+      to the exact owning tab when one exists; archiving the same decision's
+      occurrence in the Attention Inbox does not remove it from Overview.
+- [ ] A project whose `.logic-loop/board.md` is missing, an untouched
+      example board, and a real edited board: Plan section reads "No board
+      yet", "Example board — not edited yet.", and real counts respectively
+      — opening Home/Overview must never create a `.logic-loop/` directory
+      that didn't already exist.
+- [ ] Copy update on a real project: every line traceable to a decision,
+      excerpt, or commit; no file paths/commands leak through; edit the
+      textarea before clicking Copy and confirm the edited text (not the
+      original draft) lands on the clipboard.
+- [ ] Trigger a render error in Home/Overview (e.g. a temporarily broken
+      prop) and confirm `DashboardErrorBoundary`'s "Return to workspace"
+      recovers without affecting any running terminal.
+- [ ] Keyboard-only pass: Tab reaches every control in Home and Overview;
+      focus is visible; no control is nested inside another interactive
+      element; typing in Home's search box or Overview's purpose editor is
+      never intercepted by the app's global ⌘-shortcut handler.
+- [ ] Tour: fresh walkthrough shows the new "Home" card first, pointing at
+      the tab bar button; a profile that completed tour v1 sees the tour
+      once more (version bump), not every launch after.

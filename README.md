@@ -172,6 +172,7 @@ Early, actively built, dogfooded daily. Shipped:
 - ✅ Claude usage meter — 5-hour and weekly account bars from Claude Code's own `statusLine` JSON, wrapping an existing status line reversibly
 - ✅ Codex account meter — session model and each reported rate-limit bucket, read from Codex's app-server
 - ✅ Safe Router traffic view — optional, read-only list of recent routed requests and which model tier served them
+- ⏳ Home dashboard + Project Overview — a cross-project screen (search, filters, pinned/archived) linking to a per-project Overview with routed open decisions, a read-only next-action pick, a Today/7d/30d work log, Idea Board plan counts, observed agent time, and a deterministic Copy update draft; built, pending a live pass
 - ⏳ Crash recovery, public release polish
 
 ## Stack
