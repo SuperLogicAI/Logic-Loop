@@ -34,14 +34,14 @@ interface Props {
    * resumable workspace ... User click only"). */
   activeTab: Tab | null;
   openDecisionOwners: repo.DecisionOwner[];
-  /** Switch to this project's workspace: an existing tab if one exists
-   * (live or restorable), a fresh session otherwise. */
-  onOpenProject: (projectKey: string) => void;
+  /** Clicking a project opens its Project Overview (Plan 048 §1) — the
+   * workspace itself is reached from there, not directly from the card. */
+  onOpenOverview: (projectKey: string) => void;
   /** Return to the exact pane `activeTab` points at, with no respawn. */
   onContinue: (tabId: string) => void;
 }
 
-export function HomeDashboard({ tabs, expand, activeTab, openDecisionOwners, onOpenProject, onContinue }: Props) {
+export function HomeDashboard({ tabs, expand, activeTab, openDecisionOwners, onOpenOverview, onContinue }: Props) {
   const [catalog, setCatalog] = useState<repo.ProjectCatalogEntry[] | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -175,7 +175,7 @@ export function HomeDashboard({ tabs, expand, activeTab, openDecisionOwners, onO
               displayName={projectDisplayName(card.projectKey, allKeys)}
               decisionCount={decisionCountByProject.get(card.projectKey) ?? 0}
               now={now}
-              onOpen={() => onOpenProject(card.projectKey)}
+              onOpen={() => onOpenOverview(card.projectKey)}
             />
           ))}
         </div>
@@ -235,7 +235,7 @@ function ProjectCard({
         className="mt-3 rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-700"
         onClick={onOpen}
       >
-        {card.hasAnyTab ? "Open" : "Start session"}
+        Open
       </button>
     </div>
   );

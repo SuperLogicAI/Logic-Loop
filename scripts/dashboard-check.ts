@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { effectiveVisibleTerminalIds, visibleTerminalIds } from "../src/lib/splitView";
 import { shouldFlagUnclaimed } from "../src/lib/ingest";
 import { buildProjectCatalog } from "../src/lib/repo";
+import { EXAMPLE_BOARD } from "../src/lib/board";
 import {
   buildProjectCards,
   buildUpdateMarkdown,
@@ -304,5 +305,18 @@ assert.equal(projectDisplayName("/Users/a/harbor", noCollision), "harbor");
 const collision = ["/Users/a/proj", "/Users/b/proj"];
 assert.equal(projectDisplayName("/Users/a/proj", collision), "a/proj");
 assert.equal(projectDisplayName("/Users/b/proj", collision), "b/proj");
+
+// --- board.ts's EXAMPLE_BOARD mirrors board.rs's byte-for-byte. Two
+// independent constants (see board.ts's comment) — this is the tripwire
+// that catches one side drifting without the other. ---
+
+const boardRs = readFileSync(new URL("../src-tauri/src/board.rs", import.meta.url), "utf8");
+const rustConstMatch = /const EXAMPLE_BOARD: &str = "((?:[^"\\]|\\.)*)";/s.exec(boardRs);
+assert.ok(rustConstMatch, "could not find EXAMPLE_BOARD in board.rs — update this check if it moved/renamed");
+const rustExampleBoard = rustConstMatch![1]
+  .replace(/\\n\\\n/g, "\n") // Rust's `\n\` line-continuation inside the literal
+  .replace(/\\n/g, "\n")
+  .replace(/\\"/g, '"');
+assert.equal(EXAMPLE_BOARD, rustExampleBoard, "board.ts's EXAMPLE_BOARD has drifted from board.rs's");
 
 console.log("dashboard-check: all assertions passed");

@@ -88,6 +88,8 @@ import {
   type SplitPaneIds,
 } from "./lib/splitView";
 import { HomeDashboard } from "./components/HomeDashboard";
+import { ProjectOverview } from "./components/ProjectOverview";
+import { CopyUpdateModal, type CopyUpdateData } from "./components/CopyUpdateModal";
 import {
   isLockInActive,
   shouldExpireTimedLockIn,
@@ -116,6 +118,7 @@ export default function App() {
   const surfaceRef = useRef(surface);
   surfaceRef.current = surface;
   const openHome = useCallback(() => setSurface({ kind: "home" }), []);
+  const [copyUpdateData, setCopyUpdateData] = useState<CopyUpdateData | null>(null);
   const visibleTabIds = new Set(effectiveVisibleTerminalIds(surface, activeId, splitPaneIds));
   const visibleTabIdsRef = useRef(visibleTabIds);
   visibleTabIdsRef.current = visibleTabIds;
@@ -1528,10 +1531,13 @@ export default function App() {
     focusTab(tab.id);
   }, [focusTab]);
 
-  // Home's "Open"/"Start session" (Plan 048): an existing tab for this
+  // Project Overview's "Start session" (Plan 048): an existing tab for this
   // project — live or a restorable ghost, same as clicking it in the tab bar
   // — wins over starting a second one. No separate spawn path (invariant 4).
-  const openProjectFromHome = useCallback(
+  // Overview only shows this button when no live tab already exists, but a
+  // closed-but-resumable ghost can still be sitting in `tabs` — reusing
+  // focusTab here means that case still resumes instead of double-opening.
+  const openOrResumeProject = useCallback(
     (projectKey: string) => {
       const existing = tabsRef.current.find((t) => expand(t.cwd) === projectKey);
       if (existing) focusTab(existing.id);
@@ -1539,6 +1545,8 @@ export default function App() {
     },
     [expand, focusTab, openTab]
   );
+
+  const openOverview = useCallback((projectKey: string) => setSurface({ kind: "project", projectKey }), []);
 
   // Answer-now prefill: writes only a draft into the bound tab's terminal.
   // A structured submitted transcript reply is the sole automatic evidence
@@ -1703,17 +1711,30 @@ export default function App() {
           </div>
           {activeTab && <IdeaBoard cwd={expand(activeTab.cwd)} />}
         </div>
-        {surface.kind !== "workspace" && (
+        {surface.kind === "home" && (
           <HomeDashboard
             tabs={tabs}
             expand={expand}
             activeTab={activeTab}
             openDecisionOwners={openDecisionOwners}
-            onOpenProject={openProjectFromHome}
+            onOpenOverview={openOverview}
             onContinue={focusTab}
           />
         )}
+        {surface.kind === "project" && (
+          <ProjectOverview
+            projectKey={surface.projectKey}
+            tabs={tabs}
+            expand={expand}
+            now={now}
+            onBack={openHome}
+            onContinueTab={focusTab}
+            onStartSession={openOrResumeProject}
+            onOpenCopyUpdate={setCopyUpdateData}
+          />
+        )}
       </div>
+      {copyUpdateData && <CopyUpdateModal data={copyUpdateData} onClose={() => setCopyUpdateData(null)} />}
       {landingPrompt && (
         <LandingNoteModal
           sessionId={landingPrompt.sessionId}

@@ -1555,3 +1555,58 @@ export async function listProjectCatalog(): Promise<ProjectCatalogEntry[]> {
   );
   return buildProjectCatalog(activity, bookmarkKeys, activeRows, settingsRows);
 }
+
+// --- Plan 048: Project Overview reads. Project-wide (no tab/session scope),
+// unlike SidePanel's tab-scoped equivalents — a project with no open tab at
+// all must still show its Overview. ---
+
+/** Every open decision for a project, regardless of which tab/session owns
+ * it — SidePanel's `listDecisions` is tab-scoped on purpose; Overview is not. */
+export async function openDecisionsForProject(cwd: string): Promise<Decision[]> {
+  const d = await getDb();
+  return d.select<Decision[]>(
+    "SELECT * FROM decisions WHERE cwd = $1 AND status = 'open' ORDER BY ts DESC LIMIT 50",
+    [cwd]
+  );
+}
+
+export interface ProjectSessionRow {
+  session_id: string;
+  tab_tether: string;
+  agent: string | null;
+}
+
+/** Every session ever bound to this project, live or long since closed —
+ * the Work log and Workspaces sections both start from this. */
+export async function projectSessions(cwd: string): Promise<ProjectSessionRow[]> {
+  const d = await getDb();
+  return d.select<ProjectSessionRow[]>(
+    "SELECT DISTINCT session_id, tab_tether, agent FROM session_bindings WHERE project_key = $1",
+    [cwd]
+  );
+}
+
+export interface AgentTimeObservationRow {
+  session_id: string;
+  run_id: string;
+  state: AgentState;
+  observed_at: number;
+}
+
+/** Raw `attention_state_observed` rows for a project, across every session
+ * — `observedAgentTime` (dashboard.ts) reduces this to hours. Not scoped to
+ * the current run: Agent time is a historical total, not a live snapshot. */
+export async function projectAgentTimeObservations(cwd: string): Promise<AgentTimeObservationRow[]> {
+  const d = await getDb();
+  return d.select<AgentTimeObservationRow[]>(
+    `SELECT e.session_id AS session_id,
+            json_extract(e.payload_json, '$.run_id') AS run_id,
+            json_extract(e.payload_json, '$.state') AS state,
+            CAST(json_extract(e.payload_json, '$.observed_at') AS INTEGER) AS observed_at
+     FROM events e
+     WHERE e.type = 'attention_state_observed'
+       AND json_extract(e.payload_json, '$.project_key') = $1
+     ORDER BY e.session_id, observed_at`,
+    [cwd]
+  );
+}
