@@ -174,7 +174,11 @@ assert.doesNotMatch(inboxSource, /window\.addEventListener\("keydown"/);
 assert.match(inboxSource, /Archive all unavailable/);
 assert.match(inboxSource, /Restore to Attention/);
 assert.doesNotMatch(inboxSource, /ptyWrite|ptySpawn|result_claimed|setDecisionStatus|setBlockerResolved/);
-assert.match(iconSource, /global-mail-read/);
-assert.match(iconSource, /global-mail-unread/);
+// Plan 048 §3: a mail-shaped icon reads like notifications/email — replaced
+// with a non-mail "attention" icon. Both old names are fully retired, not
+// just unreferenced, so this is a real swap, not a half-finished one.
+assert.match(iconSource, /"attention"/);
+assert.doesNotMatch(iconSource, /global-mail/);
+assert.doesNotMatch(sidePanelSource, /global-mail/);
 
 console.log("attention-inbox-check: all assertions passed");

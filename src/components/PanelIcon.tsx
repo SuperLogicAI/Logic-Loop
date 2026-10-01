@@ -13,8 +13,7 @@ export type PanelIconName =
   | "accomplished"
   | "fan-out"
   | "github"
-  | "global-mail-read"
-  | "global-mail-unread"
+  | "attention"
   | "idea-board"
   | "lock-in"
   | "timed-lock"
@@ -23,7 +22,7 @@ export type PanelIconName =
   | "fold"
   | "expand";
 
-const ICONS: Record<Exclude<PanelIconName, "global-mail-read" | "global-mail-unread">, { viewBox: string; path: string }> = {
+const ICONS: Record<Exclude<PanelIconName, "attention">, { viewBox: string; path: string }> = {
   "since-left": {
     viewBox: "0 -960 960 960",
     path: "M600-160q-134 0-227-93t-93-227q0-133 93-226.5T600-800q133 0 226.5 93.5T920-480q0 134-93.5 227T600-160Zm0-80q100 0 170-70t70-170q0-100-70-170t-170-70q-100 0-170 70t-70 170q0 100 70 170t170 70Zm91-91 57-57-108-108v-144h-80v177l131 132ZM80-600v-80h160v80H80ZM40-440v-80h200v80H40Zm40 160v-80h160v80H80Zm520-200Z",
@@ -108,8 +107,29 @@ export function PanelIcon({
   rainbow?: boolean;
 }) {
   const gradientId = useId();
-  if (name === "global-mail-read" || name === "global-mail-unread") {
-    return <img src={`/${name}.svg`} alt="" className={className} />;
+  // Plan 048 §3: the Attention Inbox reads like notifications/email at a
+  // glance — a mail icon reinforces that. Stroke-based (Lucide's "inbox"
+  // shape), not a fill glyph like the rest of this registry, so it's its
+  // own branch rather than a row in ICONS.
+  if (name === "attention") {
+    return (
+      <svg
+        className={className}
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+        <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z" />
+      </svg>
+    );
   }
   const icon = ICONS[name];
   return (

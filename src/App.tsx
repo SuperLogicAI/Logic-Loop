@@ -90,6 +90,7 @@ import {
 import { HomeDashboard } from "./components/HomeDashboard";
 import { ProjectOverview } from "./components/ProjectOverview";
 import { CopyUpdateModal, type CopyUpdateData } from "./components/CopyUpdateModal";
+import { DashboardErrorBoundary } from "./components/DashboardErrorBoundary";
 import {
   isLockInActive,
   shouldExpireTimedLockIn,
@@ -118,6 +119,15 @@ export default function App() {
   const surfaceRef = useRef(surface);
   surfaceRef.current = surface;
   const openHome = useCallback(() => setSurface({ kind: "home" }), []);
+  const returnToWorkspace = useCallback(() => setSurface({ kind: "workspace" }), []);
+  const [inboxBadgeEnabled, setInboxBadgeEnabled] = useState(true);
+  const toggleInboxBadge = useCallback(() => {
+    setInboxBadgeEnabled((prev) => {
+      const next = !prev;
+      void repo.setInboxBadgeEnabled(next).catch(() => undefined);
+      return next;
+    });
+  }, []);
   const [copyUpdateData, setCopyUpdateData] = useState<CopyUpdateData | null>(null);
   const visibleTabIds = new Set(effectiveVisibleTerminalIds(surface, activeId, splitPaneIds));
   const visibleTabIdsRef = useRef(visibleTabIds);
@@ -878,6 +888,7 @@ export default function App() {
       .catch(() => {
         landingNoteModeReadyRef.current = true;
       });
+    void repo.getInboxBadgeEnabled().then(setInboxBadgeEnabled).catch(() => undefined);
     // reap PTYs orphaned by a webview crash/reload, then start fresh
     void ptyKillAll().then(async () => {
       // Ghost tabs: sessions still active when the app last quit. Never
@@ -1658,6 +1669,7 @@ export default function App() {
             attentionCount={attentionViews.active.length}
             attentionLoading={attentionLoading}
             attentionStale={attentionStale}
+            inboxBadgeEnabled={inboxBadgeEnabled}
             onOpenAttention={() => setAttentionOpen(true)}
             landingNoteMode={landingNoteMode}
             onLandingNoteModeChange={changeLandingNoteMode}
@@ -1711,27 +1723,35 @@ export default function App() {
           </div>
           {activeTab && <IdeaBoard cwd={expand(activeTab.cwd)} />}
         </div>
-        {surface.kind === "home" && (
-          <HomeDashboard
-            tabs={tabs}
-            expand={expand}
-            activeTab={activeTab}
-            openDecisionOwners={openDecisionOwners}
-            onOpenOverview={openOverview}
-            onContinue={focusTab}
-          />
-        )}
-        {surface.kind === "project" && (
-          <ProjectOverview
-            projectKey={surface.projectKey}
-            tabs={tabs}
-            expand={expand}
-            now={now}
-            onBack={openHome}
-            onContinueTab={focusTab}
-            onStartSession={openOrResumeProject}
-            onOpenCopyUpdate={setCopyUpdateData}
-          />
+        {surface.kind !== "workspace" && (
+          <DashboardErrorBoundary onReturnToWorkspace={returnToWorkspace}>
+            {surface.kind === "home" && (
+              <HomeDashboard
+                tabs={tabs}
+                expand={expand}
+                activeTab={activeTab}
+                openDecisionOwners={openDecisionOwners}
+                onOpenOverview={openOverview}
+                onContinue={focusTab}
+                attentionCount={attentionViews.active.length}
+                onOpenAttention={() => setAttentionOpen(true)}
+                inboxBadgeEnabled={inboxBadgeEnabled}
+                onToggleInboxBadge={toggleInboxBadge}
+              />
+            )}
+            {surface.kind === "project" && (
+              <ProjectOverview
+                projectKey={surface.projectKey}
+                tabs={tabs}
+                expand={expand}
+                now={now}
+                onBack={openHome}
+                onContinueTab={focusTab}
+                onStartSession={openOrResumeProject}
+                onOpenCopyUpdate={setCopyUpdateData}
+              />
+            )}
+          </DashboardErrorBoundary>
         )}
       </div>
       {copyUpdateData && <CopyUpdateModal data={copyUpdateData} onClose={() => setCopyUpdateData(null)} />}

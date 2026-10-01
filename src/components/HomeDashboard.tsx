@@ -39,9 +39,24 @@ interface Props {
   onOpenOverview: (projectKey: string) => void;
   /** Return to the exact pane `activeTab` points at, with no respawn. */
   onContinue: (tabId: string) => void;
+  attentionCount: number;
+  onOpenAttention: () => void;
+  inboxBadgeEnabled: boolean;
+  onToggleInboxBadge: () => void;
 }
 
-export function HomeDashboard({ tabs, expand, activeTab, openDecisionOwners, onOpenOverview, onContinue }: Props) {
+export function HomeDashboard({
+  tabs,
+  expand,
+  activeTab,
+  openDecisionOwners,
+  onOpenOverview,
+  onContinue,
+  attentionCount,
+  onOpenAttention,
+  inboxBadgeEnabled,
+  onToggleInboxBadge,
+}: Props) {
   const [catalog, setCatalog] = useState<repo.ProjectCatalogEntry[] | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -120,6 +135,23 @@ export function HomeDashboard({ tabs, expand, activeTab, openDecisionOwners, onO
               {decisionProjectCount > 0 ? ` · ${decisionProjectCount} with open decisions` : ""}
             </span>
           )}
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+              onClick={onToggleInboxBadge}
+              title="Plan 048 inbox_badge setting — hides the unread count on the Attention button, not the button itself"
+            >
+              {inboxBadgeEnabled ? "Hide unread count" : "Show unread count"}
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
+              onClick={onOpenAttention}
+            >
+              Inbox{inboxBadgeEnabled && attentionCount > 0 ? ` (${attentionCount})` : ""}
+            </button>
+          </div>
         </div>
 
         {activeTab && (

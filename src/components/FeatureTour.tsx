@@ -2,8 +2,9 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 
 // Bump to re-show the tour after a real redesign — separate from
 // ONBOARDING_VERSION (src/lib/onboarding.ts), see repo.ts's TOUR_VERSION_KEY
-// comment for why the two are independent.
-export const TOUR_VERSION = 1;
+// comment for why the two are independent. Bumped to 2 for Plan 048's new
+// opening Home step — a profile that already saw v1 gets it once more.
+export const TOUR_VERSION = 2;
 
 interface Step {
   target: string;
@@ -16,6 +17,11 @@ interface Step {
 // once there's something to show) is dropped at tour-open time, never
 // shown as a broken/empty card — fail open, same as every other panel.
 const STEPS: Step[] = [
+  {
+    target: "home",
+    title: "Home",
+    body: "Every project you've opened, what changed, and what needs a choice — one screen. Click a project to see its Overview, then Continue into its workspace, which is where the panels below actually live.",
+  },
   {
     target: "decisions",
     title: "Decisions",

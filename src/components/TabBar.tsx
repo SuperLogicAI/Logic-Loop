@@ -134,6 +134,7 @@ export function TabBar({
       <button
         type="button"
         data-tauri-drag-region="false"
+        data-tour-target="home"
         aria-pressed={homeActive}
         title="Home"
         onClick={onOpenHome}
