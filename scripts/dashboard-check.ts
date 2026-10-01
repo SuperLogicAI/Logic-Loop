@@ -11,8 +11,16 @@ import {
   observedAgentTime,
   projectDisplayName,
   sortProjectCards,
+  buildProjectWorkLog,
+  commitsInRange,
+  dashboardRangeStart,
+  resolveHomeStartSurface,
+  projectWorkspaceChoices,
 } from "../src/lib/dashboard";
 import type { ProjectCatalogEntry } from "../src/lib/repo";
+import { DashboardReadCache, observeDashboardRead, type ReadDiagnostic, type ReadState } from "../src/lib/dashboardLoader";
+import type { Tab } from "../src/types";
+import type { ProjectWorkLogRow } from "../src/lib/repo";
 import type { SplitPaneIds } from "../src/lib/splitView";
 
 const pair: SplitPaneIds = ["left", "right"];
@@ -319,4 +327,134 @@ const rustExampleBoard = rustConstMatch![1]
   .replace(/\\"/g, '"');
 assert.equal(EXAMPLE_BOARD, rustExampleBoard, "board.ts's EXAMPLE_BOARD has drifted from board.rs's");
 
-console.log("dashboard-check: all assertions passed");
+
+
+// Real production observer/cache, controlled promises and injected time.
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+let clockNow = 0;
+const timers = new Set<() => void>();
+const clock = {
+  now: () => clockNow,
+  schedule: (callback: () => void, _ms: number) => { timers.add(callback); return () => { timers.delete(callback); }; },
+};
+const diagnostics: ReadDiagnostic[] = [];
+const updates: { source: string; state: ReadState<unknown> }[] = [];
+const choices = deferred<number[]>();
+const git = deferred<number[]>();
+const board = deferred<string>();
+const observe = <T>(source: string, promise: Promise<T>) => observeDashboardRead(source, promise,
+  (state) => updates.push({ source, state }), (event) => diagnostics.push(event), clock);
+const stopChoices = observe("decisions", choices.promise);
+const stopGit = observe("git", git.promise);
+const stopBoard = observe("board", board.promise);
+choices.resolve(Array.from({ length: 33 }, (_, i) => i));
+await Promise.resolve();
+assert.equal(updates.length, 1, "pending filesystem sources must not withhold resolved choices");
+assert.equal(updates[0].source, "decisions");
+assert.equal(diagnostics[0].count, 33);
+board.reject(new Error("private error content must not appear in diagnostics"));
+await Promise.resolve();
+assert.deepEqual(updates[1], { source: "board", state: { state: "error", reason: "failed" } });
+clockNow = 10_000;
+for (const timer of [...timers]) timer();
+assert.deepEqual(updates[2], { source: "git", state: { state: "error", reason: "timeout" } });
+git.resolve([1]);
+await Promise.resolve();
+assert.equal(updates.length, 3, "late native results must not overwrite timeout state");
+stopChoices(); stopGit(); stopBoard();
+assert.equal(timers.size, 0);
+assert.ok(!JSON.stringify(diagnostics).includes("private"));
+
+const stale = deferred<number[]>();
+const stopStale = observe("old-project", stale.promise);
+stopStale();
+stale.resolve([1]);
+await Promise.resolve();
+assert.equal(updates.length, 3, "unmounted/old project callbacks must never publish");
+assert.equal(timers.size, 0, "disposing removes the timer");
+assert.equal(diagnostics.at(-1)?.outcome, "cancelled");
+
+const cache = new DashboardReadCache(() => clockNow);
+const native = deferred<number[]>();
+let nativeCalls = 0;
+const loadNative = () => { nativeCalls++; return native.promise; };
+const first = cache.read("/a:git", loadNative, 30_000);
+assert.equal(cache.read("/a:git", loadNative, 30_000), first, "StrictMode must coalesce");
+await Promise.resolve();
+assert.equal(nativeCalls, 1);
+clockNow += 45_000;
+assert.equal(cache.read("/a:git", loadNative, 30_000), first, "retry after timeout cannot duplicate pending native work");
+native.resolve([1]);
+await first;
+assert.equal(cache.read("/a:git", loadNative, 30_000), first, "settled native results cached for 30s");
+clockNow += 30_000;
+const second = cache.read("/a:git", loadNative, 30_000);
+await second;
+assert.equal(nativeCalls, 2, "expired settled reads refresh");
+let attempts = 0;
+await assert.rejects(cache.read("fail", async () => { attempts++; throw new Error("unavailable"); }));
+await assert.rejects(cache.read("fail", async () => { attempts++; throw new Error("unavailable"); }));
+assert.equal(attempts, 2, "failed reads remain retryable");
+
+// Unit conversion and bounded windows agree with events' (since, until].
+assert.deepEqual(commitsInRange([
+  { hash: "old", ts: 10, subject: "old" }, { hash: "inside", ts: 11, subject: "inside" },
+  { hash: "end", ts: 12, subject: "end" }, { hash: "future", ts: 13, subject: "future" },
+], 10_000, 12_000).map((c) => c.hash), ["inside", "end"]);
+const today = new Date(2026, 8, 30, 14, 20).getTime();
+assert.equal(dashboardRangeStart("today", today), new Date(2026, 8, 30).getTime());
+assert.equal(dashboardRangeStart("7d", today), today - 7 * 86_400_000);
+
+const dayOne = new Date(2026, 8, 29, 12).getTime();
+const dayTwo = new Date(2026, 8, 30, 12).getTime();
+const event = (id: number, session_id: string, ts: number): ProjectWorkLogRow => ({
+  id, session_id, ts, type: "hook:UserPromptSubmit", payload_json: "{}", agent: "codex",
+});
+const log = buildProjectWorkLog([event(1, "session-a", dayOne), event(2, "session-a", dayTwo),
+  event(3, "session-b", dayTwo), event(2, "session-a", dayTwo)]);
+assert.equal(log.length, 3, "each session/day is separate and duplicate event IDs are ignored");
+assert.deepEqual(log.map((row) => row.turns), [1, 1, 1]);
+assert.equal(new Set(log.map((row) => row.key)).size, 3);
+assert.deepEqual(buildProjectWorkLog([]), []);
+const reported = (id: number, ts: number, text: string): ProjectWorkLogRow => ({
+  ...event(id, "session-a", ts), type: "transcript", payload_json: JSON.stringify({ type: "assistant", message: { content: text } }),
+});
+const dailyReports = buildProjectWorkLog([reported(10, dayOne, "First day report"), reported(11, dayTwo, "Second day report"),
+  { ...event(12, "session-a", dayOne + 1), type: "hook:PostToolUse", payload_json: JSON.stringify({ tool_name: "Edit", tool_input: { file_path: "/fixture.ts" } }) }]);
+assert.deepEqual(dailyReports.map((row) => row.excerpt), ["Second day report", "First day report"], "assistant excerpts stay within their own day");
+assert.deepEqual(dailyReports.map((row) => row.filesEdited), [0, 1], "file counts stay within their own day");
+
+const unsafeUpdate = buildUpdateMarkdown({
+  projectName: "P", rangeLabel: "7 days", progressLines: ["Edited /Users/private/src/a.ts", "Run npm run build"],
+  commitSubjects: ["Fix src/private.ts"], decisionsNeeded: [{ question: "Run `curl secret`?", assumption: "C:\\secret\\a.ts" }],
+  blockerLines: ["$ rm -rf secret"], nextStep: "Check ./private/a.ts",
+});
+for (const secret of ["/Users/private", "npm run", "src/private.ts", "curl secret", "C:", "rm -rf", "./private"]) {
+  assert.ok(!unsafeUpdate.includes(secret), `unsafe first-line detail leaked: ${secret}`);
+}
+assert.ok(unsafeUpdate.includes("Technical details omitted"), "omitted evidence is not rendered as none recorded");
+const overviewSource = readFileSync(new URL("../src/components/ProjectOverview.tsx", import.meta.url), "utf8");
+assert.doesNotMatch(overviewSource, /\[projectKey, range, now\]/, "age clock must not drive reads");
+assert.doesNotMatch(overviewSource, /repo\.eventsSince|repo\.listProjectCatalog/, "Overview must not fan out tether scans or resolve unrelated bookmarks");
+assert.equal(resolveHomeStartSurface(null, false), "home", "fresh profiles start on Home");
+assert.equal(resolveHomeStartSurface(null, true), "workspace", "existing profiles preserve startup");
+assert.equal(resolveHomeStartSurface("home", true), "home", "saved preference wins over profile history");
+assert.equal(resolveHomeStartSurface("workspace", false), "workspace");
+const workspaceTab = (id: string, cwd: string, status: "live" | "dead"): Tab => ({ id, cwd, status, ptyId: -1, title: id, color: "#fff" });
+assert.deepEqual(projectWorkspaceChoices([workspaceTab("a", "/p", "live"), workspaceTab("b", "/p", "dead"), workspaceTab("c", "/elsewhere", "live")], "/p", (cwd) => cwd).map((tab) => tab.id), ["a", "b"], "chooser includes exact project's live and restorable tabs only");
+assert.match(overviewSource, /aria-label="Continue in workspace"/);
+assert.doesNotMatch(overviewSource, /onContinueTab\(liveTabs\[0\]\.id\)/, "multiple workspaces must not silently pick first live tab");
+assert.match(app, /getHomeStartSurface\(\)/);
+assert.match(app, /startSurface === "workspace"/);
+const statusBarSource = readFileSync(new URL("../src/components/AgentStatusBar.tsx", import.meta.url), "utf8");
+assert.match(statusBarSource, /setupOpen && createPortal/, "Setup must stay visible when Home hides the workspace ancestor");
+const tourSource = readFileSync(new URL("../src/components/FeatureTour.tsx", import.meta.url), "utf8");
+assert.match(tourSource, /getClientRects\(\)\.length > 0/, "Home tour must skip targets in hidden workspace ancestors");
+const copySource = readFileSync(new URL("../src/components/CopyUpdateModal.tsx", import.meta.url), "utf8");
+assert.match(copySource, /querySelector<HTMLTextAreaElement>\("textarea"\)\?\.focus\(\)/);
+console.log("dashboard-check: all assertions passed (including async load, cache, ranges, attribution, export privacy, startup and chooser)");

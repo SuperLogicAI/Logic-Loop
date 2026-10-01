@@ -2,6 +2,13 @@
 
 ## Status and execution contract
 
+- **Release review, 2026-09-30:** Phase 48 is **NOT ACCEPTED**. The earlier
+  “ACCEPTED” status below describes approval of this implementation plan,
+  not acceptance of the completed phase. Overview remained loading, rendered
+  false empty labels, and kept Copy update disabled in the partial release
+  pass (`docs/TESTING.md` §70). See the proposed same-phase revision in
+  [the fix-it sprint draft](048-dashboard-fixit-sprint.md). Remaining Phase 47
+  fresh-profile/digest evidence and Phase 48 scenarios are still unverified.
 - **Status:** ACCEPTED 2026-09-29 — implementation authorized. Maintainer wrote
   the literal `PHASE 47 ACCEPTED` (closing Phase 47) and `PHASE 48 APPROVED`
   (authorizing this plan's build) in the same message.
@@ -216,9 +223,9 @@ weigh in on:
   chooser then, not speculatively now.
 - **§3 Inbox relabel.** Left as "Inbox" — this doc marks the "Activity"
   rename as needing explicit approval, not decided here.
-- **Home start surface.** `getHomeStartSurface`/`setHomeStartSurface` exist
-  in `repo.ts`; nothing in the UI reads or writes the setting yet, so every
-  profile still starts on the workspace regardless of the setting's value.
+- **Home start surface (original build gap, repaired in the fix-it sprint).**
+  The original build had accessors without UI wiring. The authorized follow-up
+  reads/persists a fresh-vs-existing default and exposes Start in on Home.
 - **§1's "Pick up here" / "Needs a choice" real-data note:** confirmed live
   against this repo's own open decisions and blockers while building, not
   yet against the feedback-session participant's project.
@@ -234,3 +241,29 @@ See `docs/TESTING.md` §70 for the manual checklist (not yet run) and
 ## 9. Out of scope
 
 Tokens/spend, human time tracking, RAID context, templates, alternate board views, GitHub PR/CI, team/sync features, LLM-written summaries — see `docs/ROADMAP.md` → "Project dashboard follow-ons". No dependency additions, PTY protocol changes, or autonomous terminal input.
+
+
+## 11. Approved Phase 48 fix-it revision (2026-09-30)
+
+The maintainer authorized `plans/048-dashboard-fixit-sprint.md`, then selected
+its recommended scope dispositions. Per-card Continue and the full Actions
+menu are explicitly deferred; Overview now provides a chooser for multiple
+live/closed workspaces. The existing Inbox name stays unchanged. Startup is
+implemented: fresh profiles default to Home, existing profiles default to
+workspace, and the Home selector persists an explicit choice. Setup renders
+via a portal so its dialog remains visible while Home hides the workspace.
+
+The Overview fix replaces 277 per-session JSON/tether scans on the real
+profile with one session-owned query; reads settle independently with a 10s
+wait limit, Retry, coalescing and 30s board/Git caches. Work log groups by
+session/local day; Today uses local midnight. Decisions are no longer capped
+at 50. A dashboard-only native Git API returns errors and the complete date
+window, preserving `git_log` for existing callers. Copy update does not wait
+on board/catalog/agent-time; its Next comes from the successfully read landing
+note, decisions or blockers (board-derived Next remains on Overview). Unsafe
+first-line paths/command syntax in drafts is omitted and labeled explicitly.
+
+Automated and release evidence is recorded in `docs/TESTING.md` §71.
+Phase 48 remains NOT ACCEPTED; no Phase 49 implementation, commit, push or PR
+is authorized by this revision. Historical §10 simplifications are superseded
+where described above, rather than counted as implicit deferral approval.

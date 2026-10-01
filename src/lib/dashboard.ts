@@ -2,8 +2,69 @@
 // discipline as momentum.ts/delta.ts/attention.ts. Callers (repo.ts reads,
 // eventually the Home/Overview components) gather rows; this module turns
 // them into numbers and strings a panel can render, deterministically.
-import type { AgentState } from "../types";
-import type { ProjectCatalogEntry } from "./repo";
+import type { AgentState, Commit, Tab } from "../types";
+import type { ProjectCatalogEntry, ProjectWorkLogRow } from "./repo";
+import { lastAssistantText, summarizeDelta } from "./delta";
+
+export type DashboardRange = "today" | "7d" | "30d";
+
+export function resolveHomeStartSurface(saved: string | null, hasHistory: boolean): "home" | "workspace" {
+  if (saved === "home" || saved === "workspace") return saved;
+  return hasHistory ? "workspace" : "home";
+}
+
+export function projectWorkspaceChoices(tabs: readonly Tab[], projectKey: string, expand: (cwd: string) => string): Tab[] {
+  return tabs.filter((tab) => expand(tab.cwd) === projectKey);
+}
+
+export function dashboardRangeStart(range: DashboardRange, now: number): number {
+  if (range === "today") {
+    const date = new Date(now);
+    date.setHours(0, 0, 0, 0);
+    return date.getTime();
+  }
+  return now - (range === "7d" ? 7 : 30) * 86_400_000;
+}
+
+export function commitsInRange(commits: readonly Commit[], since: number, until: number): Commit[] {
+  return commits.filter((c) => c.ts * 1000 > since && c.ts * 1000 <= until);
+}
+
+export interface WorkLogEntry {
+  key: string;
+  sessionId: string;
+  day: string;
+  agent: string | null;
+  lastTs: number;
+  excerpt: string;
+  filesEdited: number;
+  turns: number;
+}
+
+/** One entry per authoritative session and local calendar day. Deduplicate
+ * event IDs as a backstop; session re-entry must not multiply old activity. */
+export function buildProjectWorkLog(rows: readonly ProjectWorkLogRow[]): WorkLogEntry[] {
+  const groups = new Map<string, ProjectWorkLogRow[]>();
+  const seen = new Set<number>();
+  for (const row of rows) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    const date = new Date(row.ts);
+    const day = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    const key = JSON.stringify([row.session_id, day]);
+    const group = groups.get(key) ?? [];
+    group.push(row);
+    groups.set(key, group);
+  }
+  return [...groups.entries()].map(([key, events]) => {
+    events.sort((a, b) => a.ts - b.ts || a.id - b.id);
+    const delta = summarizeDelta(events, []);
+    const last = events[events.length - 1]!;
+    const [, day] = JSON.parse(key) as [string, string];
+    return { key, sessionId: last.session_id, day, agent: last.agent, lastTs: last.ts,
+      excerpt: lastAssistantText(events), filesEdited: delta.files.length, turns: delta.turns };
+  }).sort((a, b) => b.lastTs - a.lastTs || a.key.localeCompare(b.key));
+}
 
 // --- Home project cards (Plan 048 §3) ---
 
@@ -197,7 +258,14 @@ export interface UpdateMarkdownInput {
 }
 
 function oneLine(text: string): string {
-  return text.split("\n")[0]!.trim();
+  const line = text.split("\n")[0]!.trim();
+  // Agent prose can contain paths/commands on its very first line. Avoid
+  // exporting those lines rather than assuming truncation makes them safe.
+  // This is output minimization, never semantic ingestion or PTY parsing.
+  if (/[`]|(?:^|\s)(?:\/\S+|~\/\S+|\.{1,2}\/\S+|[A-Za-z]:[\\/][^\s]+)|\b[\w.-]+\/[\w./-]+\.[\w]+|(?:^|\s)\$\s|\b(?:npm|npx|pnpm|yarn|cargo|git|sudo|bash|sh|zsh|curl|wget|rm|python3?|node|make)\s+[\w-]+/i.test(line)) {
+    return "Technical details omitted; review in the workspace.";
+  }
+  return line;
 }
 
 function bulletsOrNoneRecorded(lines: readonly string[]): string[] {
@@ -217,7 +285,7 @@ export function buildUpdateMarkdown(input: UpdateMarkdownInput): string {
   }
 
   const lines: string[] = [];
-  lines.push(`## ${input.projectName} — update (${input.rangeLabel})`);
+  lines.push(`## ${oneLine(input.projectName)} — update (${oneLine(input.rangeLabel)})`);
   lines.push("**Progress**");
   lines.push(...bulletsOrNoneRecorded(progress));
   lines.push("**Decisions needed**");

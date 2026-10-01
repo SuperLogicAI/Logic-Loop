@@ -4404,6 +4404,12 @@ has existing data and no mounted digest. The first run cancelled Quit when
 the app warned that it would terminate an active session; the maintainer
 subsequently rebuilt and relaunched it before this second pass.
 
+**Release follow-up, 2026-09-30 (Phase 48):** manually opened Tour in the
+rebuilt release app. Home appeared first as card 1 of 8; all eight cards
+advanced through Done. Next appeared, while Since You Left remained absent
+because no digest was mounted. The fresh-profile auto-start, real-digest card,
+and v1-to-v2 automatic re-show remain untested.
+
 ## 70. Home dashboard and Project Overview (Phase 48, 2026-09-30)
 
 **Automated checks (completed):** `npx tsc --noEmit`, `cd src-tauri && cargo
@@ -4426,23 +4432,25 @@ before the live pass, several things are simplified:
   detection), Agent time (`observedAgentTime`, hidden with no observations),
   Workspaces (live tabs + closed-but-resumable sessions), Pin/Archive/edit
   purpose, Copy update.
-- **Not built:** the per-card "Continue" button and its ambiguous-multiple-
-  tabs chooser (Overview's single Continue/Start session button covers the
-  common case); the ⌘/Ctrl+K "Activity" relabel (marked in the plan as
-  needing explicit approval); Inbox archive-all-unavailable and badge-prefs
-  UI beyond the one Home header toggle.
+- **Original build simplifications, dispositioned in the fix-it sprint:**
+  per-card Continue and the full project Actions menu are explicitly deferred
+  by the maintainer. Overview now has an explicit multiple-workspace chooser
+  and Home has the startup selector (§71). The ⌘/Ctrl+K Activity relabel remains
+  unapproved; Inbox archive-all-unavailable is not implemented.
 - Inbox: `attention`-icon swap and `inbox_badge` setting are both live;
   `AttentionInbox` itself, its archive/backlog controls, and ⌘/Ctrl+K are
   unchanged per plan.
 - Tour: new opening "Home" card targets the tab bar button; `TOUR_VERSION`
   bumped 1 → 2.
 
-**Installed-app manual pass: not yet run.**
+**Installed-app manual pass: partial, 2026-09-30**, using the rebuilt release
+bundle `src-tauri/target/release/bundle/macos/Logic Loop.app` (not dev mode).
 
-- [ ] Fresh profile: starts on the workspace as before (Home's
-      `home_start_surface` setting exists in `repo.ts` but nothing in the UI
-      writes it yet — "Start in: Home" is not wired to a setting toggle in
-      this phase, only the accessor).
+- [ ] Fresh profile: starts on Home, Setup remains visible and can launch
+      a selected folder; existing profiles default to Last workspace. Home's
+      Start in selector persists the chosen surface. The original accessor-only
+      gap was repaired in the authorized fix-it follow-up (§71); live fresh-profile
+      coverage still needs an isolated profile.
 - [ ] Open Home mid-session with a live agent running in a background tab:
       let it finish while Home is open, then switch back to that tab — the
       result stays unclaimed until the tab is actually shown, no PTY input,
@@ -4476,3 +4484,126 @@ before the live pass, several things are simplified:
 - [ ] Tour: fresh walkthrough shows the new "Home" card first, pointing at
       the tab bar button; a profile that completed tour v1 sees the tour
       once more (version bump), not every launch after.
+
+**Observed in this pass:** `npm run dashboard:check` and
+`npm run onboarding:check` passed. Home opened and listed 65 projects; search,
+All, Needs a choice, and Archived filters responded, and the unread-count
+toggle hid and restored its label. Opened Tour manually: Home was card 1 of 8,
+all eight cards advanced in order, Next and Attention Inbox appeared, and Done
+closed the tour. Home → Continue returned to the current workspace.
+
+**Overview data discrepancy — investigate before accepting Phase 48:** the
+Home card for `/Users/vandershark/Desktop/dev/context_terminal` showed 33 open
+decisions, while its Overview showed “Nothing open.” The same Overview showed
+“No board yet” although that project has a `.logic-loop/board.md` on disk, and
+its Work log stayed at “Loading…” for more than 12 seconds (including after
+switching from 7 days to 30 days). Copy update remained disabled. No decision,
+board, or terminal data was edited during this pass.
+
+**User-reported desktop access prompts, 2026-09-30:** the maintainer reports
+repeated requests for access to the Desktop folder, arriving about every
+10–15 seconds and in pairs, during this Phase 48 computer-use session. I did
+not see these prompts in the UI state I captured, so this is recorded as a
+user observation pending reproduction. Screenshot referenced:
+`/Users/vandershark/Desktop/Screenshot 2026-09-30 at 9.23.10 PM.png` (not
+readable by the agent due to an OS permission error).
+
+Still pending: the Phase 47 fresh-profile auto-start and real Since You Left
+digest; and the remaining Phase 48 end-to-end cases in the checklist above,
+including background-agent claim behavior, split return, decision routing and
+Inbox archival, board variants/no-directory creation, Copy update clipboard,
+error-boundary recovery, full keyboard/zoom/accessibility coverage, and
+first-run/version-bump auto-tour behavior. All checklist items stay unchecked
+until their complete scenarios are verified.
+
+
+## 71. Phase 48 Overview fix-it sprint (2026-09-30)
+
+**Status:** implementation authorized; Phase 48 NOT ACCEPTED. Maintainer
+approved the startup selector and Overview workspace chooser, deferring
+per-card Continue/full Actions, and approved a dashboard-only typed Git API.
+No commits or PR were created. Preserve §69/70 historical results and remaining
+unchecked scenarios; this section does not convert acceptance history into
+fresh-profile/digest evidence.
+
+**Environment:** macOS 26.4.1 (25E253), branch `phase-47-feature-tour`, baseline
+`3fce610` plus the fix-it working tree. Real populated profile inspected via
+SQLite `mode=ro`. No profile reset, credential logging, terminal input, global
+hook/configuration change or TCC reset was performed. No new agent sessions
+were launched for these checks.
+
+**Measured diagnosis:** the source query returned 33 open decisions and 277
+bound sessions for this project; `.logic-loop/board.md` exists. Source count
+queries took 0.1–0.2ms, lifecycle count 98.9ms, and local Git 15ms. Running the
+old JSON/tether predicate as 277 COUNT queries took 111.71s and produced
+15,857 matches including duplicate attribution. A single session-owned COUNT
+needed 0.011s (13,736 rows). The actual new production SELECT, limited to the
+work-log event types in the 7-day window, fetched 11,375 rows in 0.168s with
+zero duplicate IDs. These are read-only query timings, not equivalent UI
+latencies; they demonstrate why the original 15s cancellation loop could
+prevent the shared snapshot from publishing.
+
+**Implemented repairs:** independently settling read states; 10s wait limits,
+Retry, stale/unmount guards and in-flight coalescing; 30s board/Git caches;
+no age-clock reads or unrelated bookmark resolution in Overview; source-open
+decisions without a 50-row cap; authoritative session/day work-log grouping;
+Git seconds normalization and dashboard-specific error-returning date-window
+reads; draft first-line path/command omission; fresh/existing startup defaults
+and persisted selector; explicit project workspace chooser; Setup portal for
+Home and initial focus inside Copy update. Native board peek now preserves
+permission/metadata failures as errors instead of converting them to missing.
+
+**Automated evidence:** focused dashboard, onboarding, delta, scope and board
+checks passed. New dashboard fixtures exercise independent settlement,
+failures, timeout/late results, disposal, retry/coalescing/cache expiry, timestamp
+edges, daily grouping/deduplication, export minimization, startup and chooser.
+Rust executes the actual repo SQL against SQLite fixtures for shared-tether,
+rebound/legacy events, foreign project exclusion, range edges, Inbox archival
+and 33/61 decision counts. Native Git fixtures cover empty/missing/invalid
+repositories, full 61-commit windows and range filtering.
+
+`npm run opencode:check`, full `npm run check`, `npx tsc --noEmit`, frontend
+build, full `cargo test` (159 passed, 1 intentional live Codex test ignored),
+and Clippy passed before the final board/focus follow-up; final gate results
+will be appended below. The sandbox initially denied tsx IPC sockets and three
+Rust loopback fixtures; authorized reruns outside the sandbox passed. No
+extraction prompts changed; `golden` was not run. Vite reports its existing
+large-chunk advisory; builds succeed.
+
+**Release verification provenance:** the initial UI connection selected an
+older installed app without Home; its three visible tabs were exited. Closing
+that process exposed a previously running Phase 48 process at the raw release
+bundle path. Rebuilding replaces the binary on disk but not that running
+process's embedded frontend. Its UI still showed the original Overview
+loading/false-empty labels and no Retry, proving it was stale. A read-only
+process-path check confirmed the raw bundle path. Restart approval was
+requested because that process contains an idle live shell tab with no bound
+agent session. That old-process observation is not a regression result for
+the new build.
+
+**Outstanding live scenarios:** true disposable fresh profile/Setup-close
+auto-tour, real Since You Left digest tour card, v1→v2 once-only behavior,
+background-agent completion and claim isolation, split/same-tab return,
+closed-tab exact decision routing and Inbox archival, board variants/passive
+no-creation, edited clipboard/denial, error-boundary recovery, keyboard/zoom/
+VoiceOver/reduced-motion coverage, multi-project fan-out/worktree/history.
+Record only scenarios actually exercised in the final rebuilt process; all
+other §69/70 checklist items remain unchecked.
+
+
+**Final automated follow-up:** after the board metadata/error and modal-focus
+repairs, full `cargo test` passed (160 passed, 1 intentional live test ignored),
+Clippy exited 0, and the final focused dashboard/onboarding/board checks passed.
+The Home tour now excludes mounted targets with no layout in the hidden
+workspace; daily excerpt/file-count fixtures also passed. Final frontend/release
+build and diff check are recorded below after completion. Live checks remain
+pending restart of the old raw-bundle process; none are marked passed from
+source inspection or synthetic fixtures.
+
+
+**Final artifact:** `npm run tauri build` completed successfully after all code
+changes, including its `npm run build`/TypeScript gate. Raw bundle:
+`src-tauri/target/release/bundle/macos/Logic Loop.app`; final frontend asset
+`index-D8uH9tDM.js`. `git diff --check` exited 0. No project-branch commit,
+push, PR, reinstall or phase acceptance was performed. Remaining release
+scenarios await the restart approval above and an isolated fresh-profile pass.

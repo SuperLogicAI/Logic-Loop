@@ -81,9 +81,12 @@ const GAP = 12;
 const CARD_MIN_SPACE = 190;
 
 function mountedTargets(): string[] {
-  return STEPS.filter((s) => document.querySelector(`[data-tour-target="${s.target}"]`) !== null).map(
-    (s) => s.target
-  );
+  return STEPS.filter((s) => {
+    const target = document.querySelector(`[data-tour-target="${s.target}"]`);
+    // Workspace content stays mounted beneath Home, but display:none targets
+    // cannot provide a spotlight. Include only targets that have layout.
+    return target !== null && target.getClientRects().length > 0;
+  }).map((s) => s.target);
 }
 
 // Clip to the viewport so a section taller than the window (or scrolled

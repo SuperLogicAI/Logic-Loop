@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   antigravityDetect,
   antigravityHooksRemove,
@@ -282,7 +283,7 @@ export function AgentStatusBar({
           })}
         </div>
       </div>
-      {setupOpen && (
+      {setupOpen && createPortal(
         <OnboardingModal
           adapterStates={adapterStates}
           observedAdapters={observedAdapters}
@@ -292,7 +293,7 @@ export function AgentStatusBar({
           onRequestNotifications={onRequestNotifications}
           onLaunch={onLaunch}
           onClose={closeSetup}
-        />
+        />, document.body
       )}
     </>
   );

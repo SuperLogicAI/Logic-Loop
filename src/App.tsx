@@ -120,6 +120,11 @@ export default function App() {
   surfaceRef.current = surface;
   const openHome = useCallback(() => setSurface({ kind: "home" }), []);
   const returnToWorkspace = useCallback(() => setSurface({ kind: "workspace" }), []);
+  const [homeStartSurface, setHomeStartSurface] = useState<"home" | "workspace" | null>(null);
+  const changeHomeStartSurface = useCallback(async (next: "home" | "workspace") => {
+    await repo.setHomeStartSurface(next);
+    setHomeStartSurface(next);
+  }, []);
   const [inboxBadgeEnabled, setInboxBadgeEnabled] = useState(true);
   const toggleInboxBadge = useCallback(() => {
     setInboxBadgeEnabled((prev) => {
@@ -497,7 +502,7 @@ export default function App() {
   // Fires every time Setup closes, not just on first run — a no-op for a
   // profile that's already seen the current TOUR_VERSION (Phase 47).
   const handleSetupClose = useCallback(() => {
-    openHomeTabIfNoneOpen();
+    if (homeStartSurface !== "home") openHomeTabIfNoneOpen();
     void repo
       .getTourVersion()
       .then((version) => {
@@ -507,7 +512,7 @@ export default function App() {
         }
       })
       .catch(() => undefined);
-  }, [openHomeTabIfNoneOpen, showPanelMode]);
+  }, [openHomeTabIfNoneOpen, showPanelMode, homeStartSurface]);
 
   const openTour = useCallback(() => {
     showPanelMode("expanded");
@@ -891,6 +896,9 @@ export default function App() {
     void repo.getInboxBadgeEnabled().then(setInboxBadgeEnabled).catch(() => undefined);
     // reap PTYs orphaned by a webview crash/reload, then start fresh
     void ptyKillAll().then(async () => {
+      const startSurface = await repo.getHomeStartSurface().catch(() => "workspace" as const);
+      setHomeStartSurface(startSurface);
+      setSurface({ kind: startSurface });
       // Ghost tabs: sessions still active when the app last quit. Never
       // spawned (ptyId: -1) — the dead-tab overlay offers "Re-enter", which
       // is what actually opens the PTY, via the same resume path a mid-run
@@ -903,8 +911,9 @@ export default function App() {
         // Setup's own launch section becomes the only way the first tab
         // gets created (see AgentStatusBar's onSetupClose fallback).
         const launchedBefore = await repo.hasLaunchedSession().catch(() => true);
-        if (launchedBefore) void openTab();
-        else setForceSetupOpen(true);
+        if (launchedBefore) {
+          if (startSurface === "workspace") void openTab();
+        } else setForceSetupOpen(true);
         return;
       }
       const ghosts: Tab[] = candidates.map((c) => ({
@@ -1737,10 +1746,15 @@ export default function App() {
                 onOpenAttention={() => setAttentionOpen(true)}
                 inboxBadgeEnabled={inboxBadgeEnabled}
                 onToggleInboxBadge={toggleInboxBadge}
+                startSurface={homeStartSurface}
+                onChangeStartSurface={changeHomeStartSurface}
+                onOpenSetup={() => setForceSetupOpen(true)}
+                onOpenTour={openTour}
               />
             )}
             {surface.kind === "project" && (
               <ProjectOverview
+                key={surface.projectKey}
                 projectKey={surface.projectKey}
                 tabs={tabs}
                 expand={expand}

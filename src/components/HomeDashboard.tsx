@@ -43,6 +43,10 @@ interface Props {
   onOpenAttention: () => void;
   inboxBadgeEnabled: boolean;
   onToggleInboxBadge: () => void;
+  startSurface: "home" | "workspace" | null;
+  onChangeStartSurface: (next: "home" | "workspace") => Promise<void>;
+  onOpenSetup: () => void;
+  onOpenTour: () => void;
 }
 
 export function HomeDashboard({
@@ -56,11 +60,17 @@ export function HomeDashboard({
   onOpenAttention,
   inboxBadgeEnabled,
   onToggleInboxBadge,
+  startSurface,
+  onChangeStartSurface,
+  onOpenSetup,
+  onOpenTour,
 }: Props) {
   const [catalog, setCatalog] = useState<repo.ProjectCatalogEntry[] | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [showOlder, setShowOlder] = useState(false);
+  const [preferenceError, setPreferenceError] = useState(false);
+  const [savingPreference, setSavingPreference] = useState(false);
   const now = useMemo(() => Date.now(), []); // one snapshot per Home visit, not a ticking clock
 
   useEffect(() => {
@@ -135,7 +145,21 @@ export function HomeDashboard({
               {decisionProjectCount > 0 ? ` · ${decisionProjectCount} with open decisions` : ""}
             </span>
           )}
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <label className="text-xs text-zinc-400">Start in: {" "}
+              <select aria-label="Start in" value={startSurface ?? "workspace"} disabled={startSurface === null || savingPreference}
+                className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-zinc-300"
+                onChange={(e) => {
+                  const next = e.target.value === "home" ? "home" : "workspace";
+                  setPreferenceError(false);
+                  setSavingPreference(true);
+                  void onChangeStartSurface(next).catch(() => setPreferenceError(true)).finally(() => setSavingPreference(false));
+                }}>
+                <option value="home">Home</option><option value="workspace">Last workspace</option>
+              </select>
+            </label>
+            <button type="button" className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300" onClick={onOpenSetup}>Setup</button>
+            <button type="button" className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300" onClick={onOpenTour}>Tour</button>
             <button
               type="button"
               className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
@@ -154,6 +178,7 @@ export function HomeDashboard({
           </div>
         </div>
 
+        {preferenceError && <p role="alert" className="mt-2 text-xs text-amber-400">Couldn't save startup preference. Choose it again to retry.</p>}
         {activeTab && (
           <div className="mt-4 flex items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-800/60 px-4 py-3">
             <div className="min-w-0 flex-1">
@@ -197,7 +222,7 @@ export function HomeDashboard({
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {catalog !== null && visible.length === 0 && (
             <p className="col-span-full py-8 text-center text-sm text-zinc-500">
-              {catalog.length === 0 ? "No projects yet — open a folder to get started." : "No projects match this search."}
+              {catalog.length === 0 ? <>No projects yet. <button type="button" className="text-sky-400 hover:text-sky-300" onClick={onOpenSetup}>Choose a folder and start a session</button></> : "No projects match this search."}
             </p>
           )}
           {visible.map((card) => (

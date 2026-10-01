@@ -769,3 +769,19 @@ Update this file as phases are accepted.
   --check`, and `cargo clippy`/`cargo test --lib` (155 passed) all pass after
   every commit. See `docs/TESTING.md` §70 for the manual checklist — none of
   it run yet.
+
+
+### Phase 48 fix-it follow-up — 2026-09-30
+
+Maintainer authorized the fix-it plan after the partial release pass found
+Overview blockers. Read-only timing found 277 historical tether/JSON scans
+needed 111.71s; the new session-owned production work-log query fetched relevant
+rows in 0.168s. Overview now publishes independent bounded read states, avoids
+clock-triggered reloads, coalesces outstanding work, and caches board/Git.
+Decision counts, session/day attribution, Git timestamp units/full date-window
+errors, draft minimization and modal focus are repaired. Startup preference
+and workspace chooser were approved and implemented; Setup uses a portal so
+Home startup can display it. Per-card Continue/full Actions are explicitly
+deferred. Tests and release evidence: `docs/TESTING.md` §71. Phase 48 remains
+NOT ACCEPTED; pending live checks remain disclosed. The maintainer authorized
+committing and opening a PR; delivery proceeds as a draft pending those checks.

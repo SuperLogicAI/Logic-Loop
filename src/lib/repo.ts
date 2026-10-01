@@ -24,6 +24,7 @@ import { boundedSubmittedReply } from "./decisionReconciliation";
 import { clampPanelWidth, parsePanelMode, type VisiblePanelMode } from "./panelLayout";
 import { parseLandingNoteMode } from "./landingMode";
 import { projectKeyOf } from "./pty";
+import { resolveHomeStartSurface } from "./dashboard";
 
 let db: Database | null = null;
 
@@ -1419,7 +1420,21 @@ export async function setProjectPurpose(cwd: string, purpose: string): Promise<v
 const HOME_START_SURFACE_KEY = "home_start_surface";
 
 export async function getHomeStartSurface(): Promise<"home" | "workspace"> {
-  return (await getSetting(HOME_START_SURFACE_KEY)) === "home" ? "home" : "workspace";
+  const saved = await getSetting(HOME_START_SURFACE_KEY);
+  if (saved === "home" || saved === "workspace") return saved;
+  const rows = await (await getDb()).select<{ has_history: number }[]>(
+    `SELECT EXISTS (
+      SELECT 1 FROM session_bindings UNION ALL SELECT 1 FROM bookmarks
+      UNION ALL SELECT 1 FROM decisions UNION ALL SELECT 1 FROM blockers
+      UNION ALL SELECT 1 FROM notes UNION ALL SELECT 1 FROM events
+      UNION ALL SELECT 1 FROM settings WHERE key IN ('onboarding_version', 'tour_version', 'has_launched_session')
+    ) AS has_history`
+  );
+  const surface = resolveHomeStartSurface(saved, rows[0]?.has_history === 1);
+  // Persist the first resolved default: a fresh Home profile stays on Home
+  // after its first session, without altering an existing profile's default.
+  await setHomeStartSurface(surface);
+  return surface;
 }
 
 export async function setHomeStartSurface(value: "home" | "workspace"): Promise<void> {
@@ -1562,10 +1577,12 @@ export async function listProjectCatalog(): Promise<ProjectCatalogEntry[]> {
 
 /** Every open decision for a project, regardless of which tab/session owns
  * it — SidePanel's `listDecisions` is tab-scoped on purpose; Overview is not. */
+export const OPEN_PROJECT_DECISIONS_SQL = "SELECT * FROM decisions WHERE cwd = $1 AND status = 'open' ORDER BY ts DESC";
+
 export async function openDecisionsForProject(cwd: string): Promise<Decision[]> {
   const d = await getDb();
   return d.select<Decision[]>(
-    "SELECT * FROM decisions WHERE cwd = $1 AND status = 'open' ORDER BY ts DESC LIMIT 50",
+    OPEN_PROJECT_DECISIONS_SQL,
     [cwd]
   );
 }
@@ -1609,4 +1626,56 @@ export async function projectAgentTimeObservations(cwd: string): Promise<AgentTi
      ORDER BY e.session_id, observed_at`,
     [cwd]
   );
+}
+
+/** Project work-log ownership is the session, never the reused terminal tether.
+ * One indexed join replaces one JSON/tether scan for every historical session.
+ * SidePanel's tether-oriented eventsSince contract is intentionally separate. */
+export const PROJECT_WORK_LOG_SQL = `SELECT e.id, e.session_id, e.ts, e.type, e.payload_json, b.agent
+  FROM session_bindings b JOIN events e ON e.session_id = b.session_id
+  WHERE b.project_key = $1 AND e.ts > $2 AND e.ts <= $3
+    AND e.type IN ('transcript', 'hook:PostToolUse', 'hook:UserPromptSubmit')
+  ORDER BY e.ts ASC, e.id ASC`;
+
+export interface ProjectWorkLogRow {
+  id: number;
+  session_id: string;
+  ts: number;
+  type: string;
+  payload_json: string;
+  agent: string | null;
+}
+
+export async function projectWorkLogEvents(cwd: string, since: number, until: number): Promise<ProjectWorkLogRow[]> {
+  return (await getDb()).select<ProjectWorkLogRow[]>(PROJECT_WORK_LOG_SQL, [cwd, since, until]);
+}
+
+/** Overview metadata without resolving every other project's bookmarks on disk. */
+export async function projectOverviewMetadata(cwd: string): Promise<ProjectCatalogEntry> {
+  const d = await getDb();
+  const [activity, settings] = await Promise.all([
+    d.select<{ first_seen_at: number | null; last_activity_at: number | null; any_active: number }[]>(
+      `SELECT MIN(ts) AS first_seen_at, MAX(ts) AS last_activity_at, MAX(active) AS any_active FROM (
+        SELECT updated_at AS ts, active FROM session_bindings WHERE project_key = $1
+        UNION ALL SELECT ts, 0 FROM decisions WHERE cwd = $1
+        UNION ALL SELECT ts, 0 FROM blockers WHERE cwd = $1
+        UNION ALL SELECT ts, 0 FROM notes WHERE cwd = $1
+        UNION ALL SELECT ts, 0 FROM events WHERE type = 'attention_state_observed'
+          AND json_extract(payload_json, '$.project_key') = $1
+      )`, [cwd]),
+    d.select<{ key: string; value: string }[]>(
+      'SELECT key, value FROM settings WHERE key IN ($1, $2, $3)',
+      [PROJECT_PINNED_PREFIX + cwd, PROJECT_ARCHIVED_PREFIX + cwd, PROJECT_PURPOSE_PREFIX + cwd]),
+  ]);
+  const values = new Map(settings.map((row) => [row.key, row.value]));
+  return {
+    projectKey: cwd,
+    pinned: values.get(PROJECT_PINNED_PREFIX + cwd) === '1',
+    archived: values.get(PROJECT_ARCHIVED_PREFIX + cwd) === '1',
+    purpose: values.get(PROJECT_PURPOSE_PREFIX + cwd) ?? null,
+    bookmarked: false, // not used by Overview; catalog owns bookmark resolution
+    hasActiveSessionBinding: activity[0]?.any_active === 1,
+    firstSeenAt: activity[0]?.first_seen_at ?? null,
+    lastActivityAt: activity[0]?.last_activity_at ?? null,
+  };
 }

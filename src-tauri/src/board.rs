@@ -94,8 +94,11 @@ pub async fn peek_board(project_key: String) -> BoardPeek {
 }
 
 fn peek_board_blocking(project_key: String) -> BoardPeek {
-    if !std::path::Path::new(&project_key).is_dir() {
-        return BoardPeek::Missing;
+    match std::fs::metadata(&project_key) {
+        Ok(metadata) if metadata.is_dir() => {}
+        Ok(_) => return BoardPeek::Error { message: "Project folder is not a directory".into() },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return BoardPeek::Missing,
+        Err(e) => return BoardPeek::Error { message: e.to_string() },
     }
     match std::fs::read_to_string(board_path(&project_key)) {
         Ok(content) => BoardPeek::Ready { content },
@@ -118,6 +121,25 @@ fn write_board_blocking(project_key: String, content: String) -> Result<(), Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn peek_denied_project_metadata_is_error_not_missing() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(format!("logic-loop-board-denied-{}", std::process::id()));
+        let project = root.join("project");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let result = peek_board_blocking(project.to_string_lossy().into_owned());
+        // Restore before assertions so a test failure cannot strand the fixture.
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::remove_dir_all(&root).unwrap();
+        // Root can bypass DAC permissions in Linux CI; there a successful
+        // missing-board read is valid. Ordinary users must see Error.
+        if unsafe { libc::geteuid() } != 0 {
+            assert!(matches!(result, BoardPeek::Error { .. }));
+        }
+    }
 
     // Tests exercise the `_blocking` inner functions directly — same
     // convention as `extractor.rs`'s tests — so they stay plain sync `#[test]`

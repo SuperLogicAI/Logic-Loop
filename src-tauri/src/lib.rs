@@ -1,4 +1,7 @@
 mod board;
+mod dashboard;
+#[cfg(test)]
+mod dashboard_checks;
 mod clipboard;
 mod deepseek;
 mod extractor;
@@ -263,6 +266,7 @@ pub fn run() {
             pty::pty_live_count,
             pty::pty_kill_all,
             pty::git_log,
+            dashboard::dashboard_git_log,
             pty::git_branches,
             pty::git_worktree_add,
             pty::git_worktree_remove,

@@ -41,6 +41,7 @@ export function CopyUpdateModal({ data, onClose }: Props) {
 
   useEffect(() => {
     priorFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialogRef.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus();
     return () => priorFocusRef.current?.focus();
   }, []);
 
