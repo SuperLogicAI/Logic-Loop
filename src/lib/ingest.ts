@@ -241,8 +241,13 @@ export function bindSession(
   // tether. An untethered Codex event has no exact client identity either.
   if (p.agent === "codex") return null;
   const { boundTabIds, activeTabId, projectKey } = opts;
-  if (!projectKey) return null;
   const liveTabs = tabs.filter((t) => t.status === "live");
+  // The tab that already owns this session is the answer, even when the
+  // in-memory binding map is empty (ghost tabs after relaunch never seed it)
+  // or the session has since cd'ed elsewhere.
+  const owner = liveTabs.find((t) => t.sessionId === p.session_id);
+  if (owner) return owner.id;
+  if (!projectKey) return null;
   // A filesystem root is never a real project: it means the session was started
   // somewhere with no meaningful cwd. Binding it would overwrite the tab's cwd
   // with a key that matches nothing, blanking the panel. Untethered + rootless =
@@ -250,12 +255,16 @@ export function bindSession(
   // Deliberately anchored and exact — a prefix test would reject `/Users/x` and
   // `C:\dev\proj` too, which fails far more quietly than the bug it fixes.
   if (/^(?:[/\\]|[A-Za-z]:[/\\]?)$/.test(projectKey)) return null;
+  // A tab already holding a different session (bound in memory, or carrying a
+  // persisted sessionId — a re-entered ghost) is never a fallback target: an
+  // outside session would stamp its tab_id onto that tab's derived rows.
+  // No eligible tab → unbound; the hook is still persisted by the caller.
+  const eligible = liveTabs.filter((t) => !boundTabIds.has(t.id) && !t.sessionId);
   return (
-    liveTabs.find((t) => t.cwd === projectKey && !boundTabIds.has(t.id))?.id ??
-    liveTabs.find((t) => t.cwd === projectKey)?.id ??
+    eligible.find((t) => t.cwd === projectKey)?.id ??
     // else the active tab — the user `cd`ed away from the tab's spawn cwd
     // before running claude, and they're typing in it now.
-    liveTabs.find((t) => t.id === activeTabId && !boundTabIds.has(t.id))?.id ??
+    eligible.find((t) => t.id === activeTabId)?.id ??
     null
   );
 }
@@ -396,6 +405,18 @@ export function formatAge(ms: number): string {
   if (s < 3600) return `${Math.floor(s / 60)}m`;
   if (s < 86400) return `${Math.floor(s / 3600)}h`;
   return `${Math.floor(s / 86400)}d`;
+}
+
+/** Panel status words for a tab with no live hook state yet. A tab carrying a
+ * persisted session (a re-entered ghost: Codex `resume` sends no hook until
+ * the next turn) is a restored session, not "no session". */
+export function sessionStatusLabel(
+  agentState: AgentState | undefined,
+  sessionId: string | null | undefined
+): { state: string; noEvents: string } {
+  return sessionId && !agentState
+    ? { state: "session restored", noEvents: "no new activity" }
+    : { state: agentState ?? "no session", noEvents: "no events yet" };
 }
 
 /** Map a hook event to the tab's agent state; null = no state change. */

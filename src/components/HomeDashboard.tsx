@@ -289,6 +289,7 @@ function ProjectCard({
       </div>
       <button
         type="button"
+        aria-label={`Open ${displayName} overview`}
         className="mt-3 rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-700"
         onClick={onOpen}
       >

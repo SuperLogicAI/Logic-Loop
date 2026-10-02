@@ -59,6 +59,7 @@ import {
   ptySpawn,
 } from "./lib/pty";
 import { sanitizeSlug } from "./lib/worktree";
+import { isEditableShortcutTarget } from "./lib/shortcuts";
 import * as repo from "./lib/repo";
 import {
   togglePanelHidden,
@@ -80,6 +81,7 @@ import type {
 import { PALETTE } from "./types";
 import { landingDepartureAction } from "./lib/landingMode";
 import {
+  departedTabIds,
   effectiveVisibleTerminalIds,
   selectIntoSplit,
   splitContains,
@@ -1376,6 +1378,10 @@ export default function App() {
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
       const key = e.key.toLowerCase();
+      // Text fields keep their own keys (Ctrl+K kill-line, ⌘B in rich text,
+      // etc.); only the manual ⌘V paste below still applies to them.
+      const target = e.target instanceof Element ? e.target : document.activeElement;
+      if (isEditableShortcutTarget(target as HTMLElement | null) && !(mod && key === "v")) return;
       if (mod && key === "k") {
         e.preventDefault();
         setAttentionOpen((open) => !open);
@@ -1443,8 +1449,9 @@ export default function App() {
       const prevTab = tabsRef.current.find((t) => t.id === prevId);
       const suppressed = suppressLandingRef.current;
       if (suppressed) suppressLandingRef.current = false;
+      // tab_left is written by the visible-set effect below, not here: this
+      // effect also fires for switches made while Home hides the terminals.
       if (prevTab && !splitContains(splitPaneIdsRef.current, prevId)) {
-        markTabLeft(prevTab);
         // Consumed here, not on a timer/await elsewhere — clearing the flag
         // from the spawn call site raced this effect's async scheduling
         // (only fanOut's extra post-openTab await happened to hide it; a
@@ -1463,7 +1470,7 @@ export default function App() {
     // moves to whatever tab is next), but nobody is looking at a terminal
     // right now, so nothing should be claimed.
     if (activeId && surfaceRef.current.kind === "workspace" && document.hasFocus()) claimTab(activeId);
-  }, [activeId, expand, maybePromptLanding, claimTab, markTabLeft]);
+  }, [activeId, expand, maybePromptLanding, claimTab]);
 
   // Surface transitions (Plan 048): entering Home/Project records tab_left
   // for whatever was visible a moment ago; returning to the workspace claims
@@ -1477,25 +1484,38 @@ export default function App() {
     const prevKind = prevSurfaceKindRef.current;
     prevSurfaceKindRef.current = surface.kind;
     if (prevKind === surface.kind) return;
-    if (prevKind === "workspace") {
-      for (const id of visibleTerminalIds(activeIdRef.current, splitPaneIdsRef.current)) {
-        const tab = tabsRef.current.find((t) => t.id === id);
-        if (tab) markTabLeft(tab);
-      }
-    } else if (surface.kind === "workspace" && document.hasFocus()) {
+    if (prevKind !== "workspace" && surface.kind === "workspace" && document.hasFocus()) {
       for (const id of visibleTerminalIds(activeIdRef.current, splitPaneIdsRef.current)) {
         claimTab(id);
       }
     }
-  }, [surface, markTabLeft, claimTab]);
+  }, [surface, claimTab]);
+
+  // Since-you-left anchors (Phase 14a), visibility half: a tab is "left" when
+  // it drops out of the effective visible set — tab switch, split change,
+  // entering Home/Overview — and only then. Home -> Continue into another tab
+  // anchors nothing: the hidden tab already left when Home opened. A closed
+  // tab is already gone from tabsRef here; finishCloseTab anchored it.
+  const visibleForAnchorsRef = useRef<string[]>([]);
+  useEffect(() => {
+    const next = effectiveVisibleTerminalIds(surface, activeId, splitPaneIds);
+    const departed = departedTabIds(visibleForAnchorsRef.current, next);
+    visibleForAnchorsRef.current = next;
+    for (const id of departed) {
+      const tab = tabsRef.current.find((t) => t.id === id);
+      if (tab) markTabLeft(tab);
+    }
+  }, [surface, activeId, splitPaneIds, markTabLeft]);
 
   // Since-you-left anchor, blur half: Cmd-Tabbing to another app leaves the
-  // active tab without switching activeId, so the tab-switch effect above
-  // never fires for it.
+  // visible tabs without changing the visible set. On Home nothing is
+  // visible, so nothing is anchored.
   useEffect(() => {
     const onBlur = () => {
-      const tab = tabsRef.current.find((t) => t.id === activeIdRef.current);
-      if (tab) markTabLeft(tab);
+      for (const id of visibleForAnchorsRef.current) {
+        const tab = tabsRef.current.find((t) => t.id === id);
+        if (tab) markTabLeft(tab);
+      }
     };
     window.addEventListener("blur", onBlur);
     return () => window.removeEventListener("blur", onBlur);

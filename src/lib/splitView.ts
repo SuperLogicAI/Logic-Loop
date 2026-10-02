@@ -36,3 +36,11 @@ export function effectiveVisibleTerminalIds(
   if (surface.kind !== "workspace") return [];
   return visibleTerminalIds(activeId, pair);
 }
+
+/** Since-you-left anchors: the tabs that just stopped being visible, i.e. in
+ * the previous effective visible set but not the next. A tab hidden behind
+ * Home already left when Home opened — it must not be anchored again (that
+ * later anchor would swallow a result it finished while unseen). */
+export function departedTabIds(prev: readonly string[], next: readonly string[]): string[] {
+  return prev.filter((id) => !next.includes(id));
+}

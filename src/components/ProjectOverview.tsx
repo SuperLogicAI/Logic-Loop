@@ -352,11 +352,12 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
               <ul className="mt-2 space-y-2">
                 {needsAChoice.map((item, i) => (
                   <li key={i} className="rounded-md border border-zinc-800 bg-zinc-800/30 p-2.5">
-                    <p className="text-xs text-zinc-200">{item.text}</p>
+                    <p id={`needs-choice-${i}`} className="text-xs text-zinc-200">{item.text}</p>
                     {item.assumption && <p className="mt-0.5 text-[11px] text-zinc-500">Agent assumption: {item.assumption}</p>}
                     <button
                       type="button"
                       disabled={!item.route.tabId}
+                      aria-describedby={`needs-choice-${i}`}
                       className="mt-1.5 text-[11px] text-sky-400 hover:text-sky-300 disabled:text-zinc-600"
                       onClick={() => item.route.tabId && onContinueTab(item.route.tabId)}
                     >

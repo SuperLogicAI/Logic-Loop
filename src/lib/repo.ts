@@ -26,7 +26,11 @@ import { parseLandingNoteMode } from "./landingMode";
 import { projectKeyOf } from "./pty";
 import { resolveHomeStartSurface } from "./dashboard";
 
-let db: Database | null = null;
+// The pending load, not the resolved handle: concurrent first callers used to
+// each run Database.load, and tauri-plugin-sql opens a new pool per load (only
+// one runs migrations) — on a fresh profile that raced into `database is
+// locked` (code 5). A failed load is cleared so the next call retries.
+let dbLoad: Promise<Database> | null = null;
 
 export interface TrafficRow {
   id: number;
@@ -62,9 +66,12 @@ export async function readSafeRouterTraffic(): Promise<TrafficSnapshot> {
 // ordered so a later accepted observation cannot overtake its source event.
 const hookWriteChains = new Map<string, Promise<void>>();
 
-async function getDb(): Promise<Database> {
-  if (!db) db = await Database.load("sqlite:context-terminal.db");
-  return db;
+function getDb(): Promise<Database> {
+  dbLoad ??= Database.load("sqlite:context-terminal.db").catch((e: unknown) => {
+    dbLoad = null;
+    throw e;
+  });
+  return dbLoad;
 }
 
 export async function listBookmarks(): Promise<Bookmark[]> {

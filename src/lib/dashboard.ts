@@ -257,19 +257,62 @@ export interface UpdateMarkdownInput {
   nextStep: string | null;
 }
 
-function oneLine(text: string): string {
-  const line = text.split("\n")[0]!.trim();
-  // Agent prose can contain paths/commands on its very first line. Avoid
-  // exporting those lines rather than assuming truncation makes them safe.
-  // This is output minimization, never semantic ingestion or PTY parsing.
-  if (/[`]|(?:^|\s)(?:\/\S+|~\/\S+|\.{1,2}\/\S+|[A-Za-z]:[\\/][^\s]+)|\b[\w.-]+\/[\w./-]+\.[\w]+|(?:^|\s)\$\s|\b(?:npm|npx|pnpm|yarn|cargo|git|sudo|bash|sh|zsh|curl|wget|rm|python3?|node|make)\s+[\w-]+/i.test(line)) {
-    return "Technical details omitted; review in the workspace.";
+export const OMITTED_LINE = "Technical details omitted; review in the workspace.";
+
+// Slash words that are prose, not paths. Closed list on purpose: a general
+// letters-only exemption would also pass `src/components` or `config/secrets`.
+const SLASH_PROSE = new Set(["and/or", "either/or", "w/", "w/o", "i/o", "n/a", "tcp/ip"]);
+const CODE_FILE = /\.(?:sh|bash|zsh|py|ts|tsx|js|jsx|mjs|cjs|json|toml|ya?ml|md|rs|sql|env|lock)$/i;
+// Lowercase only: commands are typed lowercase, sentence prose is not ("Git
+// history", "Make sure"). Tool names count anywhere with an argument.
+const TOOL_COMMAND = /(?:^|[\s(])(?:npm|npx|pnpm|yarn|cargo|git|sudo|curl|wget|brew|pip3?|rg|sed|awk|tsx|deno|python3)\s+\S/;
+// English-ambiguous commands: only as the line's first word (with an argument
+// or a `cmd:` error prefix), or anywhere when followed by a flag.
+const AMBIGUOUS = "ls|cd|rm|mkdir|cp|mv|cat|find|make|node|python|bash|sh|zsh|touch|kill|chmod";
+const AMBIGUOUS_LEADING = new RegExp(`^(?:${AMBIGUOUS})(?::|\\s+\\S)`);
+const AMBIGUOUS_FLAGGED = new RegExp(`(?:^|\\s)(?:${AMBIGUOUS})\\s+--?[A-Za-z]`);
+
+function isPathLikeToken(raw: string): boolean {
+  const token = raw.replace(/^[("'\[<{]+/, "").replace(/[)"'\]>},;:.!?]+$/, "");
+  if (!token) return false;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(token)) return true; // URL
+  if (token.startsWith("~") || token.includes("\\") || /^[A-Za-z]:(?:[\\/]|$)/.test(token)) return true;
+  if (token.includes("/") && !SLASH_PROSE.has(token.toLowerCase()) && !/^\d+(?:\/\d+)+$/.test(token)) return true;
+  return CODE_FILE.test(token) && !/^[A-Z][A-Za-z]*\.js$/.test(token); // `Node.js` is a name
+}
+
+/** One exportable line for the Copy update draft: first line only, Markdown
+ * links reduced to their text, and the whole line replaced when it carries a
+ * file path or shell command. Output minimization over untrusted agent prose —
+ * never semantic ingestion, never PTY parsing. */
+export function exportSafeLine(text: string): string {
+  const line = text
+    .split("\n")[0]!
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .trim();
+  if (
+    /`|(?:^|\s)\$\s/.test(line) ||
+    TOOL_COMMAND.test(line) ||
+    AMBIGUOUS_LEADING.test(line) ||
+    AMBIGUOUS_FLAGGED.test(line) ||
+    line.split(/\s+/).some(isPathLikeToken)
+  ) {
+    return OMITTED_LINE;
   }
   return line;
 }
 
+/** A colliding display name is `parent/base`; the heading falls back to the
+ * base name rather than to the omission notice. */
+function exportSafeTitle(name: string): string {
+  const safe = exportSafeLine(name);
+  if (safe !== OMITTED_LINE) return safe;
+  const base = exportSafeLine(name.split("\n")[0]!.split(/[\\/]/).filter(Boolean).pop() ?? "");
+  return base && base !== OMITTED_LINE ? base : "Project";
+}
+
 function bulletsOrNoneRecorded(lines: readonly string[]): string[] {
-  return lines.length > 0 ? lines.map((l) => `- ${oneLine(l)}`) : ["- none recorded"];
+  return lines.length > 0 ? lines.map((l) => `- ${exportSafeLine(l)}`) : ["- none recorded"];
 }
 
 /** Deterministic Markdown for the Copy update modal — no model call, ever.
@@ -281,11 +324,11 @@ export function buildUpdateMarkdown(input: UpdateMarkdownInput): string {
   const progress = [...input.progressLines];
   if (input.commitSubjects.length > 0) {
     const n = input.commitSubjects.length;
-    progress.push(`${n} local commit${n === 1 ? "" : "s"}: ${input.commitSubjects.map(oneLine).join("; ")}`);
+    progress.push(`${n} local commit${n === 1 ? "" : "s"}: ${input.commitSubjects.map(exportSafeLine).join("; ")}`);
   }
 
   const lines: string[] = [];
-  lines.push(`## ${oneLine(input.projectName)} — update (${oneLine(input.rangeLabel)})`);
+  lines.push(`## ${exportSafeTitle(input.projectName)} — update (${exportSafeLine(input.rangeLabel)})`);
   lines.push("**Progress**");
   lines.push(...bulletsOrNoneRecorded(progress));
   lines.push("**Decisions needed**");
@@ -301,4 +344,18 @@ export function buildUpdateMarkdown(input: UpdateMarkdownInput): string {
   lines.push("**Next**");
   lines.push(...bulletsOrNoneRecorded(input.nextStep ? [input.nextStep] : []));
   return lines.join("\n");
+}
+
+/** Copy update's one side effect. A rejected clipboard write is a visible,
+ * retryable state, never a silent reset (the text stays on screen). */
+export async function copyDraft(
+  write: (text: string) => Promise<void>,
+  text: string
+): Promise<"copied" | "failed"> {
+  try {
+    await write(text);
+    return "copied";
+  } catch {
+    return "failed";
+  }
 }

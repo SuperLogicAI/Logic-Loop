@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { buildUpdateMarkdown } from "../lib/dashboard";
+import { buildUpdateMarkdown, copyDraft } from "../lib/dashboard";
 import type { Blocker, Commit, Decision } from "../types";
 
 export interface CopyUpdateData {
@@ -35,7 +35,7 @@ export function CopyUpdateModal({ data, onClose }: Props) {
     [data]
   );
   const [text, setText] = useState(draftSeed);
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const dialogRef = useRef<HTMLDivElement>(null);
   const priorFocusRef = useRef<HTMLElement | null>(null);
 
@@ -68,15 +68,10 @@ export function CopyUpdateModal({ data, onClose }: Props) {
     }
   };
 
+  // Clipboard denial is not a crash — the text stays on screen for a manual
+  // select-all/copy, and the failure is announced with a retry.
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-    } catch {
-      // Clipboard permission denial is not a crash — the text is still on
-      // screen for a manual select-all/copy.
-      setCopied(false);
-    }
+    setCopyState(await copyDraft((t) => navigator.clipboard.writeText(t), text));
   };
 
   return (
@@ -101,10 +96,18 @@ export function CopyUpdateModal({ data, onClose }: Props) {
         <textarea
           autoFocus
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            setCopyState("idle");
+          }}
           rows={14}
           className="mt-3 flex-1 resize-none rounded-md border border-zinc-700 bg-zinc-950 p-3 font-mono text-xs text-zinc-200 outline-none focus:border-sky-500"
         />
+        {copyState === "failed" && (
+          <p role="alert" className="mt-2 text-[11px] text-red-400">
+            Couldn't copy to the clipboard. Select the text and press ⌘C, or try again.
+          </p>
+        )}
         <div className="mt-3 flex justify-end gap-2">
           <button
             type="button"
@@ -118,7 +121,7 @@ export function CopyUpdateModal({ data, onClose }: Props) {
             className="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500"
             onClick={() => void copy()}
           >
-            {copied ? "Copied!" : "Copy"}
+            {copyState === "copied" ? "Copied!" : copyState === "failed" ? "Try again" : "Copy"}
           </button>
         </div>
       </div>

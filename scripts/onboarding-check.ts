@@ -10,6 +10,7 @@ import {
   parseOnboardingVersion,
   type AdapterRuntimeState,
 } from "../src/lib/onboarding";
+import { cardStyle, tourScrollBehavior, visibleRect } from "../src/components/FeatureTour";
 
 assert.equal(ONBOARDING_VERSION, 3);
 assert.deepEqual(
@@ -120,5 +121,28 @@ const ptyRsSource = readFileSync("src-tauri/src/pty.rs", "utf8");
 assert.match(ptyRsSource, /pub fn validate_project_dir\(path: String\) -> Result<String, String>/);
 assert.ok(libRsSource.includes("pty::validate_project_dir"));
 assert.ok(readFileSync("src/lib/pty.ts", "utf8").includes('invoke<string>("validate_project_dir"'));
+
+// Phase 48 release repair: the tour spotlight must keep its horizontal
+// geometry. A DOMRect exposes left/width as prototype getters; spreading one
+// dropped them, so the Home spotlight vanished and the card lost its anchor.
+const domRectLike = Object.create({
+  get top() { return 30; },
+  get left() { return 8; },
+  get width() { return 56; },
+  get height() { return 24; },
+}) as { top: number; left: number; width: number; height: number };
+assert.equal(Object.keys({ ...domRectLike }).length, 0, "fixture must behave like a DOMRect under spread");
+const homeRect = visibleRect(domRectLike, 1200, 800);
+assert.deepEqual(homeRect, { top: 30, left: 8, width: 56, height: 24 }, "tab-bar Home spotlight lost left/width");
+const homeCard = cardStyle(homeRect, 1200, 800);
+assert.equal(homeCard.top, 30 + 24 + 12, "Home card belongs just below the tab-bar button");
+assert.equal(homeCard.left, 12);
+assert.equal(homeCard.transform, undefined, "a measured target must not fall back to the centered card");
+assert.deepEqual(visibleRect({ top: -50, left: -10, width: 400, height: 2000 }, 300, 800), { top: 0, left: 0, width: 300, height: 800 });
+assert.equal(tourScrollBehavior(true), "auto", "reduced motion must not smooth-scroll");
+assert.equal(tourScrollBehavior(false), "smooth");
+const tourSrc = readFileSync(new URL("../src/components/FeatureTour.tsx", import.meta.url), "utf8");
+assert.equal((tourSrc.match(/transition-all duration-200 motion-reduce:transition-none/g) ?? []).length, 2, "spotlight and card must skip transitions under reduced motion");
+assert.match(tourSrc, /getClientRects\(\)\.length > 0/, "hidden workspace targets stay excluded");
 
 console.log("onboarding-check: all assertions passed");

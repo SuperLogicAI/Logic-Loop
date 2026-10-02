@@ -16,7 +16,11 @@ import {
   dashboardRangeStart,
   resolveHomeStartSurface,
   projectWorkspaceChoices,
+  exportSafeLine,
+  copyDraft,
+  OMITTED_LINE,
 } from "../src/lib/dashboard";
+import { isEditableShortcutTarget } from "../src/lib/shortcuts";
 import type { ProjectCatalogEntry } from "../src/lib/repo";
 import { DashboardReadCache, observeDashboardRead, type ReadDiagnostic, type ReadState } from "../src/lib/dashboardLoader";
 import type { Tab } from "../src/types";
@@ -457,4 +461,91 @@ const tourSource = readFileSync(new URL("../src/components/FeatureTour.tsx", imp
 assert.match(tourSource, /getClientRects\(\)\.length > 0/, "Home tour must skip targets in hidden workspace ancestors");
 const copySource = readFileSync(new URL("../src/components/CopyUpdateModal.tsx", import.meta.url), "utf8");
 assert.match(copySource, /querySelector<HTMLTextAreaElement>\("textarea"\)\?\.focus\(\)/);
+// --- Phase 48 release repair: export minimization (real-data leaks) ---
+const mustOmit = [
+  "ls: src-tauri/migrations: No such file or directory", // observed live under Blockers
+  "rm -rf build",
+  "npm run build failed",
+  "Edited src/lib/repo.ts",
+  "Moved the helpers into src/components",
+  "Read config/secrets before deploying",
+  "Saved it to ~/x",
+  "See ../plans/x.md for details",
+  "Docs at https://example.com/a",
+  "Run `cmd` first",
+  "make build",
+  "bash deploy.sh",
+  "python3 migrate.py",
+  "Updated deploy.sh",
+  "Compare Home/Overview counts",
+  "git push failed on main",
+  "Then run cargo test --lib",
+  "cat: no such file",
+  "Try find -name x",
+];
+for (const line of mustOmit) assert.equal(exportSafeLine(line), OMITTED_LINE, `leaked: ${line}`);
+assert.equal(exportSafeLine("See [Plan 048](plans/048-x.md) for scope"), "See Plan 048 for scope", "link target must drop, text stays");
+assert.equal(exportSafeLine("[src/a.ts](src/a.ts)"), OMITTED_LINE, "a path as link text still omits");
+const mustKeep = [
+  "Make sure the form works",
+  "We should make sure it works",
+  "Client and/or teammate update",
+  "33/61 decisions closed",
+  "Find a booking provider",
+  "Use Stripe for now",
+  "Upgrade to Node.js 22",
+  "Git history looks clean",
+  "Ship it w/ the new copy",
+];
+for (const line of mustKeep) assert.equal(exportSafeLine(line), line, `ordinary prose removed: ${line}`);
+// Every exported section routes through the same minimizer.
+const leakLine = "ls: src-tauri/migrations: No such file or directory";
+const everySection = buildUpdateMarkdown({
+  projectName: "parent/proj",
+  rangeLabel: "Sep 22–29",
+  progressLines: [leakLine, "See [the plan](plans/048-x.md)"],
+  commitSubjects: ["python3 migrate.py", "Add form"],
+  decisionsNeeded: [{ question: "bash deploy.sh now?", assumption: null }, { question: "Which provider?", assumption: "config/secrets" }],
+  blockerLines: [leakLine],
+  nextStep: "make build",
+});
+for (const secret of ["src-tauri", "plans/048", "migrate.py", "deploy.sh", "config/secrets", "make build", "parent/"]) {
+  assert.ok(!everySection.includes(secret), `section leak: ${secret}`);
+}
+assert.ok(everySection.startsWith("## proj — update (Sep 22–29)"), "colliding display name falls back to its basename");
+assert.ok(everySection.includes("- See the plan"));
+assert.ok(everySection.includes("Add form"));
+assert.ok(everySection.includes(`- ${OMITTED_LINE}`), "omitted lines are disclosed, not dropped as none recorded");
+
+// --- Copy update: clipboard failure is a retryable state ---
+assert.equal(await copyDraft(async () => undefined, "x"), "copied");
+assert.equal(await copyDraft(async () => { throw new Error("denied"); }, "x"), "failed");
+let written = "";
+assert.equal(await copyDraft(async (t) => { written = t; }, "edited text"), "copied");
+assert.equal(written, "edited text", "the edited draft, not the seed, is written");
+
+// --- Shortcut isolation: text fields keep their keys, terminals keep app shortcuts ---
+const el = (tagName: string, extra: Record<string, unknown> = {}) => ({
+  tagName,
+  classList: { contains: (c: string) => (extra.cls as string[] | undefined)?.includes(c) ?? false },
+  ...extra,
+});
+for (const type of ["text", "search", "email", "url", "tel", "password", "number", "date", ""]) {
+  assert.equal(isEditableShortcutTarget(el("INPUT", { type })), true, `input[type=${type}] must keep its keys`);
+}
+for (const type of ["checkbox", "radio", "button", "submit", "range", "color", "file"]) {
+  assert.equal(isEditableShortcutTarget(el("INPUT", { type })), false, `input[type=${type}] is not a text field`);
+}
+assert.equal(isEditableShortcutTarget(el("TEXTAREA")), true, "purpose/Copy update textareas keep their keys");
+assert.equal(isEditableShortcutTarget(el("TEXTAREA", { cls: ["xterm-helper-textarea"] })), false, "terminal keeps app shortcuts");
+assert.equal(isEditableShortcutTarget(el("DIV", { isContentEditable: true })), true);
+assert.equal(isEditableShortcutTarget(el("BUTTON")), false);
+assert.equal(isEditableShortcutTarget(null), false);
+assert.match(app, /isEditableShortcutTarget\(target as HTMLElement \| null\) && !\(mod && key === "v"\)\) return;/, "global shortcuts must yield to editable fields");
+const homeSource = readFileSync(new URL("../src/components/HomeDashboard.tsx", import.meta.url), "utf8");
+assert.match(homeSource, /aria-label=\{`Open \$\{displayName\} overview`\}/, "Home card actions must name their project");
+assert.match(overviewSource, /aria-describedby=\{`needs-choice-\$\{i\}`\}/, "Go to workspace must be described by its decision");
+const repoSource = readFileSync(new URL("../src/lib/repo.ts", import.meta.url), "utf8");
+assert.match(repoSource, /dbLoad \?\?= Database\.load\(/, "concurrent first DB calls must share one load (fresh-profile code 5)");
+assert.equal((repoSource.match(/Database\.load\(/g) ?? []).length, 1, "only getDb may load the database");
 console.log("dashboard-check: all assertions passed (including async load, cache, ranges, attribution, export privacy, startup and chooser)");
