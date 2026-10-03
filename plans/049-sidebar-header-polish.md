@@ -215,3 +215,11 @@ from blue Setup/hooks. Preserve launch/worktree behavior and other tab colors.
 Maintainer reviewed the rebuilt UI and wrote `PHASE 49 ACCEPTED`, then requested
 a PR for the complete UI overhaul. This closes all approved follow-ups. Prior
 unrun manual scenarios remain disclosed in docs/TESTING.md, not marked passed.
+
+## Approved post-acceptance density follow-up — 2026-10-03
+
+Maintainer requested a tighter project identity row and Codex usage header:
+reduce expanded project row from 48px to 36px; move the default Codex account
+label to the right of its model heading as "account". Preserve named additional
+limit buckets, loading/error/stale states and Claude usage presentation.
+Include this UI follow-up in PR 68; no metering or lifecycle behavior changes.

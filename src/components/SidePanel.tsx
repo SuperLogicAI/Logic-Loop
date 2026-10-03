@@ -957,7 +957,7 @@ export function SidePanel({
         attentionStale={attentionStale} inboxBadgeEnabled={inboxBadgeEnabled} lockIn={lockIn} />
       {/* Pinned header: never scrolls away. Text takes the project's bookmark
           color when one exists; plain grey otherwise. */}
-      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-zinc-800 px-3">
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-zinc-800 px-3">
         <div className="min-w-0 flex-1">
           <p
             className="w-full truncate font-mono text-[10px] leading-none text-zinc-500"

@@ -70,7 +70,7 @@ export function CodexUsageBlock({ agent, sessionId, snapshot, now }: {
   const visibleBuckets = codexBuckets.length ? codexBuckets : data?.buckets ?? [];
   const renderBucket = (bucket: CodexBucket) => (
     <div key={bucket.id} className="flex flex-col gap-1">
-      <span className="text-zinc-500">{bucket.name || bucket.id} account</span>
+      {bucket.id !== "codex" && <span className="text-zinc-500">{bucket.name || bucket.id} account</span>}
       {bucket.primary && <WindowBar window={bucket.primary} />}
       {bucket.secondary && <WindowBar window={bucket.secondary} />}
       {!bucket.primary && !bucket.secondary && <span className="text-zinc-600">No windows returned.</span>}
@@ -78,7 +78,10 @@ export function CodexUsageBlock({ agent, sessionId, snapshot, now }: {
   );
   return (
     <div className="flex shrink-0 flex-col gap-1.5 border-b border-zinc-800 px-3 py-1.5 text-[10px] text-zinc-400" title="Shared across this Codex account, including activity outside this project.">
-      <span className="text-zinc-500">Codex usage · {data?.model || "Model unknown"}</span>
+      <div className="flex min-w-0 items-baseline justify-between gap-2 text-zinc-500">
+        <span className="min-w-0 truncate" title={data?.model || "Model unknown"}>Codex usage · {data?.model || "Model unknown"}</span>
+        <span className="shrink-0">account</span>
+      </div>
       {!current || current.state === "loading" ? <span className="text-zinc-600">Loading account limits…</span> : null}
       {current?.state === "unavailable" && <span className="text-zinc-600">Account limits unavailable for this authentication.</span>}
       {current?.state === "error" && !data && <span className="text-amber-400">Could not read account limits.</span>}

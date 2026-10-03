@@ -5071,3 +5071,18 @@ tested. Maintainer authorized opening a PR for the complete UI overhaul.
 PR preparation: full `cargo test` passed (160 library tests, 1 ignored;
 main/doc-test targets also passed). Diff whitespace check passed. PR is based
 on the current remote main, whose tree matched the local pre-squash main.
+
+### Phase 49 post-acceptance density follow-up — 2026-10-03
+
+Maintainer supplied rebuilt-app screenshots and authorized tightening the
+project row and default Codex account header. Expanded project identity row is
+now 36px (was 48px). Codex model heading and right-aligned "account" share one
+line; redundant default Codex bucket label removed. Named additional buckets
+and loading/error/stale indicators retained. Claude usage block unchanged.
+
+Focused codex-meter/panel-layout/opencode, full check suite, strict TypeScript,
+frontend build, full Cargo tests and Clippy passed; diff whitespace check
+passed. Existing bundle-size warning remains. No golden run.
+Pending rebuild: verify project identity/Notify at narrow/normal widths and
+Codex model/account alignment, additional limits, unavailable/stale states.
+This follow-up has not received a rebuilt-app visual pass by the agent.
