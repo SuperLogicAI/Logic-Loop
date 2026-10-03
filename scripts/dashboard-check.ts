@@ -10,6 +10,7 @@ import {
   buildUpdateMarkdown,
   observedAgentTime,
   projectDisplayName,
+  projectFolderLabel,
   sortProjectCards,
   buildProjectWorkLog,
   commitsInRange,
@@ -567,3 +568,8 @@ assert.equal(namedOnly[0]?.bookmarked, false);
 const coloredCards = buildProjectCards([{ ...namedOnly[0]!, bookmarkName: "Shortcut", bookmarkColor: "#ff0000" }], [], Date.now());
 assert.equal(coloredCards[0]?.nickname, "Personal project");
 assert.equal(coloredCards[0]?.bookmarkColor, "#ff0000");
+
+assert.equal(projectFolderLabel("/Users/vandershark/Desktop/dev/context_terminal"), "dev/context_terminal");
+assert.equal(projectFolderLabel("/Users/vandershark/Desktop/dev/pair_agentic/"), "dev/pair_agentic");
+assert.equal(projectFolderLabel("/repo"), "repo");
+assert.equal(projectFolderLabel("/"), "/");

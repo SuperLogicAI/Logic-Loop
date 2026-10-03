@@ -1571,31 +1571,17 @@ export default function App() {
     focusTab(tab.id);
   }, [focusTab]);
 
-  // Project Overview's "Start session" (Plan 048): an existing tab for this
-  // project — live or a restorable ghost, same as clicking it in the tab bar
-  // — wins over starting a second one. No separate spawn path (invariant 4).
-  // Overview only shows this button when no live tab already exists, but a
-  // closed-but-resumable ghost can still be sitting in `tabs` — reusing
-  // focusTab here means that case still resumes instead of double-opening.
-  const openOrResumeProject = useCallback(
-    (projectKey: string) => {
-      const existing = tabsRef.current.find((t) => expand(t.cwd) === projectKey);
-      if (existing) focusTab(existing.id);
-      else void repo.projectIdentity(projectKey)
-        .catch(() => ({ nickname: null, bookmarkName: null, bookmarkColor: null }))
-        .then((identity) => {
-          // Another human launch may have completed while metadata was read.
-          const opened = tabsRef.current.find((t) => expand(t.cwd) === projectKey);
-          if (opened) focusTab(opened.id);
-          else void openTab({
-            cwd: projectKey,
-            name: identity.nickname || identity.bookmarkName || undefined,
-            color: identity.bookmarkColor || undefined,
-          });
-        });
-    },
-    [expand, focusTab, openTab]
-  );
+  // Human-triggered fresh session. Continue uses focusTab separately; a new
+  // tab always goes through the ordinary spawn path and preserves project identity.
+  const startProjectSession = useCallback(async (projectKey: string) => {
+    const identity = await repo.projectIdentity(projectKey)
+      .catch(() => ({ nickname: null, bookmarkName: null, bookmarkColor: null }));
+    await openTab({
+      cwd: projectKey,
+      name: identity.nickname || identity.bookmarkName || undefined,
+      color: identity.bookmarkColor || undefined,
+    });
+  }, [openTab]);
 
   const openOverview = useCallback((projectKey: string) => setSurface({ kind: "project", projectKey }), []);
 
@@ -1792,7 +1778,7 @@ export default function App() {
                 now={now}
                 onBack={openHome}
                 onContinueTab={focusTab}
-                onStartSession={openOrResumeProject}
+                onStartSession={startProjectSession}
                 onOpenCopyUpdate={setCopyUpdateData}
               />
             )}

@@ -4906,3 +4906,26 @@ exists; always offering a separate fresh-session action is proposed, not built.
 Automated gates for the visible-path follow-up passed: opencode/check suite,
 strict TypeScript, frontend build, Rust library tests (160 pass, 1 ignored),
 Clippy and diff whitespace check.
+
+### Phase 48 compact paths and fresh-session action — 2026-10-03
+
+Maintainer confirmed bookmark clicks open the proper root folder with bookmark
+color/name. Home and Overview now show parent/folder paths in zinc-400, retaining
+the full path in title tooltips. Overview keeps Start session for zero workspaces;
+with one/multiple workspaces, New session tab is below Continue/Continue in.
+Start always creates a fresh plain PTY through openTab; Continue selects existing
+workspaces. Pending launch disables repeated clicks; failures show retryable UI.
+Automated: focused dashboard/spawn checks, opencode/check suite, strict TS,
+frontend build, Rust library tests (160 passed, 1 ignored), Clippy and whitespace
+check passed. No extraction prompt changes; no golden run.
+
+Remaining live checks:
+- [ ] Home and Overview show dev/context_terminal (zinc-400), full path tooltip.
+- [ ] Zero workspaces: Start session creates one correctly named/colored tab.
+- [ ] One/multiple live or restored workspaces: New session tab creates an
+      additional fresh shell without resuming an agent or altering existing tabs.
+- [ ] Continue/chooser selects the exact existing workspace; rapid double-click
+      on the new-session action produces only one new tab; launch error is visible.
+
+Phase 48 remains NOT ACCEPTED. Follow-up commits remain local pending explicit
+remote-push authorization after automatic review rejected the previous push.

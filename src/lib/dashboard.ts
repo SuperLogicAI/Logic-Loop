@@ -156,6 +156,11 @@ export function sortProjectCards(cards: readonly ProjectCardViewModel[]): Projec
   });
 }
 
+/** Compact folder identity for Home and Overview; full key stays in tooltips. */
+export function projectFolderLabel(projectKey: string): string {
+  return projectKey.split("/").filter(Boolean).slice(-2).join("/") || projectKey;
+}
+
 function basenameOf(projectKey: string): string {
   const segments = projectKey.split("/").filter(Boolean);
   return segments[segments.length - 1] ?? projectKey;

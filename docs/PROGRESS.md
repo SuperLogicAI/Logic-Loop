@@ -796,3 +796,10 @@ editor stored in per-project settings, with nickname → first saved matching
 bookmark → folder fallback across Home, Overview and Copy update. Automated
 gates pass; new live checks and previous gaps remain in TESTING.md.
 Phase 48 remains NOT ACCEPTED; PR 67 closeout awaits manual acceptance.
+
+### Phase 48 live-feedback follow-up — 2026-10-03
+
+Approved compact parent/folder labels in zinc-400 on Home/Overview and a New
+session tab button below existing Continue controls. Fresh-session actions reuse
+openTab and project identity; Continue alone reuses existing workspaces. Required
+automated gates pass; live checks remain in TESTING.md. Phase 48 not accepted.

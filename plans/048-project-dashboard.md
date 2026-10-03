@@ -287,3 +287,15 @@ insufficient). Show canonical project key as wrapping secondary text beneath
 the name, matching Overview. This clarifies §12's path visibility requirement.
 Separate proposal awaiting approval: keep Continue/chooser and always offer
 Start new session, explicitly creating another plain terminal in the project.
+
+### Approved session/path follow-up (2026-10-03)
+
+Maintainer requested compact parent/folder paths (e.g. dev/context_terminal)
+with zinc-400 text on Home and Overview; full paths remain in tooltips.
+Maintainer also requested New session tab below Continue/chooser when project
+workspaces exist. No workspaces: retain Start session. Both start actions
+create a fresh plain PTY through openTab, carrying nickname/bookmark name and
+bookmark color; Continue alone selects/restores existing workspaces. Guard
+concurrent clicks and report launch failure. No agent launch, fan-out or worktree
+creation is implied. Supersedes the prior open-or-resume start handler; Phase
+48 remains NOT ACCEPTED. This authorizes implementation, not remote push.

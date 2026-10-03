@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import * as repo from "../lib/repo";
-import { observedAgentTime, projectDisplayName, buildProjectWorkLog, commitsInRange, dashboardRangeStart, projectWorkspaceChoices, type DashboardRange, type WorkLogEntry } from "../lib/dashboard";
+import { observedAgentTime, projectDisplayName, projectFolderLabel, buildProjectWorkLog, commitsInRange, dashboardRangeStart, projectWorkspaceChoices, type DashboardRange, type WorkLogEntry } from "../lib/dashboard";
 import { dashboardReads, observeDashboardRead, type ReadState, type ReadDiagnostic } from "../lib/dashboardLoader";
 import { computeMomentum } from "../lib/momentum";
 import { parseBoard, peekBoard, EXAMPLE_BOARD, type BoardStatus } from "../lib/board";
@@ -92,11 +92,14 @@ interface Props {
   now: number;
   onBack: () => void;
   onContinueTab: (tabId: string) => void;
-  onStartSession: (projectKey: string) => void;
+  onStartSession: (projectKey: string) => Promise<void>;
   onOpenCopyUpdate: (data: CopyUpdateData) => void;
 }
 
 export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onContinueTab, onStartSession, onOpenCopyUpdate }: Props) {
+  const [startingSession, setStartingSession] = useState(false);
+  const startingSessionRef = useRef(false);
+  const [sessionError, setSessionError] = useState(false);
   const [range, setRange] = useState<Range>("7d");
   const [refresh, setRefresh] = useState(0);
   const identity = JSON.stringify([projectKey, range, refresh]);
@@ -168,6 +171,21 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
   const reentry = (value("reentry") ?? []).filter((r) => !openTethers.has(r.tab_tether));
 
   const displayName = projectDisplayName(projectKey, [projectKey], data.catalog);
+
+  const startSession = async () => {
+    if (startingSessionRef.current) return;
+    startingSessionRef.current = true;
+    setStartingSession(true);
+    setSessionError(false);
+    try {
+      await onStartSession(projectKey);
+    } catch {
+      setSessionError(true);
+    } finally {
+      startingSessionRef.current = false;
+      setStartingSession(false);
+    }
+  };
 
   const saveNickname = async () => {
     if (savingNickname) return;
@@ -255,35 +273,46 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
           </button>
           <span className="text-sm text-zinc-600">/</span>
           <h2 className="text-sm font-semibold text-zinc-100">{displayName}</h2>
-          <div className="ml-auto flex items-center gap-2">
-            {workspaceChoices.length > 1 ? (
-              <select aria-label="Continue in workspace" value=""
-                className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-300"
-                onChange={(e) => {
-                  if (workspaceChoices.some((t) => t.id === e.target.value)) onContinueTab(e.target.value);
-                }}>
-                <option value="" disabled>Continue in…</option>
-                {workspaceChoices.map((tab) => <option key={tab.id} value={tab.id}>
-                  {tab.title} · {tab.agent ?? "shell"} · {tab.status === "dead" ? "closed — Re-enter in workspace" : tab.agentState ?? "live"} · {tab.id.slice(0, 8)}
-                </option>)}
-              </select>
-            ) : workspaceChoices.length === 1 ? (
-              <button
-                type="button"
-                className="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500"
-                onClick={() => onContinueTab(workspaceChoices[0].id)}
-              >
-                Continue
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800"
-                onClick={() => onStartSession(projectKey)}
-              >
-                Start session
-              </button>
-            )}
+          <div className="ml-auto flex flex-wrap items-start gap-2">
+            <div className="flex flex-col items-start gap-2">
+              {workspaceChoices.length > 1 ? (
+                <select aria-label="Continue in workspace" value=""
+                  className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-300"
+                  onChange={(e) => {
+                    if (workspaceChoices.some((t) => t.id === e.target.value)) onContinueTab(e.target.value);
+                  }}>
+                  <option value="" disabled>Continue in…</option>
+                  {workspaceChoices.map((tab) => <option key={tab.id} value={tab.id}>
+                    {tab.title} · {tab.agent ?? "shell"} · {tab.status === "dead" ? "closed — Re-enter in workspace" : tab.agentState ?? "live"} · {tab.id.slice(0, 8)}
+                  </option>)}
+                </select>
+              ) : workspaceChoices.length === 1 ? (
+                <button
+                  type="button"
+                  className="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500"
+                  onClick={() => onContinueTab(workspaceChoices[0].id)}
+                >
+                  Continue
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800"
+                  disabled={startingSession}
+                  onClick={() => void startSession()}
+                >
+                  {startingSession ? "Starting…" : "Start session"}
+                </button>
+              )}
+              {workspaceChoices.length > 0 && (
+                <button type="button" disabled={startingSession}
+                  className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                  onClick={() => void startSession()}>
+                  {startingSession ? "Starting…" : "New session tab"}
+                </button>
+              )}
+              {sessionError && <p role="alert" className="text-xs text-orange-400">Could not start a session. Try again.</p>}
+            </div>
             <button
               type="button"
               disabled={!copyReady}
@@ -322,7 +351,7 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
           </div>
         </div>
 
-        <p className="mt-1 break-all text-xs text-zinc-500">{projectKey}</p>
+        <p className="mt-1 break-all text-xs text-zinc-400" title={projectKey}>{projectFolderLabel(projectKey)}</p>
         {editingNickname ? (
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <input autoFocus aria-label="Project nickname" maxLength={120}

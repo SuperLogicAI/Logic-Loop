@@ -3,6 +3,7 @@ import * as repo from "../lib/repo";
 import {
   buildProjectCards,
   projectDisplayName,
+  projectFolderLabel,
   sortProjectCards,
   type HomeTabSummary,
   type ProjectCardViewModel,
@@ -279,7 +280,7 @@ function ProjectCard({
           {card.archived && <span className="text-[10px] text-zinc-500">Archived</span>}
         </div>
       </div>
-      <p className="mt-1 break-all text-[11px] text-zinc-500">{card.projectKey}</p>
+      <p className="mt-1 break-all text-[11px] text-zinc-400" title={card.projectKey}>{projectFolderLabel(card.projectKey)}</p>
       {card.purpose && <p className="mt-1 line-clamp-1 text-xs text-zinc-500">{card.purpose}</p>}
       <p className="mt-2 text-[11px] text-zinc-500">
         {card.lastActivityAt ? age(card.lastActivityAt, now) : "No activity recorded yet"}
