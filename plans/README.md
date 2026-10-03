@@ -47,8 +47,7 @@ the primary project navigation, retaining the optional Inbox, in one phase with
 no migration. Follow-ons (context/RAID, templates, board views, GitHub, spend)
 live in `docs/ROADMAP.md`. **Implementation approved for Phase 48** 2026-09-29
 (`PHASE 47 ACCEPTED` then `PHASE 48 APPROVED`, same message). Build completed;
-the 2026-09-30 release pass found Overview acceptance blockers. **Phase 48 is
-not accepted.** [The fix-it sprint draft](048-dashboard-fixit-sprint.md) sequences
+the 2026-09-30 release pass found Overview acceptance blockers. **Phase 48 ACCEPTED 2026-10-03.** [The fix-it sprint draft](048-dashboard-fixit-sprint.md) sequences
 diagnosis, loading/error-state repair, attribution/range fixes, plan-gap
 disposition and the remaining release acceptance matrix within Phase 48.
 
@@ -61,8 +60,8 @@ test dependency is proposed for Phase 26.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| [048](048-project-dashboard.md) | Home dashboard and Project Overview | P1 | M (4–6d + live pass) | Phase 47 accepted | BUILT — implementation authorized; Phase 48 NOT ACCEPTED, release Overview blockers and manual checks outstanding. |
-| [048 fix-it](048-dashboard-fixit-sprint.md) | Settle Overview reads and complete release verification | P1 | M (2–3d + manual pass) | Existing Phase 48 build; explicit plan revision before implementation | IN PROGRESS — same Phase 48; implementation and recommended scope revisions authorized; automated repairs built, release/manual closure pending. |
+| [048](048-project-dashboard.md) | Home dashboard and Project Overview | P1 | M (4–6d + live pass) | Phase 47 accepted | ACCEPTED 2026-10-03 — maintainer wrote PHASE 48 ACCEPTED; remaining unrun checks disclosed in TESTING.md. |
+| [048 fix-it](048-dashboard-fixit-sprint.md) | Settle Overview reads and complete release verification | P1 | M (2–3d + manual pass) | Existing Phase 48 build; explicit plan revision before implementation | ACCEPTED with Phase 48, 2026-10-03 — repairs and approved identity/session follow-ups complete. |
 | [001](001-cross-project-attention-inbox.md) | Cross-project attention inbox | P1 | L overall; Phase 26 read UI + Phase 27 triage | Phase 22 foundation, Phase 25 rail | DONE — PHASE 27 ACCEPTED |
 | [003](003-opencode-repo-contract-and-checks.md) | OpenCode repo contract and baseline checks | P1 | S (0.5–1d + manual pass) | Phase 22 accepted and committed | DONE — Phase 23 accepted |
 | [004](004-folded-side-rail.md) | Folded side rail | P1 | M (1–2d + live visual pass) | Phase 24 accepted and committed | DONE — Phase 25 accepted |

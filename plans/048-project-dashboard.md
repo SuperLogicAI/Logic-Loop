@@ -2,6 +2,8 @@
 
 ## Status and execution contract
 
+- **Phase acceptance:** ACCEPTED 2026-10-03 — maintainer wrote `PHASE 48 ACCEPTED`. Historical pending-status notes below are superseded; unrun manual checks remain disclosed.
+
 - **Release review, 2026-09-30:** Phase 48 is **NOT ACCEPTED**. The earlier
   “ACCEPTED” status below describes approval of this implementation plan,
   not acceptance of the completed phase. Overview remained loading, rendered

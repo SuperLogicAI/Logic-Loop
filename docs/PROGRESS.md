@@ -803,3 +803,11 @@ Approved compact parent/folder labels in zinc-400 on Home/Overview and a New
 session tab button below existing Continue controls. Fresh-session actions reuse
 openTab and project identity; Continue alone reuses existing workspaces. Required
 automated gates pass; live checks remain in TESTING.md. Phase 48 not accepted.
+
+### Phase 48 acceptance — 2026-10-03
+
+Maintainer wrote `PHASE 48 ACCEPTED` and requested return to main. This closes
+Phase 48, including approved Overview repairs, bookmark/nickname identity,
+compact path labels and fresh-session actions. Maintainer confirmed the final
+UI was good. Previously unrun manual scenarios remain disclosed rather than
+being marked tested. Phase 49 implementation is not approved by acceptance.

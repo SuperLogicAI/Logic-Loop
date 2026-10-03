@@ -4929,3 +4929,11 @@ Remaining live checks:
 
 Phase 48 remains NOT ACCEPTED. Follow-up commits remain local pending explicit
 remote-push authorization after automatic review rejected the previous push.
+
+### Phase 48 acceptance — 2026-10-03
+
+Maintainer wrote `PHASE 48 ACCEPTED` and requested return to main. This closes
+Phase 48, including approved Overview repairs, bookmark/nickname identity,
+compact path labels and fresh-session actions. Maintainer confirmed the final
+UI was good. Previously unrun manual scenarios remain disclosed rather than
+being marked tested. Phase 49 implementation is not approved by acceptance.
