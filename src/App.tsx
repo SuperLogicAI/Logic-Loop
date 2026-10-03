@@ -29,6 +29,7 @@ import { decisionReplyTab } from "./lib/decisionRouting";
 import { initNotifications, notify, requestNotifications } from "./lib/notify";
 import { adapterIdForHook, type AdapterId } from "./lib/onboarding";
 import { IdeaBoard } from "./components/IdeaBoard";
+import { SidebarControls } from "./components/SidebarControls";
 import { SidePanel } from "./components/SidePanel";
 import type { CodexMeterData, CodexMeterSnapshot } from "./components/CodexUsageBlock";
 import { LandingNoteModal } from "./components/LandingNoteModal";
@@ -1628,6 +1629,7 @@ export default function App() {
         visibleIds={visibleTabIds}
         homeActive={surface.kind === "home"}
         onOpenHome={openHome}
+        onOpenTour={openTour}
         onSelect={focusTab}
         onClose={closeTab}
         onNew={() => void openTab()}
@@ -1697,6 +1699,7 @@ export default function App() {
             attentionStale={attentionStale}
             inboxBadgeEnabled={inboxBadgeEnabled}
             onOpenAttention={() => setAttentionOpen(true)}
+            onOpenTraffic={() => setTrafficOpen(true)}
             landingNoteMode={landingNoteMode}
             onLandingNoteModeChange={changeLandingNoteMode}
             claudeStatusline={(activeTab.sessionId && claudeStatusline[activeTab.sessionId]) || null}
@@ -1707,7 +1710,10 @@ export default function App() {
           <AgentStatusBar
             panelMode={panelMode}
             onTogglePanel={togglePanel}
-            onOpenTraffic={() => setTrafficOpen(true)}
+            globalControls={(panelMode === "hidden" || !activeTab) ? <SidebarControls
+              onOpenTraffic={() => setTrafficOpen(true)} onOpenAttention={() => setAttentionOpen(true)}
+              attentionCount={attentionViews.active.length} attentionLoading={attentionLoading}
+              attentionStale={attentionStale} inboxBadgeEnabled={inboxBadgeEnabled} lockIn={lockIn} /> : undefined}
             lockInMode={lockInMode}
             onLockIn={() => activateLockIn("indefinite")}
             onTimedLockIn={() => activateLockIn("timed")}
@@ -1727,7 +1733,6 @@ export default function App() {
             onForceOpenHandled={() => setForceSetupOpen(false)}
             onLaunch={(cwd, cmd, name) => openTab({ cwd, cmd, name, strictCwd: true })}
             onSetupClose={handleSetupClose}
-            onOpenTour={openTour}
           />
           <div className={`flex min-h-0 flex-1 ${splitPaneIds && splitOrientation === "vertical" ? "flex-col" : ""}`}>
             {tabs.map((tab) => {
@@ -1750,6 +1755,10 @@ export default function App() {
           {activeTab && <IdeaBoard cwd={expand(activeTab.cwd)} />}
         </div>
         {surface.kind !== "workspace" && (
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <SidebarControls hideInbox={surface.kind === "home"} onOpenTraffic={() => setTrafficOpen(true)} onOpenAttention={() => setAttentionOpen(true)}
+            attentionCount={attentionViews.active.length} attentionLoading={attentionLoading}
+            attentionStale={attentionStale} inboxBadgeEnabled={inboxBadgeEnabled} lockIn={lockIn} />
           <DashboardErrorBoundary onReturnToWorkspace={returnToWorkspace}>
             {surface.kind === "home" && (
               <HomeDashboard
@@ -1783,6 +1792,7 @@ export default function App() {
               />
             )}
           </DashboardErrorBoundary>
+          </div>
         )}
       </div>
       {copyUpdateData && <CopyUpdateModal data={copyUpdateData} onClose={() => setCopyUpdateData(null)} />}

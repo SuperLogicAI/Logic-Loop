@@ -41,6 +41,11 @@ verification.
 
 ## Execution order & status
 
+[Plan 049](049-sidebar-header-polish.md) is **Phase 49 — ACCEPTED 2026-10-03**. Sidebar app header, attached fold control,
+Home icon and scrollbar-safe dismiss spacing. Notify remains project-scoped.
+Automated gates and isolated visual preview recorded in docs/TESTING.md;
+release-app interaction checks remain pending.
+
 Project dashboard planning added 2026-09-29 against `9f7c7f8`, based on an
 external user-feedback session. Plan 048 proposes Home and Project Overview as
 the primary project navigation, retaining the optional Inbox, in one phase with

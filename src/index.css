@@ -71,3 +71,27 @@ body,
 .lock-in-panel .lock-in-state {
   box-shadow: none !important;
 }
+
+/* Keep app controls reachable at the panel's 192px minimum width. */
+.sidebar-expanded { container-type: inline-size; }
+@container (max-width: 260px) {
+  [data-sidebar-controls] [data-control-label] { display: none; }
+  [data-sidebar-controls] button { min-width: 28px; }
+}
+
+/* Fixed scroll lane avoids macOS overlay-scrollbar hover expansion.
+   Keep the thumb's geometry unchanged on hover; only its contrast increases. */
+.sidebar-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border: 2px solid #18181b;
+  border-radius: 4px;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: #71717a;
+}

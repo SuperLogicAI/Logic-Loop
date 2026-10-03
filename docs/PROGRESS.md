@@ -811,3 +811,12 @@ Phase 48, including approved Overview repairs, bookmark/nickname identity,
 compact path labels and fresh-session actions. Maintainer confirmed the final
 UI was good. Previously unrun manual scenarios remain disclosed rather than
 being marked tested. Phase 49 implementation is not approved by acceptance.
+
+### Phase 49 acceptance — 2026-10-03
+
+Maintainer wrote `PHASE 49 ACCEPTED` after rebuilt-app review: "Looks great".
+Accepted sidebar/header hierarchy, attached fold, Home/Tour placement, fixed
+scrollbar and dismiss spacing, collapsed cleared blockers, compact completion
+notices, blue Setup/hooks and orange Isolate Loop identity. Automated gates
+pass. Previously unrun manual scenarios remain disclosed rather than marked
+tested. Maintainer authorized opening a PR for the complete UI overhaul.

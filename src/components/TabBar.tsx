@@ -57,6 +57,7 @@ interface Props {
    * own selected/pressed state, independent of any tab's activeId. */
   homeActive: boolean;
   onOpenHome: () => void;
+  onOpenTour: () => void;
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
   onNew: () => void;
@@ -72,7 +73,7 @@ interface Props {
   /** Fan-out origin tab (any group) — purple text glow ties it back to its
    * children after launch. */
   isFanOutParent: (tab: Tab) => boolean;
-  /** Isolate-loop worktree tab — blue glow. */
+  /** Isolate-loop worktree tab — orange glow. */
   isWorktreeBound: (tab: Tab) => boolean;
   /** Clock tick (Phase 14b) — drives stalled/age display, nothing else
    * changes agentState on its own. */
@@ -88,7 +89,7 @@ function groupGlow(rgb: string): string {
   return `0 -3px 8px -2px rgba(${rgb},0.55), -3px 0 8px -2px rgba(${rgb},0.55), 3px 0 8px -2px rgba(${rgb},0.55)`;
 }
 const FAN_OUT_GLOW = groupGlow("168,85,247"); // purple
-const ISOLATE_GLOW = groupGlow("59,130,246"); // blue
+const ISOLATE_GLOW = groupGlow("249,115,22"); // orange
 
 export function TabBar({
   tabs,
@@ -96,6 +97,7 @@ export function TabBar({
   visibleIds,
   homeActive,
   onOpenHome,
+  onOpenTour,
   onSelect,
   onClose,
   onNew,
@@ -131,19 +133,26 @@ export function TabBar({
       onPointerLeave={() => setDragId(null)}
       className="flex select-none items-end gap-1 bg-zinc-900"
     >
-      <button
-        type="button"
-        data-tauri-drag-region="false"
-        data-tour-target="home"
-        aria-pressed={homeActive}
-        title="Home"
-        onClick={onOpenHome}
-        className={`mb-0.5 ml-2 shrink-0 rounded-md px-2.5 py-1 text-sm ${
-          homeActive ? "bg-zinc-700 text-zinc-100" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
-        }`}
-      >
-        Home
-      </button>
+      <div className="ml-2 flex shrink-0 flex-col items-stretch gap-1 pt-1" data-tauri-drag-region="false">
+        <button type="button" onClick={onOpenTour}
+          className="self-center rounded-full border border-zinc-800 px-3 py-0.5 text-[10px] text-zinc-500 hover:border-zinc-600 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-sky-400">
+          Tour
+        </button>
+        <button
+          type="button"
+          data-tauri-drag-region="false"
+          data-tour-target="home"
+          aria-pressed={homeActive}
+          title="Home"
+          onClick={onOpenHome}
+          className={`flex shrink-0 items-center gap-1.5 rounded-t-md border border-b-0 px-2.5 py-1 text-sm hover:border-zinc-500 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400 ${
+            homeActive ? "border-zinc-600 bg-zinc-700 text-zinc-100" : "border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+          }`}
+        >
+          <img src="/home.svg" alt="" className="h-4 w-4" />
+          Home
+        </button>
+      </div>
       {/* overflow-x-auto forces the y-axis to clip too, so the glow's
           bleed needs its padding inside THIS box, not the outer wrapper —
           the last tab's rightward bleed (and the first tab's leftward
@@ -311,8 +320,8 @@ export function TabBar({
         <img src="/fan.svg" alt="" className="h-4 w-4 shrink-0" />
       </button>
       <button
-        className="mr-2 mb-0.5 flex shrink-0 items-center gap-1.5 rounded-full border border-zinc-700 px-2.5 py-1 text-sm leading-none text-zinc-400 hover:border-blue-500 hover:text-zinc-200"
-        style={{ boxShadow: "inset 0 0 0 1px rgba(59,130,246,0.4)" }}
+        className="mr-2 mb-0.5 flex shrink-0 items-center gap-1.5 rounded-full border border-zinc-700 px-2.5 py-1 text-sm leading-none text-zinc-400 hover:border-orange-400 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-orange-400"
+        style={{ boxShadow: "inset 0 0 0 1px rgba(249,115,22,0.4)" }}
         onClick={onIsolateLoop}
         title="Spawn a tab bound to a fresh git worktree"
       >

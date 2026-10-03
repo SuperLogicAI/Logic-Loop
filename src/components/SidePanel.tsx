@@ -12,7 +12,7 @@ import { parseBoard, readBoard, spliceCard, writeBoard, type Card } from "../lib
 import { computeMomentum } from "../lib/momentum";
 import { topPlannedCard } from "./IdeaBoard";
 import { PanelIcon } from "./PanelIcon";
-import { SidebarLmControl } from "./SidebarLmControl";
+import { SidebarControls } from "./SidebarControls";
 import { ClaudeUsageBlock } from "./ClaudeUsageBlock";
 import { CodexUsageBlock, type CodexMeterSnapshot } from "./CodexUsageBlock";
 import {
@@ -88,6 +88,7 @@ interface Props {
    * without hiding the Attention button itself. */
   inboxBadgeEnabled: boolean;
   onOpenAttention: () => void;
+  onOpenTraffic: () => void;
   landingNoteMode: LandingNoteMode;
   onLandingNoteModeChange: (mode: LandingNoteMode) => Promise<void>;
   claudeStatusline: ClaudeStatuslineSnapshot | null; // latest mirrored statusLine payload for the active tab's exact session
@@ -251,6 +252,7 @@ export function SidePanel({
   attentionStale,
   inboxBadgeEnabled,
   onOpenAttention,
+  onOpenTraffic,
   landingNoteMode,
   onLandingNoteModeChange,
   claudeStatusline,
@@ -258,6 +260,12 @@ export function SidePanel({
 }: Props) {
   const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
   const [muted, setMuted] = useState(false);
+  const [showClearedBlockers, setShowClearedBlockers] = useState(false);
+  const [showOlderCompletions, setShowOlderCompletions] = useState(false);
+  useEffect(() => {
+    setShowClearedBlockers(false);
+    setShowOlderCompletions(false);
+  }, [cwd]);
   const [unclaimed, setUnclaimed] = useState<{ session_id: string; ts: number }[]>([]);
   const [commits, setCommits] = useState<Commit[]>([]);
   const [blockers, setBlockers] = useState<Blocker[]>([]);
@@ -714,6 +722,7 @@ export function SidePanel({
   const open = blockers.filter((b) => b.resolved === 0);
   const done = blockers.filter((b) => b.resolved !== 0).slice(0, 10);
   const openDecisions = decisions.filter((d) => d.status === "open");
+  const recentCompletions = [...unclaimed].sort((a, b) => b.ts - a.ts || a.session_id.localeCompare(b.session_id));
   const closedDecisions = decisions.filter((d) => d.status !== "open").slice(0, 10);
   const decisionGroups = repo.groupDecisionsBySession(openDecisions);
   const hasDelta =
@@ -832,6 +841,9 @@ export function SidePanel({
             style={!lockIn && accent ? { boxShadow: `0 0 0 2px rgb(24 24 27), 0 0 0 4px ${accent}` } : undefined}
           />
         </div>
+        <SidebarControls compact hideInbox onOpenTraffic={onOpenTraffic} onOpenAttention={onOpenAttention}
+          attentionCount={attentionCount} attentionLoading={attentionLoading}
+          attentionStale={attentionStale} inboxBadgeEnabled={inboxBadgeEnabled} lockIn={lockIn} />
         <div className="flex min-h-0 flex-1 flex-col items-center overflow-x-hidden overflow-y-auto px-1 py-1">
           <RailButton
             label={
@@ -932,7 +944,7 @@ export function SidePanel({
 
   return (
     <div
-      className={`relative flex h-full shrink-0 flex-col overflow-hidden border-r border-zinc-800 bg-zinc-900 text-xs text-zinc-300 ${lockIn ? "lock-in-panel" : ""}`}
+      className={`sidebar-expanded relative flex h-full shrink-0 flex-col overflow-hidden border-r border-zinc-800 bg-zinc-900 text-xs text-zinc-300 ${lockIn ? "lock-in-panel" : ""}`}
       style={{ width: liveWidth }}
       data-lock-in={lockIn}
     >
@@ -940,9 +952,12 @@ export function SidePanel({
         className="absolute right-0 top-0 z-10 h-full w-1.5 -mr-0.5 cursor-col-resize hover:bg-zinc-600/60 active:bg-zinc-500"
         onPointerDown={onResizePointerDown}
       />
+      <SidebarControls onOpenTraffic={onOpenTraffic} onOpenAttention={onOpenAttention}
+        attentionCount={attentionCount} attentionLoading={attentionLoading}
+        attentionStale={attentionStale} inboxBadgeEnabled={inboxBadgeEnabled} lockIn={lockIn} />
       {/* Pinned header: never scrolls away. Text takes the project's bookmark
           color when one exists; plain grey otherwise. */}
-      <div className="flex h-9 shrink-0 items-center gap-2 px-3">
+      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-zinc-800 px-3">
         <div className="min-w-0 flex-1">
           <p
             className="w-full truncate font-mono text-[10px] leading-none text-zinc-500"
@@ -959,24 +974,6 @@ export function SidePanel({
               : sessionStatusLabel(agentState, sessionId).noEvents}
           </p>
         </div>
-        <button
-          type="button"
-          data-tour-target="attention"
-          aria-label={`Open Attention Inbox${attentionCount ? `, ${attentionCount} items` : ""}`}
-          title={attentionStale ? "Open Attention Inbox (data may be stale)" : "Open Attention Inbox (⌘K)"}
-          className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-sky-400 ${lockIn ? "text-zinc-500" : attentionStale ? "text-orange-300" : attentionCount > 0 ? "text-sky-300" : "text-zinc-600"}`}
-          onClick={onOpenAttention}
-        >
-          <PanelIcon name="attention" className="h-4 w-4" />
-          {!lockIn && inboxBadgeEnabled && attentionCount > 0 && (
-            <span className="absolute -right-1 -top-0.5 min-w-3 rounded-full bg-zinc-700 px-0.5 text-center font-mono text-[7px] leading-3 text-zinc-100">
-              {attentionCount > 99 ? "99+" : attentionCount}
-            </span>
-          )}
-        </button>
-      </div>
-      <div className="flex h-8 shrink-0 items-center gap-1.5 border-b border-zinc-800 px-3">
-        <SidebarLmControl />
         <button
           className={`ml-auto flex h-7 shrink-0 items-center gap-1 rounded-full px-2 leading-none ${muted ? "text-zinc-600 hover:bg-zinc-800 hover:text-zinc-400" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}
           title={muted ? "Notifications muted for this project — click to unmute" : "Mute notifications for this project"}
@@ -1075,7 +1072,7 @@ export function SidePanel({
           part of {childStrip.label ?? "a fan-out"} ({childStrip.parentTitle} ↗)
         </p>
       )}
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3">
+      <div className="sidebar-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-scroll p-3 pr-2">
       {delta &&
         (delta.files.length > 0 ||
           delta.bashRuns > 0 ||
@@ -1458,13 +1455,13 @@ export function SidePanel({
                         {rows.map((d) => (
                           <li key={d.id} className="relative rounded border border-yellow-800/60 bg-yellow-950/20 p-2">
                             <button
-                              className="absolute top-1 right-1 leading-none text-yellow-800 hover:text-yellow-500"
+                              className="absolute top-1 right-2 flex h-5 w-5 items-center justify-center rounded focus-visible:outline-2 focus-visible:outline-sky-400 text-yellow-800 hover:text-yellow-500"
                               title="Dismiss — not a real decision"
                               onClick={() => void setStatus(d, "dismissed")}
                             >
                               ✕
                             </button>
-                            <p className="break-words pr-5 text-orange-300">{d.question}</p>
+                            <p className="break-words pr-8 text-orange-300">{d.question}</p>
                             {d.assumption && (
                               <p className="mt-1 text-zinc-400">agent assumed: {d.assumption}</p>
                             )}
@@ -1536,9 +1533,9 @@ export function SidePanel({
             {open.length === 0 && <p className="text-zinc-600">None open.</p>}
             <ul className="flex flex-col gap-2">
               {open.map((b) => (
-                <li key={b.id} className="relative flex items-start gap-2 rounded border border-red-800/60 bg-red-950/20 p-2 pr-5">
+                <li key={b.id} className="relative flex items-start gap-2 rounded border border-red-800/60 bg-red-950/20 p-2 pr-8">
                   <button
-                    className="absolute top-1 right-1 leading-none text-red-800 hover:text-red-500"
+                    className="absolute top-1 right-2 flex h-5 w-5 items-center justify-center rounded focus-visible:outline-2 focus-visible:outline-sky-400 text-red-800 hover:text-red-500"
                     title="Delete"
                     onClick={() => void remove(b)}
                   >
@@ -1582,7 +1579,14 @@ export function SidePanel({
               ))}
             </ul>
             {done.length > 0 && (
-              <ul className="mt-2 flex flex-col gap-1 border-t border-zinc-800 pt-2">
+              <div className="mt-2 border-t border-zinc-800 pt-2">
+                <button type="button" aria-expanded={showClearedBlockers}
+                  onClick={() => setShowClearedBlockers((shown) => !shown)}
+                  className="flex w-full items-center gap-1.5 rounded py-1 text-left text-red-400/60 hover:text-red-300 focus-visible:outline-2 focus-visible:outline-sky-400">
+                  <Chevron collapsed={!showClearedBlockers} />
+                  Cleared Blockers <span className="text-zinc-600">({done.length})</span>
+                </button>
+              {showClearedBlockers && <ul className="mt-1 flex flex-col gap-1">
                 {done.map((b) => (
                   <li key={b.id} className="flex items-start gap-2 text-zinc-600 line-through">
                     <input type="checkbox" checked onChange={() => void resolve(b)} className="mt-0.5" />
@@ -1592,7 +1596,8 @@ export function SidePanel({
                     </button>
                   </li>
                 ))}
-              </ul>
+              </ul>}
+              </div>
             )}
           </>
         )}
@@ -1611,7 +1616,7 @@ export function SidePanel({
           <>
             {unclaimed.length > 0 && (
               <ul className="mb-1.5 flex flex-col gap-1 border-b border-emerald-800/40 pb-1.5">
-                {unclaimed.map((u) => (
+                {(showOlderCompletions ? recentCompletions : recentCompletions.slice(0, 1)).map((u) => (
                   <li key={u.session_id} className="flex items-center gap-2">
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_6px_2px_rgba(16,185,129,0.6)]" />
                     <span className="flex-1 text-emerald-200">Agent finished, unclaimed</span>
@@ -1625,6 +1630,14 @@ export function SidePanel({
                     </button>
                   </li>
                 ))}
+                {recentCompletions.length > 1 && <li>
+                  <button type="button" aria-expanded={showOlderCompletions}
+                    className="flex items-center gap-1 rounded py-1 text-zinc-500 hover:text-emerald-300 focus-visible:outline-2 focus-visible:outline-sky-400"
+                    onClick={() => setShowOlderCompletions((shown) => !shown)}>
+                    <Chevron collapsed={!showOlderCompletions} />
+                    {showOlderCompletions ? "Hide older completions" : `${recentCompletions.length - 1} older unclaimed completions`}
+                  </button>
+                </li>}
               </ul>
             )}
             {toolEvents.length === 0 && unclaimed.length === 0 && (

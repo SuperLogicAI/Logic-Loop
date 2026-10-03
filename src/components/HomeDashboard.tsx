@@ -159,7 +159,7 @@ export function HomeDashboard({
                 <option value="home">Home</option><option value="workspace">Last workspace</option>
               </select>
             </label>
-            <button type="button" className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300" onClick={onOpenSetup}>Setup</button>
+            <button type="button" className="rounded-md border border-sky-800/70 px-2.5 py-1.5 text-xs text-zinc-300 hover:border-sky-500 focus-visible:border-sky-400 focus-visible:outline-2 focus-visible:outline-sky-400" onClick={onOpenSetup}>Setup</button>
             <button type="button" className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300" onClick={onOpenTour}>Tour</button>
             <button
               type="button"
