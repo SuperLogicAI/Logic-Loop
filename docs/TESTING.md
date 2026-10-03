@@ -4895,3 +4895,14 @@ Live checks remain unperformed on this revision (installed app not replaced):
       keeps the draft available for retry.
 
 Prior Phase 48 live-check gaps remain unchanged. Phase 48 is NOT ACCEPTED.
+
+**Project identity screenshot feedback (2026-10-03):** maintainer screenshots
+show colored Home borders, bookmark names in Home/Overview and the matching
+cyan tab stripe. These are visual evidence only, not nickname persistence or
+fresh-launch attribution checks. Requested visible Home folder paths now render
+as wrapping secondary text below each name; live layout check remains pending.
+Overview currently offers Continue/chooser instead of Start when a workspace
+exists; always offering a separate fresh-session action is proposed, not built.
+Automated gates for the visible-path follow-up passed: opencode/check suite,
+strict TypeScript, frontend build, Rust library tests (160 pass, 1 ignored),
+Clippy and diff whitespace check.

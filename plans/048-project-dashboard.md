@@ -279,3 +279,11 @@ Keep paths available for identification; clearing a nickname restores fallback.
 Store nicknames in per-project settings, without a migration. Include Home,
 Overview and Copy update naming, focused identity checks and manual coverage.
 Phase 48 remains NOT ACCEPTED; Phase 49 is not authorized.
+
+### Project identity live feedback (2026-10-03)
+
+Maintainer requested visible folder paths on Home cards (tooltip alone is
+insufficient). Show canonical project key as wrapping secondary text beneath
+the name, matching Overview. This clarifies §12's path visibility requirement.
+Separate proposal awaiting approval: keep Continue/chooser and always offer
+Start new session, explicitly creating another plain terminal in the project.
