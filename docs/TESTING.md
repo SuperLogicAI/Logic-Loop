@@ -4937,3 +4937,152 @@ Phase 48, including approved Overview repairs, bookmark/nickname identity,
 compact path labels and fresh-session actions. Maintainer confirmed the final
 UI was good. Previously unrun manual scenarios remain disclosed rather than
 being marked tested. Phase 49 implementation is not approved by acceptance.
+
+## Phase 49 — Sidebar header and dismiss spacing (2026-10-03)
+
+Approved by the maintainer's Plan 049 sprint request, after Phase 48 acceptance.
+Notify remains project-scoped. App controls use an aligned 40px header; narrow
+expanded panels switch to accessible icon controls below 260px. Compact/hidden
+workspace and Home/Overview retain access to Traffic and Sidebar LM; Inbox
+keeps its existing Home entry and compact rail entry. Sidebar LM settings render
+in a portal to avoid panel clipping. Home uses the supplied decorative artwork.
+Scroll content reserves a stable scrollbar gutter plus 24px right padding;
+card dismiss targets have additional inset and text clearance.
+
+Automated checks **PASS**: panel-layout, model-traffic, attention-inbox,
+dashboard, onboarding, split-view, lock-in, opencode, full `npm run check`,
+`npx tsc --noEmit`, `npm run build`, `cargo test --lib` (160 passed, 1 ignored),
+`cargo clippy --all-targets -- -D warnings`, and `git diff --check`.
+Initial tsx IPC and Rust localhost-server failures were sandbox permission
+errors; reruns with local access passed. Build retains its bundle-size warning.
+No extraction prompts changed; golden was not run.
+
+Visual evidence: computer-use Chrome screenshot inspected on an isolated
+localhost fixture, using the actual SidebarControls, SidebarLmControl, project
+container query, and Home asset, with representative scroll cards. At 192px,
+288px and 512px, app controls fit and dismiss targets remain clearly inward;
+compact access, attached-fold silhouette and Home icon were visible. Fixture
+project text/cards/fold were illustrative, not the complete release UI. This
+is a layout preview pass only. Screenshot was displayed in the tool session;
+no screenshot artifact saved. Temporary fixture and preview server removed.
+The running Logic Loop app and its terminals were not operated or restarted.
+
+Release-app checks still pending (do not interpret preview as a live pass):
+- [ ] Expanded/compact/hidden transitions and resizing follow the boundary;
+      hover/focus outlines, single/split terminals and Lock-in remain usable.
+- [ ] Notes, decision cards and resolved blockers: scroll while hovering each
+      close target, dismiss the intended item, confirm no scrollbar overlap.
+- [ ] Traffic modal refresh/Escape/focus return and Inbox navigation/counts/
+      stale/loading/badge preference behavior on every app surface.
+- [ ] Sidebar LM keyboard opening, settings editing, Escape/Close focus return,
+      compact placement, and short-window scrolling of the popover.
+- [ ] Minimum-width project text/Notify, narrow window and 200% zoom; Home
+      inactive/hover/active states, tab reorder and window drag regions.
+- [ ] Fold/resize/Home/Overview navigation preserve PTY mount, process,
+      untouched input and terminal focus/sizing.
+
+Phase 49 implementation is ready for review; acceptance remains pending.
+
+### Phase 49 live-review follow-up — 2026-10-03
+
+Maintainer reported the rebuilt update was "pretty solid" and supplied screenshots
+showing cleared blockers and unclaimed completions crowding out tool activity.
+Implemented the requested UI revision: compact gear and Traffic art increased
+to 24px; Home has a top/side zinc outline with brighter hover and no bottom gap;
+Tour moved from the terminal toolbar to above Home. Cleared Blockers starts
+collapsed behind a subtle red chevron button. Accomplished shows only the newest
+unclaimed completion initially, sorted by timestamp, with a toggle/count for
+older notices. Disclosure state resets on project changes; expanding either
+list makes no database write. Existing dismiss/unresolve actions are retained.
+
+Focused panel-layout/blockers/unclaimed/onboarding/dashboard/split-view checks,
+opencode, full check suite, strict TypeScript, frontend build, Rust library
+tests and Clippy passed. `git diff --check` passed. Existing build-size warning
+remains. No golden run; no extraction changes.
+
+Follow-up live checks pending:
+- [ ] Rebuild and check compact gear/Traffic sizing and hit targets.
+- [ ] Home top/side border joins the bar, hover brightens, navigation still
+      works; Tour above Home launches normally, neither control drags the window.
+- [ ] Cleared Blockers defaults closed, keyboard toggle opens/closes; expand
+      and delete/unresolve one intended blocker, then switch projects.
+- [ ] Only newest completion appears above tool activity; older count toggle
+      reveals remaining notices; dismiss newest and confirm next appears.
+- [ ] Short/narrow window, Home active/hover, split view and panel modes.
+
+No rebuilt release-app pass was performed by the agent for this follow-up.
+Phase 49 acceptance remains pending.
+
+### Phase 49 Setup/hook cohesion — 2026-10-03
+
+Maintainer authorized shared blue outlines. Setup (workspace and Home) and
+all visible hook buttons now use muted sky borders with brighter hover/focus.
+Enabled, disabled and checking hooks retain existing text/fills and actions.
+Focused onboarding/opencode checks, full check suite, strict TypeScript,
+production frontend build, Rust library tests and Clippy passed;
+`git diff --check` passed. Existing bundle-size warning remains.
+No live-app visual check performed for this styling follow-up; on next rebuild,
+check blue-border cohesion in on/off/checking states, hover/keyboard focus,
+and confirm Setup still opens the existing popup. Phase 49 not yet accepted.
+
+### Phase 49 scrollbar refinement — 2026-10-03
+
+Reviewed the maintainer's two rebuilt-app screenshots: excess space beside
+Notes/Next and a wider native scrollbar in the hover image. Replaced the
+stable gutter plus 24px right padding with a scoped custom 8px scroll lane
+and 8px right padding. The lane is always reserved (`overflow-y-scroll`);
+thumb hover changes color only, keeping width/border geometry fixed.
+Inset dismiss controls remain. Compact rail and terminal scrollbars unchanged.
+
+Focused panel-layout/opencode checks, full check suite, strict TypeScript,
+frontend build, Rust library tests (160 passed, 1 ignored), Clippy and
+`git diff --check` passed. Build's existing size warning remains. No golden.
+
+Pending rebuilt-app visual check: move pointer onto/off the scrollbar while
+scrolling Notes/cards/cleared blockers; confirm constant width, tighter spacing,
+usable thumb dragging and accessible close targets at minimum/normal panel
+width. This refinement has not been visually verified in the release app.
+Phase 49 acceptance remains pending.
+
+### Phase 49 Isolate Loop orange identity — 2026-10-03
+
+Maintainer requested differentiation from blue Setup/hooks. Isolate Loop's
+launcher inset outline, hover/focus accent, associated worktree-tab glow and
+modal border/title/mode selection/branch selection/Launch accents now use
+orange. Worktree creation and tab routing behavior are unchanged.
+
+Focused spawn/panel-layout/opencode checks, full check suite, strict
+TypeScript, frontend build, Rust library tests and Clippy passed;
+`git diff --check` passed. Existing build-size warning remains; no golden.
+Pending rebuilt-app visual check: launcher idle/hover/focus, isolated tab glow,
+and both New branch/Existing branch modal modes including selected branch and
+Launch states. No release-app visual pass performed for this change.
+Phase 49 acceptance remains pending.
+
+### Phase 49 acceptance — 2026-10-03
+
+Maintainer wrote `PHASE 49 ACCEPTED` after rebuilt-app review: "Looks great".
+Accepted sidebar/header hierarchy, attached fold, Home/Tour placement, fixed
+scrollbar and dismiss spacing, collapsed cleared blockers, compact completion
+notices, blue Setup/hooks and orange Isolate Loop identity. Automated gates
+pass. Previously unrun manual scenarios remain disclosed rather than marked
+tested. Maintainer authorized opening a PR for the complete UI overhaul.
+
+PR preparation: full `cargo test` passed (160 library tests, 1 ignored;
+main/doc-test targets also passed). Diff whitespace check passed. PR is based
+on the current remote main, whose tree matched the local pre-squash main.
+
+### Phase 49 post-acceptance density follow-up — 2026-10-03
+
+Maintainer supplied rebuilt-app screenshots and authorized tightening the
+project row and default Codex account header. Expanded project identity row is
+now 36px (was 48px). Codex model heading and right-aligned "account" share one
+line; redundant default Codex bucket label removed. Named additional buckets
+and loading/error/stale indicators retained. Claude usage block unchanged.
+
+Focused codex-meter/panel-layout/opencode, full check suite, strict TypeScript,
+frontend build, full Cargo tests and Clippy passed; diff whitespace check
+passed. Existing bundle-size warning remains. No golden run.
+Pending rebuild: verify project identity/Notify at narrow/normal widths and
+Codex model/account alignment, additional limits, unavailable/stale states.
+This follow-up has not received a rebuilt-app visual pass by the agent.

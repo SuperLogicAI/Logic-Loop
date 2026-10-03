@@ -93,7 +93,7 @@ assert.match(app, /splitOrientation === "vertical" \? "flex-col"/);
 assert.match(app, /visibleTabIdsRef\.current\.has\(tabId\)/);
 assert.match(status, /Split terminal controls/);
 assert.match(status, /split_screen_vert\.svg/);
-assert.match(status, /bounce\.svg/);
+assert.match(readFileSync("src/components/SidebarControls.tsx", "utf8"), /bounce\.svg/);
 assert.match(terminal, /focused: boolean/);
 assert.match(terminal, /ring-\[1\.5px\] ring-inset ring-white/);
 assert.match(terminal, /ring-2 ring-inset ring-sky-700/);
