@@ -23,8 +23,14 @@ import type { ReconciliationCandidate } from "./decisionReconciliation";
 import { boundedSubmittedReply } from "./decisionReconciliation";
 import { clampPanelWidth, parsePanelMode, type VisiblePanelMode } from "./panelLayout";
 import { parseLandingNoteMode } from "./landingMode";
+import { projectKeyOf } from "./pty";
+import { resolveHomeStartSurface } from "./dashboard";
 
-let db: Database | null = null;
+// The pending load, not the resolved handle: concurrent first callers used to
+// each run Database.load, and tauri-plugin-sql opens a new pool per load (only
+// one runs migrations) — on a fresh profile that raced into `database is
+// locked` (code 5). A failed load is cleared so the next call retries.
+let dbLoad: Promise<Database> | null = null;
 
 export interface TrafficRow {
   id: number;
@@ -60,9 +66,12 @@ export async function readSafeRouterTraffic(): Promise<TrafficSnapshot> {
 // ordered so a later accepted observation cannot overtake its source event.
 const hookWriteChains = new Map<string, Promise<void>>();
 
-async function getDb(): Promise<Database> {
-  if (!db) db = await Database.load("sqlite:context-terminal.db");
-  return db;
+function getDb(): Promise<Database> {
+  dbLoad ??= Database.load("sqlite:context-terminal.db").catch((e: unknown) => {
+    dbLoad = null;
+    throw e;
+  });
+  return dbLoad;
 }
 
 export async function listBookmarks(): Promise<Bookmark[]> {
@@ -1369,4 +1378,344 @@ export async function allWorktreeTabIds(): Promise<string[]> {
   const d = await getDb();
   const rows = await d.select<{ tab_id: string }[]>("SELECT tab_id FROM worktree_tabs");
   return rows.map((r) => r.tab_id);
+}
+
+// --- Plan 048 (Home dashboard): per-project pin/archive/purpose, same
+// settings-table prefix pattern as mute_notifications:/board_collapsed:. ---
+
+const PROJECT_PINNED_PREFIX = "project_pinned:";
+const PROJECT_ARCHIVED_PREFIX = "project_archived:";
+const PROJECT_PURPOSE_PREFIX = "project_purpose:";
+const PROJECT_NICKNAME_PREFIX = "project_nickname:";
+
+export async function setProjectNickname(cwd: string, nickname: string): Promise<void> {
+  await setSetting(PROJECT_NICKNAME_PREFIX + cwd, nickname.trim());
+}
+
+export function selectProjectBookmark<T extends { projectKey: string }>(bookmarks: readonly T[], projectKey: string): T | undefined {
+  return bookmarks.find((bookmark) => bookmark.projectKey === projectKey);
+}
+
+async function projectBookmarks() {
+  return Promise.all((await listBookmarks()).map(async (bookmark) => ({
+    ...bookmark, projectKey: await projectKeyOf(bookmark.cwd).catch(() => bookmark.cwd),
+  })));
+}
+
+export async function projectIdentity(cwd: string) {
+  const [nickname, bookmarks] = await Promise.all([getSetting(PROJECT_NICKNAME_PREFIX + cwd), projectBookmarks()]);
+  const bookmark = selectProjectBookmark(bookmarks, cwd);
+  return { nickname: nickname?.trim() || null, bookmarkName: bookmark?.name || null, bookmarkColor: bookmark?.color || null };
+}
+
+export async function isProjectPinned(cwd: string): Promise<boolean> {
+  const d = await getDb();
+  const rows = await d.select<{ value: string }[]>("SELECT value FROM settings WHERE key = $1", [
+    PROJECT_PINNED_PREFIX + cwd,
+  ]);
+  return rows[0]?.value === "1";
+}
+
+export async function setProjectPinned(cwd: string, pinned: boolean): Promise<void> {
+  await setSetting(PROJECT_PINNED_PREFIX + cwd, pinned ? "1" : "0");
+}
+
+export async function isProjectArchived(cwd: string): Promise<boolean> {
+  const d = await getDb();
+  const rows = await d.select<{ value: string }[]>("SELECT value FROM settings WHERE key = $1", [
+    PROJECT_ARCHIVED_PREFIX + cwd,
+  ]);
+  return rows[0]?.value === "1";
+}
+
+/** Archiving/unarchiving is organization only — never touches a live
+ * session, the board file, or any other project data (Plan 048 §3 Actions). */
+export async function setProjectArchived(cwd: string, archived: boolean): Promise<void> {
+  await setSetting(PROJECT_ARCHIVED_PREFIX + cwd, archived ? "1" : "0");
+}
+
+export async function getProjectPurpose(cwd: string): Promise<string | null> {
+  return getSetting(PROJECT_PURPOSE_PREFIX + cwd);
+}
+
+export async function setProjectPurpose(cwd: string, purpose: string): Promise<void> {
+  await setSetting(PROJECT_PURPOSE_PREFIX + cwd, purpose);
+}
+
+// --- Plan 048: Home start surface + Inbox badge — global shell prefs, same
+// table as panel layout above. ---
+
+const HOME_START_SURFACE_KEY = "home_start_surface";
+
+export async function getHomeStartSurface(): Promise<"home" | "workspace"> {
+  const saved = await getSetting(HOME_START_SURFACE_KEY);
+  if (saved === "home" || saved === "workspace") return saved;
+  const rows = await (await getDb()).select<{ has_history: number }[]>(
+    `SELECT EXISTS (
+      SELECT 1 FROM session_bindings UNION ALL SELECT 1 FROM bookmarks
+      UNION ALL SELECT 1 FROM decisions UNION ALL SELECT 1 FROM blockers
+      UNION ALL SELECT 1 FROM notes UNION ALL SELECT 1 FROM events
+      UNION ALL SELECT 1 FROM settings WHERE key IN ('onboarding_version', 'tour_version', 'has_launched_session')
+    ) AS has_history`
+  );
+  const surface = resolveHomeStartSurface(saved, rows[0]?.has_history === 1);
+  // Persist the first resolved default: a fresh Home profile stays on Home
+  // after its first session, without altering an existing profile's default.
+  await setHomeStartSurface(surface);
+  return surface;
+}
+
+export async function setHomeStartSurface(value: "home" | "workspace"): Promise<void> {
+  await setSetting(HOME_START_SURFACE_KEY, value);
+}
+
+const INBOX_BADGE_KEY = "inbox_badge";
+
+export async function getInboxBadgeEnabled(): Promise<boolean> {
+  return (await getSetting(INBOX_BADGE_KEY)) !== "0"; // on by default
+}
+
+export async function setInboxBadgeEnabled(enabled: boolean): Promise<void> {
+  await setSetting(INBOX_BADGE_KEY, enabled ? "1" : "0");
+}
+
+// --- Plan 048: project catalog. One repo-wide read of every project key the
+// app has any record of — the Home screen's card list. ---
+
+export interface ProjectCatalogEntry {
+  projectKey: string;
+  pinned: boolean;
+  archived: boolean;
+  /** Exempts a project from Home's 30-day "older projects" cutoff alongside
+   * `pinned` (Plan 048 §3) — a bookmarked project stays a deliberate
+   * shortcut even if nothing's happened there in a while. */
+  bookmarked: boolean;
+  purpose: string | null;
+  nickname?: string | null;
+  bookmarkName?: string | null;
+  bookmarkColor?: string | null;
+  /** A session bound to this project and not explicitly closed (this is a
+   * DB-only proxy for "work in flight" — `session_bindings.active` survives
+   * a relaunch but says nothing about whether a PTY is live right now. The
+   * caller overlays real tab state on top; never treat this alone as
+   * "currently running" — see Plan 048 §4.) */
+  hasActiveSessionBinding: boolean;
+  firstSeenAt: number | null;
+  lastActivityAt: number | null;
+}
+
+interface ProjectKeyActivityRow {
+  key: string;
+  first_seen_at: number;
+  last_activity_at: number;
+}
+
+/** Pure merge step, split out from `listProjectCatalog` the same way
+ * `latestPerTether`/`findGroupsForTab` are split from their DB callers — so
+ * the canonicalization/flag-combination logic is testable without a live
+ * DB. `bookmarkKeys` must already be resolved (see `listProjectCatalog`);
+ * this function does no further canonicalization of its own. */
+export function buildProjectCatalog(
+  activity: ProjectKeyActivityRow[],
+  bookmarkKeys: string[],
+  activeRows: { project_key: string; any_active: number }[],
+  settingsRows: { key: string; value: string }[]
+): ProjectCatalogEntry[] {
+  const byKey = new Map<string, { firstSeenAt: number; lastActivityAt: number }>();
+  for (const row of activity) {
+    if (!row.key) continue;
+    byKey.set(row.key, { firstSeenAt: row.first_seen_at, lastActivityAt: row.last_activity_at });
+  }
+  const bookmarked = new Set(bookmarkKeys);
+  for (const key of bookmarked) {
+    if (!byKey.has(key)) byKey.set(key, { firstSeenAt: 0, lastActivityAt: 0 });
+  }
+
+  const activeByKey = new Map(activeRows.map((r) => [r.project_key, r.any_active === 1]));
+
+  const pinned = new Set<string>();
+  const archived = new Set<string>();
+  const purpose = new Map<string, string>();
+  const nickname = new Map<string, string>();
+  for (const row of settingsRows) {
+    if (row.key.startsWith(PROJECT_PINNED_PREFIX)) {
+      if (row.value === "1") pinned.add(row.key.slice(PROJECT_PINNED_PREFIX.length));
+    } else if (row.key.startsWith(PROJECT_ARCHIVED_PREFIX)) {
+      if (row.value === "1") archived.add(row.key.slice(PROJECT_ARCHIVED_PREFIX.length));
+    } else if (row.key.startsWith(PROJECT_NICKNAME_PREFIX)) {
+      nickname.set(row.key.slice(PROJECT_NICKNAME_PREFIX.length), row.value.trim());
+    } else if (row.key.startsWith(PROJECT_PURPOSE_PREFIX)) {
+      purpose.set(row.key.slice(PROJECT_PURPOSE_PREFIX.length), row.value);
+    }
+  }
+  // A project only pinned/archived/purposed by hand, with no other activity
+  // row anywhere (e.g. archived before it was ever bookmarked), still belongs
+  // in the catalog.
+  for (const key of [...pinned, ...archived, ...purpose.keys(), ...nickname.keys()]) {
+    if (!byKey.has(key)) byKey.set(key, { firstSeenAt: 0, lastActivityAt: 0 });
+  }
+
+  return [...byKey.entries()].map(([projectKey, ts]) => ({
+    projectKey,
+    pinned: pinned.has(projectKey),
+    archived: archived.has(projectKey),
+    bookmarked: bookmarked.has(projectKey),
+    purpose: purpose.get(projectKey) ?? null,
+    nickname: nickname.get(projectKey) || null,
+    hasActiveSessionBinding: activeByKey.get(projectKey) ?? false,
+    firstSeenAt: ts.firstSeenAt || null,
+    lastActivityAt: ts.lastActivityAt || null,
+  }));
+}
+
+/** Distinct project keys unioned from every table that carries one, plus
+ * bookmarks and pin/archive/purpose settings for a project with no other
+ * activity yet. `bookmarks.cwd` is the one source stored via
+ * `canonicalizeCwd` rather than the server-derived `project_key`
+ * (`BookmarksBar`'s `onAdd` in App.tsx) — a bookmark aimed at a subdirectory
+ * needs `projectKeyOf` here to land under the same catalog entry as a tab
+ * opened at the repo root. Every other source already writes the
+ * server-derived key, so no further canonicalization is needed for those. */
+export async function listProjectCatalog(): Promise<ProjectCatalogEntry[]> {
+  const d = await getDb();
+  const activity = await d.select<ProjectKeyActivityRow[]>(
+    `SELECT key, MIN(ts) AS first_seen_at, MAX(ts) AS last_activity_at FROM (
+       SELECT project_key AS key, updated_at AS ts FROM session_bindings
+       UNION ALL
+       SELECT cwd, ts FROM decisions
+       UNION ALL
+       SELECT cwd, ts FROM blockers
+       UNION ALL
+       SELECT cwd, ts FROM notes
+       UNION ALL
+       SELECT json_extract(payload_json, '$.project_key'), ts FROM events
+       WHERE type = 'attention_state_observed' AND json_extract(payload_json, '$.project_key') IS NOT NULL
+     )
+     WHERE key IS NOT NULL AND key != ''
+     GROUP BY key`
+  );
+  const bookmarkRows = await projectBookmarks();
+  const bookmarkKeys = bookmarkRows.map((row) => row.projectKey);
+  const activeRows = await d.select<{ project_key: string; any_active: number }[]>(
+    "SELECT project_key, MAX(active) AS any_active FROM session_bindings GROUP BY project_key"
+  );
+  const settingsRows = await d.select<{ key: string; value: string }[]>(
+    "SELECT key, value FROM settings WHERE key LIKE $1 OR key LIKE $2 OR key LIKE $3 OR key LIKE $4",
+    [PROJECT_PINNED_PREFIX + "%", PROJECT_ARCHIVED_PREFIX + "%", PROJECT_PURPOSE_PREFIX + "%", PROJECT_NICKNAME_PREFIX + "%"]
+  );
+  return buildProjectCatalog(activity, bookmarkKeys, activeRows, settingsRows).map((entry) => {
+    const bookmark = selectProjectBookmark(bookmarkRows, entry.projectKey);
+    return { ...entry, bookmarkName: bookmark?.name || null, bookmarkColor: bookmark?.color || null };
+  });
+}
+
+// --- Plan 048: Project Overview reads. Project-wide (no tab/session scope),
+// unlike SidePanel's tab-scoped equivalents — a project with no open tab at
+// all must still show its Overview. ---
+
+/** Every open decision for a project, regardless of which tab/session owns
+ * it — SidePanel's `listDecisions` is tab-scoped on purpose; Overview is not. */
+export const OPEN_PROJECT_DECISIONS_SQL = "SELECT * FROM decisions WHERE cwd = $1 AND status = 'open' ORDER BY ts DESC";
+
+export async function openDecisionsForProject(cwd: string): Promise<Decision[]> {
+  const d = await getDb();
+  return d.select<Decision[]>(
+    OPEN_PROJECT_DECISIONS_SQL,
+    [cwd]
+  );
+}
+
+export interface ProjectSessionRow {
+  session_id: string;
+  tab_tether: string;
+  agent: string | null;
+}
+
+/** Every session ever bound to this project, live or long since closed —
+ * the Work log and Workspaces sections both start from this. */
+export async function projectSessions(cwd: string): Promise<ProjectSessionRow[]> {
+  const d = await getDb();
+  return d.select<ProjectSessionRow[]>(
+    "SELECT DISTINCT session_id, tab_tether, agent FROM session_bindings WHERE project_key = $1",
+    [cwd]
+  );
+}
+
+export interface AgentTimeObservationRow {
+  session_id: string;
+  run_id: string;
+  state: AgentState;
+  observed_at: number;
+}
+
+/** Raw `attention_state_observed` rows for a project, across every session
+ * — `observedAgentTime` (dashboard.ts) reduces this to hours. Not scoped to
+ * the current run: Agent time is a historical total, not a live snapshot. */
+export async function projectAgentTimeObservations(cwd: string): Promise<AgentTimeObservationRow[]> {
+  const d = await getDb();
+  return d.select<AgentTimeObservationRow[]>(
+    `SELECT e.session_id AS session_id,
+            json_extract(e.payload_json, '$.run_id') AS run_id,
+            json_extract(e.payload_json, '$.state') AS state,
+            CAST(json_extract(e.payload_json, '$.observed_at') AS INTEGER) AS observed_at
+     FROM events e
+     WHERE e.type = 'attention_state_observed'
+       AND json_extract(e.payload_json, '$.project_key') = $1
+     ORDER BY e.session_id, observed_at`,
+    [cwd]
+  );
+}
+
+/** Project work-log ownership is the session, never the reused terminal tether.
+ * One indexed join replaces one JSON/tether scan for every historical session.
+ * SidePanel's tether-oriented eventsSince contract is intentionally separate. */
+export const PROJECT_WORK_LOG_SQL = `SELECT e.id, e.session_id, e.ts, e.type, e.payload_json, b.agent
+  FROM session_bindings b JOIN events e ON e.session_id = b.session_id
+  WHERE b.project_key = $1 AND e.ts > $2 AND e.ts <= $3
+    AND e.type IN ('transcript', 'hook:PostToolUse', 'hook:UserPromptSubmit')
+  ORDER BY e.ts ASC, e.id ASC`;
+
+export interface ProjectWorkLogRow {
+  id: number;
+  session_id: string;
+  ts: number;
+  type: string;
+  payload_json: string;
+  agent: string | null;
+}
+
+export async function projectWorkLogEvents(cwd: string, since: number, until: number): Promise<ProjectWorkLogRow[]> {
+  return (await getDb()).select<ProjectWorkLogRow[]>(PROJECT_WORK_LOG_SQL, [cwd, since, until]);
+}
+
+/** Overview metadata plus canonical bookmark presentation for this project. */
+export async function projectOverviewMetadata(cwd: string): Promise<ProjectCatalogEntry> {
+  const d = await getDb();
+  const [activity, settings, identity] = await Promise.all([
+    d.select<{ first_seen_at: number | null; last_activity_at: number | null; any_active: number }[]>(
+      `SELECT MIN(ts) AS first_seen_at, MAX(ts) AS last_activity_at, MAX(active) AS any_active FROM (
+        SELECT updated_at AS ts, active FROM session_bindings WHERE project_key = $1
+        UNION ALL SELECT ts, 0 FROM decisions WHERE cwd = $1
+        UNION ALL SELECT ts, 0 FROM blockers WHERE cwd = $1
+        UNION ALL SELECT ts, 0 FROM notes WHERE cwd = $1
+        UNION ALL SELECT ts, 0 FROM events WHERE type = 'attention_state_observed'
+          AND json_extract(payload_json, '$.project_key') = $1
+      )`, [cwd]),
+    d.select<{ key: string; value: string }[]>(
+      'SELECT key, value FROM settings WHERE key IN ($1, $2, $3)',
+      [PROJECT_PINNED_PREFIX + cwd, PROJECT_ARCHIVED_PREFIX + cwd, PROJECT_PURPOSE_PREFIX + cwd]),
+    projectIdentity(cwd),
+  ]);
+  const values = new Map(settings.map((row) => [row.key, row.value]));
+  return {
+    projectKey: cwd,
+    ...identity,
+    pinned: values.get(PROJECT_PINNED_PREFIX + cwd) === '1',
+    archived: values.get(PROJECT_ARCHIVED_PREFIX + cwd) === '1',
+    purpose: values.get(PROJECT_PURPOSE_PREFIX + cwd) ?? null,
+    bookmarked: false, // not used by Overview; catalog owns bookmark resolution
+    hasActiveSessionBinding: activity[0]?.any_active === 1,
+    firstSeenAt: activity[0]?.first_seen_at ?? null,
+    lastActivityAt: activity[0]?.last_activity_at ?? null,
+  };
 }

@@ -716,8 +716,9 @@ Update this file as phases are accepted.
   all three regression checks plus click-through, keyboard navigation,
   narrow-window positioning, and saved-version behavior after relaunch and
   Setup close. Fresh-profile auto-start and a real Since You Left digest
-  remain untested. See docs/TESTING.md §69; Phase 47 remains open for those
-  two live cases.
+  remained untested at commit time. See docs/TESTING.md §69. **Closed
+  2026-09-29**: maintainer wrote the literal `PHASE 47 ACCEPTED`, covering
+  the two outstanding live cases.
 - Phase 46 / Plan 046 (Codex cleanup investigation): **APPROVED 2026-09-27**;
   literal `PHASE 46 ACCEPTED` authorized implementation and `PHASE 46
   APPROVED` closed the phase. Read-only code and
@@ -737,3 +738,76 @@ Update this file as phases are accepted.
   and app quit/relaunch ghost restoration. The active-tab session mismatch
   has no normal live panel click path and passed its focused routing check.
   See docs/TESTING.md §68.
+- Phase 48 / Plan 048 (Home dashboard and Project Overview): **APPROVED
+  2026-09-29** (literal `PHASE 48 APPROVED`, given alongside `PHASE 47
+  ACCEPTED` in the same message). Origin: one external user-feedback session,
+  2026-09-25. Adds a Home surface and per-project Overview reading only
+  existing tables (bookmarks, session_bindings, decisions, blockers, notes,
+  attention_state_observed, git_log, board) — no migration. Keeps Inbox as an
+  optional triage view. See `plans/048-project-dashboard.md` for the full
+  spec, §5 for the numbered implementation sequence, §7 for manual checks to
+  land in docs/TESTING.md before close.
+
+  **Build complete 2026-09-30, closure pending a live manual pass.** All 7
+  implementation steps landed across 8 commits: surface/visibility plumbing
+  (new `AppSurface` type, `effectiveVisibleTerminalIds`, and a real fix —
+  `viewedId()`'s `activeIdRef.current` fallback would have silently marked a
+  Home-surface background result as viewed, changed to `null`); a read-only
+  `peek_board` Rust command distinct from `read_board`'s seed-on-missing
+  behavior; `listProjectCatalog` unioning every table that carries a project
+  key plus per-row `projectKeyOf` resolution for bookmarks; pure shaping in
+  the new `src/lib/dashboard.ts` (`observedAgentTime`, `buildUpdateMarkdown`,
+  `buildProjectCards`, `projectDisplayName`); the Home screen and Project
+  Overview themselves (`HomeDashboard.tsx`, `ProjectOverview.tsx`,
+  `CopyUpdateModal.tsx`, `DashboardErrorBoundary.tsx`); and Inbox/tour
+  wiring (`attention` icon replacing `global-mail-*`, `inbox_badge`
+  setting, a new opening tour card, `TOUR_VERSION` 1 → 2). Simplified versus
+  the full §3 spec: no per-card "Continue" button or its ambiguous-tabs
+  chooser, and the "Inbox" → "Activity" relabel was left for the explicit
+  approval the plan calls for. `npx tsc --noEmit`, the full `npm run check`
+  (39 scripts, incl. new `dashboard:check`), `npm run build`, `git diff
+  --check`, and `cargo clippy`/`cargo test --lib` (155 passed) all pass after
+  every commit. See `docs/TESTING.md` §70 for the manual checklist — none of
+  it run yet.
+
+
+### Phase 48 fix-it follow-up — 2026-09-30
+
+Maintainer authorized the fix-it plan after the partial release pass found
+Overview blockers. Read-only timing found 277 historical tether/JSON scans
+needed 111.71s; the new session-owned production work-log query fetched relevant
+rows in 0.168s. Overview now publishes independent bounded read states, avoids
+clock-triggered reloads, coalesces outstanding work, and caches board/Git.
+Decision counts, session/day attribution, Git timestamp units/full date-window
+errors, draft minimization and modal focus are repaired. Startup preference
+and workspace chooser were approved and implemented; Setup uses a portal so
+Home startup can display it. Per-card Continue/full Actions are explicitly
+deferred. Tests and release evidence: `docs/TESTING.md` §71. Phase 48 remains
+NOT ACCEPTED; pending live checks remain disclosed. The maintainer authorized
+committing and opening a PR; delivery proceeds as a draft pending those checks.
+
+### Phase 48 bounded project identity revision — 2026-10-02
+
+Maintainer approved bookmark colors and independent project nicknames before
+closeout. Home card borders use canonical matching bookmark colors; new tabs
+started through Overview inherit those colors and the project display name.
+Existing workspaces keep their presentation. Overview provides a nickname
+editor stored in per-project settings, with nickname → first saved matching
+bookmark → folder fallback across Home, Overview and Copy update. Automated
+gates pass; new live checks and previous gaps remain in TESTING.md.
+Phase 48 remains NOT ACCEPTED; PR 67 closeout awaits manual acceptance.
+
+### Phase 48 live-feedback follow-up — 2026-10-03
+
+Approved compact parent/folder labels in zinc-400 on Home/Overview and a New
+session tab button below existing Continue controls. Fresh-session actions reuse
+openTab and project identity; Continue alone reuses existing workspaces. Required
+automated gates pass; live checks remain in TESTING.md. Phase 48 not accepted.
+
+### Phase 48 acceptance — 2026-10-03
+
+Maintainer wrote `PHASE 48 ACCEPTED` and requested return to main. This closes
+Phase 48, including approved Overview repairs, bookmark/nickname identity,
+compact path labels and fresh-session actions. Maintainer confirmed the final
+UI was good. Previously unrun manual scenarios remain disclosed rather than
+being marked tested. Phase 49 implementation is not approved by acceptance.

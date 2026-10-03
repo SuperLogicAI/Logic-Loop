@@ -2,8 +2,9 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 
 // Bump to re-show the tour after a real redesign — separate from
 // ONBOARDING_VERSION (src/lib/onboarding.ts), see repo.ts's TOUR_VERSION_KEY
-// comment for why the two are independent.
-export const TOUR_VERSION = 1;
+// comment for why the two are independent. Bumped to 2 for Plan 048's new
+// opening Home step — a profile that already saw v1 gets it once more.
+export const TOUR_VERSION = 2;
 
 interface Step {
   target: string;
@@ -16,6 +17,11 @@ interface Step {
 // once there's something to show) is dropped at tour-open time, never
 // shown as a broken/empty card — fail open, same as every other panel.
 const STEPS: Step[] = [
+  {
+    target: "home",
+    title: "Home",
+    body: "Every project you've opened, what changed, and what needs a choice — one screen. Click a project to see its Overview, then Continue into its workspace, which is where the panels below actually live.",
+  },
   {
     target: "decisions",
     title: "Decisions",
@@ -75,25 +81,35 @@ const GAP = 12;
 const CARD_MIN_SPACE = 190;
 
 function mountedTargets(): string[] {
-  return STEPS.filter((s) => document.querySelector(`[data-tour-target="${s.target}"]`) !== null).map(
-    (s) => s.target
-  );
+  return STEPS.filter((s) => {
+    const target = document.querySelector(`[data-tour-target="${s.target}"]`);
+    // Workspace content stays mounted beneath Home, but display:none targets
+    // cannot provide a spotlight. Include only targets that have layout.
+    return target !== null && target.getClientRects().length > 0;
+  }).map((s) => s.target);
 }
 
 // Clip to the viewport so a section taller than the window (or scrolled
-// partly off) still gets an on-screen spotlight and card.
-function visibleRect(rect: Rect): Rect {
+// partly off) still gets an on-screen spotlight and card. Reads each field
+// explicitly: a DOMRect's left/width are prototype getters, so spreading one
+// (`{ ...rect }`) silently dropped them and the spotlight lost its position.
+export function visibleRect(rect: Rect, viewportW: number, viewportH: number): Rect {
   const top = Math.max(0, rect.top);
-  const bottom = Math.min(window.innerHeight, rect.top + rect.height);
-  return { ...rect, top, height: Math.max(0, bottom - top) };
+  const bottom = Math.min(viewportH, rect.top + rect.height);
+  const left = Math.max(0, rect.left);
+  const right = Math.min(viewportW, rect.left + rect.width);
+  return { top, left, height: Math.max(0, bottom - top), width: Math.max(0, right - left) };
 }
 
-function cardStyle(rect: Rect | null): CSSProperties {
+/** Reduced motion jumps instead of animating the scroll to the next target. */
+export function tourScrollBehavior(reducedMotion: boolean): ScrollBehavior {
+  return reducedMotion ? "auto" : "smooth";
+}
+
+export function cardStyle(rect: Rect | null, viewportW: number, viewportH: number): CSSProperties {
   if (!rect) {
     return { top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: CARD_WIDTH };
   }
-  const viewportW = window.innerWidth;
-  const viewportH = window.innerHeight;
   const spaceBelow = viewportH - (rect.top + rect.height);
   const left = Math.min(Math.max(GAP, rect.left), Math.max(GAP, viewportW - CARD_WIDTH - GAP));
   if (spaceBelow >= CARD_MIN_SPACE) {
@@ -151,11 +167,12 @@ export function FeatureTour({ onClose }: Props) {
       setRect(null);
       return;
     }
-    const update = () => setRect(visibleRect(el.getBoundingClientRect()));
+    const update = () => setRect(visibleRect(el.getBoundingClientRect(), window.innerWidth, window.innerHeight));
     update();
     // A section taller than the viewport can't be centered — show its top.
     const tall = el.getBoundingClientRect().height > window.innerHeight * 0.6;
-    el.scrollIntoView({ block: tall ? "start" : "center", behavior: "smooth" });
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ block: tall ? "start" : "center", behavior: tourScrollBehavior(reduced) });
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
     return () => {
@@ -221,7 +238,7 @@ export function FeatureTour({ onClose }: Props) {
     <>
       <div className="fixed inset-0 z-40" role="presentation" />
       <div
-        className="pointer-events-none fixed z-40 rounded-lg transition-all duration-200"
+        className="pointer-events-none fixed z-40 rounded-lg transition-all duration-200 motion-reduce:transition-none"
         style={spotlightStyle}
       />
       <div
@@ -229,8 +246,8 @@ export function FeatureTour({ onClose }: Props) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="tour-step-title"
-        className="fixed z-50 rounded-lg border border-sky-500/40 bg-zinc-950 p-3.5 text-xs text-zinc-300 shadow-2xl transition-all duration-200"
-        style={cardStyle(rect)}
+        className="fixed z-50 rounded-lg border border-sky-500/40 bg-zinc-950 p-3.5 text-xs text-zinc-300 shadow-2xl transition-all duration-200 motion-reduce:transition-none"
+        style={cardStyle(rect, window.innerWidth, window.innerHeight)}
       >
         <div className="mb-2 flex items-center justify-between text-[10px] text-zinc-500">
           <span>

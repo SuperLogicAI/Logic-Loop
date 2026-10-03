@@ -41,6 +41,16 @@ verification.
 
 ## Execution order & status
 
+Project dashboard planning added 2026-09-29 against `9f7c7f8`, based on an
+external user-feedback session. Plan 048 proposes Home and Project Overview as
+the primary project navigation, retaining the optional Inbox, in one phase with
+no migration. Follow-ons (context/RAID, templates, board views, GitHub, spend)
+live in `docs/ROADMAP.md`. **Implementation approved for Phase 48** 2026-09-29
+(`PHASE 47 ACCEPTED` then `PHASE 48 APPROVED`, same message). Build completed;
+the 2026-09-30 release pass found Overview acceptance blockers. **Phase 48 ACCEPTED 2026-10-03.** [The fix-it sprint draft](048-dashboard-fixit-sprint.md) sequences
+diagnosis, loading/error-state repair, attribution/range fixes, plan-gap
+disposition and the remaining release acceptance matrix within Phase 48.
+
 Cross-project attention inbox design added 2026-09-07 against `c0c0cdd`,
 combining IDEAS #4 and Astra A. Phase 22 completed its source-context and
 lifecycle-evidence foundation. Phase 26 now proposes the bounded read-only UI
@@ -50,6 +60,8 @@ test dependency is proposed for Phase 26.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
+| [048](048-project-dashboard.md) | Home dashboard and Project Overview | P1 | M (4–6d + live pass) | Phase 47 accepted | ACCEPTED 2026-10-03 — maintainer wrote PHASE 48 ACCEPTED; remaining unrun checks disclosed in TESTING.md. |
+| [048 fix-it](048-dashboard-fixit-sprint.md) | Settle Overview reads and complete release verification | P1 | M (2–3d + manual pass) | Existing Phase 48 build; explicit plan revision before implementation | ACCEPTED with Phase 48, 2026-10-03 — repairs and approved identity/session follow-ups complete. |
 | [001](001-cross-project-attention-inbox.md) | Cross-project attention inbox | P1 | L overall; Phase 26 read UI + Phase 27 triage | Phase 22 foundation, Phase 25 rail | DONE — PHASE 27 ACCEPTED |
 | [003](003-opencode-repo-contract-and-checks.md) | OpenCode repo contract and baseline checks | P1 | S (0.5–1d + manual pass) | Phase 22 accepted and committed | DONE — Phase 23 accepted |
 | [004](004-folded-side-rail.md) | Folded side rail | P1 | M (1–2d + live visual pass) | Phase 24 accepted and committed | DONE — Phase 25 accepted |

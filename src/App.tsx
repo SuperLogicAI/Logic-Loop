@@ -59,6 +59,7 @@ import {
   ptySpawn,
 } from "./lib/pty";
 import { sanitizeSlug } from "./lib/worktree";
+import { isEditableShortcutTarget } from "./lib/shortcuts";
 import * as repo from "./lib/repo";
 import {
   togglePanelHidden,
@@ -66,6 +67,7 @@ import {
   type VisiblePanelMode,
 } from "./lib/panelLayout";
 import type {
+  AppSurface,
   AttentionEvidence,
   AttentionSourceContext,
   Bookmark,
@@ -79,12 +81,18 @@ import type {
 import { PALETTE } from "./types";
 import { landingDepartureAction } from "./lib/landingMode";
 import {
+  departedTabIds,
+  effectiveVisibleTerminalIds,
   selectIntoSplit,
   splitContains,
   type SplitOrientation,
   visibleTerminalIds,
   type SplitPaneIds,
 } from "./lib/splitView";
+import { HomeDashboard } from "./components/HomeDashboard";
+import { ProjectOverview } from "./components/ProjectOverview";
+import { CopyUpdateModal, type CopyUpdateData } from "./components/CopyUpdateModal";
+import { DashboardErrorBoundary } from "./components/DashboardErrorBoundary";
 import {
   isLockInActive,
   shouldExpireTimedLockIn,
@@ -105,12 +113,40 @@ export default function App() {
   activeIdRef.current = activeId;
   const splitPaneIdsRef = useRef(splitPaneIds);
   splitPaneIdsRef.current = splitPaneIds;
-  const visibleTabIds = new Set(visibleTerminalIds(activeId, splitPaneIds));
+  // Plan 048: which app-level screen is showing. Only "workspace" shows a
+  // live terminal pane — see effectiveVisibleTerminalIds below. Changing
+  // surface never touches activeId/splitPaneIds, so returning to "workspace"
+  // restores the same pane(s) with no PTY remount (architecture invariant).
+  const [surface, setSurface] = useState<AppSurface>({ kind: "workspace" });
+  const surfaceRef = useRef(surface);
+  surfaceRef.current = surface;
+  const openHome = useCallback(() => setSurface({ kind: "home" }), []);
+  const returnToWorkspace = useCallback(() => setSurface({ kind: "workspace" }), []);
+  const [homeStartSurface, setHomeStartSurface] = useState<"home" | "workspace" | null>(null);
+  const changeHomeStartSurface = useCallback(async (next: "home" | "workspace") => {
+    await repo.setHomeStartSurface(next);
+    setHomeStartSurface(next);
+  }, []);
+  const [inboxBadgeEnabled, setInboxBadgeEnabled] = useState(true);
+  const toggleInboxBadge = useCallback(() => {
+    setInboxBadgeEnabled((prev) => {
+      const next = !prev;
+      void repo.setInboxBadgeEnabled(next).catch(() => undefined);
+      return next;
+    });
+  }, []);
+  const [copyUpdateData, setCopyUpdateData] = useState<CopyUpdateData | null>(null);
+  const visibleTabIds = new Set(effectiveVisibleTerminalIds(surface, activeId, splitPaneIds));
   const visibleTabIdsRef = useRef(visibleTabIds);
   visibleTabIdsRef.current = visibleTabIds;
   const focusTab = useCallback((tabId: string) => {
     setSplitPaneIds((pair) => selectIntoSplit(pair, activeIdRef.current, tabId));
     setActiveId(tabId);
+    // Every caller of focusTab is a human picking a specific tab to look at
+    // (tab-bar click, ⌃Tab, Answer Now routing, Attention's "Open tab", a
+    // fan-out member click) — always a return to the workspace, so this is
+    // the one place that needs to know about it (invariant 4's reuse rule).
+    setSurface({ kind: "workspace" });
   }, []);
   const didInit = useRef(false);
   // One browser process is one Attention observation run. Later inbox queries
@@ -468,7 +504,7 @@ export default function App() {
   // Fires every time Setup closes, not just on first run — a no-op for a
   // profile that's already seen the current TOUR_VERSION (Phase 47).
   const handleSetupClose = useCallback(() => {
-    openHomeTabIfNoneOpen();
+    if (homeStartSurface !== "home") openHomeTabIfNoneOpen();
     void repo
       .getTourVersion()
       .then((version) => {
@@ -478,7 +514,7 @@ export default function App() {
         }
       })
       .catch(() => undefined);
-  }, [openHomeTabIfNoneOpen, showPanelMode]);
+  }, [openHomeTabIfNoneOpen, showPanelMode, homeStartSurface]);
 
   const openTour = useCallback(() => {
     showPanelMode("expanded");
@@ -859,8 +895,12 @@ export default function App() {
       .catch(() => {
         landingNoteModeReadyRef.current = true;
       });
+    void repo.getInboxBadgeEnabled().then(setInboxBadgeEnabled).catch(() => undefined);
     // reap PTYs orphaned by a webview crash/reload, then start fresh
     void ptyKillAll().then(async () => {
+      const startSurface = await repo.getHomeStartSurface().catch(() => "workspace" as const);
+      setHomeStartSurface(startSurface);
+      setSurface({ kind: startSurface });
       // Ghost tabs: sessions still active when the app last quit. Never
       // spawned (ptyId: -1) — the dead-tab overlay offers "Re-enter", which
       // is what actually opens the PTY, via the same resume path a mid-run
@@ -873,8 +913,9 @@ export default function App() {
         // Setup's own launch section becomes the only way the first tab
         // gets created (see AgentStatusBar's onSetupClose fallback).
         const launchedBefore = await repo.hasLaunchedSession().catch(() => true);
-        if (launchedBefore) void openTab();
-        else setForceSetupOpen(true);
+        if (launchedBefore) {
+          if (startSurface === "workspace") void openTab();
+        } else setForceSetupOpen(true);
         return;
       }
       const ghosts: Tab[] = candidates.map((c) => ({
@@ -1109,7 +1150,11 @@ export default function App() {
 
       const muted = cwd ? mutedProjectsRef.current.has(cwd) : false;
       const nudgeLabel = cwd ? (cwd.split("/").filter(Boolean).pop() ?? cwd) : "Logic Loop";
-      const viewedId = () => visibleTabIdsRef.current.has(tabId) ? tabId : activeIdRef.current;
+      // No fallback to activeIdRef.current: activeId is already included in
+      // visibleTabIdsRef whenever a workspace pane is actually shown (Plan
+      // 048), so a tab absent from that set is never "viewed" — including
+      // when a non-workspace surface (Home) leaves it empty on purpose.
+      const viewedId = () => visibleTabIdsRef.current.has(tabId) ? tabId : null;
       const canNotify = () => shouldNotify(tabId, viewedId(), document.hasFocus(), muted, lockInRef.current);
 
       // Waiting-edge only — a hook can re-fire (e.g. an idle reminder) while
@@ -1300,7 +1345,8 @@ export default function App() {
         nudgedStallRef.current.add(tab.id);
         const cwd = expand(tab.cwd);
         const muted = mutedProjectsRef.current.has(cwd);
-        const viewedId = visibleTabIdsRef.current.has(tab.id) ? tab.id : activeIdRef.current;
+        // Same no-fallback rule as the ingestion effect's viewedId() above.
+        const viewedId = visibleTabIdsRef.current.has(tab.id) ? tab.id : null;
         if (shouldNotify(tab.id, viewedId, document.hasFocus(), muted, lockInRef.current)) {
           notify("Agent quiet 3m", cwd.split("/").filter(Boolean).pop() ?? cwd);
         }
@@ -1332,6 +1378,10 @@ export default function App() {
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
       const key = e.key.toLowerCase();
+      // Text fields keep their own keys (Ctrl+K kill-line, ⌘B in rich text,
+      // etc.); only the manual ⌘V paste below still applies to them.
+      const target = e.target instanceof Element ? e.target : document.activeElement;
+      if (isEditableShortcutTarget(target as HTMLElement | null) && !(mod && key === "v")) return;
       if (mod && key === "k") {
         e.preventDefault();
         setAttentionOpen((open) => !open);
@@ -1399,8 +1449,9 @@ export default function App() {
       const prevTab = tabsRef.current.find((t) => t.id === prevId);
       const suppressed = suppressLandingRef.current;
       if (suppressed) suppressLandingRef.current = false;
+      // tab_left is written by the visible-set effect below, not here: this
+      // effect also fires for switches made while Home hides the terminals.
       if (prevTab && !splitContains(splitPaneIdsRef.current, prevId)) {
-        markTabLeft(prevTab);
         // Consumed here, not on a timer/await elsewhere — clearing the flag
         // from the spawn call site raced this effect's async scheduling
         // (only fanOut's extra post-openTab await happened to hide it; a
@@ -1414,17 +1465,57 @@ export default function App() {
     }
     // Switching to a flagged tab while the window isn't focused (e.g. via a
     // background automation) must not silently claim it — same rule the
-    // focus-listener follows.
-    if (activeId && document.hasFocus()) claimTab(activeId);
-  }, [activeId, expand, maybePromptLanding, claimTab, markTabLeft]);
+    // focus-listener follows. Also gated on the workspace surface: closing
+    // the active tab while Home is open still fires this effect (activeId
+    // moves to whatever tab is next), but nobody is looking at a terminal
+    // right now, so nothing should be claimed.
+    if (activeId && surfaceRef.current.kind === "workspace" && document.hasFocus()) claimTab(activeId);
+  }, [activeId, expand, maybePromptLanding, claimTab]);
+
+  // Surface transitions (Plan 048): entering Home/Project records tab_left
+  // for whatever was visible a moment ago; returning to the workspace claims
+  // whatever's visible now, if focused. Separate from the tab-switch effect
+  // above because a Home -> workspace return can leave activeId unchanged
+  // (no tab-change effect fires for that today) and because "just closed the
+  // active tab while on Home" must go through that effect's own guard above,
+  // not this one.
+  const prevSurfaceKindRef = useRef(surface.kind);
+  useEffect(() => {
+    const prevKind = prevSurfaceKindRef.current;
+    prevSurfaceKindRef.current = surface.kind;
+    if (prevKind === surface.kind) return;
+    if (prevKind !== "workspace" && surface.kind === "workspace" && document.hasFocus()) {
+      for (const id of visibleTerminalIds(activeIdRef.current, splitPaneIdsRef.current)) {
+        claimTab(id);
+      }
+    }
+  }, [surface, claimTab]);
+
+  // Since-you-left anchors (Phase 14a), visibility half: a tab is "left" when
+  // it drops out of the effective visible set — tab switch, split change,
+  // entering Home/Overview — and only then. Home -> Continue into another tab
+  // anchors nothing: the hidden tab already left when Home opened. A closed
+  // tab is already gone from tabsRef here; finishCloseTab anchored it.
+  const visibleForAnchorsRef = useRef<string[]>([]);
+  useEffect(() => {
+    const next = effectiveVisibleTerminalIds(surface, activeId, splitPaneIds);
+    const departed = departedTabIds(visibleForAnchorsRef.current, next);
+    visibleForAnchorsRef.current = next;
+    for (const id of departed) {
+      const tab = tabsRef.current.find((t) => t.id === id);
+      if (tab) markTabLeft(tab);
+    }
+  }, [surface, activeId, splitPaneIds, markTabLeft]);
 
   // Since-you-left anchor, blur half: Cmd-Tabbing to another app leaves the
-  // active tab without switching activeId, so the tab-switch effect above
-  // never fires for it.
+  // visible tabs without changing the visible set. On Home nothing is
+  // visible, so nothing is anchored.
   useEffect(() => {
     const onBlur = () => {
-      const tab = tabsRef.current.find((t) => t.id === activeIdRef.current);
-      if (tab) markTabLeft(tab);
+      for (const id of visibleForAnchorsRef.current) {
+        const tab = tabsRef.current.find((t) => t.id === id);
+        if (tab) markTabLeft(tab);
+      }
     };
     window.addEventListener("blur", onBlur);
     return () => window.removeEventListener("blur", onBlur);
@@ -1480,6 +1571,20 @@ export default function App() {
     focusTab(tab.id);
   }, [focusTab]);
 
+  // Human-triggered fresh session. Continue uses focusTab separately; a new
+  // tab always goes through the ordinary spawn path and preserves project identity.
+  const startProjectSession = useCallback(async (projectKey: string) => {
+    const identity = await repo.projectIdentity(projectKey)
+      .catch(() => ({ nickname: null, bookmarkName: null, bookmarkColor: null }));
+    await openTab({
+      cwd: projectKey,
+      name: identity.nickname || identity.bookmarkName || undefined,
+      color: identity.bookmarkColor || undefined,
+    });
+  }, [openTab]);
+
+  const openOverview = useCallback((projectKey: string) => setSurface({ kind: "project", projectKey }), []);
+
   // Answer-now prefill: writes only a draft into the bound tab's terminal.
   // A structured submitted transcript reply is the sole automatic evidence
   // that can mark the decision answered.
@@ -1521,6 +1626,8 @@ export default function App() {
         tabs={tabs}
         activeId={activeId}
         visibleIds={visibleTabIds}
+        homeActive={surface.kind === "home"}
+        onOpenHome={openHome}
         onSelect={focusTab}
         onClose={closeTab}
         onNew={() => void openTab()}
@@ -1557,7 +1664,7 @@ export default function App() {
         onReorder={reorderBookmarks}
       />
       <div className="flex min-h-0 flex-1">
-        {panelMode !== "hidden" && activeTab && (
+        {surface.kind === "workspace" && panelMode !== "hidden" && activeTab && (
           <SidePanel
             mode={panelMode}
             onModeChange={showPanelMode}
@@ -1588,6 +1695,7 @@ export default function App() {
             attentionCount={attentionViews.active.length}
             attentionLoading={attentionLoading}
             attentionStale={attentionStale}
+            inboxBadgeEnabled={inboxBadgeEnabled}
             onOpenAttention={() => setAttentionOpen(true)}
             landingNoteMode={landingNoteMode}
             onLandingNoteModeChange={changeLandingNoteMode}
@@ -1595,7 +1703,7 @@ export default function App() {
             codexMeter={activeTab.sessionId ? codexMeterBySession[activeTab.sessionId] ?? null : null}
           />
         )}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className={`flex min-h-0 min-w-0 flex-1 flex-col ${surface.kind !== "workspace" ? "hidden" : ""}`}>
           <AgentStatusBar
             panelMode={panelMode}
             onTogglePanel={togglePanel}
@@ -1641,7 +1749,43 @@ export default function App() {
           </div>
           {activeTab && <IdeaBoard cwd={expand(activeTab.cwd)} />}
         </div>
+        {surface.kind !== "workspace" && (
+          <DashboardErrorBoundary onReturnToWorkspace={returnToWorkspace}>
+            {surface.kind === "home" && (
+              <HomeDashboard
+                tabs={tabs}
+                expand={expand}
+                activeTab={activeTab}
+                openDecisionOwners={openDecisionOwners}
+                onOpenOverview={openOverview}
+                onContinue={focusTab}
+                attentionCount={attentionViews.active.length}
+                onOpenAttention={() => setAttentionOpen(true)}
+                inboxBadgeEnabled={inboxBadgeEnabled}
+                onToggleInboxBadge={toggleInboxBadge}
+                startSurface={homeStartSurface}
+                onChangeStartSurface={changeHomeStartSurface}
+                onOpenSetup={() => setForceSetupOpen(true)}
+                onOpenTour={openTour}
+              />
+            )}
+            {surface.kind === "project" && (
+              <ProjectOverview
+                key={surface.projectKey}
+                projectKey={surface.projectKey}
+                tabs={tabs}
+                expand={expand}
+                now={now}
+                onBack={openHome}
+                onContinueTab={focusTab}
+                onStartSession={startProjectSession}
+                onOpenCopyUpdate={setCopyUpdateData}
+              />
+            )}
+          </DashboardErrorBoundary>
+        )}
       </div>
+      {copyUpdateData && <CopyUpdateModal data={copyUpdateData} onClose={() => setCopyUpdateData(null)} />}
       {landingPrompt && (
         <LandingNoteModal
           sessionId={landingPrompt.sessionId}

@@ -6,7 +6,7 @@ import { burst } from "../lib/confetti";
 import { generateCommitMessage } from "../lib/commitMessage";
 import { summarizeDelta, type Delta } from "../lib/delta";
 import { collapseNoopRuns, groupIterations, isLoopRun, type Iteration } from "../lib/loop";
-import { deriveClock, formatAge } from "../lib/ingest";
+import { deriveClock, formatAge, sessionStatusLabel } from "../lib/ingest";
 import { adapterSupportsDecisions } from "../lib/onboarding";
 import { parseBoard, readBoard, spliceCard, writeBoard, type Card } from "../lib/board";
 import { computeMomentum } from "../lib/momentum";
@@ -84,6 +84,9 @@ interface Props {
   attentionCount: number;
   attentionLoading: boolean;
   attentionStale: boolean;
+  /** Plan 048 `inbox_badge` setting (default on) — hides the unread count
+   * without hiding the Attention button itself. */
+  inboxBadgeEnabled: boolean;
   onOpenAttention: () => void;
   landingNoteMode: LandingNoteMode;
   onLandingNoteModeChange: (mode: LandingNoteMode) => Promise<void>;
@@ -246,6 +249,7 @@ export function SidePanel({
   attentionCount,
   attentionLoading,
   attentionStale,
+  inboxBadgeEnabled,
   onOpenAttention,
   landingNoteMode,
   onLandingNoteModeChange,
@@ -784,10 +788,11 @@ export function SidePanel({
 
   if (mode === "compact") {
     const projectName = cwd.split("/").filter(Boolean).pop() ?? cwd;
-    const stateLabel = `${projectName}: ${agentState ?? "no session"}${
+    const status = sessionStatusLabel(agentState, sessionId);
+    const stateLabel = `${projectName}: ${status.state}${
       lastEventTs !== undefined
         ? `, last event ${formatAge(deriveClock({ agentState, lastEventTs }, now).quietMs)} ago`
-        : ", no events yet"
+        : `, ${status.noEvents}`
     }`;
     const stateColor = lockIn
       ? "bg-zinc-500"
@@ -837,13 +842,8 @@ export function SidePanel({
                   : `Attention: ${attentionCount} item${attentionCount === 1 ? "" : "s"}`
             }
             section="attention"
-            icon={
-              <PanelIcon
-                name={!lockIn && attentionCount > 0 ? "global-mail-unread" : "global-mail-read"}
-                className="h-5 w-5"
-              />
-            }
-            count={!lockIn ? attentionCount || undefined : undefined}
+            icon={<PanelIcon name="attention" className="h-5 w-5" />}
+            count={!lockIn && inboxBadgeEnabled ? attentionCount || undefined : undefined}
             className={lockIn ? "text-zinc-500" : attentionStale ? "text-orange-300" : attentionCount > 0 ? "text-sky-300" : "text-zinc-600"}
             onClick={onOpenAttention}
           />
@@ -952,11 +952,11 @@ export function SidePanel({
             project: {cwd.split("/").filter(Boolean).pop() ?? cwd}
           </p>
           <p className="mt-0.5 w-full truncate text-[9px] leading-none text-zinc-600" title="Phase 14b clock">
-            {agentState ?? "no session"}
+            {sessionStatusLabel(agentState, sessionId).state}
             {" · "}
             {lastEventTs !== undefined
               ? `${formatAge(deriveClock({ agentState, lastEventTs }, now).quietMs)} ago`
-              : "no events yet"}
+              : sessionStatusLabel(agentState, sessionId).noEvents}
           </p>
         </div>
         <button
@@ -967,8 +967,8 @@ export function SidePanel({
           className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-sky-400 ${lockIn ? "text-zinc-500" : attentionStale ? "text-orange-300" : attentionCount > 0 ? "text-sky-300" : "text-zinc-600"}`}
           onClick={onOpenAttention}
         >
-          <PanelIcon name={!lockIn && attentionCount > 0 ? "global-mail-unread" : "global-mail-read"} className="h-4 w-4" />
-          {!lockIn && attentionCount > 0 && (
+          <PanelIcon name="attention" className="h-4 w-4" />
+          {!lockIn && inboxBadgeEnabled && attentionCount > 0 && (
             <span className="absolute -right-1 -top-0.5 min-w-3 rounded-full bg-zinc-700 px-0.5 text-center font-mono text-[7px] leading-3 text-zinc-100">
               {attentionCount > 99 ? "99+" : attentionCount}
             </span>

@@ -145,3 +145,31 @@ export function readBoard(projectKey: string): Promise<string> {
 export function writeBoard(projectKey: string, content: string): Promise<void> {
   return invoke("write_board", { projectKey, content });
 }
+
+// --- Plan 048: passive peek for Project Overview's Plan section. Distinct
+// from readBoard, which seeds the example board on a missing file — a
+// dashboard card must never create one just by being rendered. ---
+
+export type BoardPeek = { state: "ready"; content: string } | { state: "missing" } | { state: "error"; message: string };
+
+export function peekBoard(projectKey: string): Promise<BoardPeek> {
+  return invoke<BoardPeek>("peek_board", { projectKey }).catch((e) => ({ state: "error", message: String(e) }));
+}
+
+/** Mirrors `board.rs`'s `EXAMPLE_BOARD` byte-for-byte — Overview compares a
+ * peeked board against this to show "Example board" with no counts instead
+ * of real card counts (Plan 048 §4). Two independent constants, not one
+ * shared source: acceptable because both are frozen, user-facing seed text
+ * that only ever changes together with a deliberate onboarding-copy edit on
+ * both sides, same risk class as a translated string pair. */
+export const EXAMPLE_BOARD =
+  "## Example: something you're considering\n" +
+  "status: idea\n" +
+  "A one-line idea. Delete this card, or turn it into a real one.\n" +
+  "## Example: something queued up next\n" +
+  "status: planned\n" +
+  "next: the first concrete step to take\n" +
+  "link: https://example.com/related-issue\n" +
+  "## Example: something already shipped\n" +
+  "status: done\n" +
+  "Cards move to `done` instead of being deleted, so history stays in the file.\n";

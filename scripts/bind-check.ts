@@ -68,8 +68,31 @@ assert.equal(
 // --- Untethered sessions (outside terminal) still bind by cwd. ---
 assert.equal(bind(ev(), two), "tab-1", "cwd fallback did not bind");
 assert.equal(bind(ev(), two, { bound: ["tab-1"] }), "tab-2", "did not prefer an unbound tab");
-// All candidates bound → reuse the match rather than dropping the session.
-assert.equal(bind(ev(), two, { bound: ["tab-1", "tab-2"] }), "tab-1");
+// All candidates hold other sessions → unbound (the caller still persists
+// the hook). Reusing a match stamped this outside session's tab_id onto
+// another session's tab (Phase 48 release-test contamination).
+assert.equal(bind(ev(), two, { bound: ["tab-1", "tab-2"] }), null, "outside session reused a bound tab");
+assert.equal(
+  bind(ev(), [{ ...tab("tab-1"), sessionId: "s-other" }, { ...tab("tab-2"), sessionId: "s-third" }]),
+  null,
+  "outside session reused a tab owning another session"
+);
+// A tab carrying a persisted sessionId (re-entered ghost, absent from the
+// in-memory bound set) is not "free": prefer a session-less tab.
+assert.equal(bind(ev(), [{ ...tab("tab-1"), sessionId: "s-other" }, tab("tab-2")]), "tab-2");
+
+// --- Owner recovery: the tab already owning this session wins, even with an
+// empty bound set (after relaunch) and a session that cd'ed elsewhere. ---
+const ownerA = { ...tab("tab-1"), sessionId: "s1" };
+assert.equal(bind(ev(), [tab("tab-2"), ownerA]), "tab-1", "known owner lost to a free same-cwd tab");
+assert.equal(
+  bind(ev(), [tab("tab-2"), ownerA], { projectKey: "/Users/x/dev/elsewhere" }),
+  "tab-1",
+  "owner lost after the session changed cwd"
+);
+assert.equal(bind(ev(), [{ ...ownerA, status: "dead" }, tab("tab-2")]), "tab-2", "dead owner recovered");
+// Untethered Codex is still never bound, owner or not.
+assert.equal(bind(ev({ agent: "codex" }), [ownerA]), null, "untethered Codex recovered an owner");
 
 // A subdir cwd is already collapsed to the repo root upstream, so a tab opened
 // at the root and an agent run from src-tauri agree — the project-identity fix.
@@ -94,6 +117,19 @@ assert.equal(
   bind(ev(), [tab("tab-1", "/Users/x/dev/other")], { active: "tab-1" }),
   "tab-1",
   "active-tab fallback did not fire"
+);
+// ...but never onto an active tab owning another session: a re-entered ghost
+// (persisted sessionId, not in the bound set) took an unrelated outside
+// session's derived rows in the Phase 48 release test.
+assert.equal(
+  bind(ev(), [{ ...tab("tab-1", "/Users/x/dev/other"), sessionId: "s-ghost" }], { active: "tab-1" }),
+  null,
+  "active-tab rescue hijacked a re-entered tab"
+);
+assert.equal(
+  bind(ev(), [tab("tab-1", "/Users/x/dev/other")], { active: "tab-1", bound: ["tab-1"] }),
+  null,
+  "active-tab rescue hijacked a bound tab"
 );
 // Root cwd is never a project: the app's own `claude -p` extractor children run
 // with cwd `/` and post hooks back. Binding one overwrote the active tab's cwd
@@ -177,6 +213,12 @@ for (const source of ["startup", "compact", undefined]) {
   assert.equal(bind(cx({ launch: "current", launch_id: L1, source }), [ownedByL1]), null, `${source} replaced within a launch`);
   assert.equal(sessionBindingLocation(cx({ launch: "current", launch_id: L1, source }), REPO, ownedByL1), null);
 }
+// Re-entry: a resumed ghost (own session, no launchId yet) binds its tab.
+assert.equal(
+  bind(cx({ launch: "current", launch_id: L1, source: "resume", session_id: "s-old" }), [ownedOld]),
+  "tab-1",
+  "re-entered tab lost its own resumed session"
+);
 // Same session (e.g. compact) is just the tab's own event.
 assert.equal(bind(cx({ launch: "current", launch_id: L1, source: "compact", session_id: "s-old" }), [ownedByL1]), "tab-1");
 // Non-SessionStart events never replace, even from the current launch.

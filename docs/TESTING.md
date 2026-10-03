@@ -4403,3 +4403,537 @@ auto-start; the Since You Left card with a real digest. The current profile
 has existing data and no mounted digest. The first run cancelled Quit when
 the app warned that it would terminate an active session; the maintainer
 subsequently rebuilt and relaunched it before this second pass.
+
+**Release follow-up, 2026-09-30 (Phase 48):** manually opened Tour in the
+rebuilt release app. Home appeared first as card 1 of 8; all eight cards
+advanced through Done. Next appeared, while Since You Left remained absent
+because no digest was mounted. The fresh-profile auto-start, real-digest card,
+and v1-to-v2 automatic re-show remain untested.
+
+## 70. Home dashboard and Project Overview (Phase 48, 2026-09-30)
+
+**Automated checks (completed):** `npx tsc --noEmit`, `cd src-tauri && cargo
+clippy --all-targets -- -D warnings && cargo test --lib` (155 passed, 1
+ignored — 4 new in `board.rs`), `npm run check` (39 scripts, incl. new
+`dashboard:check`), `npm run build`, and `git diff --check` all pass after
+every commit in this phase. No extraction prompt changed; `golden` not run.
+
+Scope actually shipped vs. `plans/048-project-dashboard.md` §3 — read this
+before the live pass, several things are simplified:
+
+- Home: header line, a Continue callout for the current workspace pane
+  (`activeId` itself), search, All/Working/Needs a choice/Archived filters,
+  the 30-day older-projects fold (exempts pinned/bookmarked), one card
+  action ("Open" → Project Overview, not a second "Continue" button).
+- Project Overview: Needs a choice (routed via `resolveAttentionRoute`),
+  Pick up here (`computeMomentum`, read-only), Work log (Today/7d/30d,
+  per-session agent excerpt + file/turn counts + local commits), Plan
+  (`peek_board`/`parseBoard`, Now card + status counts, "Example board"
+  detection), Agent time (`observedAgentTime`, hidden with no observations),
+  Workspaces (live tabs + closed-but-resumable sessions), Pin/Archive/edit
+  purpose, Copy update.
+- **Original build simplifications, dispositioned in the fix-it sprint:**
+  per-card Continue and the full project Actions menu are explicitly deferred
+  by the maintainer. Overview now has an explicit multiple-workspace chooser
+  and Home has the startup selector (§71). The ⌘/Ctrl+K Activity relabel remains
+  unapproved; Inbox archive-all-unavailable is not implemented.
+- Inbox: `attention`-icon swap and `inbox_badge` setting are both live;
+  `AttentionInbox` itself, its archive/backlog controls, and ⌘/Ctrl+K are
+  unchanged per plan.
+- Tour: new opening "Home" card targets the tab bar button; `TOUR_VERSION`
+  bumped 1 → 2.
+
+**Installed-app manual pass: partial, 2026-09-30**, using the rebuilt release
+bundle `src-tauri/target/release/bundle/macos/Logic Loop.app` (not dev mode).
+
+**Restarted release follow-up, 2026-09-30, from 22:48 HST:**
+the requested raw bundle was absent on disk; `npm run tauri build` rebuilt
+it successfully (TypeScript/frontend gate included, `index-D8uH9tDM.js`).
+Quit the stale app; elevated `pgrep -fl "Logic Loop"` returned no processes.
+Moved the complete real profile directory to `.bak`, never copied its 2.8 GB
+database. The new process path was confirmed as the rebuilt raw bundle.
+
+- **PASS:** true fresh profile showed Home selected, zero projects, no tabs,
+  and visible Setup. Selected `/private/tmp/logic-loop-phase48-manual` through
+  the folder picker; Start session launched a plain shell in that folder.
+- **FINDING:** first-run Setup displayed `Setup preference could not be saved:
+  error returned from database: (code: 5) database is locked`. It persisted
+  through folder selection and session launch; Finish setup still closed it.
+- **PASS:** closing Setup auto-started Home as tour card 1 of 8; advanced
+  Home, Decisions, Accomplished, Blockers, Next, Idea Board, Attention Inbox,
+  Header controls; Done closed it. Since You Left was absent (no agent
+  session/activity); its real-digest target remains unverified. The Home
+  card screenshot showed a centered card without a visible Home spotlight;
+  target positioning needs further verification.
+- **PASS:** explicitly selected Last workspace, hid unread count, quit and
+  confirmed the live-shell warning. Relaunch had Home off and no auto-tour;
+  reopening Home showed Last workspace and Show unread count. This verifies
+  the selected setting and badge persistence, not v1→v2 migration.
+- **PASS, profile safety:** quit again and verified no process. Preserved the
+  disposable profile at `/private/tmp/logic-loop-phase48-fresh-profile-20260930`
+  and moved `.bak` back to the original path. Relaunched the rebuilt release;
+  Home showed the real **65-project catalog** before continuing.
+- **Automated follow-up:** dashboard, onboarding, and board assertions passed
+  using `node --import tsx scripts/<name>-check.ts`; the normal npm runners
+  were blocked by sandbox `tsx` IPC socket permissions. Diff check passed.
+
+Combined checklist items below remain unchecked where any subcase is pending.
+
+- [x] Fresh profile: starts on Home, Setup remains visible and can launch
+      a selected folder; existing profiles default to Last workspace. Home's
+      Start in selector persists the chosen surface. The original accessor-only
+      gap was repaired in the authorized fix-it follow-up (§71). Passed with
+      an isolated profile in this follow-up; Setup's database-lock warning is
+      recorded separately above.
+- [ ] Open Home mid-session with a live agent running in a background tab:
+      let it finish while Home is open, then switch back to that tab — the
+      result stays unclaimed until the tab is actually shown, no PTY input,
+      process/output intact.
+- [ ] Return from Home to a split workspace and to a single one (including
+      returning to the same `activeId`): focus and xterm sizing recover, no
+      respawn, no flash.
+- [ ] Several projects with a mix of live tabs, closed-but-resumable
+      sessions, and bookmark-only (no session) entries: card counts and the
+      "N closed" Workspaces line match; close the last tab for a project —
+      the project and its history remain in the catalog.
+- [ ] A project with an open decision: Overview's "Go to workspace" routes
+      to the exact owning tab when one exists; archiving the same decision's
+      occurrence in the Attention Inbox does not remove it from Overview.
+- [x] A project whose `.logic-loop/board.md` is missing, an untouched
+      example board, and a real edited board: Plan section reads "No board
+      yet", "Example board — not edited yet.", and real counts respectively
+      — opening Home/Overview must never create a `.logic-loop/` directory
+      that didn't already exist.
+      **PASS:** GH-gem showed No board yet; `ls -ld` before/after confirmed
+      its `.logic-loop` directory remained absent. The Phase 46 scratch board
+      matched the literal example and showed Example board — not edited yet.
+      Temporarily replaced that scratch board with four QA cards: Overview
+      showed Now: Manual QA current card and Idea 1 / Planned 1 / Building 1 /
+      Done 1. Restored the original scratch file; `cmp` exited 0. The real
+      context_terminal board also matched disk counts (4/0/5/1, no Now card).
+- [ ] Copy update on a real project: every line traceable to a decision,
+      excerpt, or commit; no file paths/commands leak through; edit the
+      textarea before clicking Copy and confirm the edited text (not the
+      original draft) lands on the clipboard.
+      **FAIL, export minimization; PASS, edited clipboard:** real decisions,
+      excerpts and 22 local commits populated the draft. After adding
+      `phase48-edited-clipboard-check`, Copy showed Copied! and pasting into
+      an unsaved TextEdit scratch document contained the edited marker. No
+      permission prompt appeared. The draft leaked the command/path line
+      `ls: src-tauri/migrations: No such file or directory` under Blockers;
+      also retained a relative Markdown plan link. Only first-line excerpts
+      were exported, but first-line filtering is insufficient. Clipboard
+      denial and recovery remain untested; source catch has no explicit error.
+- [ ] Trigger a render error in Home/Overview (e.g. a temporarily broken
+      prop) and confirm `DashboardErrorBoundary`'s "Return to workspace"
+      recovers without affecting any running terminal.
+- [ ] Keyboard-only pass: Tab reaches every control in Home and Overview;
+      focus is visible; no control is nested inside another interactive
+      element; typing in Home's search box or Overview's purpose editor is
+      never intercepted by the app's global ⌘-shortcut handler.
+      **FAIL:** while each editable field had focus, ⌘K opened Attention
+      Inbox from both Home search and Overview purpose editor. Cancelled
+      purpose editing without saving. Home header/search/filter/card action
+      traversal and all enabled controls of the scratch Overview were
+      reachable in order; sampled screenshots showed visible orange focus
+      rings. Full per-stop visual and VoiceOver coverage remains pending.
+- [ ] Tour: fresh walkthrough shows the new "Home" card first, pointing at
+      the tab bar button; a profile that completed tour v1 sees the tour
+      once more (version bump), not every launch after.
+      **PARTIAL / target failure:** fresh Setup-close walkthrough and v2
+      no-repeat passed above; v1→v2 remains untested. Both fresh walkthrough
+      and later Home Tour screenshots showed a centered Home card without a
+      visible spotlight around the tab-bar Home control. Tour from Home had
+      1 of 1 (hidden workspace targets excluded); workspace walkthrough had
+      1 of 8. No full Home-target pass is claimed.
+
+**Additional A–D cases in the same release pass:**
+
+- [x] Real Since You Left card, before relaunch: maintainer supplied a
+  screenshot at 22:59 showing 1 command run, 1 turn, 0 stops and real agent
+  text after the delayed read-only prompt and Home departure. This is
+  populated real-profile evidence, not fresh-profile or restart evidence.
+- [ ] **FAIL — digest after quit/relaunch:** automatic approval review initially rejected
+  Quit pending confirmation of its two-session termination effect. Maintainer
+  then manually quit and confirmed this testing agent lives outside Logic
+  Loop. Relaunched the release bundle: Project 5 and Project 7 restored as
+  dead tabs; selected Project 7 (the Codex digest test), whose panel showed
+  no session/no events and no Since You Left card. Re-enter launched Codex,
+  but stopped at Codex's update prompt. Requested that the maintainer press
+  Esc to skip the update; no terminal input was sent by the testing agent.
+  Maintainer skipped the prompt and reported ready. Screenshot confirmed
+  the saved conversation loaded, including the delayed README prompt and its
+  final three bullets, but the panel still showed no session/no events and
+  no Since You Left card. Home → Continue returned focus to Terminal input
+  without restoring the digest. This fails the requested restart scenario;
+  it does not establish whether a subsequent new agent turn would rebind.
+- [ ] Clipboard denial/failure state/retry: no prompt appeared; no privacy
+  permissions or TCC state were changed to manufacture denial.
+- [ ] 200% zoom on Home/Overview: four ⌘+ attempts on Home had no visible
+  scale change. A verified 200% layout check remains pending.
+- [ ] VoiceOver announcements: ⌘F5 produced no visible activation; no
+  audible announcements were verified. AX showed named headings but generic
+  repeated Open buttons, so this is not an announcements pass.
+- [ ] Reduced-motion animation behavior: enabled Reduce motion via System
+  Settings → Accessibility → Motion, opened Tour, then restored off (verified
+  both states). Still screenshots cannot establish animation timing; source
+  retains `transition-all duration-200` and smooth scrolling without a reduced
+  motion branch. Animation-skip behavior remains unresolved.
+- [x] Unread-badge preference persisted across the disposable-profile relaunch.
+
+**Observed in this pass:** `npm run dashboard:check` and
+`npm run onboarding:check` passed. Home opened and listed 65 projects; search,
+All, Needs a choice, and Archived filters responded, and the unread-count
+toggle hid and restored its label. Opened Tour manually: Home was card 1 of 8,
+all eight cards advanced in order, Next and Attention Inbox appeared, and Done
+closed the tour. Home → Continue returned to the current workspace.
+
+**Overview data discrepancy — investigate before accepting Phase 48:** the
+Home card for `/Users/vandershark/Desktop/dev/context_terminal` showed 33 open
+decisions, while its Overview showed “Nothing open.” The same Overview showed
+“No board yet” although that project has a `.logic-loop/board.md` on disk, and
+its Work log stayed at “Loading…” for more than 12 seconds (including after
+switching from 7 days to 30 days). Copy update remained disabled. No decision,
+board, or terminal data was edited during this pass.
+
+**User-reported desktop access prompts, 2026-09-30:** the maintainer reports
+repeated requests for access to the Desktop folder, arriving about every
+10–15 seconds and in pairs, during this Phase 48 computer-use session. I did
+not see these prompts in the UI state I captured, so this is recorded as a
+user observation pending reproduction. Screenshot referenced:
+`/Users/vandershark/Desktop/Screenshot 2026-09-30 at 9.23.10 PM.png` (not
+readable by the agent due to an OS permission error).
+
+Still pending: the Phase 47 fresh-profile auto-start and real Since You Left
+digest; and the remaining Phase 48 end-to-end cases in the checklist above,
+including background-agent claim behavior, split return, decision routing and
+Inbox archival, board variants/no-directory creation, Copy update clipboard,
+error-boundary recovery, full keyboard/zoom/accessibility coverage, and
+first-run/version-bump auto-tour behavior. All checklist items stay unchecked
+until their complete scenarios are verified.
+
+
+## 71. Phase 48 Overview fix-it sprint (2026-09-30)
+
+**Status:** implementation authorized; Phase 48 NOT ACCEPTED. Maintainer
+approved the startup selector and Overview workspace chooser, deferring
+per-card Continue/full Actions, and approved a dashboard-only typed Git API.
+No commits or PR were created. Preserve §69/70 historical results and remaining
+unchecked scenarios; this section does not convert acceptance history into
+fresh-profile/digest evidence.
+
+**Environment:** macOS 26.4.1 (25E253), branch `phase-47-feature-tour`, baseline
+`3fce610` plus the fix-it working tree. Real populated profile inspected via
+SQLite `mode=ro`. No profile reset, credential logging, terminal input, global
+hook/configuration change or TCC reset was performed. No new agent sessions
+were launched for these checks.
+
+**Measured diagnosis:** the source query returned 33 open decisions and 277
+bound sessions for this project; `.logic-loop/board.md` exists. Source count
+queries took 0.1–0.2ms, lifecycle count 98.9ms, and local Git 15ms. Running the
+old JSON/tether predicate as 277 COUNT queries took 111.71s and produced
+15,857 matches including duplicate attribution. A single session-owned COUNT
+needed 0.011s (13,736 rows). The actual new production SELECT, limited to the
+work-log event types in the 7-day window, fetched 11,375 rows in 0.168s with
+zero duplicate IDs. These are read-only query timings, not equivalent UI
+latencies; they demonstrate why the original 15s cancellation loop could
+prevent the shared snapshot from publishing.
+
+**Implemented repairs:** independently settling read states; 10s wait limits,
+Retry, stale/unmount guards and in-flight coalescing; 30s board/Git caches;
+no age-clock reads or unrelated bookmark resolution in Overview; source-open
+decisions without a 50-row cap; authoritative session/day work-log grouping;
+Git seconds normalization and dashboard-specific error-returning date-window
+reads; draft first-line path/command omission; fresh/existing startup defaults
+and persisted selector; explicit project workspace chooser; Setup portal for
+Home and initial focus inside Copy update. Native board peek now preserves
+permission/metadata failures as errors instead of converting them to missing.
+
+**Automated evidence:** focused dashboard, onboarding, delta, scope and board
+checks passed. New dashboard fixtures exercise independent settlement,
+failures, timeout/late results, disposal, retry/coalescing/cache expiry, timestamp
+edges, daily grouping/deduplication, export minimization, startup and chooser.
+Rust executes the actual repo SQL against SQLite fixtures for shared-tether,
+rebound/legacy events, foreign project exclusion, range edges, Inbox archival
+and 33/61 decision counts. Native Git fixtures cover empty/missing/invalid
+repositories, full 61-commit windows and range filtering.
+
+`npm run opencode:check`, full `npm run check`, `npx tsc --noEmit`, frontend
+build, full `cargo test` (159 passed, 1 intentional live Codex test ignored),
+and Clippy passed before the final board/focus follow-up; final gate results
+will be appended below. The sandbox initially denied tsx IPC sockets and three
+Rust loopback fixtures; authorized reruns outside the sandbox passed. No
+extraction prompts changed; `golden` was not run. Vite reports its existing
+large-chunk advisory; builds succeed.
+
+**Release verification provenance:** the initial UI connection selected an
+older installed app without Home; its three visible tabs were exited. Closing
+that process exposed a previously running Phase 48 process at the raw release
+bundle path. Rebuilding replaces the binary on disk but not that running
+process's embedded frontend. Its UI still showed the original Overview
+loading/false-empty labels and no Retry, proving it was stale. A read-only
+process-path check confirmed the raw bundle path. Restart approval was
+requested because that process contains an idle live shell tab with no bound
+agent session. That old-process observation is not a regression result for
+the new build.
+
+**Outstanding live scenarios:** true disposable fresh profile/Setup-close
+auto-tour, real Since You Left digest tour card, v1→v2 once-only behavior,
+background-agent completion and claim isolation, split/same-tab return,
+closed-tab exact decision routing and Inbox archival, board variants/passive
+no-creation, edited clipboard/denial, error-boundary recovery, keyboard/zoom/
+VoiceOver/reduced-motion coverage, multi-project fan-out/worktree/history.
+Record only scenarios actually exercised in the final rebuilt process; all
+other §69/70 checklist items remain unchecked.
+
+**Restarted-pass update, 2026-09-30:** §70 now records true fresh Home/Setup,
+selected-folder shell launch, Setup-close automatic eight-card walkthrough,
+completed-v2 no-repeat on relaunch, startup-selector and unread-badge
+persistence, and restoration of the real 65-project catalog. These subcases
+are no longer outstanding. Fresh Setup's database-lock warning is a new
+finding requiring disposition. A completed-v1 upgrade, real digest (including
+relaunch), Home spotlight positioning, full keyboard/zoom/VoiceOver/reduced
+motion, clipboard success/denial, all board variants, and the broader terminal
+and routing scenarios remain pending. Source inspection additionally found
+that Copy update's rejection handler only resets `copied` without displaying
+an error; this is not a live clipboard-denial test. No acceptance token is
+issued from partial coverage.
+
+**Later live findings, same rebuilt process:** board variants and passive
+no-directory creation passed, including temporary Now/count fixture with
+byte-identical restoration. Real Copy update populated and its edited marker
+pasted into TextEdit, but export minimization **failed** on a raw relative
+command/path line. Editable-field shortcut isolation **failed** on both Home
+search and Overview purpose: ⌘K opened Inbox. Home Tour lacked a visible Home
+spotlight. The maintainer's real Since You Left screenshot closes populated
+card evidence before restart only. The maintainer manually quit; relaunch
+restored a dead Codex tab without a digest. After the maintainer skipped the
+update prompt, the saved conversation loaded but its panel remained unbound
+(no session/no events), without the digest even after Home → Continue.
+Restart persistence **failed**; no autonomous terminal input was sent.
+Clipboard denial, verified 200% layout, audible
+VoiceOver, reduced-motion timing, v1 upgrade and the broader terminal/routing
+matrix remain unresolved. Reduce motion was restored off; no Full Disk Access
+or other privacy permissions were changed. Source code was not edited during
+this testing pass. Phase 48 remains NOT ACCEPTED.
+
+
+**Final automated follow-up:** after the board metadata/error and modal-focus
+repairs, full `cargo test` passed (160 passed, 1 intentional live test ignored),
+Clippy exited 0, and the final focused dashboard/onboarding/board checks passed.
+The Home tour now excludes mounted targets with no layout in the hidden
+workspace; daily excerpt/file-count fixtures also passed. Final frontend/release
+build and diff check are recorded below after completion. Live checks remain
+pending restart of the old raw-bundle process; none are marked passed from
+source inspection or synthetic fixtures.
+
+
+**Final artifact:** `npm run tauri build` completed successfully after all code
+changes, including its `npm run build`/TypeScript gate. Raw bundle:
+`src-tauri/target/release/bundle/macos/Logic Loop.app`; final frontend asset
+`index-D8uH9tDM.js`. `git diff --check` exited 0. No project-branch commit,
+push, PR, reinstall or phase acceptance was performed. Remaining release
+scenarios await the restart approval above and an isolated fresh-profile pass.
+
+
+### 71.1 Release-test repair (revision 2, `plans/048-release-repair.md`, 2026-09-30)
+
+**Status:** approved by the maintainer ("approved, defer zoom, clean the rows -
+approved to proceed"); implementation built; **live UI re-test NOT performed**
+— this Claude Code CLI session had no computer-use tools, so no release-UI
+scenario below is marked passed. Phase 48 remains NOT ACCEPTED. No commit,
+push, PR change, reinstall, terminal input, or global setting change.
+
+**Diagnosis evidence (real profile, read-only `mode=ro`, structural columns
+only — types, timestamps, truncated ids, key equality; no transcript or
+decision text):** the Codex digest tab (`T`) and session (`S`) binding row
+was correct and unchanged; Re-enter resumed `S`. Its final `Stop` (22:59:13)
+preceded departure anchors at 22:59:25 and 22:59:50, so that run's empty
+post-relaunch digest followed the anchor rule; Codex `resume` sent no hook
+until a new turn. Two real defects: (1) the window-blur handler and tab-switch
+effect wrote `tab_left` for tabs hidden behind Home, so an unseen result could
+be anchored away; (2) after relaunch an unrelated untethered Claude Code
+session (different project, no tether) fell through `bindSession`'s
+active-tab rescue onto the re-entered tab — ghost tabs never seed the
+in-memory binding map — and 75 `attention_state_observed` rows, 1
+`result_landed` row and 1 auto-detected blocker were stamped with `T`.
+
+**Repairs:** visibility-diff departure anchors (`departedTabIds` over the
+effective visible set; blur anchors only visible panes, nothing on
+Home/Overview); `bindSession` untethered owner recovery and no fallback onto a
+tab owning another session (removes the old "reuse when all bound" rule);
+restored-session panel label; editable-field shortcut isolation
+(`src/lib/shortcuts.ts`); `exportSafeLine` export minimization (link targets
+dropped, closed slash allowlist, code-file tokens, lowercase command shapes,
+basename title fallback); tour `visibleRect` reads DOMRect fields explicitly
+(spread had dropped `left`/`width`) and clips horizontally; reduced-motion
+transition/scroll branch; Copy update `copied/failed` state with `role="alert"`
+and Try again; project-named Home Open buttons and decision-described Go to
+workspace; `getDb()` memoizes the load promise (concurrent first calls had
+each opened a tauri-plugin-sql pool). Zoom deferred by the maintainer.
+
+**Automated evidence (all exit 0, 2026-09-30):** focused `bind`, `clock`,
+`split-view`, `dashboard`, `onboarding` checks with new fixtures (owner
+recovery, ghost-tab hijack, all-owned same-cwd → unbound, resumed ghost binds;
+anchor transitions incl. workspace A → Home → A Stop → Continue B → select A
+digest; observed `ls:` leak and link through every exported section,
+must-keep prose; clipboard failure; editable-target predicate; DOMRect-like
+geometry, reduced motion, hidden-target exclusion; restored label; single
+DB load). Then `npm run opencode:check`, `npm run check` (40 scripts),
+`npx tsc --noEmit`, `npm run build`, `cargo test --lib` (160 passed, 1
+ignored), `cargo clippy --all-targets -- -D warnings`, `git diff --check`.
+`npm run tauri build` produced the raw bundle with frontend
+`index-BCKZtXbx.js`. No extraction prompt changed; `golden` not run.
+
+**Real-profile cleanup (authorized):** with no Logic Loop process running
+(unsandboxed `pgrep`/`ps` empty; last event 23:45:21), saved a rollback file
+of the 75 affected rows (ids + structural payloads) to the session scratchpad,
+then in one `BEGIN IMMEDIATE` transaction removed only the `tab_id` key from
+those `attention_state_observed` rows: targets 75, changed 75, remaining with
+`T` 0. Observations kept. The 1 `result_landed` row and 1 blocker (`tab_id`
+column) stamped by the same foreign session are **not yet changed** — the
+plan required reporting them first.
+
+**Live checks pending (maintainer or a computer-use agent, raw bundle):**
+
+- [ ] Restart digest A1 (switch tab) and A2 (Home) before the turn ends, blur,
+      quit without returning, relaunch, select tab → Since You Left shows the
+      turn; structural query shows no `tab_left` after its `Stop`.
+- [ ] Re-enter: panel reads "session restored · no new activity"; a new
+      human turn updates state on the same tab.
+- [ ] Foreign untethered session while a re-entered tab is active → no new
+      rows stamped with that tab (structural query).
+- [ ] ⌘K/⌘B/⌘T/⌘W in Home search, Overview purpose, Copy update textarea and
+      Setup fields keep field behavior; same keys in a focused terminal still
+      act.
+- [ ] Copy update on the same real project: no `ls:` line, no link target;
+      every line traced; edited text copied.
+- [ ] Tour: Home spotlight around the tab-bar button (fresh auto-tour and
+      Home-triggered 1 of 1); side-panel steps spotlight their sections.
+- [ ] Reduce Motion on: no spotlight/card transition or smooth scroll.
+- [ ] Fresh disposable profile: no `database is locked` Setup warning; Start
+      in preference persists. Code-5 incident stays unresolved until then.
+- [ ] Clipboard failure/retry live; VoiceOver announces project-named Open
+      buttons; 200% zoom deferred (unchecked).
+
+**Computer-use follow-up, 2026-10-01 (installed rebuilt release):** tested
+`/Applications/Logic Loop.app`; the raw `.app` path above was absent. Its
+`Contents/MacOS/app` matches `src-tauri/target/release/app` byte-for-byte by
+SHA-256 (`ae109ec113fc80a6ce7e2b6415c07e1d6ce76cb514cc485e9f052a3759c3d10e`).
+Local frontend output remains `index-BCKZtXbx.js`. The broad checklist above
+stays unchecked where only part of a scenario was verified. No code changes,
+commit, push, profile cleanup/reset, global settings changes, or terminal
+text input in this pass. Phase 48 remains NOT ACCEPTED.
+
+- [x] Home search: typed `context_terminal`, then ⌘K/⌘B/⌘T/⌘W and
+      Ctrl+Tab; field stayed focused with its value, Home stayed open, no
+      Attention overlay, panel action, or tab creation/closure.
+- [x] Overview purpose editor (empty, unsaved): the same five shortcuts
+      left the accessibility tree and field focus unchanged. No purpose saved.
+- [x] Copy update textarea: the same five shortcuts left draft and focus
+      unchanged. Edited draft to a disposable check string, clicked Copy,
+      observed `Copied!`, replaced its text, then ⌘V restored the exact edited
+      string. Modal closed without persisting edits. Clipboard now contains
+      the disposable check string.
+- [x] Real `dev/context_terminal` Copy update draft: inspected every exported
+      line. No `ls:` line or Markdown link target; observed technical-details
+      placeholders for the reported path/command blockers. Link text survived
+      (`Created the full dashboard plan and added it to the plan index.` and
+      `PR #65`). Ordinary prose remained. This validates filtering, not the
+      truth or usefulness of historical extracted content.
+- [x] Home-triggered Tour: `1 of 1`; screenshot showed spotlight enclosing
+      the top-left tab-bar Home button and card below it. Hidden workspace
+      targets were skipped.
+- [x] Workspace Tour Decisions step: `2 of 8`; screenshot showed spotlight
+      enclosing the actual Decisions section with card above, horizontally
+      aligned. Other workspace steps and fresh auto-tour remain unverified:
+      computer use reported an intervening app change and later state was
+      `5 of 8`, then the tour was closed outside this agent's actions.
+- [x] Restored workspace label: observed `session restored · no new activity`
+      before re-entry. Re-enter/new-turn behavior remains unchecked.
+- [x] Terminal-focused ⌘K opened Attention; Escape closed it. ⌘B collapsed
+      the panel and a second ⌘B restored it. ⌘T created one disposable plain
+      Terminal tab; ⌘W closed that tab, retaining both pre-existing restored
+      tabs. No commands or prompts were entered.
+- [ ] Terminal-focused Ctrl+Tab: two attempts produced no visible workspace
+      switch, including with only the two restored tabs remaining. This is
+      an unresolved observation, not a pass; distinguish native key delivery
+      from an app-handler defect in a human repeat.
+- [ ] Setup editable-field shortcuts: opened Setup; this build exposes
+      Choose folder and agent radio buttons, no editable text field. No
+      adapter, permission, or launch configuration changed.
+- [ ] Restart digest A1/A2 and foreign-session attribution: no new human
+      turns submitted, no structural database verification in this pass.
+- [ ] Reduce Motion, fresh disposable profile, audible VoiceOver, and live
+      clipboard failure/retry: not performed. The approved plan requires
+      maintainer approval/hands for profile moves and global settings; no
+      safe clipboard-denial method was available. Zoom remains deferred.
+
+### Phase 48 project identity revision — 2026-10-02
+
+Authorized bounded revision: bookmark Home borders/new-tab colors and project
+nicknames. Automated: `dashboard:check` covers nickname/bookmark/folder
+precedence, clearing fallback, unbookmarked nickname catalog membership,
+metadata propagation and first matching canonical bookmark in saved order.
+`npm run opencode:check`, `npm run check`, `npx tsc --noEmit`, `npm run build`,
+`cargo test --lib` (160 passed, 1 intentionally ignored),
+`cargo clippy --all-targets -- -D warnings`, and `git diff --check` passed.
+The tsx IPC socket and three Rust local-socket tests required an unsandboxed
+rerun. No extraction prompts changed; no golden run.
+
+Live checks remain unperformed on this revision (installed app not replaced):
+- [ ] Bookmark color appears on Home card border; Overview Start session
+      creates a tab with that color/name. Bookmark of a repo subfolder matches
+      the root card. Multiple matches use the first bookmark in saved order.
+- [ ] Continue into an existing live/restorable workspace preserves its color
+      and name and does not create an additional session.
+- [ ] Overview Add project nickname works without a bookmark; Save updates
+      Overview, Copy update and Home (including search); persists after restart.
+- [ ] Clearing the nickname restores bookmark name, then folder fallback;
+      Cancel/Escape discard edits; long names truncate with path available.
+- [ ] Keyboard field shortcuts stay local; save failure reports an error and
+      keeps the draft available for retry.
+
+Prior Phase 48 live-check gaps remain unchanged. Phase 48 is NOT ACCEPTED.
+
+**Project identity screenshot feedback (2026-10-03):** maintainer screenshots
+show colored Home borders, bookmark names in Home/Overview and the matching
+cyan tab stripe. These are visual evidence only, not nickname persistence or
+fresh-launch attribution checks. Requested visible Home folder paths now render
+as wrapping secondary text below each name; live layout check remains pending.
+Overview currently offers Continue/chooser instead of Start when a workspace
+exists; always offering a separate fresh-session action is proposed, not built.
+Automated gates for the visible-path follow-up passed: opencode/check suite,
+strict TypeScript, frontend build, Rust library tests (160 pass, 1 ignored),
+Clippy and diff whitespace check.
+
+### Phase 48 compact paths and fresh-session action — 2026-10-03
+
+Maintainer confirmed bookmark clicks open the proper root folder with bookmark
+color/name. Home and Overview now show parent/folder paths in zinc-400, retaining
+the full path in title tooltips. Overview keeps Start session for zero workspaces;
+with one/multiple workspaces, New session tab is below Continue/Continue in.
+Start always creates a fresh plain PTY through openTab; Continue selects existing
+workspaces. Pending launch disables repeated clicks; failures show retryable UI.
+Automated: focused dashboard/spawn checks, opencode/check suite, strict TS,
+frontend build, Rust library tests (160 passed, 1 ignored), Clippy and whitespace
+check passed. No extraction prompt changes; no golden run.
+
+Remaining live checks:
+- [ ] Home and Overview show dev/context_terminal (zinc-400), full path tooltip.
+- [ ] Zero workspaces: Start session creates one correctly named/colored tab.
+- [ ] One/multiple live or restored workspaces: New session tab creates an
+      additional fresh shell without resuming an agent or altering existing tabs.
+- [ ] Continue/chooser selects the exact existing workspace; rapid double-click
+      on the new-session action produces only one new tab; launch error is visible.
+
+Phase 48 remains NOT ACCEPTED. Follow-up commits remain local pending explicit
+remote-push authorization after automatic review rejected the previous push.
+
+### Phase 48 acceptance — 2026-10-03
+
+Maintainer wrote `PHASE 48 ACCEPTED` and requested return to main. This closes
+Phase 48, including approved Overview repairs, bookmark/nickname identity,
+compact path labels and fresh-session actions. Maintainer confirmed the final
+UI was good. Previously unrun manual scenarios remain disclosed rather than
+being marked tested. Phase 49 implementation is not approved by acceptance.

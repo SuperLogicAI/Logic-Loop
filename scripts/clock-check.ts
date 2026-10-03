@@ -1,6 +1,6 @@
 // Self-check for the Phase 14b clock. Run: npm run clock:check
 import { strict as assert } from "node:assert";
-import { deriveClock, STALL_MS } from "../src/lib/ingest";
+import { deriveClock, sessionStatusLabel, STALL_MS } from "../src/lib/ingest";
 
 const base = Date.now();
 
@@ -34,5 +34,11 @@ assert.deepEqual(
   { quietMs: 0, stalled: false },
   "no lastEventTs should be quietMs 0, not stalled"
 );
+
+// Phase 48 release repair: a re-entered tab with a persisted session is
+// "restored", never "no session".
+assert.deepEqual(sessionStatusLabel(undefined, "s1"), { state: "session restored", noEvents: "no new activity" });
+assert.deepEqual(sessionStatusLabel(undefined, null), { state: "no session", noEvents: "no events yet" });
+assert.equal(sessionStatusLabel("idle", "s1").state, "idle");
 
 console.log(`clock-check: all assertions passed (STALL_MS=${STALL_MS})`);
