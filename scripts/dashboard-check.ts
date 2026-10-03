@@ -3,7 +3,7 @@ import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import { effectiveVisibleTerminalIds, visibleTerminalIds } from "../src/lib/splitView";
 import { shouldFlagUnclaimed } from "../src/lib/ingest";
-import { buildProjectCatalog } from "../src/lib/repo";
+import { buildProjectCatalog, selectProjectBookmark } from "../src/lib/repo";
 import { EXAMPLE_BOARD } from "../src/lib/board";
 import {
   buildProjectCards,
@@ -549,3 +549,21 @@ const repoSource = readFileSync(new URL("../src/lib/repo.ts", import.meta.url), 
 assert.match(repoSource, /dbLoad \?\?= Database\.load\(/, "concurrent first DB calls must share one load (fresh-profile code 5)");
 assert.equal((repoSource.match(/Database\.load\(/g) ?? []).length, 1, "only getDb may load the database");
 console.log("dashboard-check: all assertions passed (including async load, cache, ranges, attribution, export privacy, startup and chooser)");
+
+// Project identity uses the same canonical key for bookmark presentation and launch.
+const matchingBookmarks = [
+  { projectKey: "/repo", name: "Client website", color: "#ff0000" },
+  { projectKey: "/repo", name: "Other shortcut", color: "#00ff00" },
+  { projectKey: "/different", name: "Other project", color: "#0000ff" },
+];
+assert.equal(selectProjectBookmark(matchingBookmarks, "/repo"), matchingBookmarks[0]);
+assert.equal(selectProjectBookmark(matchingBookmarks, "/unknown"), undefined);
+assert.equal(projectDisplayName("/repo", ["/repo"], { nickname: "  Harbor  ", bookmarkName: "Client website" }), "Harbor");
+assert.equal(projectDisplayName("/repo", ["/repo"], { nickname: "  ", bookmarkName: "Client website" }), "Client website");
+assert.equal(projectDisplayName("/repo", ["/repo"], { nickname: null, bookmarkName: null }), "repo");
+const namedOnly = buildProjectCatalog([], [], [], [{ key: "project_nickname:/unbookmarked", value: "Personal project" }]);
+assert.equal(namedOnly[0]?.nickname, "Personal project");
+assert.equal(namedOnly[0]?.bookmarked, false);
+const coloredCards = buildProjectCards([{ ...namedOnly[0]!, bookmarkName: "Shortcut", bookmarkColor: "#ff0000" }], [], Date.now());
+assert.equal(coloredCards[0]?.nickname, "Personal project");
+assert.equal(coloredCards[0]?.bookmarkColor, "#ff0000");

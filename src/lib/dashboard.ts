@@ -83,6 +83,9 @@ export interface ProjectCardViewModel {
   archived: boolean;
   bookmarked: boolean;
   purpose: string | null;
+  nickname?: string | null;
+  bookmarkName?: string | null;
+  bookmarkColor?: string | null;
   lastActivityAt: number | null;
   workingCount: number;
   waitingCount: number;
@@ -123,6 +126,9 @@ export function buildProjectCards(
       archived: entry.archived,
       bookmarked: entry.bookmarked,
       purpose: entry.purpose,
+      nickname: entry.nickname,
+      bookmarkName: entry.bookmarkName,
+      bookmarkColor: entry.bookmarkColor,
       lastActivityAt: entry.lastActivityAt,
       workingCount: liveTabs.filter((t) => t.agentState === "working").length,
       waitingCount: liveTabs.filter((t) => t.agentState === "waiting").length,
@@ -158,7 +164,9 @@ function basenameOf(projectKey: string): string {
 /** Card display name: basename, with the immediate parent directory appended
  * only when another project in the same set shares that basename (Plan 048
  * §3: "name (basename; parent dir appended on collision)"). */
-export function projectDisplayName(projectKey: string, allProjectKeys: readonly string[]): string {
+export function projectDisplayName(projectKey: string, allProjectKeys: readonly string[], identity?: { nickname?: string | null; bookmarkName?: string | null }): string {
+  const preferred = identity?.nickname?.trim() || identity?.bookmarkName?.trim();
+  if (preferred) return preferred;
   const base = basenameOf(projectKey);
   const collides = allProjectKeys.some((other) => other !== projectKey && basenameOf(other) === base);
   if (!collides) return base;

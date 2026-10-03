@@ -1581,7 +1581,18 @@ export default function App() {
     (projectKey: string) => {
       const existing = tabsRef.current.find((t) => expand(t.cwd) === projectKey);
       if (existing) focusTab(existing.id);
-      else void openTab({ cwd: projectKey });
+      else void repo.projectIdentity(projectKey)
+        .catch(() => ({ nickname: null, bookmarkName: null, bookmarkColor: null }))
+        .then((identity) => {
+          // Another human launch may have completed while metadata was read.
+          const opened = tabsRef.current.find((t) => expand(t.cwd) === projectKey);
+          if (opened) focusTab(opened.id);
+          else void openTab({
+            cwd: projectKey,
+            name: identity.nickname || identity.bookmarkName || undefined,
+            color: identity.bookmarkColor || undefined,
+          });
+        });
     },
     [expand, focusTab, openTab]
   );

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import * as repo from "../lib/repo";
 import { observedAgentTime, projectDisplayName, buildProjectWorkLog, commitsInRange, dashboardRangeStart, projectWorkspaceChoices, type DashboardRange, type WorkLogEntry } from "../lib/dashboard";
@@ -102,6 +102,10 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
   const identity = JSON.stringify([projectKey, range, refresh]);
   const [snapshot, setSnapshot] = useState<{ identity: string; reads: OverviewReads }>({ identity: "", reads: loadingReads() });
   const reads = snapshot.identity === identity ? snapshot.reads : loadingReads();
+  const [nicknameDraft, setNicknameDraft] = useState("");
+  const [editingNickname, setEditingNickname] = useState(false);
+  const [savingNickname, setSavingNickname] = useState(false);
+  const [nicknameError, setNicknameError] = useState(false);
   const [purposeDraft, setPurposeDraft] = useState("");
   const [editingPurpose, setEditingPurpose] = useState(false);
   const [diagnostics, setDiagnostics] = useState<{ identity: string; events: ReadDiagnostic[] }>({ identity: "", events: [] });
@@ -163,7 +167,22 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
   const openTethers = new Set(tabs.map((t) => t.id));
   const reentry = (value("reentry") ?? []).filter((r) => !openTethers.has(r.tab_tether));
 
-  const displayName = useMemo(() => projectDisplayName(projectKey, [projectKey]), [projectKey]);
+  const displayName = projectDisplayName(projectKey, [projectKey], data.catalog);
+
+  const saveNickname = async () => {
+    if (savingNickname) return;
+    setSavingNickname(true);
+    setNicknameError(false);
+    try {
+      await repo.setProjectNickname(projectKey, nicknameDraft);
+      setEditingNickname(false);
+      setRefresh((n) => n + 1);
+    } catch {
+      setNicknameError(true);
+    } finally {
+      setSavingNickname(false);
+    }
+  };
 
   const tabSnapshots: AttentionTabSnapshot[] = tabs.map((t) => ({
     id: t.id,
@@ -303,6 +322,28 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
           </div>
         </div>
 
+        <p className="mt-1 break-all text-xs text-zinc-500">{projectKey}</p>
+        {editingNickname ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <input autoFocus aria-label="Project nickname" maxLength={120}
+              disabled={savingNickname} value={nicknameDraft}
+              placeholder="Blank uses bookmark or folder name"
+              onChange={(e) => setNicknameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); void saveNickname(); }
+                if (e.key === "Escape" && !savingNickname) { e.stopPropagation(); setEditingNickname(false); }
+              }}
+              className="w-full max-w-md rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 focus:border-sky-500" />
+            <button type="button" disabled={savingNickname} className="text-xs text-sky-400" onClick={() => void saveNickname()}>Save name</button>
+            <button type="button" disabled={savingNickname} className="text-xs text-zinc-400" onClick={() => setEditingNickname(false)}>Cancel</button>
+            {nicknameError && <p role="alert" className="text-xs text-orange-400">Could not save the name. Try again.</p>}
+          </div>
+        ) : (
+          <button type="button" disabled={reads.catalog.state !== "ready"} className="mt-1 text-xs text-sky-400"
+            onClick={() => { setNicknameDraft(data.catalog?.nickname ?? ""); setNicknameError(false); setEditingNickname(true); }}>
+            {data.catalog?.nickname ? "Edit project name" : "Add project nickname"}
+          </button>
+        )}
         {editingPurpose ? (
           <div className="mt-1 flex items-center gap-2">
             <input

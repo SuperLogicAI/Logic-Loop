@@ -785,3 +785,14 @@ Home startup can display it. Per-card Continue/full Actions are explicitly
 deferred. Tests and release evidence: `docs/TESTING.md` §71. Phase 48 remains
 NOT ACCEPTED; pending live checks remain disclosed. The maintainer authorized
 committing and opening a PR; delivery proceeds as a draft pending those checks.
+
+### Phase 48 bounded project identity revision — 2026-10-02
+
+Maintainer approved bookmark colors and independent project nicknames before
+closeout. Home card borders use canonical matching bookmark colors; new tabs
+started through Overview inherit those colors and the project display name.
+Existing workspaces keep their presentation. Overview provides a nickname
+editor stored in per-project settings, with nickname → first saved matching
+bookmark → folder fallback across Home, Overview and Copy update. Automated
+gates pass; new live checks and previous gaps remain in TESTING.md.
+Phase 48 remains NOT ACCEPTED; PR 67 closeout awaits manual acceptance.

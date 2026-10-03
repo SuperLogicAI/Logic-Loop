@@ -267,3 +267,15 @@ Automated and release evidence is recorded in `docs/TESTING.md` §71.
 Phase 48 remains NOT ACCEPTED; no Phase 49 implementation, commit, push or PR
 is authorized by this revision. Historical §10 simplifications are superseded
 where described above, rather than counted as implicit deferral approval.
+
+## 12. Approved project identity revision (2026-10-02)
+
+Maintainer approved the bounded Phase 48 revision: bookmark color on Home
+card borders and new workspace tabs launched through Overview; existing
+workspace colors stay intact. Add a project nickname independent of bookmarks,
+with display precedence nickname → first matching bookmark in saved order →
+folder name. Resolve bookmark folders using the existing canonical project key.
+Keep paths available for identification; clearing a nickname restores fallback.
+Store nicknames in per-project settings, without a migration. Include Home,
+Overview and Copy update naming, focused identity checks and manual coverage.
+Phase 48 remains NOT ACCEPTED; Phase 49 is not authorized.

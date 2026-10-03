@@ -1386,6 +1386,27 @@ export async function allWorktreeTabIds(): Promise<string[]> {
 const PROJECT_PINNED_PREFIX = "project_pinned:";
 const PROJECT_ARCHIVED_PREFIX = "project_archived:";
 const PROJECT_PURPOSE_PREFIX = "project_purpose:";
+const PROJECT_NICKNAME_PREFIX = "project_nickname:";
+
+export async function setProjectNickname(cwd: string, nickname: string): Promise<void> {
+  await setSetting(PROJECT_NICKNAME_PREFIX + cwd, nickname.trim());
+}
+
+export function selectProjectBookmark<T extends { projectKey: string }>(bookmarks: readonly T[], projectKey: string): T | undefined {
+  return bookmarks.find((bookmark) => bookmark.projectKey === projectKey);
+}
+
+async function projectBookmarks() {
+  return Promise.all((await listBookmarks()).map(async (bookmark) => ({
+    ...bookmark, projectKey: await projectKeyOf(bookmark.cwd).catch(() => bookmark.cwd),
+  })));
+}
+
+export async function projectIdentity(cwd: string) {
+  const [nickname, bookmarks] = await Promise.all([getSetting(PROJECT_NICKNAME_PREFIX + cwd), projectBookmarks()]);
+  const bookmark = selectProjectBookmark(bookmarks, cwd);
+  return { nickname: nickname?.trim() || null, bookmarkName: bookmark?.name || null, bookmarkColor: bookmark?.color || null };
+}
 
 export async function isProjectPinned(cwd: string): Promise<boolean> {
   const d = await getDb();
@@ -1470,6 +1491,9 @@ export interface ProjectCatalogEntry {
    * shortcut even if nothing's happened there in a while. */
   bookmarked: boolean;
   purpose: string | null;
+  nickname?: string | null;
+  bookmarkName?: string | null;
+  bookmarkColor?: string | null;
   /** A session bound to this project and not explicitly closed (this is a
    * DB-only proxy for "work in flight" — `session_bindings.active` survives
    * a relaunch but says nothing about whether a PTY is live right now. The
@@ -1512,11 +1536,14 @@ export function buildProjectCatalog(
   const pinned = new Set<string>();
   const archived = new Set<string>();
   const purpose = new Map<string, string>();
+  const nickname = new Map<string, string>();
   for (const row of settingsRows) {
     if (row.key.startsWith(PROJECT_PINNED_PREFIX)) {
       if (row.value === "1") pinned.add(row.key.slice(PROJECT_PINNED_PREFIX.length));
     } else if (row.key.startsWith(PROJECT_ARCHIVED_PREFIX)) {
       if (row.value === "1") archived.add(row.key.slice(PROJECT_ARCHIVED_PREFIX.length));
+    } else if (row.key.startsWith(PROJECT_NICKNAME_PREFIX)) {
+      nickname.set(row.key.slice(PROJECT_NICKNAME_PREFIX.length), row.value.trim());
     } else if (row.key.startsWith(PROJECT_PURPOSE_PREFIX)) {
       purpose.set(row.key.slice(PROJECT_PURPOSE_PREFIX.length), row.value);
     }
@@ -1524,7 +1551,7 @@ export function buildProjectCatalog(
   // A project only pinned/archived/purposed by hand, with no other activity
   // row anywhere (e.g. archived before it was ever bookmarked), still belongs
   // in the catalog.
-  for (const key of [...pinned, ...archived, ...purpose.keys()]) {
+  for (const key of [...pinned, ...archived, ...purpose.keys(), ...nickname.keys()]) {
     if (!byKey.has(key)) byKey.set(key, { firstSeenAt: 0, lastActivityAt: 0 });
   }
 
@@ -1534,6 +1561,7 @@ export function buildProjectCatalog(
     archived: archived.has(projectKey),
     bookmarked: bookmarked.has(projectKey),
     purpose: purpose.get(projectKey) ?? null,
+    nickname: nickname.get(projectKey) || null,
     hasActiveSessionBinding: activeByKey.get(projectKey) ?? false,
     firstSeenAt: ts.firstSeenAt || null,
     lastActivityAt: ts.lastActivityAt || null,
@@ -1566,16 +1594,19 @@ export async function listProjectCatalog(): Promise<ProjectCatalogEntry[]> {
      WHERE key IS NOT NULL AND key != ''
      GROUP BY key`
   );
-  const bookmarkRows = await d.select<{ cwd: string }[]>("SELECT DISTINCT cwd FROM bookmarks");
-  const bookmarkKeys = await Promise.all(bookmarkRows.map((r) => projectKeyOf(r.cwd).catch(() => r.cwd)));
+  const bookmarkRows = await projectBookmarks();
+  const bookmarkKeys = bookmarkRows.map((row) => row.projectKey);
   const activeRows = await d.select<{ project_key: string; any_active: number }[]>(
     "SELECT project_key, MAX(active) AS any_active FROM session_bindings GROUP BY project_key"
   );
   const settingsRows = await d.select<{ key: string; value: string }[]>(
-    "SELECT key, value FROM settings WHERE key LIKE $1 OR key LIKE $2 OR key LIKE $3",
-    [PROJECT_PINNED_PREFIX + "%", PROJECT_ARCHIVED_PREFIX + "%", PROJECT_PURPOSE_PREFIX + "%"]
+    "SELECT key, value FROM settings WHERE key LIKE $1 OR key LIKE $2 OR key LIKE $3 OR key LIKE $4",
+    [PROJECT_PINNED_PREFIX + "%", PROJECT_ARCHIVED_PREFIX + "%", PROJECT_PURPOSE_PREFIX + "%", PROJECT_NICKNAME_PREFIX + "%"]
   );
-  return buildProjectCatalog(activity, bookmarkKeys, activeRows, settingsRows);
+  return buildProjectCatalog(activity, bookmarkKeys, activeRows, settingsRows).map((entry) => {
+    const bookmark = selectProjectBookmark(bookmarkRows, entry.projectKey);
+    return { ...entry, bookmarkName: bookmark?.name || null, bookmarkColor: bookmark?.color || null };
+  });
 }
 
 // --- Plan 048: Project Overview reads. Project-wide (no tab/session scope),
@@ -1657,10 +1688,10 @@ export async function projectWorkLogEvents(cwd: string, since: number, until: nu
   return (await getDb()).select<ProjectWorkLogRow[]>(PROJECT_WORK_LOG_SQL, [cwd, since, until]);
 }
 
-/** Overview metadata without resolving every other project's bookmarks on disk. */
+/** Overview metadata plus canonical bookmark presentation for this project. */
 export async function projectOverviewMetadata(cwd: string): Promise<ProjectCatalogEntry> {
   const d = await getDb();
-  const [activity, settings] = await Promise.all([
+  const [activity, settings, identity] = await Promise.all([
     d.select<{ first_seen_at: number | null; last_activity_at: number | null; any_active: number }[]>(
       `SELECT MIN(ts) AS first_seen_at, MAX(ts) AS last_activity_at, MAX(active) AS any_active FROM (
         SELECT updated_at AS ts, active FROM session_bindings WHERE project_key = $1
@@ -1673,10 +1704,12 @@ export async function projectOverviewMetadata(cwd: string): Promise<ProjectCatal
     d.select<{ key: string; value: string }[]>(
       'SELECT key, value FROM settings WHERE key IN ($1, $2, $3)',
       [PROJECT_PINNED_PREFIX + cwd, PROJECT_ARCHIVED_PREFIX + cwd, PROJECT_PURPOSE_PREFIX + cwd]),
+    projectIdentity(cwd),
   ]);
   const values = new Map(settings.map((row) => [row.key, row.value]));
   return {
     projectKey: cwd,
+    ...identity,
     pinned: values.get(PROJECT_PINNED_PREFIX + cwd) === '1',
     archived: values.get(PROJECT_ARCHIVED_PREFIX + cwd) === '1',
     purpose: values.get(PROJECT_PURPOSE_PREFIX + cwd) ?? null,

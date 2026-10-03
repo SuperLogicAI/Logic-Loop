@@ -119,7 +119,7 @@ export function HomeDashboard({
     if (filter !== "archived" && c.archived) return false;
     if (query.trim()) {
       const q = query.trim().toLowerCase();
-      const name = projectDisplayName(c.projectKey, allKeys).toLowerCase();
+      const name = projectDisplayName(c.projectKey, allKeys, c).toLowerCase();
       if (!name.includes(q) && !c.projectKey.toLowerCase().includes(q) && !(c.purpose ?? "").toLowerCase().includes(q)) {
         return false;
       }
@@ -183,7 +183,7 @@ export function HomeDashboard({
           <div className="mt-4 flex items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-800/60 px-4 py-3">
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Continue</p>
-              <p className="truncate text-sm text-zinc-200">{projectDisplayName(expand(activeTab.cwd), allKeys)}</p>
+              <p className="truncate text-sm text-zinc-200">{projectDisplayName(expand(activeTab.cwd), allKeys, catalog?.find((entry) => entry.projectKey === expand(activeTab.cwd)))}</p>
             </div>
             <button
               type="button"
@@ -229,7 +229,7 @@ export function HomeDashboard({
             <ProjectCard
               key={card.projectKey}
               card={card}
-              displayName={projectDisplayName(card.projectKey, allKeys)}
+              displayName={projectDisplayName(card.projectKey, allKeys, card)}
               decisionCount={decisionCountByProject.get(card.projectKey) ?? 0}
               now={now}
               onOpen={() => onOpenOverview(card.projectKey)}
@@ -269,7 +269,7 @@ function ProjectCard({
   if (card.waitingCount > 0) statusParts.push(`${card.waitingCount} waiting`);
 
   return (
-    <div className="flex flex-col rounded-lg border border-zinc-700 bg-zinc-800/40 p-4">
+    <div className="flex flex-col rounded-lg border border-zinc-700 bg-zinc-800/40 p-4" style={{ borderColor: card.bookmarkColor || undefined }}>
       <div className="flex items-start justify-between gap-2">
         <h3 className="min-w-0 truncate text-sm font-medium text-zinc-100" title={card.projectKey}>
           {displayName}

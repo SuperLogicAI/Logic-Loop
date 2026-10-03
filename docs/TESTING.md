@@ -4868,3 +4868,30 @@ text input in this pass. Phase 48 remains NOT ACCEPTED.
       clipboard failure/retry: not performed. The approved plan requires
       maintainer approval/hands for profile moves and global settings; no
       safe clipboard-denial method was available. Zoom remains deferred.
+
+### Phase 48 project identity revision — 2026-10-02
+
+Authorized bounded revision: bookmark Home borders/new-tab colors and project
+nicknames. Automated: `dashboard:check` covers nickname/bookmark/folder
+precedence, clearing fallback, unbookmarked nickname catalog membership,
+metadata propagation and first matching canonical bookmark in saved order.
+`npm run opencode:check`, `npm run check`, `npx tsc --noEmit`, `npm run build`,
+`cargo test --lib` (160 passed, 1 intentionally ignored),
+`cargo clippy --all-targets -- -D warnings`, and `git diff --check` passed.
+The tsx IPC socket and three Rust local-socket tests required an unsandboxed
+rerun. No extraction prompts changed; no golden run.
+
+Live checks remain unperformed on this revision (installed app not replaced):
+- [ ] Bookmark color appears on Home card border; Overview Start session
+      creates a tab with that color/name. Bookmark of a repo subfolder matches
+      the root card. Multiple matches use the first bookmark in saved order.
+- [ ] Continue into an existing live/restorable workspace preserves its color
+      and name and does not create an additional session.
+- [ ] Overview Add project nickname works without a bookmark; Save updates
+      Overview, Copy update and Home (including search); persists after restart.
+- [ ] Clearing the nickname restores bookmark name, then folder fallback;
+      Cancel/Escape discard edits; long names truncate with path available.
+- [ ] Keyboard field shortcuts stay local; save failure reports an error and
+      keeps the draft available for retry.
+
+Prior Phase 48 live-check gaps remain unchanged. Phase 48 is NOT ACCEPTED.
