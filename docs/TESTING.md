@@ -5121,3 +5121,20 @@ Manual, in the running app:
 10. **Setup rows** — "Safe Router traffic" row text matches the three states.
 11. **Min width** — header row still fits at 192px with all controls shown and
     with none.
+
+### Phase 50 Part C — Since you left on dashboard cards
+
+Automated: `delta:check` covers `hasDelta` / `describeDelta`; `tsc`, build and
+full `npm run check` pass. **No rebuilt-app visual pass by the agent.**
+
+Manual:
+12. Leave a live session (switch tab away), let the agent do work, return to
+    Home: its project card shows `▸ Since you left · 1 session`; chevron
+    expands a row with title, summary (files/turns/decisions/failed commands)
+    and last words; clicking the row opens that tab.
+13. Two live sessions in one project, both with changes: line says `2 sessions`,
+    both rows listed.
+14. Card with no live tab, a never-left tab, or nothing new: no line.
+15. A just-spawned tab with no bound session yet: skipped (fan-out isolation).
+16. Collapsed by default after every Home visit (not persisted); minimum width
+    keeps the row readable; Lock-in does not matter on Home.

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import * as repo from "../lib/repo";
+import { describeDelta, type Delta } from "../lib/delta";
+import { loadTabDelta } from "../lib/tabDelta";
 import {
   buildProjectCards,
   projectDisplayName,
@@ -88,6 +90,38 @@ export function HomeDashboard({
       cancelled = true;
     };
   }, []);
+
+  // Plan 050 Part C: since-you-left per live, session-bound tab. Re-read only
+  // when the set of such tabs changes, not on every agent-state tick.
+  const [tabDeltas, setTabDeltas] = useState<Map<string, Delta>>(new Map());
+  const deltaTabKey = tabs.filter((t) => t.status === "live" && t.sessionId).map((t) => `${t.id}:${t.sessionId}`).join("|");
+  useEffect(() => {
+    let cancelled = false;
+    const live = tabs.filter((t) => t.status === "live" && t.sessionId);
+    void Promise.all(live.map(async (t) => [t.id, await loadTabDelta(t)] as const)).then((pairs) => {
+      if (cancelled) return;
+      const next = new Map<string, Delta>();
+      for (const [id, delta] of pairs) if (delta) next.set(id, delta);
+      setTabDeltas(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deltaTabKey]);
+
+  const instancesByProject = useMemo(() => {
+    const map = new Map<string, SinceLeftInstance[]>();
+    for (const t of tabs) {
+      const delta = tabDeltas.get(t.id);
+      if (!delta || t.status !== "live") continue;
+      const key = expand(t.cwd);
+      const list = map.get(key) ?? [];
+      list.push({ id: t.id, title: t.title, delta });
+      map.set(key, list);
+    }
+    return map;
+  }, [tabs, tabDeltas, expand]);
 
   const homeTabs: HomeTabSummary[] = useMemo(
     () => tabs.map((t) => ({ projectKey: expand(t.cwd), status: t.status, agentState: t.agentState })),
@@ -233,6 +267,8 @@ export function HomeDashboard({
               displayName={projectDisplayName(card.projectKey, allKeys, card)}
               decisionCount={decisionCountByProject.get(card.projectKey) ?? 0}
               now={now}
+              sinceLeft={instancesByProject.get(card.projectKey) ?? []}
+              onOpenTab={onContinue}
               onOpen={() => onOpenOverview(card.projectKey)}
             />
           ))}
@@ -252,19 +288,30 @@ export function HomeDashboard({
   );
 }
 
+interface SinceLeftInstance {
+  id: string;
+  title: string;
+  delta: Delta;
+}
+
 function ProjectCard({
   card,
   displayName,
   decisionCount,
   now,
+  sinceLeft,
+  onOpenTab,
   onOpen,
 }: {
   card: ProjectCardViewModel;
   displayName: string;
   decisionCount: number;
   now: number;
+  sinceLeft: SinceLeftInstance[];
+  onOpenTab: (tabId: string) => void;
   onOpen: () => void;
 }) {
+  const [sinceOpen, setSinceOpen] = useState(false);
   const statusParts: string[] = [];
   if (card.workingCount > 0) statusParts.push(`${card.workingCount} working`);
   if (card.waitingCount > 0) statusParts.push(`${card.waitingCount} waiting`);
@@ -289,6 +336,36 @@ function ProjectCard({
         {statusParts.length > 0 && <span>{statusParts.join(" · ")}</span>}
         {decisionCount > 0 && <span className="text-attn-400">{decisionCount} open decision{decisionCount === 1 ? "" : "s"}</span>}
       </div>
+      {sinceLeft.length > 0 && (
+        <div className="mt-2 text-[11px]">
+          <button
+            type="button"
+            aria-expanded={sinceOpen}
+            className="flex w-full items-center gap-1 text-left text-info-300 hover:text-info-200 focus-visible:outline-2 focus-visible:outline-focus-400"
+            onClick={() => setSinceOpen((open) => !open)}
+          >
+            <span aria-hidden="true">{sinceOpen ? "▾" : "▸"}</span>
+            Since you left · {sinceLeft.length} session{sinceLeft.length === 1 ? "" : "s"}
+          </button>
+          {sinceOpen && (
+            <ul className="mt-1 flex flex-col gap-1">
+              {sinceLeft.map((inst) => (
+                <li key={inst.id}>
+                  <button
+                    type="button"
+                    className="w-full rounded px-1.5 py-1 text-left text-zinc-300 hover:bg-zinc-700/60 focus-visible:outline-2 focus-visible:outline-focus-400"
+                    onClick={() => onOpenTab(inst.id)}
+                  >
+                    <span className="block truncate text-zinc-200">{inst.title}</span>
+                    <span className="block text-zinc-400">{describeDelta(inst.delta)}</span>
+                    {inst.delta.lastWords && <span className="line-clamp-1 block text-zinc-500">{inst.delta.lastWords}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       <button
         type="button"
         aria-label={`Open ${displayName} overview`}

@@ -136,3 +136,14 @@ Stated explicitly per process rules:
   OnboardingModal so hidden controls stay reachable. No Rust change was needed:
   `TrafficSnapshot` already separates `missing` from `error`.
 - Existing check assertions on `sky-700` (split-view) updated to `info-700`.
+
+### Part C added mid-phase (2026-10-06, maintainer-approved)
+
+Dashboard project cards show a `Since you left · N sessions ▸` line for live,
+session-bound tabs with a non-empty delta; expanding lists one row per session
+(title, `describeDelta` summary, last words) and clicking opens that tab.
+Defaults approved as proposed: same PR #69 as a third commit; live tabs only;
+expansion not persisted; `info` tone. New: `src/lib/tabDelta.ts`
+(`loadTabDelta`), `hasDelta`/`describeDelta` in `delta.ts`. The sidebar's own
+inline test was left untouched (surgical); unbound tabs are skipped to respect
+fan-out isolation. UI-only, no SQL/Rust.
