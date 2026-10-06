@@ -188,7 +188,7 @@ export function IdeaBoard({ cwd }: Props) {
           <span className="flex min-w-0 items-center gap-1.5 text-xs">
             <PanelIcon name="idea-board" className="h-4 w-4 shrink-0" />
             <span className="truncate">
-              <span className="text-yellow-500">★</span> {nowCards.map((c) => c.title).join(" · ")}
+              <span className="text-attn-500">★</span> {nowCards.map((c) => c.title).join(" · ")}
             </span>
           </span>
         ) : (
@@ -218,7 +218,7 @@ export function IdeaBoard({ cwd }: Props) {
           <PanelIcon name="idea-board" className="h-4 w-4 shrink-0" />
           Idea Board {cards.length > 0 && `(${cards.length})`}
         </span>
-        {capNotice && <span className="text-yellow-600">Now is full ({NOW_CAP}/{NOW_CAP}) — remove one first</span>}
+        {capNotice && <span className="text-attn-600">Now is full ({NOW_CAP}/{NOW_CAP}) — remove one first</span>}
       </div>
       <div className="flex min-h-0 flex-1 gap-2 overflow-x-auto px-2 pb-2">
         {COLUMNS.map((col) => (
@@ -247,7 +247,7 @@ export function IdeaBoard({ cwd }: Props) {
                         <Chevron collapsed={expandedCard !== c.title} />
                       </button>
                       <button
-                        className={c.now ? "shrink-0 text-xs text-yellow-500" : "shrink-0 text-xs text-zinc-700 hover:text-zinc-500"}
+                        className={c.now ? "shrink-0 text-xs text-attn-500" : "shrink-0 text-xs text-zinc-700 hover:text-zinc-500"}
                         title={c.now ? "Remove from Now" : "Add to Now"}
                         onClick={() => void star(c)}
                       >
@@ -269,7 +269,7 @@ export function IdeaBoard({ cwd }: Props) {
                         {c.title}
                       </p>
                       <button
-                        className="shrink-0 text-zinc-700 hover:text-red-400"
+                        className="shrink-0 text-zinc-700 hover:text-danger-400"
                         title="Delete card"
                         onClick={() => void remove(c)}
                       >
@@ -299,7 +299,7 @@ export function IdeaBoard({ cwd }: Props) {
                     {expandedCard === c.title && (
                       <>
                         {c.body && <p className="mt-1 break-words whitespace-pre-wrap text-zinc-400">{c.body}</p>}
-                        {c.next && <p className="mt-1 text-teal-400">next: {c.next}</p>}
+                        {c.next && <p className="mt-1 text-info-400">next: {c.next}</p>}
                         {c.link && <p className="mt-1 truncate font-mono text-[10px] text-zinc-600">{c.link}</p>}
                       </>
                     )}

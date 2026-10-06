@@ -60,5 +60,7 @@ assert.match(iconSource, /"lock-in"/);
 assert.match(iconSource, /"timed-lock"/);
 assert.match(iconSource, /unlock/);
 assert.match(cssSource, /\.lock-in-panel/);
+assert.match(cssSource, /\.lock-in-panel \{[\s\S]*--color-attn-500: var\(--color-zinc-500\)/, "Lock-in greys color roles via tokens");
+assert.doesNotMatch(cssSource, /\.lock-in-panel \[class[*~]="(text|bg|border)-/, "no class-string color matching");
 
 console.log("lock-in-check: all assertions passed");

@@ -50,23 +50,23 @@ export function IsolateLoopModal({ parentCwd, onLaunch, onCancel }: Props) {
       onClick={onCancel}
     >
       <div
-        className="max-h-[85vh] w-[28rem] max-w-[90vw] overflow-y-auto rounded-lg border border-orange-500/30 bg-zinc-900 p-4 shadow-xl"
+        className="max-h-[85vh] w-[28rem] max-w-[90vw] overflow-y-auto rounded-lg border border-zinc-300/30 bg-zinc-900 p-4 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="font-semibold text-orange-300">Isolate loop</h3>
+        <h3 className="font-semibold text-zinc-300">Isolate loop</h3>
         <p className="mb-3 text-xs text-zinc-500">
           Spawn a tab on a fresh git worktree, on a new or existing branch. Use it to run a
           separate work stream on this repo without touching tabs already checked out.
         </p>
         <div className="mb-3 flex gap-1 text-xs">
           <button
-            className={`rounded px-2.5 py-1 ${mode === "new" ? "bg-orange-500 text-black" : "text-zinc-400 hover:bg-zinc-800"}`}
+            className={`rounded px-2.5 py-1 ${mode === "new" ? "bg-zinc-300 text-black" : "text-zinc-400 hover:bg-zinc-800"}`}
             onClick={() => setMode("new")}
           >
             New branch
           </button>
           <button
-            className={`rounded px-2.5 py-1 ${mode === "existing" ? "bg-orange-500 text-black" : "text-zinc-400 hover:bg-zinc-800"}`}
+            className={`rounded px-2.5 py-1 ${mode === "existing" ? "bg-zinc-300 text-black" : "text-zinc-400 hover:bg-zinc-800"}`}
             onClick={() => setMode("existing")}
           >
             Existing branch
@@ -101,7 +101,7 @@ export function IsolateLoopModal({ parentCwd, onLaunch, onCancel }: Props) {
                 <li
                   key={b}
                   className={`cursor-pointer px-2 py-1.5 font-mono text-xs ${
-                    selected === b ? "bg-orange-500/20 text-orange-200" : "text-zinc-300 hover:bg-zinc-800"
+                    selected === b ? "bg-zinc-300/20 text-zinc-200" : "text-zinc-300 hover:bg-zinc-800"
                   }`}
                   onClick={() => setSelected(b)}
                 >
@@ -111,13 +111,13 @@ export function IsolateLoopModal({ parentCwd, onLaunch, onCancel }: Props) {
             </ul>
           </div>
         )}
-        {error && <p className="mb-3 text-xs text-red-400">{error}</p>}
+        {error && <p className="mb-3 text-xs text-danger-400">{error}</p>}
         <div className="flex justify-end gap-2 text-sm">
           <button className="rounded px-3 py-1 text-zinc-400 hover:text-zinc-200" onClick={onCancel} disabled={busy}>
             Cancel
           </button>
           <button
-            className="rounded bg-orange-500 px-3 py-1 font-medium text-black hover:bg-orange-400 disabled:opacity-50"
+            className="rounded bg-zinc-300 px-3 py-1 font-medium text-black hover:bg-zinc-200 disabled:opacity-50"
             onClick={() => void launch()}
             disabled={busy || (mode === "new" ? !newSlug.trim() : !selected)}
           >

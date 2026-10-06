@@ -166,7 +166,7 @@ export function OnboardingModal({
               type="button"
               onClick={onClose}
               aria-label="Skip setup for now"
-              className="rounded px-2 py-1 text-lg text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-sky-400"
+              className="rounded px-2 py-1 text-lg text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-focus-400"
             >
               ×
             </button>
@@ -209,7 +209,7 @@ export function OnboardingModal({
               <button
                 type="button"
                 onClick={() => void pickFolder()}
-                className="h-8 shrink-0 rounded-md border border-zinc-700 px-3 text-xs text-zinc-200 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-sky-400"
+                className="h-8 shrink-0 rounded-md border border-zinc-700 px-3 text-xs text-zinc-200 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-focus-400"
               >
                 Choose folder…
               </button>
@@ -218,7 +218,7 @@ export function OnboardingModal({
               </span>
             </div>
             {folderError && (
-              <p className="break-words rounded bg-red-950/40 px-2 py-1.5 text-xs text-red-300">{folderError}</p>
+              <p className="break-words rounded bg-danger-950/40 px-2 py-1.5 text-xs text-danger-300">{folderError}</p>
             )}
             <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Agent to launch">
               {[...ADAPTERS.map((a) => ({ id: a.id as LaunchChoiceId, label: a.label })), { id: "shell" as LaunchChoiceId, label: "Plain shell" }].map(
@@ -229,9 +229,9 @@ export function OnboardingModal({
                     role="radio"
                     aria-checked={launchChoice === opt.id}
                     onClick={() => setLaunchChoice(opt.id)}
-                    className={`h-7 rounded-full px-3 text-xs focus-visible:outline-2 focus-visible:outline-sky-400 ${
+                    className={`h-7 rounded-full px-3 text-xs focus-visible:outline-2 focus-visible:outline-focus-400 ${
                       launchChoice === opt.id
-                        ? "bg-sky-950 text-sky-300"
+                        ? "bg-info-950 text-info-300"
                         : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
                     }`}
                   >
@@ -253,16 +253,16 @@ export function OnboardingModal({
                 // for the same pick — pickFolder clears it on a new pick.
                 disabled={!folder || starting || launched !== null}
                 onClick={() => void startSession()}
-                className="h-8 rounded-md bg-sky-500 px-3 text-xs font-semibold text-sky-950 hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400"
+                className="h-8 rounded-md bg-info-500 px-3 text-xs font-semibold text-info-950 hover:bg-info-400 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-400"
               >
                 {starting ? "Starting…" : "Start session"}
               </button>
-              {startError && <span className="text-xs text-red-300">{startError}</span>}
+              {startError && <span className="text-xs text-danger-300">{startError}</span>}
             </div>
             {launched && (
               <p
                 className={`text-xs ${
-                  launched.agentId && observedAdapters.has(launched.agentId) ? "text-emerald-300" : "text-zinc-400"
+                  launched.agentId && observedAdapters.has(launched.agentId) ? "text-ok-300" : "text-zinc-400"
                 }`}
               >
                 {launched.agentId === null
@@ -292,13 +292,13 @@ export function OnboardingModal({
                   </div>
                   <div className="min-w-0">
                     <div className="flex flex-wrap gap-1 text-[11px]">
-                      <span className="rounded bg-emerald-950 px-1.5 py-0.5 text-emerald-300">
+                      <span className="rounded bg-ok-950 px-1.5 py-0.5 text-ok-300">
                         Activity
                       </span>
                       <span
                         className={`rounded px-1.5 py-0.5 ${
                           adapter.capabilities.decisions
-                            ? "bg-sky-950 text-sky-300"
+                            ? "bg-info-950 text-info-300"
                             : "bg-zinc-800 text-zinc-500"
                         }`}
                       >
@@ -307,7 +307,7 @@ export function OnboardingModal({
                       <span
                         className={`rounded px-1.5 py-0.5 ${
                           adapter.capabilities.reentry
-                            ? "bg-violet-950 text-violet-300"
+                            ? "bg-info-950 text-info-300"
                             : "bg-zinc-800 text-zinc-500"
                         }`}
                       >
@@ -318,9 +318,9 @@ export function OnboardingModal({
                       <span
                         className={`shrink-0 ${
                           progress === "error"
-                            ? "text-red-300"
+                            ? "text-danger-300"
                             : progress === "connected"
-                              ? "text-emerald-300"
+                              ? "text-ok-300"
                               : "text-zinc-400"
                         }`}
                       >
@@ -343,7 +343,7 @@ export function OnboardingModal({
                       </p>
                     )}
                     {state.error && (
-                      <p className="mt-2 break-words rounded bg-red-950/40 px-2 py-1.5 text-xs text-red-300">
+                      <p className="mt-2 break-words rounded bg-danger-950/40 px-2 py-1.5 text-xs text-danger-300">
                         {state.error}
                       </p>
                     )}
@@ -356,7 +356,7 @@ export function OnboardingModal({
                       else void onToggleAdapter(adapter.id);
                     }}
                     title={installUrl ? `Open ${adapter.label} installation instructions` : undefined}
-                    className="h-8 min-w-20 rounded-md bg-zinc-100 px-3 text-xs font-medium text-zinc-950 hover:bg-white disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400"
+                    className="h-8 min-w-20 rounded-md bg-zinc-100 px-3 text-xs font-medium text-zinc-950 hover:bg-white disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-400"
                   >
                     {installUrl
                       ? "Install"
@@ -383,7 +383,7 @@ export function OnboardingModal({
                 click the button.
               </p>
               {notificationAttempted && !notificationsEnabled && (
-                <p className="mt-2 text-xs text-amber-300">
+                <p className="mt-2 text-xs text-attn-300">
                   Notifications were not enabled. You can continue setup and change this later in
                   system settings.
                 </p>
@@ -393,7 +393,7 @@ export function OnboardingModal({
               type="button"
               disabled={notificationsEnabled || requestingNotifications}
               onClick={() => void requestNotifications()}
-              className="h-8 rounded-md border border-zinc-700 px-3 text-xs text-zinc-200 hover:bg-zinc-800 disabled:cursor-default disabled:text-zinc-500 focus-visible:outline-2 focus-visible:outline-sky-400"
+              className="h-8 rounded-md border border-zinc-700 px-3 text-xs text-zinc-200 hover:bg-zinc-800 disabled:cursor-default disabled:text-zinc-500 focus-visible:outline-2 focus-visible:outline-focus-400"
             >
               {notificationsEnabled
                 ? "Notifications enabled"
@@ -404,7 +404,7 @@ export function OnboardingModal({
           </div>
 
           {persistenceError && (
-            <p className="rounded bg-red-950/40 px-3 py-2 text-sm text-red-300">
+            <p className="rounded bg-danger-950/40 px-3 py-2 text-sm text-danger-300">
               Setup preference could not be saved: {persistenceError}
             </p>
           )}
@@ -417,7 +417,7 @@ export function OnboardingModal({
               event.preventDefault();
               void openUrl("https://superlogicai.com");
             }}
-            className="text-xs text-zinc-600 transition-colors hover:text-zinc-400 focus-visible:rounded focus-visible:outline-2 focus-visible:outline-sky-400"
+            className="text-xs text-zinc-600 transition-colors hover:text-zinc-400 focus-visible:rounded focus-visible:outline-2 focus-visible:outline-focus-400"
           >
             Explore Super Logic AI ↗
           </a>
@@ -425,14 +425,14 @@ export function OnboardingModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md px-4 py-2 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-sky-400"
+              className="rounded-md px-4 py-2 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-focus-400"
             >
               Skip for now
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md bg-sky-500 px-4 py-2 text-sm font-semibold text-sky-950 hover:bg-sky-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300"
+              className="rounded-md bg-info-500 px-4 py-2 text-sm font-semibold text-info-950 hover:bg-info-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-300"
             >
               Finish setup
             </button>

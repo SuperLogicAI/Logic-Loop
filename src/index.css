@@ -1,5 +1,79 @@
 @import "tailwindcss";
 
+/* Semantic color roles (Plan 050). Components use these, never raw hues.
+   attn = needs you / stale, ok = done, danger = blocker, info = neutral
+   interactive, focus = focus ring only, setup = Setup accent. Shades follow
+   the base hue's scale so existing weights carry over. */
+@theme {
+  --color-attn-50: var(--color-amber-50);
+  --color-attn-100: var(--color-amber-100);
+  --color-attn-200: var(--color-amber-200);
+  --color-attn-300: var(--color-amber-300);
+  --color-attn-400: var(--color-amber-400);
+  --color-attn-500: var(--color-amber-500);
+  --color-attn-600: var(--color-amber-600);
+  --color-attn-700: var(--color-amber-700);
+  --color-attn-800: var(--color-amber-800);
+  --color-attn-900: var(--color-amber-900);
+  --color-attn-950: var(--color-amber-950);
+  --color-ok-50: var(--color-emerald-50);
+  --color-ok-100: var(--color-emerald-100);
+  --color-ok-200: var(--color-emerald-200);
+  --color-ok-300: var(--color-emerald-300);
+  --color-ok-400: var(--color-emerald-400);
+  --color-ok-500: var(--color-emerald-500);
+  --color-ok-600: var(--color-emerald-600);
+  --color-ok-700: var(--color-emerald-700);
+  --color-ok-800: var(--color-emerald-800);
+  --color-ok-900: var(--color-emerald-900);
+  --color-ok-950: var(--color-emerald-950);
+  --color-danger-50: var(--color-red-50);
+  --color-danger-100: var(--color-red-100);
+  --color-danger-200: var(--color-red-200);
+  --color-danger-300: var(--color-red-300);
+  --color-danger-400: var(--color-red-400);
+  --color-danger-500: var(--color-red-500);
+  --color-danger-600: var(--color-red-600);
+  --color-danger-700: var(--color-red-700);
+  --color-danger-800: var(--color-red-800);
+  --color-danger-900: var(--color-red-900);
+  --color-danger-950: var(--color-red-950);
+  --color-info-50: var(--color-sky-50);
+  --color-info-100: var(--color-sky-100);
+  --color-info-200: var(--color-sky-200);
+  --color-info-300: var(--color-sky-300);
+  --color-info-400: var(--color-sky-400);
+  --color-info-500: var(--color-sky-500);
+  --color-info-600: var(--color-sky-600);
+  --color-info-700: var(--color-sky-700);
+  --color-info-800: var(--color-sky-800);
+  --color-info-900: var(--color-sky-900);
+  --color-info-950: var(--color-sky-950);
+  --color-focus-50: var(--color-blue-50);
+  --color-focus-100: var(--color-blue-100);
+  --color-focus-200: var(--color-blue-200);
+  --color-focus-300: var(--color-blue-300);
+  --color-focus-400: var(--color-blue-400);
+  --color-focus-500: var(--color-blue-500);
+  --color-focus-600: var(--color-blue-600);
+  --color-focus-700: var(--color-blue-700);
+  --color-focus-800: var(--color-blue-800);
+  --color-focus-900: var(--color-blue-900);
+  --color-focus-950: var(--color-blue-950);
+  --color-setup-50: var(--color-teal-50);
+  --color-setup-100: var(--color-teal-100);
+  --color-setup-200: var(--color-teal-200);
+  --color-setup-300: var(--color-teal-300);
+  --color-setup-400: var(--color-teal-400);
+  --color-setup-500: var(--color-teal-500);
+  --color-setup-600: var(--color-teal-600);
+  --color-setup-700: var(--color-teal-700);
+  --color-setup-800: var(--color-teal-800);
+  --color-setup-900: var(--color-teal-900);
+  --color-setup-950: var(--color-teal-950);
+}
+
+
 html,
 body,
 #root {
@@ -24,47 +98,76 @@ body,
   background: #a1a1aa;
 }
 
-/* Lock-in is presentation-only: neutralize attention colors inside the side
-   panel while leaving the top tab strip and all underlying state untouched. */
-.lock-in-panel [class*="text-teal-"],
-.lock-in-panel [class*="text-yellow-"],
-.lock-in-panel [class*="text-orange-"],
-.lock-in-panel [class*="text-red-"],
-.lock-in-panel [class*="text-emerald-"],
-.lock-in-panel [class*="text-purple-"],
-.lock-in-panel [class*="text-sky-"],
-.lock-in-panel [class*="text-blue-"],
-.lock-in-panel [class*="text-green-"] {
-  color: #a1a1aa !important;
-}
-
-.lock-in-panel [class*="border-teal-"],
-.lock-in-panel [class*="border-yellow-"],
-.lock-in-panel [class*="border-orange-"],
-.lock-in-panel [class*="border-red-"],
-.lock-in-panel [class*="border-emerald-"],
-.lock-in-panel [class*="border-purple-"],
-.lock-in-panel [class*="border-sky-"],
-.lock-in-panel [class*="border-blue-"],
-.lock-in-panel [class*="border-green-"] {
-  border-color: rgb(82 82 91 / 0.7) !important;
-}
-
-.lock-in-panel [class~="bg-blue-400"],
-.lock-in-panel [class~="bg-yellow-400"],
-.lock-in-panel [class~="bg-yellow-400/5"],
-.lock-in-panel [class~="bg-yellow-950/20"],
-.lock-in-panel [class~="bg-orange-400"],
-.lock-in-panel [class~="bg-red-500"],
-.lock-in-panel [class~="bg-red-950/20"],
-.lock-in-panel [class~="bg-emerald-400"],
-.lock-in-panel [class~="bg-emerald-500"],
-.lock-in-panel [class~="bg-emerald-700"],
-.lock-in-panel [class~="bg-purple-400/5"],
-.lock-in-panel [class~="bg-purple-400/[0.015]"],
-.lock-in-panel [class~="bg-rose-500/10"],
-.lock-in-panel [class~="bg-sky-900/40"] {
-  background-color: rgb(39 39 42 / 0.45) !important;
+/* Lock-in is presentation-only: re-point every color role to grey inside the
+   side panel while leaving the top tab strip and all underlying state
+   untouched. New colors need no entry here as long as they use a role. */
+.lock-in-panel {
+  --color-attn-50: var(--color-zinc-50);
+  --color-attn-100: var(--color-zinc-100);
+  --color-attn-200: var(--color-zinc-200);
+  --color-attn-300: var(--color-zinc-300);
+  --color-attn-400: var(--color-zinc-400);
+  --color-attn-500: var(--color-zinc-500);
+  --color-attn-600: var(--color-zinc-600);
+  --color-attn-700: var(--color-zinc-700);
+  --color-attn-800: var(--color-zinc-800);
+  --color-attn-900: var(--color-zinc-900);
+  --color-attn-950: var(--color-zinc-950);
+  --color-ok-50: var(--color-zinc-50);
+  --color-ok-100: var(--color-zinc-100);
+  --color-ok-200: var(--color-zinc-200);
+  --color-ok-300: var(--color-zinc-300);
+  --color-ok-400: var(--color-zinc-400);
+  --color-ok-500: var(--color-zinc-500);
+  --color-ok-600: var(--color-zinc-600);
+  --color-ok-700: var(--color-zinc-700);
+  --color-ok-800: var(--color-zinc-800);
+  --color-ok-900: var(--color-zinc-900);
+  --color-ok-950: var(--color-zinc-950);
+  --color-danger-50: var(--color-zinc-50);
+  --color-danger-100: var(--color-zinc-100);
+  --color-danger-200: var(--color-zinc-200);
+  --color-danger-300: var(--color-zinc-300);
+  --color-danger-400: var(--color-zinc-400);
+  --color-danger-500: var(--color-zinc-500);
+  --color-danger-600: var(--color-zinc-600);
+  --color-danger-700: var(--color-zinc-700);
+  --color-danger-800: var(--color-zinc-800);
+  --color-danger-900: var(--color-zinc-900);
+  --color-danger-950: var(--color-zinc-950);
+  --color-info-50: var(--color-zinc-50);
+  --color-info-100: var(--color-zinc-100);
+  --color-info-200: var(--color-zinc-200);
+  --color-info-300: var(--color-zinc-300);
+  --color-info-400: var(--color-zinc-400);
+  --color-info-500: var(--color-zinc-500);
+  --color-info-600: var(--color-zinc-600);
+  --color-info-700: var(--color-zinc-700);
+  --color-info-800: var(--color-zinc-800);
+  --color-info-900: var(--color-zinc-900);
+  --color-info-950: var(--color-zinc-950);
+  --color-focus-50: var(--color-zinc-50);
+  --color-focus-100: var(--color-zinc-100);
+  --color-focus-200: var(--color-zinc-200);
+  --color-focus-300: var(--color-zinc-300);
+  --color-focus-400: var(--color-zinc-400);
+  --color-focus-500: var(--color-zinc-500);
+  --color-focus-600: var(--color-zinc-600);
+  --color-focus-700: var(--color-zinc-700);
+  --color-focus-800: var(--color-zinc-800);
+  --color-focus-900: var(--color-zinc-900);
+  --color-focus-950: var(--color-zinc-950);
+  --color-setup-50: var(--color-zinc-50);
+  --color-setup-100: var(--color-zinc-100);
+  --color-setup-200: var(--color-zinc-200);
+  --color-setup-300: var(--color-zinc-300);
+  --color-setup-400: var(--color-zinc-400);
+  --color-setup-500: var(--color-zinc-500);
+  --color-setup-600: var(--color-zinc-600);
+  --color-setup-700: var(--color-zinc-700);
+  --color-setup-800: var(--color-zinc-800);
+  --color-setup-900: var(--color-zinc-900);
+  --color-setup-950: var(--color-zinc-950);
 }
 
 .lock-in-panel [class*="shadow-["],

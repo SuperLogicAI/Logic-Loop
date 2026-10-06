@@ -61,10 +61,10 @@ export function FanOutModal({ parentCwd, onLaunch, onCancel }: Props) {
   return (
     <div className="fixed inset-x-0 top-7 bottom-0 z-40 flex items-center justify-center bg-black/60" onClick={onCancel}>
       <div
-        className="max-h-[85vh] w-[36rem] max-w-[90vw] overflow-y-auto rounded-lg border border-purple-500/30 bg-zinc-900 p-4 shadow-xl"
+        className="max-h-[85vh] w-[36rem] max-w-[90vw] overflow-y-auto rounded-lg border border-info-500/30 bg-zinc-900 p-4 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="font-semibold text-purple-300">Fan out</h3>
+        <h3 className="font-semibold text-info-300">Fan out</h3>
         <p className="mb-3 text-xs text-zinc-500">
           Spawn several tabs at once, one per cwd/command row. Use it to kick off parallel
           agent runs across repos or subfolders in a single click.
@@ -118,7 +118,7 @@ export function FanOutModal({ parentCwd, onLaunch, onCancel }: Props) {
               value={jsonText}
               onChange={(e) => setJsonText(e.target.value)}
             />
-            {jsonError && <p className="text-red-400">{jsonError}</p>}
+            {jsonError && <p className="text-danger-400">{jsonError}</p>}
             <button
               className="self-start rounded border border-zinc-700 px-2.5 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
               onClick={parseJson}
@@ -133,7 +133,7 @@ export function FanOutModal({ parentCwd, onLaunch, onCancel }: Props) {
             Cancel
           </button>
           <button
-            className="rounded bg-purple-500 px-3 py-1 font-medium text-black hover:bg-purple-400"
+            className="rounded bg-info-500 px-3 py-1 font-medium text-black hover:bg-info-400"
             onClick={launch}
           >
             Launch

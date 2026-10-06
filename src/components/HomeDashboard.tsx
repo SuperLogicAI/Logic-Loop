@@ -159,7 +159,7 @@ export function HomeDashboard({
                 <option value="home">Home</option><option value="workspace">Last workspace</option>
               </select>
             </label>
-            <button type="button" className="rounded-md border border-sky-800/70 px-2.5 py-1.5 text-xs text-zinc-300 hover:border-sky-500 focus-visible:border-sky-400 focus-visible:outline-2 focus-visible:outline-sky-400" onClick={onOpenSetup}>Setup</button>
+            <button type="button" className="rounded-md border border-setup-800/70 px-2.5 py-1.5 text-xs text-zinc-300 hover:border-setup-500 focus-visible:border-setup-400 focus-visible:outline-2 focus-visible:outline-focus-400" onClick={onOpenSetup}>Setup</button>
             <button type="button" className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300" onClick={onOpenTour}>Tour</button>
             <button
               type="button"
@@ -179,7 +179,7 @@ export function HomeDashboard({
           </div>
         </div>
 
-        {preferenceError && <p role="alert" className="mt-2 text-xs text-amber-400">Couldn't save startup preference. Choose it again to retry.</p>}
+        {preferenceError && <p role="alert" className="mt-2 text-xs text-attn-400">Couldn't save startup preference. Choose it again to retry.</p>}
         {activeTab && (
           <div className="mt-4 flex items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-800/60 px-4 py-3">
             <div className="min-w-0 flex-1">
@@ -188,7 +188,7 @@ export function HomeDashboard({
             </div>
             <button
               type="button"
-              className="shrink-0 rounded-md bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500"
+              className="shrink-0 rounded-md bg-info-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-info-500"
               onClick={() => onContinue(activeTab.id)}
             >
               Continue
@@ -202,7 +202,7 @@ export function HomeDashboard({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search projects…"
             aria-label="Search projects"
-            className="min-w-48 flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-sky-500"
+            className="min-w-48 flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-info-500"
           />
           <div className="flex items-center gap-1" role="tablist" aria-label="Project filters">
             {(Object.keys(FILTER_LABEL) as Filter[]).map((key) => (
@@ -223,7 +223,7 @@ export function HomeDashboard({
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {catalog !== null && visible.length === 0 && (
             <p className="col-span-full py-8 text-center text-sm text-zinc-500">
-              {catalog.length === 0 ? <>No projects yet. <button type="button" className="text-sky-400 hover:text-sky-300" onClick={onOpenSetup}>Choose a folder and start a session</button></> : "No projects match this search."}
+              {catalog.length === 0 ? <>No projects yet. <button type="button" className="text-info-400 hover:text-info-300" onClick={onOpenSetup}>Choose a folder and start a session</button></> : "No projects match this search."}
             </p>
           )}
           {visible.map((card) => (
@@ -276,7 +276,7 @@ function ProjectCard({
           {displayName}
         </h3>
         <div className="flex shrink-0 items-center gap-1">
-          {card.pinned && <span className="text-[10px] text-amber-400">pinned</span>}
+          {card.pinned && <span className="text-[10px] text-attn-400">pinned</span>}
           {card.archived && <span className="text-[10px] text-zinc-500">Archived</span>}
         </div>
       </div>
@@ -287,7 +287,7 @@ function ProjectCard({
       </p>
       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-400">
         {statusParts.length > 0 && <span>{statusParts.join(" · ")}</span>}
-        {decisionCount > 0 && <span className="text-orange-400">{decisionCount} open decision{decisionCount === 1 ? "" : "s"}</span>}
+        {decisionCount > 0 && <span className="text-attn-400">{decisionCount} open decision{decisionCount === 1 ? "" : "s"}</span>}
       </div>
       <button
         type="button"

@@ -34,16 +34,16 @@ function agentIconForTab(tab: Tab): AgentIcon | null {
 // "working" dot loses its blue for a dim amber ring instead — distinct from
 // waiting's pulse ("needs you now" vs. "check on me").
 function dotClass(tab: Tab, stalled: boolean): string {
-  if (tab.status === "dead") return "bg-red-500";
+  if (tab.status === "dead") return "bg-danger-500";
   switch (tab.agentState) {
     case "working":
-      return stalled ? "bg-blue-900 ring-2 ring-amber-500/70" : "bg-blue-400";
+      return stalled ? "bg-info-900 ring-2 ring-attn-500/70" : "bg-info-400";
     case "waiting":
-      return "bg-amber-400 animate-pulse";
+      return "bg-attn-400 animate-pulse";
     case "idle":
-      return "bg-green-500";
+      return "bg-ok-500";
     case "error":
-      return "bg-red-400";
+      return "bg-danger-400";
     default:
       return "bg-zinc-500";
   }
@@ -73,7 +73,7 @@ interface Props {
   /** Fan-out origin tab (any group) — purple text glow ties it back to its
    * children after launch. */
   isFanOutParent: (tab: Tab) => boolean;
-  /** Isolate-loop worktree tab — orange glow. */
+  /** Isolate-loop worktree tab — neutral glow. */
   isWorktreeBound: (tab: Tab) => boolean;
   /** Clock tick (Phase 14b) — drives stalled/age display, nothing else
    * changes agentState on its own. */
@@ -89,7 +89,7 @@ function groupGlow(rgb: string): string {
   return `0 -3px 8px -2px rgba(${rgb},0.55), -3px 0 8px -2px rgba(${rgb},0.55), 3px 0 8px -2px rgba(${rgb},0.55)`;
 }
 const FAN_OUT_GLOW = groupGlow("168,85,247"); // purple
-const ISOLATE_GLOW = groupGlow("249,115,22"); // orange
+const ISOLATE_GLOW = groupGlow("212,212,216"); // neutral zinc-300 (no warning hue)
 
 export function TabBar({
   tabs,
@@ -135,7 +135,7 @@ export function TabBar({
     >
       <div className="ml-2 flex shrink-0 flex-col items-stretch gap-1 pt-1" data-tauri-drag-region="false">
         <button type="button" onClick={onOpenTour}
-          className="self-center rounded-full border border-zinc-800 px-3 py-0.5 text-[10px] text-zinc-500 hover:border-zinc-600 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-sky-400">
+          className="self-center rounded-full border border-zinc-800 px-3 py-0.5 text-[10px] text-zinc-500 hover:border-zinc-600 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-focus-400">
           Tour
         </button>
         <button
@@ -145,7 +145,7 @@ export function TabBar({
           aria-pressed={homeActive}
           title="Home"
           onClick={onOpenHome}
-          className={`flex shrink-0 items-center gap-1.5 rounded-t-md border border-b-0 px-2.5 py-1 text-sm hover:border-zinc-500 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400 ${
+          className={`flex shrink-0 items-center gap-1.5 rounded-t-md border border-b-0 px-2.5 py-1 text-sm hover:border-zinc-500 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-400 ${
             homeActive ? "border-zinc-600 bg-zinc-700 text-zinc-100" : "border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
           }`}
         >
@@ -197,7 +197,7 @@ export function TabBar({
             tab.id === activeId
               ? "bg-zinc-700 text-zinc-100 after:border-[1.5px] after:border-b-0 after:border-white"
               : visibleIds.has(tab.id)
-                ? "bg-zinc-700/70 text-zinc-300 after:border-2 after:border-b-0 after:border-sky-700"
+                ? "bg-zinc-700/70 text-zinc-300 after:border-2 after:border-b-0 after:border-info-700"
                 : "bg-zinc-800/70 text-zinc-500 after:border-[1.5px] after:border-zinc-800 hover:bg-zinc-700/50 hover:text-zinc-300"
           } ${dragId === tab.id ? "opacity-60 ring-1 ring-zinc-500" : ""} ${
             isFanOutChild(tab) || isWorktreeBound(tab) ? "z-10" : "z-0"
@@ -238,12 +238,12 @@ export function TabBar({
             <span className="ml-auto" />
             <span className="flex shrink-0 items-center gap-0.5">
               {blockerCount(tab) > 0 && (
-                <span className="shrink-0 rounded-full bg-red-500/20 px-1.5 text-[10px] font-semibold text-red-400">
+                <span className="shrink-0 rounded-full bg-danger-500/20 px-1.5 text-[10px] font-semibold text-danger-400">
                   {blockerCount(tab)}
                 </span>
               )}
               {decisionCount(tab) > 0 && (
-                <span className="shrink-0 rounded-full bg-orange-500/20 px-1.5 text-[10px] font-semibold text-orange-400">
+                <span className="shrink-0 rounded-full bg-zinc-300/20 px-1.5 text-[10px] font-semibold text-zinc-200">
                   {decisionCount(tab)}
                 </span>
               )}
@@ -291,7 +291,7 @@ export function TabBar({
               />
             ) : (
               <span
-                className={`min-w-0 flex-1 truncate ${isFanOutParent(tab) ? "text-purple-300" : ""}`}
+                className={`min-w-0 flex-1 truncate ${isFanOutParent(tab) ? "text-info-300" : ""}`}
                 style={isFanOutParent(tab) ? { textShadow: "0 0 6px rgba(168,85,247,0.85)" } : undefined}
                 title={isFanOutParent(tab) ? "fan-out origin tab" : "Right-click to rename"}
               >
@@ -311,7 +311,7 @@ export function TabBar({
         +
       </button>
       <button
-        className="mb-0.5 flex shrink-0 items-center gap-1.5 rounded-full border border-zinc-700 px-2.5 py-1 text-sm leading-none text-zinc-400 hover:border-purple-500 hover:text-zinc-200"
+        className="mb-0.5 flex shrink-0 items-center gap-1.5 rounded-full border border-zinc-700 px-2.5 py-1 text-sm leading-none text-zinc-400 hover:border-info-500 hover:text-zinc-200"
         style={{ boxShadow: "inset 0 0 0 1px rgba(168,85,247,0.4)" }}
         onClick={onFanOut}
         title="Fan out the active tab into N child tabs"
@@ -320,7 +320,7 @@ export function TabBar({
         <img src="/fan.svg" alt="" className="h-4 w-4 shrink-0" />
       </button>
       <button
-        className="mr-2 mb-0.5 flex shrink-0 items-center gap-1.5 rounded-full border border-zinc-700 px-2.5 py-1 text-sm leading-none text-zinc-400 hover:border-orange-400 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-orange-400"
+        className="mr-2 mb-0.5 flex shrink-0 items-center gap-1.5 rounded-full border border-zinc-700 px-2.5 py-1 text-sm leading-none text-zinc-400 hover:border-zinc-200 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-zinc-200"
         style={{ boxShadow: "inset 0 0 0 1px rgba(249,115,22,0.4)" }}
         onClick={onIsolateLoop}
         title="Spawn a tab bound to a fresh git worktree"

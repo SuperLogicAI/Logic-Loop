@@ -156,7 +156,7 @@ export function AttentionInbox({ items, now, loading, stale, onClose, onOpenTab,
           <div className="flex items-center gap-3">
             <h2 className="text-sm font-semibold text-zinc-100">Attention</h2>
             <span className="text-[10px] text-zinc-500">Actionable first, then oldest.</span>
-            {stale && <span className="ml-auto text-[10px] text-orange-300">Attention may be stale</span>}
+            {stale && <span className="ml-auto text-[10px] text-attn-300">Attention may be stale</span>}
             <button
               type="button"
               aria-label="Close Attention Inbox"
@@ -184,7 +184,7 @@ export function AttentionInbox({ items, now, loading, stale, onClose, onOpenTab,
               <button
                 type="button"
                 disabled={mutating !== null}
-                className="ml-auto rounded px-2.5 py-1 text-xs text-orange-300 hover:bg-orange-950/40 disabled:text-zinc-600"
+                className="ml-auto rounded px-2.5 py-1 text-xs text-attn-300 hover:bg-attn-950/40 disabled:text-zinc-600"
                 onClick={archiveBacklog}
               >
                 {mutating === "bulk" ? "Archiving…" : "Archive all unavailable"}
@@ -201,7 +201,7 @@ export function AttentionInbox({ items, now, loading, stale, onClose, onOpenTab,
             aria-activedescendant={current ? `attention-option-${visible.indexOf(current)}` : undefined}
             role="combobox"
             aria-expanded="true"
-            className="mt-3 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-sky-500"
+            className="mt-3 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-info-500"
           />
         </header>
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(220px,0.8fr)]">
@@ -253,7 +253,7 @@ export function AttentionInbox({ items, now, loading, stale, onClose, onOpenTab,
                 <button
                   type="button"
                   disabled={!current.tabId}
-                  className="mt-5 w-full rounded-md bg-sky-600 px-3 py-2 text-xs font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600"
+                  className="mt-5 w-full rounded-md bg-info-600 px-3 py-2 text-xs font-medium text-white hover:bg-info-500 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-600"
                   onClick={() => current.tabId && onOpenTab(current.tabId)}
                 >
                   {current.tabId ? "Open tab" : "Destination unavailable"}
