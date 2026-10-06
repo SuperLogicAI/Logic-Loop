@@ -5165,3 +5165,7 @@ Manual (rebuilt app, not an older install):
 Known gap, undecided: Sidebar LM stays hidden when a non-active backend has a
 saved model (e.g. LM Studio model saved, backend still Claude CLI); it is
 reachable from Setup. Maintainer to decide whether a saved model counts.
+21. **Home header copy** — header reads `N projects · T open decisions across P
+    projects`; T equals the sum of the per-card "open decisions" counts shown
+    for every card (scroll to check), P the number of cards with a count.
+    With exactly one such project it reads "1 project".
