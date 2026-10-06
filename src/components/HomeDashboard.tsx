@@ -146,6 +146,7 @@ export function HomeDashboard({
   const projectCount = cards.length;
   const workingProjectCount = cards.filter((c) => c.workingCount > 0).length;
   const decisionProjectCount = cards.filter((c) => (decisionCountByProject.get(c.projectKey) ?? 0) > 0).length;
+  const decisionTotal = cards.reduce((sum, c) => sum + (decisionCountByProject.get(c.projectKey) ?? 0), 0);
 
   const filtered = cards.filter((c) => {
     if (filter === "working" && c.workingCount === 0 && c.waitingCount === 0) return false;
@@ -177,7 +178,7 @@ export function HomeDashboard({
             <span>
               {projectCount} project{projectCount === 1 ? "" : "s"}
               {workingProjectCount > 0 ? ` · ${workingProjectCount} with agents working` : ""}
-              {decisionProjectCount > 0 ? ` · ${decisionProjectCount} with open decisions` : ""}
+              {decisionProjectCount > 0 ? ` · ${decisionTotal} open decisions across ${decisionProjectCount} project${decisionProjectCount === 1 ? "" : "s"}` : ""}
             </span>
           )}
           <div className="ml-auto flex flex-wrap items-center gap-2">

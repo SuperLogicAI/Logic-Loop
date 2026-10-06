@@ -1510,3 +1510,28 @@ Lock-in, min width, and every state color: do not accept from screenshots.
 drops orange; whether Setup keeps its blue as a dedicated token.
 **Out of scope:** new themes/light mode, changes to state semantics or
 notification policy.
+
+## Stale decisions: age-out so "open" means "waiting on you"
+
+Surfaced 2026-10-06 reviewing Home. Real profile: 748 open decisions across
+the DB (1,189 dismissed, 279 answered, 16 delegated); single cards show 201
+(NSSA), 97 (Logic Loop), 29, 22, 20. At that size the open count stops being
+a signal, and Home's "N open decisions" and the Inbox lose their meaning.
+Bulk-dismiss (Phase 17) exists but is manual; nothing ages decisions out.
+
+**Idea.** A derived "stale" state: an open decision whose session is long
+over and which the project has since moved past (no activity in the session,
+older than N days) is shown separately ("Stale (180)") and excluded from the
+headline/card counts and the Inbox, never auto-dismissed. One-click "dismiss
+all stale" per project. Panels stay dumb SQL views over the append-only
+tables (invariant #3): staleness is computed in the view or ingestion layer,
+not by rewriting rows.
+
+**Decisions needed (maintainer):** the age threshold and whether it is
+per-project or global; whether stale decisions still appear in the sidebar
+list (collapsed) or only on a separate toggle; whether "session ended" or
+"newer decisions exist in the same project" also counts as stale. Check how
+many of the 748 are genuinely recent before choosing, using counts only.
+
+**Not in scope:** auto-dismissing or deleting rows, changing extraction
+(invariant #5), changing what counts as a decision.
