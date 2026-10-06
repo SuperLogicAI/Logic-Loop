@@ -68,9 +68,9 @@ interface Props {
   decisionCount: (tab: Tab) => number;
   /** An agent finished on this tab and it hasn't been switched to since. */
   unclaimed: (tab: Tab) => boolean;
-  /** Fan-out child (any group) — purple glow. */
+  /** Fan-out child (any group) — sky glow. */
   isFanOutChild: (tab: Tab) => boolean;
-  /** Fan-out origin tab (any group) — purple text glow ties it back to its
+  /** Fan-out origin tab (any group) — sky text glow ties it back to its
    * children after launch. */
   isFanOutParent: (tab: Tab) => boolean;
   /** Isolate-loop worktree tab — neutral glow. */
@@ -88,7 +88,7 @@ interface Props {
 function groupGlow(rgb: string): string {
   return `0 -3px 8px -2px rgba(${rgb},0.55), -3px 0 8px -2px rgba(${rgb},0.55), 3px 0 8px -2px rgba(${rgb},0.55)`;
 }
-const FAN_OUT_GLOW = groupGlow("168,85,247"); // purple
+const FAN_OUT_GLOW = groupGlow("14,165,233"); // sky-500, matches --color-info-500
 const ISOLATE_GLOW = groupGlow("212,212,216"); // neutral zinc-300 (no warning hue)
 
 export function TabBar({
@@ -292,7 +292,7 @@ export function TabBar({
             ) : (
               <span
                 className={`min-w-0 flex-1 truncate ${isFanOutParent(tab) ? "text-info-300" : ""}`}
-                style={isFanOutParent(tab) ? { textShadow: "0 0 6px rgba(168,85,247,0.85)" } : undefined}
+                style={isFanOutParent(tab) ? { textShadow: "0 0 6px rgba(14,165,233,0.85)" } : undefined}
                 title={isFanOutParent(tab) ? "fan-out origin tab" : "Right-click to rename"}
               >
                 {tab.title}
@@ -312,7 +312,7 @@ export function TabBar({
       </button>
       <button
         className="mb-0.5 flex shrink-0 items-center gap-1.5 rounded-full border border-zinc-700 px-2.5 py-1 text-sm leading-none text-zinc-400 hover:border-info-500 hover:text-zinc-200"
-        style={{ boxShadow: "inset 0 0 0 1px rgba(168,85,247,0.4)" }}
+        style={{ boxShadow: "inset 0 0 0 1px color-mix(in oklab, var(--color-info-500) 40%, transparent)" }}
         onClick={onFanOut}
         title="Fan out the active tab into N child tabs"
       >
@@ -321,7 +321,7 @@ export function TabBar({
       </button>
       <button
         className="mr-2 mb-0.5 flex shrink-0 items-center gap-1.5 rounded-full border border-zinc-700 px-2.5 py-1 text-sm leading-none text-zinc-400 hover:border-zinc-200 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-zinc-200"
-        style={{ boxShadow: "inset 0 0 0 1px rgba(249,115,22,0.4)" }}
+        style={{ boxShadow: "inset 0 0 0 1px color-mix(in oklab, var(--color-zinc-300) 40%, transparent)" }}
         onClick={onIsolateLoop}
         title="Spawn a tab bound to a fresh git worktree"
       >

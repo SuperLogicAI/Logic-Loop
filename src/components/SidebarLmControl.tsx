@@ -22,13 +22,16 @@ export function SidebarLmControl({ compact = false }: { compact?: boolean }) {
     };
     const reposition = () => {
       const rect = buttonRef.current?.getBoundingClientRect();
-      if (rect) setPosition({ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - 264)) });
+      // Clamp so the popover never extends below the window (button can sit low in a scrolled modal).
+      const height = popoverRef.current?.offsetHeight ?? 320;
+      if (rect) setPosition({ top: Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - height - 8)), left: Math.max(8, Math.min(rect.left, window.innerWidth - 264)) });
     };
     reposition();
     window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
     window.addEventListener("keydown", close, true);
-    return () => { window.removeEventListener("resize", reposition); window.removeEventListener("keydown", close, true); };
-  }, [showSettings]);
+    return () => { window.removeEventListener("resize", reposition); window.removeEventListener("scroll", reposition, true); window.removeEventListener("keydown", close, true); };
+  }, [showSettings, extractor?.backend]);
 
   useEffect(() => {
     if (!showSettings || !extractor) return;

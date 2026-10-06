@@ -1684,10 +1684,10 @@ export function SidePanel({
 
       <section ref={gitLogRef} className="scroll-mt-3">
         <h2
-          className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-info-400 uppercase select-none"
+          className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-zinc-400 uppercase select-none"
           onClick={() => toggleSection("gitlog")}
         >
-          <Chevron collapsed={collapsed.has("gitlog")} className="text-info-400/85" />
+          <Chevron collapsed={collapsed.has("gitlog")} className="text-zinc-500" />
           <PanelIcon name="github" className="h-4 w-4" />
           Git log
         </h2>
@@ -1698,7 +1698,7 @@ export function SidePanel({
               {(showAllCommits ? commits : commits.slice(0, ROW_CAP)).map((c) => (
                 <li key={c.hash} className="flex gap-2">
                   <span className="w-8 shrink-0 text-right text-zinc-600">{ago(c.ts * 1000)}</span>
-                  <span className="min-w-0 flex-1 truncate text-info-300" title={c.subject}>
+                  <span className="min-w-0 flex-1 truncate text-zinc-300" title={c.subject}>
                     <span className="font-mono text-zinc-500">{c.hash}</span> {c.subject}
                   </span>
                 </li>
