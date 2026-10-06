@@ -119,3 +119,20 @@ policy.
 3. Does Setup keep a dedicated accent? (Default: yes, `setup`.)
 4. Sidebar LM: hide until configured, or leave always visible this sprint?
 5. Ship Part A and B as one PR or two? (Default: two commits, one PR.)
+
+## Plan revisions during build (2026-10-06)
+
+Stated explicitly per process rules:
+- **Role mapping differs from the draft table.** The audit showed teal is the
+  re-entry brief, purple is fan-out, blue is the running dot, and Setup was sky.
+  Final: `attn` = orange/yellow/amber, `ok` = emerald/green, `danger` =
+  red/rose, `info` = sky/blue/teal/purple/violet, `focus` = outline-sky rings
+  recolored blue, `setup` = teal on the Setup pill and Home Setup button only.
+  Fan-out and re-entry lose their own hues (identity via icon/position).
+- Roles carry the full 50-950 shade scale of their base hue so existing weights
+  and opacity modifiers carried over with a mechanical codemod.
+- Isolate Loop tab glow changed from orange to neutral zinc-300.
+- Part B added Setup rows (Safe Router status, Sidebar LM control) in
+  OnboardingModal so hidden controls stay reachable. No Rust change was needed:
+  `TrafficSnapshot` already separates `missing` from `error`.
+- Existing check assertions on `sky-700` (split-view) updated to `info-700`.

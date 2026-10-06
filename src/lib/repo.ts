@@ -1479,6 +1479,18 @@ export async function setInboxBadgeEnabled(enabled: boolean): Promise<void> {
   await setSetting(INBOX_BADGE_KEY, enabled ? "1" : "0");
 }
 
+const TRAFFIC_SEEN_KEY = "traffic_seen";
+
+/** Plan 050: true once a real Safe Router log was read; keeps Traffic visible
+ * through a transient missing log so upgrades never silently drop it. */
+export async function getTrafficSeen(): Promise<boolean> {
+  return (await getSetting(TRAFFIC_SEEN_KEY)) === "1";
+}
+
+export async function setTrafficSeen(): Promise<void> {
+  await setSetting(TRAFFIC_SEEN_KEY, "1");
+}
+
 // --- Plan 048: project catalog. One repo-wide read of every project key the
 // app has any record of — the Home screen's card list. ---
 

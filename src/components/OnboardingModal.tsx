@@ -1,3 +1,5 @@
+import { SidebarLmControl } from "./SidebarLmControl";
+import { useSidebarControls } from "../lib/useSidebarControls";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { open as openFolderDialog } from "@tauri-apps/plugin-dialog";
@@ -49,6 +51,7 @@ export function OnboardingModal({
   onLaunch,
   onClose,
 }: Props) {
+  const optional = useSidebarControls();
   const dialogRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const [requestingNotifications, setRequestingNotifications] = useState(false);
@@ -401,6 +404,30 @@ export function OnboardingModal({
                   ? "Requesting…"
                   : "Enable notifications"}
             </button>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2.5">
+            <div>
+              <div className="text-sm font-medium text-zinc-100">Safe Router traffic</div>
+              <p className="mt-0.5 text-xs text-zinc-400">
+                {optional.kind === "missing" || optional.kind === null
+                  ? "Optional. Not detected. The Traffic control appears in the sidebar once a Safe Router log exists."
+                  : optional.kind === "error"
+                    ? "Detected, but the log could not be read. Traffic stays in the sidebar."
+                    : "Safe Router detected. Traffic is in the sidebar header."}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2.5">
+            <div>
+              <div className="text-sm font-medium text-zinc-100">Sidebar LM</div>
+              <p className="mt-0.5 text-xs text-zinc-400">
+                Optional. Choose a local or alternate model for decision extraction. The control
+                joins the sidebar header once configured.
+              </p>
+            </div>
+            <SidebarLmControl />
           </div>
 
           {persistenceError && (

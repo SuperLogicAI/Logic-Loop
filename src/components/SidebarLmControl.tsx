@@ -2,6 +2,7 @@ import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import { getExtractorSettings, setExtractorSettings } from "../lib/repo";
 import type { ExtractorSettings } from "../types";
+import { SIDEBAR_CONTROLS_REFRESH } from "../lib/sidebarControls";
 
 export function SidebarLmControl({ compact = false }: { compact?: boolean }) {
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -41,7 +42,9 @@ export function SidebarLmControl({ compact = false }: { compact?: boolean }) {
 
   const saveExtractor = (settings: ExtractorSettings) => {
     setExtractor(settings);
-    void setExtractorSettings(settings).catch(() => undefined);
+    void setExtractorSettings(settings)
+      .then(() => window.dispatchEvent(new Event(SIDEBAR_CONTROLS_REFRESH)))
+      .catch(() => undefined);
   };
 
   return (

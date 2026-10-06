@@ -5086,3 +5086,38 @@ passed. Existing bundle-size warning remains. No golden run.
 Pending rebuild: verify project identity/Notify at narrow/normal widths and
 Codex model/account alignment, additional limits, unavailable/stale states.
 This follow-up has not received a rebuilt-app visual pass by the agent.
+
+## Phase 50 — Semantic color roles + hide unused sidebar controls (2026-10-06)
+
+Automated (agent-run): `tsc --noEmit`, `vite build`, full `npm run check`
+including new `color-tokens:check` (no raw hue classes; Lock-in greys all roles
+via tokens) and `sidebar-controls:check` (visibility predicates). Built CSS
+confirmed: role utilities compile to `var(--color-<role>-N)` and
+`.lock-in-panel` overrides them. Rust untouched. **No rebuilt-app visual pass
+has been done by the agent** — everything below is for the maintainer.
+
+Manual, in the running app:
+1. **Colors, every state** — in expanded sidebar, compact rail, hidden sidebar,
+   and minimum width: blocker (danger), waiting/stale Inbox and open decisions
+   (attn), done (ok), running dot and Inbox count (info), tab/status dots.
+   Compare against the pre-change app: orange and yellow now both render amber;
+   purple (fan-out) and teal (re-entry) now render sky; blue running dot is sky.
+2. **Focus ring** — Tab through sidebar controls and modals; ring is blue and
+   visibly distinct from the sky info accents.
+3. **Setup accent** — Setup pill and Home "Setup" button are teal.
+4. **Isolate Loop** — modal, tab badge, tab glow and "+ Isolate" hover are
+   neutral grey/white, no orange.
+5. **Lock-in** — turn on both indefinite and timed Lock-in: no hue anywhere in
+   the side panel (danger/attn/ok/info all grey); tab strip unchanged.
+6. **Traffic hidden** — with no `~/.safe-router/log.db` and a fresh settings DB
+   (no `traffic_seen`), header shows no Traffic (expanded and compact).
+7. **Traffic shown** — with a log present: Traffic appears, opens the modal.
+   Remove the log afterwards: Traffic stays (seen).
+8. **Traffic unknown** — unreadable/corrupt log: Traffic visible.
+9. **Sidebar LM** — default settings: control hidden; Setup shows the Sidebar
+   LM row with a working button; choosing LM Studio (or a Claude model) makes
+   it appear in the sidebar header without restart; back to default Claude CLI
+   with empty model: it disappears after next focus/refresh.
+10. **Setup rows** — "Safe Router traffic" row text matches the three states.
+11. **Min width** — header row still fits at 192px with all controls shown and
+    with none.
