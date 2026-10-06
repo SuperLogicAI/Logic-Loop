@@ -5138,3 +5138,30 @@ Manual:
 15. A just-spawned tab with no bound session yet: skipped (fan-out isolation).
 16. Collapsed by default after every Home visit (not persisted); minimum width
     keeps the row readable; Lock-in does not matter on Home.
+
+### Phase 50 follow-up — live-review fixes (commit d5acf61)
+
+Found live 2026-10-06. Automated: `tsc`, full `npm run check` (incl.
+`color-tokens:check`, `sidebar-controls:check`) pass. No layout test for the
+popover clamp (pure geometry, needs a real window). **No rebuilt-app visual
+pass by the agent.**
+
+Manual (rebuilt app, not an older install):
+17. **Launcher rest rings** — Fan out has a sky ring and Isolate loop a grey
+    ring at rest; neither is purple or orange. Fan out hover is sky, Isolate
+    hover is light grey.
+18. **Fan-out glow** — a fan-out child tab glows sky and the origin tab's
+    title glows sky; no purple anywhere. A fan-out child still stands out from
+    a split pane's blue border; if not, raise the glow opacity (0.55) first.
+    Isolate loop tab glow is unchanged (neutral).
+19. **Git log grey** — Git log heading, chevron and commit subjects are grey
+    (hash dimmer), in normal and Lock-in. The Commit & Push footer, branch
+    label and "PR opened" link stay blue. Since you left and Notes unchanged.
+20. **Sidebar LM popover** — open it from the Setup modal scrolled so the
+    button is near the bottom: the popover stays fully on screen. Also check
+    a short window, switching backends (popover grows, stays on screen), and
+    scrolling the modal with it open (it follows the button).
+
+Known gap, undecided: Sidebar LM stays hidden when a non-active backend has a
+saved model (e.g. LM Studio model saved, backend still Claude CLI); it is
+reachable from Setup. Maintainer to decide whether a saved model counts.
