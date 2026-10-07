@@ -144,6 +144,8 @@ requires a live `claude -p` process.
 ### `AGENTS.md`
 
 Keep the file ASCII and at or below 3,072 bytes. Use these sections:
+(Plan 052, 2026-10-07: cap raised to 4,096 bytes by maintainer decision to fit
+the Logic Loop working agreement section; `opencode:check` enforces it.)
 
 1. One-paragraph product/stack summary.
 2. `Repo map` with exact paths for Rust core, React UI, DB layer, ingestion,

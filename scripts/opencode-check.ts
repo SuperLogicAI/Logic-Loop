@@ -44,7 +44,7 @@ for (const pattern of [
 
 const agents = readFileSync("AGENTS.md", "utf8");
 assert.ok(agents.trim(), "AGENTS.md is empty");
-assert.ok(Buffer.byteLength(agents) <= 3072, "AGENTS.md exceeds 3,072 bytes");
+assert.ok(Buffer.byteLength(agents) <= 4096, "AGENTS.md exceeds 4,096 bytes"); // Plan 052 raised from 3,072 for the working agreement
 for (const concept of [
   /Never parse ANSI or PTY output/i,
   /Fail open/i,

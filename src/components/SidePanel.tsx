@@ -261,10 +261,12 @@ export function SidePanel({
   const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
   const [muted, setMuted] = useState(false);
   const [showClearedBlockers, setShowClearedBlockers] = useState(false);
+  const [showAllDetected, setShowAllDetected] = useState(false); // Plan 052: newest ROW_CAP, ＋N expands
   const [showOlderCompletions, setShowOlderCompletions] = useState(false);
   const [showStaleDecisions, setShowStaleDecisions] = useState(false);
   useEffect(() => {
     setShowClearedBlockers(false);
+    setShowAllDetected(false);
     setShowOlderCompletions(false);
     setShowStaleDecisions(false);
   }, [cwd]);
@@ -656,22 +658,20 @@ export function SidePanel({
     }
   };
 
-  // Momentum: latest open landing note → oldest open decision → oldest open
-  // blocker → planned card. Nothing open → no card. Cascade lives in
-  // src/lib/momentum.ts (Plan 043) so it can be reused/tested outside this
+  // Momentum: latest open landing note → Now card → oldest open decision →
+  // planned card. Nothing open → no card. Cascade lives in
+  // src/lib/momentum.ts (Plan 052) so it can be reused/tested outside this
   // component; the resolvers below still own the actual writes.
   const doneRef = useRef<HTMLButtonElement>(null);
   const momentum = computeMomentum({
     landing,
     decisions: decisions.filter((d) => !d.stale),
-    blockers,
     plannedCard,
     onLandingDone: (n) => repo.setNoteStatus(n.id, "done"),
     onDecisionDone: (d) => repo.setDecisionStatus(d.id, "answered"),
-    onBlockerDone: (b) => repo.setBlockerResolved(b.id, true),
-    // Done advances the card into the next column rather than clearing it —
-    // the intent isn't finished, the work started. Also clears `now`: acted
-    // on, the slot frees up for the next pick.
+    // Start (the button's label for this kind) advances the card into
+    // Building rather than clearing it — the work started. Also clears
+    // `now`: acted on, the slot frees up for the next pick.
     onPlannedCardDone: async (card) => {
       const fresh = await readBoard(cwd);
       const match = parseBoard(fresh).find((c) => c.title === card.title) ?? card;
@@ -709,6 +709,18 @@ export function SidePanel({
     onBlockersChanged();
   };
 
+  const clearDetected = async () => {
+    await repo.resolveDetectedBlockers(cwd);
+    await reload();
+    onBlockersChanged();
+  };
+
+  const promote = async (b: Blocker) => {
+    await repo.promoteBlocker(b);
+    await reload();
+    onBlockersChanged();
+  };
+
   const remove = async (b: Blocker) => {
     await repo.deleteBlocker(b.id);
     await reload();
@@ -721,8 +733,11 @@ export function SidePanel({
     onDecisionsChanged();
   };
 
-  const open = blockers.filter((b) => b.resolved === 0);
-  const done = blockers.filter((b) => b.resolved !== 0).slice(0, 10);
+  // Plan 052: project blockers get the cards, counts and Cleared list;
+  // detector rows only appear in the muted Detected tier below.
+  const open = blockers.filter((b) => b.resolved === 0 && repo.isProjectBlocker(b));
+  const done = blockers.filter((b) => b.resolved !== 0 && repo.isProjectBlocker(b)).slice(0, 10);
+  const detected = blockers.filter((b) => b.resolved === 0 && !repo.isProjectBlocker(b));
   const openDecisions = decisions.filter((d) => d.status === "open" && !d.stale);
   const staleDecisions = decisions.filter((d) => d.status === "open" && d.stale);
   const recentCompletions = [...unclaimed].sort((a, b) => b.ts - a.ts || a.session_id.localeCompare(b.session_id));
@@ -1367,14 +1382,12 @@ export function SidePanel({
             <PanelIcon name="next" className="h-4 w-4" rainbow={!lockIn && momentum.label === "landing note"} /> Next
             <span
               className={`ml-auto font-normal text-[10px] normal-case ${
-                momentum.label === "decision"
-                  ? "text-attn-400"
-                  : momentum.label === "blocker"
-                    ? "text-danger-400"
-                    : "text-zinc-500"
+                momentum.label === "decision" ? "text-attn-400" : "text-zinc-500"
               }`}
             >
               {!lockIn && momentum.label === "landing note" ? <RainbowText text={momentum.label} /> : momentum.label}
+              {/* Age so an old note reads as old (Plan 052) — no expiry rule. */}
+              {momentum.label === "landing note" && landing && <span className="text-zinc-600"> · {ago(landing.ts)}</span>}
             </span>
           </h2>
           <p className="mb-2 break-words text-zinc-200">{momentum.text}</p>
@@ -1389,9 +1402,10 @@ export function SidePanel({
             <button
               ref={doneRef}
               className="rounded bg-attn-400 px-2.5 py-1 font-medium text-zinc-950 hover:bg-attn-300"
+              title={momentum.label === "planned" ? "Moves this card to Building and frees its Now slot" : undefined}
               onClick={() => void finishMomentum()}
             >
-              ✓ Done
+              {momentum.label === "planned" ? "▶ Start" : "✓ Done"}
             </button>
           </div>
         </section>
@@ -1583,7 +1597,9 @@ export function SidePanel({
             </div>
             {open.length === 0 && <p className="text-zinc-600">None open.</p>}
             <ul className="flex flex-col gap-2">
-              {open.map((b) => (
+              {open.map((b) => {
+                const promoted = repo.promotedParts(b);
+                return (
                 <li key={b.id} className="relative flex items-start gap-2 rounded border border-danger-800/60 bg-danger-950/20 p-2 pr-8">
                   <button
                     className="absolute top-1 right-2 flex h-5 w-5 items-center justify-center rounded focus-visible:outline-2 focus-visible:outline-focus-400 text-danger-800 hover:text-danger-500"
@@ -1599,12 +1615,12 @@ export function SidePanel({
                     className="mt-0.5 accent-danger-500"
                   />
                   <span className="min-w-0 flex-1">
-                    {b.source !== "manual" ? (
-                      // Detector blockers: human label leads, raw match line below,
+                    {promoted ? (
+                      // Promoted detector row: label leads, raw match line below,
                       // clamped to two lines with a ＋ to expand.
                       <>
                         <span className="break-words text-danger-300">
-                          {b.source}
+                          {promoted.label}
                           <button
                             className="ml-1 text-zinc-100 hover:text-white"
                             title={expandedBlockers.has(b.id) ? "Collapse" : "Expand"}
@@ -1618,7 +1634,7 @@ export function SidePanel({
                             expandedBlockers.has(b.id) ? "" : "line-clamp-2"
                           }`}
                         >
-                          {b.text}
+                          {promoted.detail}
                         </p>
                       </>
                     ) : (
@@ -1627,8 +1643,59 @@ export function SidePanel({
                     <span className="mt-1.5 block text-right text-zinc-600">{ago(b.ts)}</span>
                   </span>
                 </li>
-              ))}
+                );
+              })}
             </ul>
+            {detected.length > 0 && (
+              // Plan 052: detector rows (keyword hits on tool output) in the
+              // Accomplished row shape — muted, counted nowhere else.
+              <div className="mt-2 border-t border-zinc-800 pt-2">
+                <div className="mb-1 flex items-center gap-1.5 text-danger-400/60">
+                  Detected <span className="text-zinc-600">({detected.length})</span>
+                  {detected.length > 1 && (
+                    <button
+                      className="ml-auto text-[10px] text-danger-400/60 hover:text-danger-300"
+                      title="Clear every detected row for this project; project blockers stay"
+                      onClick={() => void clearDetected()}
+                    >
+                      clear detected
+                    </button>
+                  )}
+                </div>
+                <ul className="flex flex-col gap-1.5">
+                  {(showAllDetected ? detected : detected.slice(0, ROW_CAP)).map((b) => (
+                    <li key={b.id} className="flex gap-2">
+                      <span className="w-8 shrink-0 text-right text-zinc-600">{ago(b.ts)}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-danger-300/80">{b.source}</span>
+                        <span className="block truncate font-mono text-[10px] text-zinc-600" title={b.text}>
+                          {b.text}
+                        </span>
+                      </span>
+                      <button
+                        className="shrink-0 self-start text-zinc-600 hover:text-danger-300"
+                        title="Promote to a project blocker"
+                        onClick={() => void promote(b)}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        className="shrink-0 self-start text-zinc-700 hover:text-zinc-200"
+                        title="Clear"
+                        onClick={() => void resolve(b)}
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                {detected.length > ROW_CAP && (
+                  <button className={EXPAND_BTN} onClick={() => setShowAllDetected((s) => !s)}>
+                    {showAllDetected ? "−" : `＋ ${detected.length - ROW_CAP}`}
+                  </button>
+                )}
+              </div>
+            )}
             {done.length > 0 && (
               <div className="mt-2 border-t border-zinc-800 pt-2">
                 <button type="button" aria-expanded={showClearedBlockers}

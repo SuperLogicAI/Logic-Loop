@@ -1,10 +1,9 @@
-// Characterization check for the Plan 043 momentum extraction: computeMomentum
-// must pick exactly what SidePanel's prior inline cascade picked — latest
-// open landing note → oldest open decision → oldest open blocker → planned
-// board card. Run: npm run momentum:check
+// Check for the Plan 052 momentum cascade: computeMomentum picks latest open
+// landing note → Now-starred card → oldest open decision → unstarred planned
+// card. Blockers are not an input. Run: npm run momentum:check
 import { strict as assert } from "node:assert";
 import { computeMomentum } from "../src/lib/momentum";
-import type { Blocker, Decision, Note } from "../src/types";
+import type { Decision, Note } from "../src/types";
 import type { Card } from "../src/lib/board";
 
 const note: Note = { id: 1, cwd: "/p", kind: "landing", body: "landing text", status: "open", session_id: null, ts: 1 };
@@ -24,22 +23,8 @@ const decisionOld: Decision = {
 };
 const decisionNew: Decision = { ...decisionOld, id: 2, question: "new decision", ts: 20 };
 const decisionAnswered: Decision = { ...decisionOld, id: 3, question: "answered decision", status: "answered", ts: 5 };
-const blockerOld: Blocker = {
-  id: 1,
-  cwd: "/p",
-  session_id: null,
-  tab_id: null,
-  agent: null,
-  actor_id: null,
-  text: "old blocker",
-  source: "manual",
-  resolved: 0,
-  ts: 10,
-};
-const blockerNew: Blocker = { ...blockerOld, id: 2, text: "new blocker", ts: 20 };
-const blockerResolved: Blocker = { ...blockerOld, id: 3, text: "resolved blocker", resolved: 1, ts: 1 };
-const card: Card = {
-  title: "Planned card",
+const nowCard: Card = {
+  title: "Now card",
   status: "planned",
   body: "",
   link: null,
@@ -49,50 +34,36 @@ const card: Card = {
   start: 0,
   end: 0,
 };
-const cardNoNext: Card = { ...card, title: "No-next card", next: null };
+const plannedCard: Card = { ...nowCard, title: "Planned card", next: "planned next", now: false };
+const cardNoNext: Card = { ...nowCard, title: "No-next card", next: null };
 
 const resolvers = {
   onLandingDone: async () => {},
   onDecisionDone: async () => {},
-  onBlockerDone: async () => {},
   onPlannedCardDone: async () => {},
 };
 
 // Nothing open → null, no card.
-assert.equal(
-  computeMomentum({ landing: null, decisions: [], blockers: [], plannedCard: null, ...resolvers }),
-  null
-);
+assert.equal(computeMomentum({ landing: null, decisions: [], plannedCard: null, ...resolvers }), null);
 
-// Answered decisions and resolved blockers never win.
-assert.equal(
-  computeMomentum({
-    landing: null,
-    decisions: [decisionAnswered],
-    blockers: [blockerResolved],
-    plannedCard: null,
-    ...resolvers,
-  }),
-  null
-);
+// Answered decisions never win.
+assert.equal(computeMomentum({ landing: null, decisions: [decisionAnswered], plannedCard: null, ...resolvers }), null);
 
-// Landing note beats everything.
-const withLanding = computeMomentum({
-  landing: note,
-  decisions: [decisionOld],
-  blockers: [blockerOld],
-  plannedCard: card,
-  ...resolvers,
-});
+// Landing note beats everything, including a Now card.
+const withLanding = computeMomentum({ landing: note, decisions: [decisionOld], plannedCard: nowCard, ...resolvers });
 assert.equal(withLanding?.label, "landing note");
 assert.equal(withLanding?.text, note.body);
 
-// Oldest open decision beats blockers and planned card.
+// Now-starred card beats open decisions.
+const withNow = computeMomentum({ landing: null, decisions: [decisionOld], plannedCard: nowCard, ...resolvers });
+assert.equal(withNow?.label, "planned");
+assert.equal(withNow?.text, nowCard.next, "a starred card outranks extracted decisions");
+
+// Oldest open decision beats an unstarred planned card.
 const withDecisions = computeMomentum({
   landing: null,
   decisions: [decisionNew, decisionOld],
-  blockers: [blockerOld],
-  plannedCard: card,
+  plannedCard,
   ...resolvers,
 });
 assert.equal(withDecisions?.label, "decision");
@@ -102,51 +73,41 @@ assert.equal(
   "oldest (lowest ts) decision wins, not first-in-array, and text is reply-framed not verbatim"
 );
 
-// Oldest open blocker beats planned card when no note/decision is open.
-const withBlockers = computeMomentum({
-  landing: null,
-  decisions: [decisionAnswered],
-  blockers: [blockerNew, blockerOld],
-  plannedCard: card,
-  ...resolvers,
-});
-assert.equal(withBlockers?.label, "blocker");
-assert.equal(withBlockers?.text, blockerOld.text, "oldest (lowest ts) blocker wins, not first-in-array");
-
-// Planned card is the last resort, using next when present.
-const withCard = computeMomentum({ landing: null, decisions: [], blockers: [], plannedCard: card, ...resolvers });
+// Unstarred planned card is the last resort, using next when present.
+const withCard = computeMomentum({ landing: null, decisions: [decisionAnswered], plannedCard, ...resolvers });
 assert.equal(withCard?.label, "planned");
-assert.equal(withCard?.text, card.next);
+assert.equal(withCard?.text, plannedCard.next);
 
-// Planned card falls back to title when next is absent.
-const withCardNoNext = computeMomentum({
-  landing: null,
-  decisions: [],
-  blockers: [],
-  plannedCard: cardNoNext,
-  ...resolvers,
-});
+// Card text falls back to title when next is absent.
+const withCardNoNext = computeMomentum({ landing: null, decisions: [], plannedCard: cardNoNext, ...resolvers });
 assert.equal(withCardNoNext?.text, cardNoNext.title);
 
 // The picked item's done() calls exactly its own resolver, with the winning
 // row — not a fixed/first row.
 let doneCalledWith: unknown = null;
-const spyResolvers = {
-  onLandingDone: async () => {},
-  onDecisionDone: async (d: Decision) => {
-    doneCalledWith = d;
-  },
-  onBlockerDone: async () => {},
-  onPlannedCardDone: async () => {},
-};
 const spied = computeMomentum({
   landing: null,
   decisions: [decisionNew, decisionOld],
-  blockers: [],
   plannedCard: null,
-  ...spyResolvers,
+  ...resolvers,
+  onDecisionDone: async (d: Decision) => {
+    doneCalledWith = d;
+  },
 });
 await spied?.done();
 assert.equal(doneCalledWith, decisionOld, "done() resolves the exact winning decision, not just any decision");
+
+let cardDoneWith: unknown = null;
+const spiedCard = computeMomentum({
+  landing: null,
+  decisions: [decisionOld],
+  plannedCard: nowCard,
+  ...resolvers,
+  onPlannedCardDone: async (c: Card) => {
+    cardDoneWith = c;
+  },
+});
+await spiedCard?.done();
+assert.equal(cardDoneWith, nowCard, "done() on a Now pick resolves that card, not the decision");
 
 console.log("momentum-check: all assertions passed");

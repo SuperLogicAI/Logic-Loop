@@ -47,8 +47,24 @@ Use `src/lib/repo.ts` for all database access; components contain no inline SQL.
 
 ## Adapter matrix
 
-Claude and Codex support transcript-backed decision extraction. OpenCode and Antigravity currently provide structured activity only, not decision extraction. Do not infer unsupported capabilities from shared state handling.
+All six adapters (Claude Code, Codex, OpenCode, Antigravity, Pi, DeepSeek Harness) support decision extraction; `src/lib/onboarding.ts` capabilities are the source of truth. No adapter has blocker extraction: project blockers are manual, and regex detector rows show in a separate muted tier that counts nowhere else. Do not infer unsupported capabilities from shared state handling.
 
 ## Read on demand
 
 Read `CLAUDE.md` for detailed landmines and history, `CONTRIBUTING.md` for contribution rules, `docs/ROADMAP.md` for direction, `docs/TESTING.md` for manual coverage, and the relevant approved file in `plans/` before implementation.
+
+## Logic Loop working agreement
+
+- Before substantial work, state the intended result, first action, and how
+  you'll check it's done. If a plan already exists, follow it; don't restate it.
+- Surface consequential choices the user might challenge, one line each:
+  `Assumed: <choice> over <alternative> - <reason>.`
+  Skip routine implementation details. An assumption never replaces required approval.
+- Put questions that need a reply last, as a short numbered list.
+- When work can't proceed: `Blocked: <what> - needs <action, person, or info>.`
+- Report what you verified and how, what's unverified, and whether human
+  review or acceptance is still pending. Never just "done".
+- End any turn that leaves work unfinished with
+  `Next: <one concrete action> (<who>)`. If nothing remains, say so; don't invent work.
+- Plans and the board belong to the user: propose changes to
+  `.logic-loop/board.md`, don't make them.
