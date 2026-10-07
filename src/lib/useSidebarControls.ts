@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getExtractorSettings, getTrafficSeen, readSafeRouterTraffic, setTrafficSeen } from "./repo";
+import { getExtractorSettings, getSidebarLmPinned, getTrafficSeen, readSafeRouterTraffic, setTrafficSeen } from "./repo";
 import { SIDEBAR_CONTROLS_REFRESH, showSidebarLm, showTraffic, type TrafficKind } from "./sidebarControls";
 import type { ExtractorSettings } from "../types";
 
@@ -9,19 +9,22 @@ export function useSidebarControls() {
   const [kind, setKind] = useState<TrafficKind>(null);
   const [seen, setSeen] = useState(false);
   const [lm, setLm] = useState<ExtractorSettings | "error" | null>(null);
+  const [pinned, setPinned] = useState<boolean | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      const [snap, wasSeen, settings] = await Promise.all([
+      const [snap, wasSeen, settings, pin] = await Promise.all([
         readSafeRouterTraffic(),
         getTrafficSeen().catch(() => false),
         getExtractorSettings().catch(() => "error" as const),
+        getSidebarLmPinned().catch(() => null),
       ]);
       if (cancelled) return;
       setKind(snap.kind);
       setSeen(wasSeen);
       setLm(settings);
+      setPinned(pin);
       if (!wasSeen && (snap.kind === "v1" || snap.kind === "ready")) {
         setSeen(true);
         void setTrafficSeen().catch(() => undefined);
@@ -37,5 +40,5 @@ export function useSidebarControls() {
     };
   }, []);
 
-  return { kind, traffic: showTraffic(kind, seen), lm: showSidebarLm(lm) };
+  return { kind, traffic: showTraffic(kind, seen), lm: showSidebarLm(lm, pinned) };
 }

@@ -12,9 +12,12 @@ export function showTraffic(kind: TrafficKind, seen: boolean): boolean {
   return seen || (kind !== null && kind !== "missing");
 }
 
-/** Sidebar LM shows once a local/non-default extractor is configured; an
- * unreadable settings read ("error") keeps it visible; null = not read yet. */
-export function showSidebarLm(settings: ExtractorSettings | "error" | null): boolean {
+/** Sidebar LM: an explicit user choice (`pinned`, from the Setup toggle) wins.
+ * With no choice (null) it shows once a local/non-default extractor is
+ * configured; an unreadable settings read ("error") keeps it visible; null
+ * settings = not read yet. */
+export function showSidebarLm(settings: ExtractorSettings | "error" | null, pinned: boolean | null = null): boolean {
+  if (pinned !== null) return pinned;
   if (settings === null) return false;
   if (settings === "error") return true;
   return settings.backend !== "claude" || settings.claudeModel !== "";

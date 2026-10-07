@@ -1,5 +1,7 @@
 import { SidebarLmControl } from "./SidebarLmControl";
 import { useSidebarControls } from "../lib/useSidebarControls";
+import { SIDEBAR_CONTROLS_REFRESH } from "../lib/sidebarControls";
+import { setSidebarLmPinned } from "../lib/repo";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { open as openFolderDialog } from "@tauri-apps/plugin-dialog";
@@ -423,9 +425,21 @@ export function OnboardingModal({
             <div>
               <div className="text-sm font-medium text-zinc-100">Sidebar LM</div>
               <p className="mt-0.5 text-xs text-zinc-400">
-                Optional. Choose a local or alternate model for decision extraction. The control
-                joins the sidebar header once configured.
+                Optional. Choose a local or alternate model for decision extraction. Show it in
+                the sidebar header to change models without opening Setup.
               </p>
+              <label className="mt-1.5 flex items-center gap-2 text-xs text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={optional.lm}
+                  onChange={() => {
+                    void setSidebarLmPinned(!optional.lm)
+                      .then(() => window.dispatchEvent(new Event(SIDEBAR_CONTROLS_REFRESH)))
+                      .catch(() => undefined);
+                  }}
+                />
+                Show in sidebar
+              </label>
             </div>
             <SidebarLmControl />
           </div>

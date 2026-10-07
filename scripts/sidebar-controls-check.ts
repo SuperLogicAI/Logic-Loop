@@ -21,5 +21,11 @@ assert.equal(showSidebarLm(base), false, "default Claude CLI = not configured");
 assert.equal(showSidebarLm({ ...base, claudeModel: "opus" }), true);
 assert.equal(showSidebarLm({ ...base, backend: "lmstudio" }), true);
 assert.equal(showSidebarLm("error"), true, "Unknown ≠ Absent");
+// Explicit Setup toggle wins in both directions.
+assert.equal(showSidebarLm(base, true), true, "pinned on shows it with default settings");
+assert.equal(showSidebarLm(null, true), true, "pinned on shows it before settings load");
+assert.equal(showSidebarLm({ ...base, backend: "lmstudio" }, false), false, "pinned off hides it even when configured");
+assert.equal(showSidebarLm("error", false), false);
+assert.equal(showSidebarLm(base, null), false, "no choice falls back to the configured rule");
 
 console.log("sidebar-controls-check: all assertions passed");
