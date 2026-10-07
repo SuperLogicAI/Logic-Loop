@@ -7,7 +7,7 @@
   <a href="https://superlogicai.com"><img src="docs/assets/by-super-logic-ai.svg" alt="by Super Logic AI" height="20" valign="middle"></a>
 </h1>
 
-<p align="center"><strong>Keep your place across AI coding projects.</strong></p>
+<p align="center"><strong>Coding agents move fast. Logic Loop helps you keep up. Keep your place across AI coding projects.</strong></p>
 
 <p align="center"><strong>Agents</strong></p>
 
