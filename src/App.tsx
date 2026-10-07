@@ -29,6 +29,8 @@ import { decisionReplyTab } from "./lib/decisionRouting";
 import { initNotifications, notify, requestNotifications } from "./lib/notify";
 import { adapterIdForHook, type AdapterId } from "./lib/onboarding";
 import { IdeaBoard } from "./components/IdeaBoard";
+import { ContextMeter } from "./components/ContextMeter";
+import { claudeContext, codexContext, type ContextUsage } from "./lib/contextMeter";
 import { SidebarControls } from "./components/SidebarControls";
 import { SidePanel } from "./components/SidePanel";
 import type { CodexMeterData, CodexMeterSnapshot } from "./components/CodexUsageBlock";
@@ -232,6 +234,8 @@ export default function App() {
   // Plan 023: latest mirrored Claude statusLine snapshot per session_id. Live
   // gauge state, never persisted to SQLite — overwritten on every rerun.
   const [claudeStatusline, setClaudeStatusline] = useState<Record<string, ClaudeStatuslineSnapshot>>({});
+  // Plan 054: latest Codex token_count per session. Transient, never persisted.
+  const [codexContextBySession, setCodexContextBySession] = useState<Record<string, ContextUsage>>({});
   const [codexMeterBySession, setCodexMeterBySession] = useState<Record<string, CodexMeterSnapshot>>({});
   const codexMeterInFlightRef = useRef(false);
   const codexPollRef = useRef<(() => void) | null>(null);
@@ -1193,6 +1197,8 @@ export default function App() {
 
     void onTranscriptLine((p) => {
       void repo.addEvent(p.session_id, "transcript", p.line).catch(() => undefined);
+      const codexUsage = codexContext(p.line);
+      if (codexUsage) setCodexContextBySession((prev) => ({ ...prev, [p.session_id]: codexUsage }));
       // Plan 053 revision 2: only Codex's structured failed CommandExecution
       // completion qualifies. Prose and successful output never reach detectors.
       const context = sessionContexts.get(p.session_id) ?? { sessionId: p.session_id };
@@ -1523,6 +1529,16 @@ export default function App() {
   }, [markTabLeft]);
 
   const activeTab = tabs.find((t) => t.id === activeId) ?? null;
+  // Plan 054: Codex from rollout token_count; plain Claude (no adapter marker)
+  // from the statusLine wrapper. Anything else shows no meter.
+  const activeSid = activeTab?.sessionId ?? null;
+  const activeContext = !activeSid
+    ? null
+    : activeTab?.agent === "codex"
+      ? codexContextBySession[activeSid] ?? null
+      : !activeTab?.agent
+        ? claudeContext(claudeStatusline[activeSid]?.payload.context_window)
+        : null;
   const codexMeterSession = panelMode === "expanded" && activeTab?.agent === "codex" ? activeTab.sessionId : null;
   useEffect(() => {
     if (!codexMeterSession) { codexPollRef.current = null; return; }
@@ -1752,7 +1768,12 @@ export default function App() {
               );
             })}
           </div>
-          {activeTab && <IdeaBoard cwd={expand(activeTab.cwd)} />}
+          {activeTab && (
+            <IdeaBoard
+              cwd={expand(activeTab.cwd)}
+              trailing={activeContext && <ContextMeter usage={activeContext} agent={activeTab.agent === "codex" ? "Codex" : "Claude"} />}
+            />
+          )}
         </div>
         {surface.kind !== "workspace" && (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">

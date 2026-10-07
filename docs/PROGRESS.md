@@ -938,3 +938,27 @@ Claude reported a nonexistent transcript path, and the tailer went blind
 carry `resumeCwd` from SessionStart / the binding's `cwd`;
 `restartSpawnCwd` (`src/lib/pty.ts`) uses it for resumes only. Gates pass;
 live items 49-52 in docs/TESTING.md pending.
+
+### Phase 54 — Context meter (2026-10-07)
+
+Maintainer wrote `PHASE 54 APPROVED`, decisions 1-4 as recommended. Built on
+`feat/phase-54-context-meter` (Plan 054). A subtle `ctx` bar + percent sits
+right-aligned in the Idea Board's top bar (collapsed and expanded) for the
+active tab. Claude: `emit_statusline` now also forwards the statusLine's
+`context_window`; the meter shows its `used_percentage` (input-only, same as
+`/context`), hidden without the wrapper and while `current_usage` is null
+(before the first response, after `/compact`). Codex: rollout `token_count`
+events already flowing through `onTranscriptLine` give
+`last_token_usage.total_tokens / model_context_window`. Pure parsers in
+`src/lib/contextMeter.ts` read numeric fields only; state is transient (not
+persisted), same precedent as Plan 023. Gates: `context-meter:check`, full
+`npm run check`, `npx tsc --noEmit`, `npm run build` (existing large-chunk
+warning), `cargo test --lib` (162 passed, 1 ignored), clippy `-D warnings`,
+`git diff --check`. Golden not run (prompts unchanged). Awaiting live checks
+(TESTING.md Phase 54, items 53-60) and acceptance.
+
+Live-review follow-up the same day: the meter's text matches the Idea Board
+label size (`text-xs`) and its bar is wider (`w-12` → `w-16`).
+
+Live checks 53-59 passed on the rebuilt app; 60 (amber/red thresholds) not
+reached live, accepted to watch in use. **PHASE 54 ACCEPTED** (2026-10-07).

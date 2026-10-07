@@ -195,6 +195,8 @@ export interface ClaudeStatuslinePayload {
   session_id: string;
   model?: { id?: string; display_name?: string } | string | null;
   rate_limits?: ClaudeRateLimits | null;
+  /** Plan 054: passed through opaquely; validated by `claudeContext`. */
+  context_window?: unknown;
 }
 
 /** Wrapper install state, mirroring Rust's `statusline::StatuslineStatus`. */

@@ -372,7 +372,7 @@ fn header_value(request: &tiny_http::Request, name: &'static str) -> Option<Stri
 /// distinct emit from `/event`'s hook payloads, and never written to the
 /// `events` table — statusLine reruns on nearly every assistant message, and
 /// this is transient per-tab display state, not an append-only fact.
-/// `model`/`rate_limits` are passed through opaquely so a field this server
+/// `model`/`rate_limits`/`context_window` are passed through opaquely so a field this server
 /// doesn't know about still reaches the frontend, which owns display
 /// validation (clamping, missing-field states, staleness).
 fn emit_statusline(app: &AppHandle, payload: serde_json::Value, tab_id: Option<String>) {
@@ -387,6 +387,8 @@ fn emit_statusline(app: &AppHandle, payload: serde_json::Value, tab_id: Option<S
         "session_id": session_id,
         "model": obj.get("model").cloned().unwrap_or(serde_json::Value::Null),
         "rate_limits": obj.get("rate_limits").cloned().unwrap_or(serde_json::Value::Null),
+        // Plan 054: context meter in the Idea Board bar.
+        "context_window": obj.get("context_window").cloned().unwrap_or(serde_json::Value::Null),
     });
     if let Some(key) = project_key {
         out["project_key"] = key.into();

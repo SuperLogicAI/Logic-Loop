@@ -5335,4 +5335,41 @@ binding's `cwd`); Re-enter spawns there. Tab identity (`cwd`) is unchanged.
 Automated: `reentry:check` covers resume vs plain restart vs legacy tab vs
 `~`. Gates: `reentry:check`, `npx tsc --noEmit`, full `npm run check`,
 `npm run build`, `git diff --check`. No Rust change, so cargo not rerun.
-**Items 49-52 unverified live.**
+**Live (2026-10-07, maintainer): re-entry confirmed on Claude and a fresh
+Codex instance after rebuild. Subfolder-specific items 49, 50 and 52 not
+separately reported.**
+
+## Phase 54 — Context meter in the Idea Board bar (2026-10-07)
+
+Plan 054. A `ctx ▬▬▭ N%` meter sits right-aligned in the Idea Board's top
+bar for the active tab. Claude: from the statusLine wrapper's
+`context_window.used_percentage` (wrapper must be enabled). Codex: from the
+rollout's `token_count` event (`last_token_usage.total_tokens /
+model_context_window`). Rebuilt app required (Rust passthrough changed).
+
+53. **Claude matches `/context`** — Claude tab with the usage-meter wrapper
+    enabled; send a prompt. Expected: meter appears after the first response;
+    run `/context` and compare. Within 1 point. Hover shows `Nk / Nk tokens`.
+54. **Claude live update** — send two more prompts that read files. Expected:
+    percent rises after each response without switching tabs.
+55. **Claude `/compact`** — run `/compact`. Expected: meter hides, returns
+    lower after the next response.
+56. **Claude without wrapper** — disable the wrapper in the sidebar, start a
+    new Claude session. Expected: no meter, no placeholder.
+57. **Codex live update** — Codex tab, send two prompts. Expected: meter
+    appears after the first turn and updates per turn. Note the Codex footer's
+    context figure next to ours (Decision 2: switch formula only if the gap is
+    visible).
+58. **Placement** — meter is right-aligned in both the collapsed bar (with and
+    without ★ Now cards) and the expanded board header; clicking it does not
+    toggle the board; long ★ Now titles truncate rather than push it off.
+59. **Tab switching** — switch between a Claude tab, a Codex tab and a plain
+    shell tab. Expected: meter follows the active tab; shell shows none.
+60. **Thresholds** — (if reachable) bar turns amber at 70%, red at 90%.
+
+Automated: `context-meter:check` (both parsers, malformed input, compact,
+fill clamp, token formatting).
+
+**Live (2026-10-07, maintainer, rebuilt app): items 53-59 passed; item 60
+not reached (thresholds unverified live, covered by `context-meter:check`).**
+Codex figure matched closely enough that Decision 2's formula stays.
