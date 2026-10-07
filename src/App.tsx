@@ -58,6 +58,7 @@ import {
   ptyKill,
   ptyKillAll,
   ptySpawn,
+  restartSpawnCwd,
 } from "./lib/pty";
 import { sanitizeSlug } from "./lib/worktree";
 import { isEditableShortcutTarget } from "./lib/shortcuts";
@@ -854,7 +855,7 @@ export default function App() {
     // tab.agent (persisted with the binding for a ghost tab, tracked live
     // otherwise) picks the resume syntax — see pty.rs's resume_command.
     const ptyId = await ptySpawn(
-      tab.cwd === "~" ? null : tab.cwd,
+      restartSpawnCwd(tab, resumeSessionId),
       80,
       24,
       tab.id,
@@ -928,6 +929,7 @@ export default function App() {
         status: "dead",
         sessionId: c.session_id,
         agent: c.agent,
+        resumeCwd: c.cwd || undefined,
       }));
       // Seed the unclaimed flags before activating a tab: claimTab reads the
       // in-memory set, so a result that outlived the last quit is unclaimable
@@ -1052,6 +1054,12 @@ export default function App() {
           );
         }
         if (location) {
+          // Same folder the binding stores, so a mid-run process death
+          // re-enters where the session started, not the project root.
+          // ponytail: SessionStart cwd only; a /clear after the agent cd'd
+          // records the subfolder. Store the launch cwd if that bites.
+          const resumeCwd = location.cwd;
+          setTabs((prev) => prev.map((t) => (t.id === p.tab_id ? { ...t, resumeCwd } : t)));
           const tether = p.tab_id;
           void (replacing ? repo.deactivateSessionBinding(tether) : Promise.resolve())
             .then(() =>
