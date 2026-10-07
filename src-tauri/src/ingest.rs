@@ -646,8 +646,16 @@ fn accepts_synthetic_transcript(agent: Option<&str>) -> bool {
     matches!(agent, Some("opencode" | "pi" | "deepseek"))
 }
 
-const HOOK_EVENTS: [&str; 5] =
-    ["Notification", "Stop", "PostToolUse", "UserPromptSubmit", "SessionStart"];
+/// `PostToolUseFailure` (Plan 053) is Claude Code's separate hook for failed
+/// tool calls; detectors scan only its `error` text, never successful output.
+const HOOK_EVENTS: [&str; 6] = [
+    "Notification",
+    "Stop",
+    "PostToolUse",
+    "PostToolUseFailure",
+    "UserPromptSubmit",
+    "SessionStart",
+];
 
 fn is_ours(entry: &serde_json::Value) -> bool {
     entry["hooks"]
@@ -699,6 +707,8 @@ fn apply_setup(settings: &mut serde_json::Value) -> Result<(), String> {
         });
         if event == "PostToolUse" {
             entry["matcher"] = "*".into();
+        } else if event == "PostToolUseFailure" {
+            entry["matcher"] = "Bash".into();
         }
         hooks
             .entry(event)
@@ -756,17 +766,24 @@ pub fn hooks_remove() -> Result<(), String> {
     write_settings(&settings)
 }
 
-#[tauri::command]
-pub fn hooks_status() -> Result<bool, String> {
-    let settings = read_settings()?;
-    let Some(hooks) = settings.get("hooks").and_then(|h| h.as_object()) else {
-        return Ok(false);
+/// "off" = none of ours, "on" = ours on every `HOOK_EVENTS` event, "partial" =
+/// ours on some but not all (an install from before an event was added; the
+/// UI offers Update, which re-runs the idempotent `hooks_setup`).
+fn hooks_state(settings: &serde_json::Value) -> &'static str {
+    let has_ours = |event: &str| {
+        settings["hooks"][event].as_array().is_some_and(|a| a.iter().any(is_ours))
     };
-    Ok(hooks
-        .values()
-        .filter_map(|v| v.as_array())
-        .flatten()
-        .any(is_ours))
+    let present = HOOK_EVENTS.iter().filter(|e| has_ours(e)).count();
+    match present {
+        0 => "off",
+        n if n == HOOK_EVENTS.len() => "on",
+        _ => "partial",
+    }
+}
+
+#[tauri::command]
+pub fn hooks_status() -> Result<&'static str, String> {
+    Ok(hooks_state(&read_settings()?))
 }
 
 #[cfg(test)]
@@ -1059,12 +1076,39 @@ mod tests {
         assert_eq!(s["hooks"]["Stop"][0]["hooks"][0]["command"], "echo user-owned");
         assert_eq!(s["hooks"]["SessionStart"][0]["hooks"][0]["command"], "caveman-mode");
         assert_eq!(s["model"], "opus");
-        // ours present on all four events
+        // ours present on every event
         for ev in HOOK_EVENTS {
             assert!(s["hooks"][ev].as_array().unwrap().iter().any(is_ours), "{ev} missing");
         }
         assert_eq!(s["hooks"]["Stop"].as_array().unwrap().len(), 2);
         assert_eq!(s["hooks"]["SessionStart"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn failure_hook_registers_with_bash_matcher_and_only_ours() {
+        let mut s = foreign_settings();
+        apply_setup(&mut s).unwrap();
+        assert_eq!(s["hooks"]["PostToolUseFailure"].as_array().unwrap().len(), 1);
+        assert_eq!(s["hooks"]["PostToolUseFailure"][0]["matcher"], "Bash");
+        assert_eq!(s["hooks"]["PostToolUse"][0]["matcher"], "*");
+    }
+
+    #[test]
+    fn hooks_state_reports_off_partial_on_and_update_fixes_partial() {
+        let mut s = foreign_settings();
+        assert_eq!(hooks_state(&s), "off");
+        apply_setup(&mut s).unwrap();
+        assert_eq!(hooks_state(&s), "on");
+        // Old 5-event install: ours everywhere except PostToolUseFailure.
+        s["hooks"].as_object_mut().unwrap().remove("PostToolUseFailure");
+        assert_eq!(hooks_state(&s), "partial");
+        apply_setup(&mut s).unwrap();
+        assert_eq!(hooks_state(&s), "on");
+        for ev in HOOK_EVENTS {
+            let n = s["hooks"][ev].as_array().unwrap().iter().filter(|e| is_ours(e)).count();
+            assert_eq!(n, 1, "{ev}: exactly one of ours after update");
+        }
+        assert_eq!(s["hooks"]["Stop"][0]["hooks"][0]["command"], "echo user-owned");
     }
 
     #[test]

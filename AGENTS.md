@@ -47,7 +47,7 @@ Use `src/lib/repo.ts` for all database access; components contain no inline SQL.
 
 ## Adapter matrix
 
-All six adapters (Claude Code, Codex, OpenCode, Antigravity, Pi, DeepSeek Harness) support decision extraction; `src/lib/onboarding.ts` capabilities are the source of truth. No adapter has blocker extraction: project blockers are manual, and regex detector rows show in a separate muted tier that counts nowhere else. Do not infer unsupported capabilities from shared state handling.
+All six adapters (Claude Code, Codex, OpenCode, Antigravity, Pi, DeepSeek Harness) support decision extraction; `src/lib/onboarding.ts` capabilities are the source of truth. No adapter extracts blockers: they are manual; muted detector rows count nowhere and scan only failed commands (Claude, Codex, OpenCode, Antigravity report them). Do not infer unsupported capabilities from shared state handling.
 
 ## Read on demand
 

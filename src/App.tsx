@@ -23,7 +23,7 @@ import {
   isTerminalResult,
   stateForHook,
 } from "./lib/ingest";
-import { detectBlockers } from "./lib/detectors";
+import { detectBlockers, detectorTextFor, detectorTextForTranscript } from "./lib/detectors";
 import * as decisions from "./lib/decisions";
 import { decisionReplyTab } from "./lib/decisionRouting";
 import { initNotifications, notify, requestNotifications } from "./lib/notify";
@@ -1087,23 +1087,13 @@ export default function App() {
       // unseen; SessionEnd alone is session shutdown, not a new result — it
       // only closes the epoch (via stateForHook), it doesn't land one here.
       const terminalResult = isTerminalResult(p);
+      // Failure-only (Plan 053): detectors see a failed shell command's error
+      // text, never a successful command's output, which is just whatever the
+      // agent read — quoted error strings in source or docs, not real failures.
+      // File-edit tools are deliberately excluded (see detectorTextFor).
+      const detectText = detectorTextFor(p);
+      if (detectText) runDetectors(p.session_id, detectText, sourceContext);
       if (p.hook_event_name === "PostToolUse") {
-        // Scoped to Bash/run_command: Read/Grep/Glob tool_response is file/doc
-        // content, not command output — scanning it flags blockers on error
-        // strings quoted in comments or docs (e.g. this file's own landmine
-        // notes) rather than real failures. run_command is Antigravity's
-        // shell-command tool (Phase 16) — file-edit tools are deliberately
-        // not added here, this gate is for command *output*, not edit content.
-        if (p["tool_name"] === "Bash" || p["tool_name"] === "run_command") {
-          const resp = p["tool_response"];
-          const text =
-            typeof resp === "string"
-              ? resp
-              : resp && typeof resp === "object"
-                ? Object.values(resp).filter((v): v is string => typeof v === "string").join("\n")
-                : "";
-          runDetectors(p.session_id, text, sourceContext);
-        }
         setPanelRefresh((n) => n + 1); // accomplished panel has a new row
       }
 
@@ -1195,9 +1185,11 @@ export default function App() {
 
     void onTranscriptLine((p) => {
       void repo.addEvent(p.session_id, "transcript", p.line).catch(() => undefined);
-      // Blocker detection deliberately skips raw transcript lines (assistant/
-      // user prose, quoted doc content) — PostToolUse's Bash-scoped tool_response
-      // above is the only real-error channel now. See note there.
+      // Plan 053 revision 2: only Codex's structured failed CommandExecution
+      // completion qualifies. Prose and successful output never reach detectors.
+      const context = sessionContexts.get(p.session_id) ?? { sessionId: p.session_id };
+      const detectText = detectorTextForTranscript(p.line, context.agent);
+      if (detectText) runDetectors(p.session_id, detectText, context);
       decisions.onTranscript(
         p.session_id,
         sessionCwd.get(p.session_id),
