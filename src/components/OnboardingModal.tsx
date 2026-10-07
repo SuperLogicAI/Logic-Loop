@@ -410,19 +410,6 @@ export function OnboardingModal({
 
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2.5">
             <div>
-              <div className="text-sm font-medium text-zinc-100">Safe Router traffic</div>
-              <p className="mt-0.5 text-xs text-zinc-400">
-                {optional.kind === "missing" || optional.kind === null
-                  ? "Optional. Not detected. The Traffic control appears in the sidebar once a Safe Router log exists."
-                  : optional.kind === "error"
-                    ? "Detected, but the log could not be read. Traffic stays in the sidebar."
-                    : "Safe Router detected. Traffic is in the sidebar header."}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2.5">
-            <div>
               <div className="text-sm font-medium text-zinc-100">Sidebar LM</div>
               <p className="mt-0.5 text-xs text-zinc-400">
                 Optional. Choose a local or alternate model for decision extraction.
@@ -449,6 +436,19 @@ export function OnboardingModal({
                   <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-zinc-100 transition-transform ${optional.lm ? "translate-x-4" : ""}`} />
                 </button>
               </label>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2.5">
+            <div>
+              <div className="text-sm font-medium text-zinc-100">Safe Router traffic</div>
+              <p className="mt-0.5 text-xs text-zinc-400">
+                {optional.kind === "missing" || optional.kind === null
+                  ? "Optional. Not detected. The Traffic control appears in the sidebar once a Safe Router log exists."
+                  : optional.kind === "error"
+                    ? "Detected, but the log could not be read. Traffic stays in the sidebar."
+                    : "Safe Router detected. Traffic is in the sidebar header."}
+              </p>
             </div>
           </div>
 
