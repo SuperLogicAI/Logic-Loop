@@ -1654,15 +1654,19 @@ export async function listProjectCatalog(): Promise<ProjectCatalogEntry[]> {
 
 /** Every open decision for a project, regardless of which tab/session owns
  * it — SidePanel's `listDecisions` is tab-scoped on purpose; Overview is not. */
-export const openProjectDecisionsSql = (): string =>
-  `SELECT * FROM decisions WHERE cwd = $1 AND status = 'open' AND NOT ${staleDecisionSql()} ORDER BY ts DESC`;
+export const OPEN_PROJECT_DECISIONS_SQL = "SELECT * FROM decisions WHERE cwd = $1 AND status = 'open' ORDER BY ts DESC";
 
+/** Open decisions for a project minus stale ones (Plan 051). The source query
+ * stays the plain, uncapped one (Rust `dashboard_checks` pins it); staleness is
+ * subtracted afterwards so the two concerns stay separate. */
 export async function openDecisionsForProject(cwd: string): Promise<Decision[]> {
   const d = await getDb();
-  return d.select<Decision[]>(
-    openProjectDecisionsSql(),
-    [cwd]
-  );
+  const [open, stale] = await Promise.all([
+    d.select<Decision[]>(OPEN_PROJECT_DECISIONS_SQL, [cwd]),
+    d.select<{ id: number }[]>(`SELECT id FROM decisions WHERE cwd = $1 AND ${staleDecisionSql()}`, [cwd]),
+  ]);
+  const staleIds = new Set(stale.map((r) => r.id));
+  return open.filter((row) => !staleIds.has(row.id));
 }
 
 export interface ProjectSessionRow {

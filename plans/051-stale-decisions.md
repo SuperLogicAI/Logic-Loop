@@ -1,6 +1,6 @@
 # Stale decisions: age-out so "open" means "waiting on you"
 
-Status: **APPROVED 2026-10-06 (`PHASE 51 APPROVED`, defaults confirmed) — built, awaiting live checks and acceptance.**
+Status: **Phase 51 ACCEPTED 2026-10-06 — maintainer wrote the literal PHASE 51 ACCEPTED after live testing.**
 
 Source: docs/IDEAS.md "Stale decisions". Maintainer chose a 14-day threshold on
 2026-10-06 and asked for the recommended combined rule.
@@ -133,3 +133,10 @@ Revisions (stated explicitly; maintainer may object):
 3. **"dismiss stale" in the sidebar is project-wide** (the approved default)
    while the stale list shown there is tab-scoped like the rest of the section;
    the button title says so.
+4. **(CI fix, found after the PR opened)** The first build renamed
+   `OPEN_PROJECT_DECISIONS_SQL`, which the Rust test
+   `dashboard_checks::project_decisions_match_source_open_count_without_a_silent_cap`
+   reads from `repo.ts`; the agent had not run `cargo test` and wrongly claimed
+   Rust was unaffected. The constant is restored unchanged and
+   `openDecisionsForProject` subtracts stale ids afterwards. `stale-decisions:check`
+   uses `node:sqlite`, which needs Node 22.13+, so `ci.yml` moves from Node 20 to 22.

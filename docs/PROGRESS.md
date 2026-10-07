@@ -843,3 +843,12 @@ age + dormant-session rule and the proposed defaults (Plan 051). Built on
 and momentum; collapsed `Stale (N)` group plus project-wide "dismiss stale" in
 the sidebar; count line in Overview. Real profile: 303 of 765 open decisions
 stale. Awaiting live checks (TESTING.md 23-30) and acceptance.
+
+### Phase 51 acceptance — 2026-10-06
+
+Maintainer wrote `PHASE 51 ACCEPTED` after live testing. The first PR build
+failed CI: it renamed a constant a Rust test reads (and the agent had not run
+`cargo test`), and the new check needed Node 22 while CI ran 20. Fixed (constant
+restored, stale ids subtracted in `openDecisionsForProject`; CI to Node 22).
+Full `cargo test --lib` (160 passed, 1 ignored) and clippy now run clean locally.
+Unrun manual scenarios stay disclosed in docs/TESTING.md.
