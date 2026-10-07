@@ -94,6 +94,11 @@ export interface Tab {
   /** Plan 045: the Codex launch that owns `sessionId`, when a registered
    * launch bound it. In memory only — launches die with their PTY. */
   launchId?: string;
+  /** Folder the tab's session started in (its SessionStart cwd, persisted as
+   * the binding's cwd). Re-entry resumes here, not in `cwd`, which is the
+   * project root: Claude keys transcripts by launch folder, so resuming in
+   * the root reports a transcript path that doesn't exist. */
+  resumeCwd?: string;
 }
 
 export interface Blocker {

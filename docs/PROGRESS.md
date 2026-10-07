@@ -927,3 +927,14 @@ Rebuilt-app live checks passed (Claude Update, failure row, no row on
 successful detector-source read, Codex failure/success, hooks off/on). OpenCode
 non-zero stays fixture-only; the ~7/day baseline is a one-week watch.
 **PHASE 53 ACCEPTED** (2026-10-07).
+
+### Hotfix — re-entry launch folder (2026-10-07)
+
+Off-phase, authorized in-session. Ghost tabs restored with `cwd =
+project_key` since Phase 6 (`0ab71be`), and Re-enter spawned `claude
+--resume` there. A session started in a subfolder resumed one level up,
+Claude reported a nonexistent transcript path, and the tailer went blind
+(two NSSA sessions live; read-only DB check, paths and IDs only). Tabs now
+carry `resumeCwd` from SessionStart / the binding's `cwd`;
+`restartSpawnCwd` (`src/lib/pty.ts`) uses it for resumes only. Gates pass;
+live items 49-52 in docs/TESTING.md pending.

@@ -46,6 +46,17 @@ export function ptySpawn(
   });
 }
 
+/** Where a restarted tab spawns: a resume goes back to the session's launch
+ * folder; a plain restart, or a legacy tab with no recorded folder, uses the
+ * tab's own cwd. `~` means "let the shell default", sent as null. */
+export function restartSpawnCwd(
+  tab: { cwd: string; resumeCwd?: string },
+  resumeSessionId?: string
+): string | null {
+  const cwd = resumeSessionId && tab.resumeCwd ? tab.resumeCwd : tab.cwd;
+  return cwd === "~" ? null : cwd;
+}
+
 /** Resolve `~` and case/symlinks to the real path. */
 export function canonicalizeCwd(path: string): Promise<string> {
   return invoke<string>("canonicalize_cwd", { path });

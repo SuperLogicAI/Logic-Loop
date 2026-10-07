@@ -1,6 +1,7 @@
 // Self-check for re-entry's tether-keyed row shaping. Run: npm run reentry:check
 import { strict as assert } from "node:assert";
 import { latestPerTether } from "../src/lib/repo";
+import { restartSpawnCwd } from "../src/lib/pty";
 
 const row = (
   tether: string,
@@ -109,5 +110,15 @@ assert.deepEqual(
   ],
   "legacy or blank presentation must remain absent"
 );
+
+// Re-entry resumes in the session's launch folder, not the project root.
+// Found live 2026-10-07: a Claude session started in <repo>/build was resumed
+// in <repo>, so its hook reported a transcript under the wrong project folder
+// and the tailer went blind.
+const subfolderTab = { cwd: "/Users/x/dev/repo", resumeCwd: "/Users/x/dev/repo/build" };
+assert.equal(restartSpawnCwd(subfolderTab, "s1"), "/Users/x/dev/repo/build", "resume must use the launch folder");
+assert.equal(restartSpawnCwd(subfolderTab), "/Users/x/dev/repo", "a plain restart keeps the tab cwd");
+assert.equal(restartSpawnCwd({ cwd: "/Users/x/dev/repo" }, "s1"), "/Users/x/dev/repo", "legacy tab falls back to tab cwd");
+assert.equal(restartSpawnCwd({ cwd: "~" }, "s1"), null, "~ still means shell default");
 
 console.log("reentry-check: all assertions passed");

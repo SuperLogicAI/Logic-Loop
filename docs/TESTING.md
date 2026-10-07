@@ -5308,3 +5308,31 @@ Revision 2 gates passed: focused `detectors:check`, `opencode:check`, full
 `cargo clippy --all-targets -- -D warnings`, `git diff --check`.
 Initial tsx IPC / Rust local-server sandbox errors passed on permitted
 reruns. Build has the existing large-chunk warning; golden not run.
+
+## Hotfix — re-entry resumes in the session's launch folder (2026-10-07)
+
+Found live: two Claude sessions started in `<repo>/build` were re-entered in
+`<repo>` (ghost tabs restore with `cwd = project_key`). Claude reported a
+transcript path under the parent's project folder that doesn't exist, the
+tailer emitted `tailer-failed`, and the app-wide strip read "no transcript
+for 2 sessions". Fix: tabs carry `resumeCwd` (the SessionStart cwd, also the
+binding's `cwd`); Re-enter spawns there. Tab identity (`cwd`) is unchanged.
+
+49. **Ghost re-entry from a subfolder** — rebuilt app: open a tab at a repo
+    root, `cd` into a subfolder, run `claude`, send one prompt. Quit and
+    relaunch the app, click Re-enter on the ghost tab. Expected: the agent's
+    `! pwd` shows the subfolder; no "no transcript" strip; a decision-bearing
+    reply still produces a card.
+50. **Mid-run death from a subfolder** — same setup without quitting the app:
+    exit Claude so the tab goes dead, click Re-enter. Expected: resumes in the
+    subfolder, no strip.
+51. **Root sessions unchanged** — a session started at the repo root re-enters
+    at the root (regression).
+52. **Missing launch folder** — delete the subfolder before Re-enter. Expected:
+    spawn falls back (shell opens, no crash); the strip may show for that
+    session, which is accurate.
+
+Automated: `reentry:check` covers resume vs plain restart vs legacy tab vs
+`~`. Gates: `reentry:check`, `npx tsc --noEmit`, full `npm run check`,
+`npm run build`, `git diff --check`. No Rust change, so cargo not rerun.
+**Items 49-52 unverified live.**
