@@ -1,6 +1,6 @@
 # Semantic color tokens + hide unused sidebar controls
 
-Status: **APPROVED 2026-10-06 — build in progress; Phase 50 acceptance pending maintainer testing.**
+Status: **Phase 50 ACCEPTED 2026-10-06 — maintainer wrote the literal `PHASE 50 ACCEPTED` after live testing.**
 
 Approved decisions (2026-10-06): role list and hues as proposed; Isolate Loop
 drops orange; Setup keeps a dedicated accent; Sidebar LM hides until a local
