@@ -77,6 +77,31 @@ const loadingReads = (): OverviewReads => ({
   board: { state: "loading" }, agentTime: { state: "loading" }, reentry: { state: "loading" },
 });
 
+/** Plan 051: stale decisions (open, >14 days, dormant session) are left out of
+ * Overview's open list; surface the count here with a one-click dismiss.
+ * Fail open: a failed read renders nothing. */
+function StaleDecisionsNote({ projectKey }: { projectKey: string }) {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    void repo.staleDecisionsForProject(projectKey).then((rows) => { if (!cancelled) setCount(rows.length); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [projectKey]);
+  if (count === 0) return null;
+  return (
+    <div className="flex items-center gap-2 text-xs text-zinc-500">
+      <span>{count} stale decision{count === 1 ? "" : "s"} (older than 14 days, session idle)</span>
+      <button
+        type="button"
+        className="rounded border border-zinc-700 px-2 py-0.5 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-focus-400"
+        onClick={() => void repo.dismissStaleDecisions(projectKey).then(() => setCount(0)).catch(() => undefined)}
+      >
+        Dismiss all stale
+      </button>
+    </div>
+  );
+}
+
 function ReadStatus({ read, label }: { read: ReadState<unknown>; label: string }) {
   if (read.state === "ready") return null;
   return <p role="status" className={`mt-2 text-xs ${read.state === "error" ? "text-attn-400" : "text-zinc-500"}`}>
@@ -455,6 +480,8 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
               </>
             )}
           </section>
+
+          <StaleDecisionsNote projectKey={projectKey} />
 
           <section>
             <div className="flex items-center justify-between">

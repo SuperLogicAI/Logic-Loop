@@ -1513,6 +1513,8 @@ notification policy.
 
 ## Stale decisions: age-out so "open" means "waiting on you"
 
+**Status 2026-10-06: BUILT as Plan 051 / Phase 51 (14 days, age + dormant session). Entry kept for history.**
+
 Surfaced 2026-10-06 reviewing Home. Real profile: 748 open decisions across
 the DB (1,189 dismissed, 279 answered, 16 delegated); single cards show 201
 (NSSA), 97 (Logic Loop), 29, 22, 20. At that size the open count stops being

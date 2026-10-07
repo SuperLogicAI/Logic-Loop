@@ -5178,3 +5178,33 @@ reachable from Setup. Maintainer to decide whether a saved model counts.
     it disappears, including for a user with a configured extractor (explicit
     choice wins). The choice survives an app restart. Before any choice,
     visibility still follows the configured-extractor rule (item 9).
+
+## Phase 51 — Stale decisions (2026-10-06)
+
+Automated: `stale-decisions:check` (predicate against a real in-memory SQLite:
+recent / old+active session / old+dormant / no events / non-open / 14-day
+boundary / re-arms on new activity), `tsc`, `vite build`, full `npm run check`.
+Read-only run against the real profile: 303 stale, 462 open non-stale (765 open
+total at the time). Rust untouched; no extraction prompt changed (golden not
+run). **No rebuilt-app pass by the agent.**
+
+Manual, rebuilt app (real profile):
+23. **Counts drop** — Home header/cards and tab badges fall by roughly the stale
+    count (about 303 total, fewer if some belong to projects without cards);
+    the header total still equals the sum of the card counts.
+24. **Sidebar group** — a project with old decisions shows `Stale (N)` collapsed
+    under Decisions; expand it; answer one and dismiss one (✕), both leave the
+    group; recent decisions stay in the main list.
+25. **Dismiss stale** — "dismiss stale" clears stale decisions for that whole
+    project (Overview's stale line also disappears, per the project-wide
+    default) and leaves recent open decisions untouched.
+26. **"dismiss all" safety** — the Decisions header "dismiss all" no longer
+    dismisses stale rows; they remain in `Stale (N)`.
+27. **Overview** — a project with stale decisions shows
+    `N stale decisions (older than 14 days, session idle)` with Dismiss all
+    stale; a project without any shows no line; Pick up here and Copy update
+    ignore stale decisions.
+28. **Inbox** — stale decisions no longer appear; a recent decision still does.
+29. **Re-arm** — an old decision whose session just produced an event (resume
+    that session and send one prompt) moves back to the normal list.
+30. **Lock-in / rail / min width** — unaffected; no new colors.

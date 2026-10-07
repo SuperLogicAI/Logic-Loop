@@ -25,6 +25,7 @@ import { clampPanelWidth, parsePanelMode, type VisiblePanelMode } from "./panelL
 import { parseLandingNoteMode } from "./landingMode";
 import { projectKeyOf } from "./pty";
 import { resolveHomeStartSurface } from "./dashboard";
+import { staleDecisionSql } from "./staleDecisions";
 
 // The pending load, not the resolved handle: concurrent first callers used to
 // each run Database.load, and tauri-plugin-sql opens a new pool per load (only
@@ -441,7 +442,7 @@ export async function listAttentionEvidence(runId: string): Promise<AttentionEvi
             NULL AS run_id,
             NULL AS observed_state
      FROM decisions
-     WHERE status = 'open'
+     WHERE status = 'open' AND NOT ${staleDecisionSql()}
      UNION ALL
      SELECT 'blocker:' || id,
             'blocker',
@@ -656,7 +657,7 @@ export async function insertDecision(
 export async function listDecisions(cwd: string, tabId: string, sessionId: string | null): Promise<Decision[]> {
   const d = await getDb();
   return d.select<Decision[]>(
-    `SELECT * FROM decisions
+    `SELECT decisions.*, CASE WHEN ${staleDecisionSql()} THEN 1 ELSE 0 END AS stale FROM decisions
      WHERE cwd = $1 AND (tab_id = $2 OR ($3 IS NOT NULL AND session_id = $3))
      ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, ts DESC LIMIT 100`,
     [cwd, tabId, sessionId]
@@ -727,7 +728,7 @@ export function decisionCountForTab(
 export async function openDecisionOwners(): Promise<DecisionOwner[]> {
   const d = await getDb();
   return d.select<DecisionOwner[]>(
-    "SELECT cwd, tab_id, session_id FROM decisions WHERE status = 'open'"
+    `SELECT cwd, tab_id, session_id FROM decisions WHERE status = 'open' AND NOT ${staleDecisionSql()}`
   );
 }
 
@@ -764,10 +765,23 @@ export async function dismissAllDecisions(cwd: string, tabId: string, sessionId:
   const d = await getDb();
   await d.execute(
     `UPDATE decisions SET status = 'dismissed'
-     WHERE cwd = $1 AND status = 'open'
+     WHERE cwd = $1 AND status = 'open' AND NOT ${staleDecisionSql()}
        AND (tab_id = $2 OR ($3 IS NOT NULL AND session_id = $3))`,
     [cwd, tabId, sessionId]
   );
+}
+
+/** Dismiss every stale decision in one project (Plan 051). Same "dismissed"
+ * semantics as the per-row ✕; human-triggered only. */
+export async function dismissStaleDecisions(cwd: string): Promise<void> {
+  const d = await getDb();
+  await d.execute(`UPDATE decisions SET status = 'dismissed' WHERE cwd = $1 AND ${staleDecisionSql()}`, [cwd]);
+}
+
+/** Stale decisions for one project, newest first (Overview count, sidebar group). */
+export async function staleDecisionsForProject(cwd: string): Promise<Decision[]> {
+  const d = await getDb();
+  return d.select<Decision[]>(`SELECT * FROM decisions WHERE cwd = $1 AND ${staleDecisionSql()} ORDER BY ts DESC`, [cwd]);
 }
 
 /** Pure grouping step for the open-decisions list, newest cluster first.
@@ -1642,12 +1656,17 @@ export async function listProjectCatalog(): Promise<ProjectCatalogEntry[]> {
  * it — SidePanel's `listDecisions` is tab-scoped on purpose; Overview is not. */
 export const OPEN_PROJECT_DECISIONS_SQL = "SELECT * FROM decisions WHERE cwd = $1 AND status = 'open' ORDER BY ts DESC";
 
+/** Open decisions for a project minus stale ones (Plan 051). The source query
+ * stays the plain, uncapped one (Rust `dashboard_checks` pins it); staleness is
+ * subtracted afterwards so the two concerns stay separate. */
 export async function openDecisionsForProject(cwd: string): Promise<Decision[]> {
   const d = await getDb();
-  return d.select<Decision[]>(
-    OPEN_PROJECT_DECISIONS_SQL,
-    [cwd]
-  );
+  const [open, stale] = await Promise.all([
+    d.select<Decision[]>(OPEN_PROJECT_DECISIONS_SQL, [cwd]),
+    d.select<{ id: number }[]>(`SELECT id FROM decisions WHERE cwd = $1 AND ${staleDecisionSql()}`, [cwd]),
+  ]);
+  const staleIds = new Set(stale.map((r) => r.id));
+  return open.filter((row) => !staleIds.has(row.id));
 }
 
 export interface ProjectSessionRow {

@@ -833,3 +833,22 @@ and a clearer Home decision-count header. Automated gates pass; manual
 scenarios not run are disclosed in docs/TESTING.md rather than marked tested.
 Parked in docs/IDEAS.md: stale-decisions age-out (748 open decisions in the
 real profile). PR #69.
+
+### Phase 51 — Stale decisions (2026-10-06)
+
+Maintainer wrote `PHASE 51 APPROVED` with a 14-day threshold, the combined
+age + dormant-session rule and the proposed defaults (Plan 051). Built on
+`feat/phase-51-stale-decisions`: derived stale predicate
+(`src/lib/staleDecisions.ts`), excluded from Home counts/badges, Inbox, Overview
+and momentum; collapsed `Stale (N)` group plus project-wide "dismiss stale" in
+the sidebar; count line in Overview. Real profile: 303 of 765 open decisions
+stale. Awaiting live checks (TESTING.md 23-30) and acceptance.
+
+### Phase 51 acceptance — 2026-10-06
+
+Maintainer wrote `PHASE 51 ACCEPTED` after live testing. The first PR build
+failed CI: it renamed a constant a Rust test reads (and the agent had not run
+`cargo test`), and the new check needed Node 22 while CI ran 20. Fixed (constant
+restored, stale ids subtracted in `openDecisionsForProject`; CI to Node 22).
+Full `cargo test --lib` (160 passed, 1 ignored) and clippy now run clean locally.
+Unrun manual scenarios stay disclosed in docs/TESTING.md.
