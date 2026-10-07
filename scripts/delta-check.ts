@@ -1,6 +1,6 @@
 // Self-check for the Phase 14a since-you-left digest. Run: npm run delta:check
 import { strict as assert } from "node:assert";
-import { summarizeDelta, type EventRow } from "../src/lib/delta";
+import { describeDelta, hasDelta, summarizeDelta, type EventRow } from "../src/lib/delta";
 
 const row = (type: string, payload: unknown, ts: number): EventRow => ({
   id: ts,
@@ -55,5 +55,14 @@ assert.equal(empty.bashErrors, 0, "empty input should yield zero bash errors");
 assert.equal(empty.turns, 0, "empty input should yield zero turns");
 assert.equal(empty.stops, 0, "empty input should yield zero stops");
 assert.equal(empty.lastWords, "", "empty input should yield empty lastWords");
+
+// Plan 050 Part C: dashboard card helpers.
+assert.equal(hasDelta(empty), false, "empty delta has nothing to show");
+assert.equal(hasDelta({ ...empty, lastWords: "done" }), true, "last words alone counts");
+assert.equal(describeDelta({ ...empty, lastWords: "done" }), "Agent activity");
+assert.equal(
+  describeDelta({ ...empty, files: ["a", "b"], turns: 1, decisions: [{ id: 1, question: "q", ts: 1 }], bashErrors: 3 }),
+  "2 files · 1 turn · 1 new decision · 3 failed commands"
+);
 
 console.log("delta-check: all assertions passed");

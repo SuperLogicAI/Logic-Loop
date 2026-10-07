@@ -47,10 +47,10 @@ export function DiffModal({ filePath, cwd, onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="flex max-h-[80vh] w-[48rem] max-w-[90vw] flex-col rounded-lg border border-emerald-800/60 bg-zinc-900 p-4 shadow-xl"
+        className="flex max-h-[80vh] w-[48rem] max-w-[90vw] flex-col rounded-lg border border-ok-800/60 bg-zinc-900 p-4 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="font-semibold text-emerald-300">{basename(filePath)}</h3>
+        <h3 className="font-semibold text-ok-300">{basename(filePath)}</h3>
         <p className="mb-2 truncate font-mono text-[10px] text-zinc-600" title={filePath}>
           {filePath}
         </p>

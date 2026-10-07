@@ -61,6 +61,25 @@ Also: all DB access goes through the typed repo layer (`src/lib/repo.ts`) —
 no inline SQL in components. Schema changes are a new numbered migration,
 never an edit to an old one.
 
+## UI colors
+
+Use color roles, never raw Tailwind hues (`text-attn-300`, not `text-amber-300`).
+`npm run color-tokens:check` fails on raw hue classes. Roles live in
+`src/index.css`; Lock-in greys them all with one rule, so a new color needs no
+Lock-in entry.
+
+| Role | Meaning |
+|------|---------|
+| `attn` | needs you, waiting, stale, open decisions |
+| `ok` | done, healthy |
+| `danger` | blocker, error |
+| `info` | neutral interactive, counts, running |
+| `focus` | focus ring only |
+| `setup` | Setup accent |
+
+Feature identity (Isolate Loop, fan-out, re-entry) uses icon, shape or position,
+not a hue. Zinc is the neutral.
+
 ## Adding an agent adapter
 
 The most valuable contribution, and there's a worked path. Each adapter is one

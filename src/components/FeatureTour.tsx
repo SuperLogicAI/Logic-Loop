@@ -246,7 +246,7 @@ export function FeatureTour({ onClose }: Props) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="tour-step-title"
-        className="fixed z-50 rounded-lg border border-sky-500/40 bg-zinc-950 p-3.5 text-xs text-zinc-300 shadow-2xl transition-all duration-200 motion-reduce:transition-none"
+        className="fixed z-50 rounded-lg border border-info-500/40 bg-zinc-950 p-3.5 text-xs text-zinc-300 shadow-2xl transition-all duration-200 motion-reduce:transition-none"
         style={cardStyle(rect, window.innerWidth, window.innerHeight)}
       >
         <div className="mb-2 flex items-center justify-between text-[10px] text-zinc-500">
@@ -283,7 +283,7 @@ export function FeatureTour({ onClose }: Props) {
             ref={nextRef}
             type="button"
             onClick={next}
-            className="ml-auto rounded bg-sky-600 px-3 py-1 font-medium text-white hover:bg-sky-500 focus-visible:outline-2 focus-visible:outline-sky-300"
+            className="ml-auto rounded bg-info-600 px-3 py-1 font-medium text-white hover:bg-info-500 focus-visible:outline-2 focus-visible:outline-focus-300"
           >
             {index + 1 === total ? "Done" : "›"}
           </button>

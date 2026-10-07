@@ -34,7 +34,7 @@ export class DashboardErrorBoundary extends Component<Props, State> {
           <p className="max-w-md text-xs text-zinc-500">{this.state.error.message}</p>
           <button
             type="button"
-            className="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500"
+            className="rounded-md bg-info-600 px-4 py-2 text-sm font-medium text-white hover:bg-info-500"
             onClick={() => {
               this.setState({ error: null });
               this.props.onReturnToWorkspace();

@@ -47,7 +47,7 @@ function WindowBar({ window }: { window: CodexWindow }) {
         <span>{Math.round(used)}% used · {Math.round(100 - used)}% left · resets {reset}</span>
       </div>
       <div className="h-1 w-full overflow-hidden rounded-full bg-zinc-800">
-        <div className={`h-full rounded-full ${used >= 90 ? "bg-red-500" : used >= 70 ? "bg-amber-400" : "bg-sky-500"}`} style={{ width: `${used}%` }} />
+        <div className={`h-full rounded-full ${used >= 90 ? "bg-danger-500" : used >= 70 ? "bg-attn-400" : "bg-info-500"}`} style={{ width: `${used}%` }} />
       </div>
     </div>
   );
@@ -84,8 +84,8 @@ export function CodexUsageBlock({ agent, sessionId, snapshot, now }: {
       </div>
       {!current || current.state === "loading" ? <span className="text-zinc-600">Loading account limits…</span> : null}
       {current?.state === "unavailable" && <span className="text-zinc-600">Account limits unavailable for this authentication.</span>}
-      {current?.state === "error" && !data && <span className="text-amber-400">Could not read account limits.</span>}
-      {(stale || current?.state === "error") && data && <span className="text-amber-400">Last update may be stale.</span>}
+      {current?.state === "error" && !data && <span className="text-attn-400">Could not read account limits.</span>}
+      {(stale || current?.state === "error") && data && <span className="text-attn-400">Last update may be stale.</span>}
       {data?.state === "available" && (data.buckets.length === 0
         ? <span className="text-zinc-600">No account windows returned.</span>
         : <>

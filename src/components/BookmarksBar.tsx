@@ -94,7 +94,7 @@ export function BookmarksBar({ bookmarks, onOpen, onAdd, onUpdate, onDelete, onR
         </button>
 
       {deleteError && (
-        <span className="shrink-0 rounded-full bg-red-950/60 px-2 py-0.5 text-xs text-red-300">
+        <span className="shrink-0 rounded-full bg-danger-950/60 px-2 py-0.5 text-xs text-danger-300">
           Delete failed: {deleteError}
         </span>
       )}
@@ -120,7 +120,7 @@ export function BookmarksBar({ bookmarks, onOpen, onAdd, onUpdate, onDelete, onR
               Edit
             </button>
             <button
-              className="px-4 py-1 text-left text-red-400 hover:bg-zinc-700"
+              className="px-4 py-1 text-left text-danger-400 hover:bg-zinc-700"
               onClick={() => {
                 const id = menu.id;
                 setMenu(null);
@@ -163,7 +163,7 @@ export function BookmarksBar({ bookmarks, onOpen, onAdd, onUpdate, onDelete, onR
               />
             ))}
           </div>
-          {saveError && <p className="max-w-64 break-words text-red-400">{saveError}</p>}
+          {saveError && <p className="max-w-64 break-words text-danger-400">{saveError}</p>}
           <div className="flex justify-end gap-2">
             <button
               className="text-zinc-400 hover:text-zinc-200 disabled:opacity-50"

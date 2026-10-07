@@ -96,7 +96,7 @@ function Bar({ label, window }: { label: string; window: ClaudeRateLimitWindow |
       </div>
       <div className="h-1 w-full overflow-hidden rounded-full bg-zinc-800">
         <div
-          className={`h-full rounded-full ${fill >= 90 ? "bg-red-500" : fill >= 70 ? "bg-amber-400" : "bg-sky-500"}`}
+          className={`h-full rounded-full ${fill >= 90 ? "bg-danger-500" : fill >= 70 ? "bg-attn-400" : "bg-info-500"}`}
           style={{ width: `${fill}%` }}
         />
       </div>
@@ -173,7 +173,7 @@ export function ClaudeUsageBlock({ agent, sessionId, lastEventTs, now, snapshot 
       </div>
 
       {state === "wrapper-not-installed" && status?.state === "foreign" && (
-        <div className="flex flex-col gap-1 rounded border border-sky-900/50 bg-sky-950/20 p-1.5 text-sky-200">
+        <div className="flex flex-col gap-1 rounded border border-info-900/50 bg-info-950/20 p-1.5 text-info-200">
           <span>
             Found your statusLine command: <span className="font-mono">{status.detected_command}</span>
           </span>
@@ -183,7 +183,7 @@ export function ClaudeUsageBlock({ agent, sessionId, lastEventTs, now, snapshot 
           </label>
           <button
             type="button"
-            className="self-start rounded bg-sky-900/40 px-2 py-0.5 text-sky-100 disabled:opacity-40"
+            className="self-start rounded bg-info-900/40 px-2 py-0.5 text-info-100 disabled:opacity-40"
             disabled={!confirmed || busy}
             onClick={() => run(claudeStatuslineSetup, true)}
           >
@@ -205,13 +205,13 @@ export function ClaudeUsageBlock({ agent, sessionId, lastEventTs, now, snapshot 
       )}
       {(state === "available" || state === "stale") && rateLimits && (
         <>
-          {state === "stale" && <span className="text-amber-400">last update may be stale</span>}
+          {state === "stale" && <span className="text-attn-400">last update may be stale</span>}
           <Bar label="Claude · 5h" window={rateLimits.five_hour} />
           <Bar label="Claude · weekly" window={rateLimits.seven_day} />
           {rateLimits.spend_limit && <Bar label="Claude · spend limit" window={rateLimits.spend_limit} />}
         </>
       )}
-      {error && <span className="text-red-400">{error}</span>}
+      {error && <span className="text-danger-400">{error}</span>}
     </div>
   );
 }

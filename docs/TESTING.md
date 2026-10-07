@@ -5086,3 +5086,95 @@ passed. Existing bundle-size warning remains. No golden run.
 Pending rebuild: verify project identity/Notify at narrow/normal widths and
 Codex model/account alignment, additional limits, unavailable/stale states.
 This follow-up has not received a rebuilt-app visual pass by the agent.
+
+## Phase 50 — Semantic color roles + hide unused sidebar controls (2026-10-06)
+
+Automated (agent-run): `tsc --noEmit`, `vite build`, full `npm run check`
+including new `color-tokens:check` (no raw hue classes; Lock-in greys all roles
+via tokens) and `sidebar-controls:check` (visibility predicates). Built CSS
+confirmed: role utilities compile to `var(--color-<role>-N)` and
+`.lock-in-panel` overrides them. Rust untouched. **No rebuilt-app visual pass
+has been done by the agent** — everything below is for the maintainer.
+
+Manual, in the running app:
+1. **Colors, every state** — in expanded sidebar, compact rail, hidden sidebar,
+   and minimum width: blocker (danger), waiting/stale Inbox and open decisions
+   (attn), done (ok), running dot and Inbox count (info), tab/status dots.
+   Compare against the pre-change app: orange and yellow now both render amber;
+   purple (fan-out) and teal (re-entry) now render sky; blue running dot is sky.
+2. **Focus ring** — Tab through sidebar controls and modals; ring is blue and
+   visibly distinct from the sky info accents.
+3. **Setup accent** — Setup pill and Home "Setup" button are teal.
+4. **Isolate Loop** — modal, tab badge, tab glow and "+ Isolate" hover are
+   neutral grey/white, no orange.
+5. **Lock-in** — turn on both indefinite and timed Lock-in: no hue anywhere in
+   the side panel (danger/attn/ok/info all grey); tab strip unchanged.
+6. **Traffic hidden** — with no `~/.safe-router/log.db` and a fresh settings DB
+   (no `traffic_seen`), header shows no Traffic (expanded and compact).
+7. **Traffic shown** — with a log present: Traffic appears, opens the modal.
+   Remove the log afterwards: Traffic stays (seen).
+8. **Traffic unknown** — unreadable/corrupt log: Traffic visible.
+9. **Sidebar LM** — default settings: control hidden; Setup shows the Sidebar
+   LM row with a working button; choosing LM Studio (or a Claude model) makes
+   it appear in the sidebar header without restart; back to default Claude CLI
+   with empty model: it disappears after next focus/refresh.
+10. **Setup rows** — "Safe Router traffic" row text matches the three states.
+11. **Min width** — header row still fits at 192px with all controls shown and
+    with none.
+
+### Phase 50 Part C — Since you left on dashboard cards
+
+Automated: `delta:check` covers `hasDelta` / `describeDelta`; `tsc`, build and
+full `npm run check` pass. **No rebuilt-app visual pass by the agent.**
+
+Manual:
+12. Leave a live session (switch tab away), let the agent do work, return to
+    Home: its project card shows `▸ Since you left · 1 session`; chevron
+    expands a row with title, summary (files/turns/decisions/failed commands)
+    and last words; clicking the row opens that tab.
+13. Two live sessions in one project, both with changes: line says `2 sessions`,
+    both rows listed.
+14. Card with no live tab, a never-left tab, or nothing new: no line.
+15. A just-spawned tab with no bound session yet: skipped (fan-out isolation).
+16. Collapsed by default after every Home visit (not persisted); minimum width
+    keeps the row readable; Lock-in does not matter on Home.
+
+### Phase 50 follow-up — live-review fixes (commit d5acf61)
+
+Found live 2026-10-06. Automated: `tsc`, full `npm run check` (incl.
+`color-tokens:check`, `sidebar-controls:check`) pass. No layout test for the
+popover clamp (pure geometry, needs a real window). **No rebuilt-app visual
+pass by the agent.**
+
+Manual (rebuilt app, not an older install):
+17. **Launcher rest rings** — Fan out has a sky ring and Isolate loop a grey
+    ring at rest; neither is purple or orange. Fan out hover is sky, Isolate
+    hover is light grey.
+18. **Fan-out glow** — a fan-out child tab glows sky and the origin tab's
+    title glows sky; no purple anywhere. A fan-out child still stands out from
+    a split pane's blue border; if not, raise the glow opacity (0.55) first.
+    Isolate loop tab glow is unchanged (neutral).
+19. **Git log grey** — Git log heading, chevron and commit subjects are grey
+    (hash dimmer), in normal and Lock-in. The Commit & Push footer, branch
+    label and "PR opened" link stay blue. Since you left and Notes unchanged.
+20. **Sidebar LM popover** — open it from the Setup modal scrolled so the
+    button is near the bottom: the popover stays fully on screen. Also check
+    a short window, switching backends (popover grows, stays on screen), and
+    scrolling the modal with it open (it follows the button).
+
+Known gap, undecided: Sidebar LM stays hidden when a non-active backend has a
+saved model (e.g. LM Studio model saved, backend still Claude CLI); it is
+reachable from Setup. Maintainer to decide whether a saved model counts.
+21. **Home header copy** — header reads `N projects · T open decisions across P
+    projects`; T equals the sum of the per-card "open decisions" counts shown
+    for every card (scroll to check), P the number of cards with a count.
+    With exactly one such project it reads "1 project".
+22. **Sidebar LM toggle** — Setup > Sidebar LM card shows the bordered
+    "Sidebar LM" pill button with a "Show in sidebar" toggle switch stacked
+    beneath it on the right; the pill reads as a button at rest. Default
+    settings: toggle off, no control in the header. Turn it on:
+    the Sidebar LM control appears in the header (expanded and compact rail)
+    without a restart, and the popover changes the model from there. Turn it off:
+    it disappears, including for a user with a configured extractor (explicit
+    choice wins). The choice survives an app restart. Before any choice,
+    visibility still follows the configured-extractor rule (item 9).

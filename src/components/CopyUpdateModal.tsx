@@ -101,10 +101,10 @@ export function CopyUpdateModal({ data, onClose }: Props) {
             setCopyState("idle");
           }}
           rows={14}
-          className="mt-3 flex-1 resize-none rounded-md border border-zinc-700 bg-zinc-950 p-3 font-mono text-xs text-zinc-200 outline-none focus:border-sky-500"
+          className="mt-3 flex-1 resize-none rounded-md border border-zinc-700 bg-zinc-950 p-3 font-mono text-xs text-zinc-200 outline-none focus:border-info-500"
         />
         {copyState === "failed" && (
-          <p role="alert" className="mt-2 text-[11px] text-red-400">
+          <p role="alert" className="mt-2 text-[11px] text-danger-400">
             Couldn't copy to the clipboard. Select the text and press ⌘C, or try again.
           </p>
         )}
@@ -118,7 +118,7 @@ export function CopyUpdateModal({ data, onClose }: Props) {
           </button>
           <button
             type="button"
-            className="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500"
+            className="rounded-md bg-info-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-info-500"
             onClick={() => void copy()}
           >
             {copyState === "copied" ? "Copied!" : copyState === "failed" ? "Try again" : "Copy"}

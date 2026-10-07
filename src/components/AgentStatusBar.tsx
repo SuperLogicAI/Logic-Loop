@@ -185,11 +185,11 @@ export function AgentStatusBar({
   }, [onSetupClose]);
 
   const hookClass = (enabled: boolean | null, primary = false) =>
-    `flex h-6 shrink-0 items-center rounded-full border border-sky-800/70 px-3 text-xs hover:border-sky-500 focus-visible:border-sky-400 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400 ${
+    `flex h-6 shrink-0 items-center rounded-full border border-setup-800/70 px-3 text-xs hover:border-setup-500 focus-visible:border-setup-400 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-400 ${
       enabled
-        ? "bg-emerald-900 text-emerald-300 hover:bg-emerald-800"
+        ? "bg-ok-900 text-ok-300 hover:bg-ok-800"
         : primary
-          ? "animate-pulse bg-amber-900/60 font-semibold text-amber-300 hover:bg-amber-800/60"
+          ? "animate-pulse bg-attn-900/60 font-semibold text-attn-300 hover:bg-attn-800/60"
           : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
     }`;
 
@@ -199,7 +199,7 @@ export function AgentStatusBar({
         <div className="flex shrink-0 items-center gap-1.5">
           <button
             type="button"
-            className="flex h-7 w-9 shrink-0 items-center justify-center rounded-r-full border border-l-0 border-zinc-700 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-sky-400"
+            className="flex h-7 w-9 shrink-0 items-center justify-center rounded-r-full border border-l-0 border-zinc-700 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-focus-400"
             aria-label={panelMode === "expanded" ? "Collapse project panel" : "Expand project panel"}
             title={panelMode === "expanded" ? "Collapse project panel" : "Expand project panel"}
             onClick={onTogglePanel}
@@ -214,18 +214,18 @@ export function AgentStatusBar({
           >
             {lockInMode === "off" ? (
               <>
-                <button type="button" className="flex h-full w-7 items-center justify-center hover:bg-zinc-800 hover:text-zinc-200 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400" aria-label="Enter Lock-in until manually unlocked" title="Lock in — silence notifications and panel emphasis until manually unlocked" onClick={onLockIn}>
+                <button type="button" className="flex h-full w-7 items-center justify-center hover:bg-zinc-800 hover:text-zinc-200 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-400" aria-label="Enter Lock-in until manually unlocked" title="Lock in — silence notifications and panel emphasis until manually unlocked" onClick={onLockIn}>
                   <PanelIcon name="lock-in" className="h-4 w-4" />
                 </button>
                 <span aria-hidden="true" className="h-4 border-l border-zinc-700" />
-                <button type="button" className="flex h-full w-7 items-center justify-center hover:bg-zinc-800 hover:text-zinc-200 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400" aria-label="Enter Lock-in for 60 minutes" title="Timed Lock-in — silence notifications and panel emphasis for 60 minutes" onClick={onTimedLockIn}>
+                <button type="button" className="flex h-full w-7 items-center justify-center hover:bg-zinc-800 hover:text-zinc-200 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-400" aria-label="Enter Lock-in for 60 minutes" title="Timed Lock-in — silence notifications and panel emphasis for 60 minutes" onClick={onTimedLockIn}>
                   <PanelIcon name="timed-lock" className="h-4 w-4" />
                 </button>
               </>
             ) : (
               <button
                 type="button"
-                className="flex h-full w-8 items-center justify-center bg-zinc-800 text-zinc-200 hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400"
+                className="flex h-full w-8 items-center justify-center bg-zinc-800 text-zinc-200 hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-400"
                 aria-pressed={true}
                 aria-label={lockInMode === "timed" ? "Exit 60-minute Lock-in" : "Exit Lock-in"}
                 title={lockInMode === "timed" ? "Exit 60-minute Lock-in — restore notifications and panel emphasis" : "Exit Lock-in — restore notifications and panel emphasis"}
@@ -243,7 +243,7 @@ export function AgentStatusBar({
                 <button
                   key={orientation}
                   type="button"
-                  className={`flex h-full w-7 items-center justify-center hover:bg-zinc-800 hover:text-zinc-200 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400 disabled:cursor-not-allowed disabled:opacity-40 ${active ? "bg-sky-950/70 text-sky-300" : ""} ${index === 1 ? "border-l border-zinc-700" : ""}`}
+                  className={`flex h-full w-7 items-center justify-center hover:bg-zinc-800 hover:text-zinc-200 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-400 disabled:cursor-not-allowed disabled:opacity-40 ${active ? "bg-info-950/70 text-info-300" : ""} ${index === 1 ? "border-l border-zinc-700" : ""}`}
                   aria-pressed={active}
                   aria-label={active ? "Exit split terminal view" : label}
                   title={active ? "Exit split view and keep the focused terminal" : label}
@@ -258,7 +258,7 @@ export function AgentStatusBar({
           {globalControls}
         </div>
         <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 overflow-x-auto">
-          <button type="button" onClick={() => setSetupOpen(true)} className="flex h-6 shrink-0 items-center rounded-full border border-sky-800/70 hover:border-sky-500 focus-visible:border-sky-400 px-3 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-sky-400">
+          <button type="button" onClick={() => setSetupOpen(true)} className="flex h-6 shrink-0 items-center rounded-full border border-setup-800/70 hover:border-setup-500 focus-visible:border-setup-400 px-3 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-focus-400">
             Setup
           </button>
           {(["antigravity", "claude", "codex", "deepseek", "opencode", "pi"] as const).map((id) => {

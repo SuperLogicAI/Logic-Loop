@@ -1439,3 +1439,99 @@ preserved); `tsc --noEmit`, clippy clean; a manual §-entry in
 new `claude` session in that dir mentions the decision when asked "what
 has been decided here?" → remove import → file stops regenerating → git
 diff shows only the one line removed from CLAUDE.md.
+
+## Hide Traffic / Sidebar LM when unused (sidebar header) — high value, needs a human call
+
+Surfaced 2026-10-05 reviewing Phase 49 (PR #68). `SidebarControls.tsx` renders
+**Sidebar LM · Traffic · Inbox** unconditionally. Traffic only does anything with
+the optional Safe Router installed (README: "Entirely optional: with no Safe
+Router installed, the control simply reports that no log was found"); Sidebar LM
+is a niche local-model control. A new user or outside evaluator sees two dead
+controls beside the one everyone uses (Inbox) in the most prominent spot in the
+app. First-impression cost, small fix.
+
+**Decision needed (maintainer, in front of the app — not decided):**
+- Traffic: hide entirely when no Safe Router log is found, or show only after
+  first detection? Either way keep it reachable from Setup so it stays
+  discoverable ("Safe Router detected" row).
+- Sidebar LM: always visible, hide behind a setting, or hide until the user has
+  configured a local model? Hiding it changes where an existing user finds it.
+- Rail (compact) and hidden-sidebar entries must follow the same rule.
+- Existing users who use Traffic must not lose it silently on upgrade; detection
+  has to be reliable (an unreadable log ≠ no log — Unknown ≠ Absent).
+
+**Sketch of the cheap version:** a `routerDetected` boolean already implied by
+the Traffic modal's "no log found" state, lifted into `SidebarControls` props;
+conditionally render Traffic in expanded and compact modes. No SQL, no Rust
+change if the log-exists check is already a command (verify). UI-only,
+Plan-049-sized (hours). Check `lock-in:check` and `panel-layout:check`, plus the
+live pass at minimum width.
+
+**Not in scope:** removing either feature, changing Safe Router ingestion,
+changing notification policy.
+
+## Semantic color tokens (replace per-feature hues) — needs a human palette call
+
+Surfaced 2026-10-05 reviewing Phase 49 (PR #68). **Likely sprint: same as
+"Hide Traffic / Sidebar LM when unused" (above) — color tokens are the larger
+item, the hide is the small add-on.** Not scheduled; no PLAN.md.
+
+**Problem.** Hues are doing several jobs at once, and the CSS guesses meaning
+from class strings. Raw Tailwind color classes in `src` (2026-10-05): sky ~100,
+red ~50, orange ~48, yellow ~28, emerald ~25, purple ~23, amber ~19.
+- Orange = Isolate Loop identity, stale-Inbox warning, and decision-question text.
+- Sky = focus ring, Setup/hook outline, and Inbox count.
+- `.lock-in-panel` in `src/index.css` neutralizes accents with attribute
+  selectors (`[class*="text-orange-"]`, hand-listed `bg-*` shades). Every new
+  color or shade must be added there by hand or it leaks through Lock-in.
+
+**Proposal (palette is the maintainer's call).**
+1. A few semantic roles as CSS variables, mapped into the Tailwind theme, e.g.
+   `--attn` (needs you), `--ok` (done), `--danger` (blocker), `--info`
+   (neutral interactive), `--focus` (focus ring only), plus one dedicated
+   Setup accent. Components use the role, not the hue.
+2. Lock-in collapses to one rule: re-point the tokens to grey under
+   `.lock-in-panel`; delete the attribute-selector block. New colors then
+   work in Lock-in automatically. Strongest reason to do this.
+3. Hues carry **state** (blocked/waiting/done/stale). Feature identity
+   (Setup, Isolate Loop, Traffic) leans on icon/shape/position instead; Isolate
+   Loop's existing worktree-tab glow already marks the isolated state without
+   borrowing a warning color.
+4. One job per color: `--focus` distinct from any feature accent.
+5. Cap at ~5 roles plus neutrals; document the table in CONTRIBUTING/AGENTS;
+   add a `*:check` script that flags new raw `text-<hue>-NNN` in components.
+
+**Cost.** ~300 class usages plus the Lock-in CSS; UI-only (no SQL/Rust). A
+day or two plus a visual pass, Plan-sized. Cheaper before release than after
+(it becomes a visible restyle for existing users). Needs live review at
+Lock-in, min width, and every state color: do not accept from screenshots.
+
+**Decisions needed:** the role list and exact values; whether Isolate Loop
+drops orange; whether Setup keeps its blue as a dedicated token.
+**Out of scope:** new themes/light mode, changes to state semantics or
+notification policy.
+
+## Stale decisions: age-out so "open" means "waiting on you"
+
+Surfaced 2026-10-06 reviewing Home. Real profile: 748 open decisions across
+the DB (1,189 dismissed, 279 answered, 16 delegated); single cards show 201
+(NSSA), 97 (Logic Loop), 29, 22, 20. At that size the open count stops being
+a signal, and Home's "N open decisions" and the Inbox lose their meaning.
+Bulk-dismiss (Phase 17) exists but is manual; nothing ages decisions out.
+
+**Idea.** A derived "stale" state: an open decision whose session is long
+over and which the project has since moved past (no activity in the session,
+older than N days) is shown separately ("Stale (180)") and excluded from the
+headline/card counts and the Inbox, never auto-dismissed. One-click "dismiss
+all stale" per project. Panels stay dumb SQL views over the append-only
+tables (invariant #3): staleness is computed in the view or ingestion layer,
+not by rewriting rows.
+
+**Decisions needed (maintainer):** the age threshold and whether it is
+per-project or global; whether stale decisions still appear in the sidebar
+list (collapsed) or only on a separate toggle; whether "session ended" or
+"newer decisions exist in the same project" also counts as stale. Check how
+many of the 748 are genuinely recent before choosing, using counts only.
+
+**Not in scope:** auto-dismissing or deleting rows, changing extraction
+(invariant #5), changing what counts as a decision.

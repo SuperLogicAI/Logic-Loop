@@ -124,7 +124,7 @@ function RailButton({
       aria-label={label}
       title={label}
       data-rail-section={section}
-      className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-md hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400 ${className}`}
+      className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-md hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-400 ${className}`}
       onClick={onClick}
     >
       {icon}
@@ -806,13 +806,13 @@ export function SidePanel({
     const stateColor = lockIn
       ? "bg-zinc-500"
       : agentState === "working"
-        ? "bg-blue-400"
+        ? "bg-info-400"
         : agentState === "waiting"
-          ? "bg-yellow-400"
+          ? "bg-attn-400"
           : agentState === "idle"
-            ? "bg-emerald-500"
+            ? "bg-ok-500"
             : agentState === "error"
-              ? "bg-red-500"
+              ? "bg-danger-500"
               : "bg-zinc-600";
     const warningLabel = [
       ...adapterWarnings.map(adapterWarningMessage),
@@ -856,7 +856,7 @@ export function SidePanel({
             section="attention"
             icon={<PanelIcon name="attention" className="h-5 w-5" />}
             count={!lockIn && inboxBadgeEnabled ? attentionCount || undefined : undefined}
-            className={lockIn ? "text-zinc-500" : attentionStale ? "text-orange-300" : attentionCount > 0 ? "text-sky-300" : "text-zinc-600"}
+            className={lockIn ? "text-zinc-500" : attentionStale ? "text-attn-300" : attentionCount > 0 ? "text-info-300" : "text-zinc-600"}
             onClick={onOpenAttention}
           />
           {hasWarnings && (
@@ -864,7 +864,7 @@ export function SidePanel({
               label={`Panel warning: ${warningLabel}`}
               section="warnings"
               icon={<WarningIcon className="h-5 w-5" />}
-              className="text-orange-300"
+              className="text-attn-300"
               onClick={() => onModeChange("expanded")}
             />
           )}
@@ -874,7 +874,7 @@ export function SidePanel({
               label="Since You Left"
               section="since-left"
               icon={<PanelIcon name="since-left" className="h-5 w-5" />}
-              className="text-teal-400"
+              className="text-info-400"
               onClick={() => openRailSection("since-left")}
             />
           )}
@@ -891,7 +891,7 @@ export function SidePanel({
               label={`Fan-out: ${parentGroups.length} group${parentGroups.length === 1 ? "" : "s"}`}
               section="fan-out"
               icon={<PanelIcon name="fan-out" className="h-5 w-5" />}
-              className="text-purple-400"
+              className="text-info-400"
               onClick={() => openRailSection("fan-out")}
             />
           )}
@@ -900,7 +900,7 @@ export function SidePanel({
               label={`Next: ${momentum.label}`}
               section="next"
               icon={<PanelIcon name="next" className="h-5 w-5" rainbow={!lockIn && momentum.label === "landing note"} />}
-              className="text-yellow-300"
+              className="text-attn-300"
               onClick={() => openRailSection("next")}
             />
           )}
@@ -909,7 +909,7 @@ export function SidePanel({
             section="decisions"
             icon={<PanelIcon name="decisions" className="h-[18px] w-[18px]" />}
             count={!lockIn ? openDecisions.length || undefined : undefined}
-            className={openDecisions.length > 0 ? "text-orange-400" : "text-zinc-600"}
+            className={openDecisions.length > 0 ? "text-attn-400" : "text-zinc-600"}
             onClick={() => openRailSection("decisions")}
           />
           <RailButton
@@ -917,7 +917,7 @@ export function SidePanel({
             section="blockers"
             icon={<PanelIcon name="blockers" className="h-5 w-5" />}
             count={!lockIn ? open.length || undefined : undefined}
-            className={open.length > 0 ? "text-red-400" : "text-zinc-600"}
+            className={open.length > 0 ? "text-danger-400" : "text-zinc-600"}
             onClick={() => openRailSection("blockers")}
           />
           <RailButton
@@ -925,7 +925,7 @@ export function SidePanel({
             section="accomplished"
             icon={<PanelIcon name="accomplished" className="h-5 w-5" />}
             count={!lockIn ? unclaimed.length || undefined : undefined}
-            className={unclaimed.length > 0 ? "text-emerald-400" : "text-zinc-600"}
+            className={unclaimed.length > 0 ? "text-ok-400" : "text-zinc-600"}
             onClick={() => openRailSection("accomplished")}
           />
         </div>
@@ -1007,16 +1007,16 @@ export function SidePanel({
       {adapterWarnings.map((w, i) => (
         <p
           key={`${w.agent}-${w.reason}-${i}`}
-          className="flex shrink-0 items-center gap-2 border-b border-orange-400/40 bg-rose-500/10 px-3 py-1.5 text-[10px] text-orange-200"
+          className="flex shrink-0 items-center gap-2 border-b border-attn-400/40 bg-danger-500/10 px-3 py-1.5 text-[10px] text-attn-200"
         >
-          <WarningIcon className="h-7 w-7 shrink-0 text-orange-300" />
+          <WarningIcon className="h-7 w-7 shrink-0 text-attn-300" />
           <span className="min-w-0 flex-1 leading-4">{adapterWarningMessage(w)}</span>
           {w.reason === "transcript_schema_unrecognized" && onRetrySchemaDriftWarning && (
             <button
               type="button"
               onClick={() => onRetrySchemaDriftWarning(w.agent)}
               title="Re-check now — clears this warning; it returns on its own if the schema drift is still there"
-              className="shrink-0 rounded border border-orange-300/50 px-1.5 py-0.5 text-orange-200 hover:bg-orange-400/10 hover:text-orange-100"
+              className="shrink-0 rounded border border-attn-300/50 px-1.5 py-0.5 text-attn-200 hover:bg-attn-400/10 hover:text-attn-100"
             >
               Retry
             </button>
@@ -1026,7 +1026,7 @@ export function SidePanel({
               type="button"
               onClick={() => onDismissAdapterWarning(w.agent, w.reason)}
               aria-label="Dismiss warning"
-              className="shrink-0 px-1 text-orange-300 hover:text-orange-100"
+              className="shrink-0 px-1 text-attn-300 hover:text-attn-100"
             >
               ×
             </button>
@@ -1038,10 +1038,10 @@ export function SidePanel({
           says so rather than looking like a quiet day. */}
       {blindPaths.length > 0 && (
         <p
-          className="flex shrink-0 items-center gap-2 border-b border-orange-400/40 bg-rose-500/10 px-3 py-1.5 text-[10px] text-orange-200"
+          className="flex shrink-0 items-center gap-2 border-b border-attn-400/40 bg-danger-500/10 px-3 py-1.5 text-[10px] text-attn-200"
           title={blindPaths.join("\n")}
         >
-          <WarningIcon className="h-7 w-7 shrink-0 text-orange-300" />
+          <WarningIcon className="h-7 w-7 shrink-0 text-attn-300" />
           <span className="min-w-0 flex-1 leading-4">
             <span className="block">
               no transcript for {blindPaths.length} session{blindPaths.length > 1 ? "s" : ""}
@@ -1053,7 +1053,7 @@ export function SidePanel({
               flat <id>.jsonl, so they warn forever. Detecting them is Phase 6;
               until then, say so here rather than let the strip cry wolf. */}
           <span
-            className="ml-auto flex h-7 w-7 shrink-0 cursor-help items-center justify-center text-xl leading-none text-orange-200/60"
+            className="ml-auto flex h-7 w-7 shrink-0 cursor-help items-center justify-center text-xl leading-none text-attn-200/60"
             title={
               "Expected for Claude Desktop cowork sessions: they send hooks but never write a transcript file, so this warning will not clear.\n\n" +
               "For a Claude Code session it means decisions are genuinely being missed."
@@ -1065,7 +1065,7 @@ export function SidePanel({
       )}
       {childStrip && (
         <p
-          className="flex shrink-0 cursor-pointer items-center gap-1 border-b border-purple-500/20 bg-purple-400/5 px-3 py-1.5 text-[10px] text-purple-300 hover:bg-purple-400/10"
+          className="flex shrink-0 cursor-pointer items-center gap-1 border-b border-info-500/20 bg-info-400/5 px-3 py-1.5 text-[10px] text-info-300 hover:bg-info-400/10"
           onClick={() => onSelectTab(childStrip.parentTabId)}
           title="Jump to the parent tab"
         >
@@ -1080,12 +1080,12 @@ export function SidePanel({
           delta.stops > 0 ||
           delta.decisions.length > 0 ||
           delta.lastWords !== "") && (
-        <section ref={sinceLeftRef} data-tour-target="since-left" className="scroll-mt-3 rounded-lg border border-teal-500/30 bg-teal-400/5 p-3">
+        <section ref={sinceLeftRef} data-tour-target="since-left" className="scroll-mt-3 rounded-lg border border-info-500/30 bg-info-400/5 p-3">
           <h2
-            className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-teal-300 uppercase select-none"
+            className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-info-300 uppercase select-none"
             onClick={() => toggleSection("since-left")}
           >
-            <Chevron collapsed={collapsed.has("since-left")} className="text-teal-300/85" />
+            <Chevron collapsed={collapsed.has("since-left")} className="text-info-300/85" />
             <PanelIcon name="since-left" className="h-4 w-4" />
             Since you left
           </h2>
@@ -1093,32 +1093,32 @@ export function SidePanel({
             (loopIterations ? (
               <ul className="flex flex-col gap-1 text-zinc-300">
                 <li className="flex gap-1.5 text-zinc-500">
-                  <span className="shrink-0 text-teal-500/60">•</span>
+                  <span className="shrink-0 text-info-500/60">•</span>
                   <span>
                     {loopIterations.length} iteration{loopIterations.length === 1 ? "" : "s"} while you were away
                   </span>
                 </li>
                 {loopIterations.flatMap((it) => it.decisions).map((d) => (
-                  <li key={d.id} className="flex gap-1.5 text-orange-300">
-                    <span className="shrink-0 text-teal-500/60">•</span>
+                  <li key={d.id} className="flex gap-1.5 text-attn-300">
+                    <span className="shrink-0 text-info-500/60">•</span>
                     <span>decision opened: {d.question}</span>
                   </li>
                 ))}
                 {collapseNoopRuns(loopIterations).map((line, i) =>
                   line.kind === "noop-run" ? (
                     <li key={i} className="flex gap-1.5 text-zinc-600">
-                      <span className="shrink-0 text-teal-500/60">•</span>
+                      <span className="shrink-0 text-info-500/60">•</span>
                       <span>
                         ×{line.count} no change
                       </span>
                     </li>
                   ) : (
                     <li key={i} className="flex gap-1.5">
-                      <span className="shrink-0 text-teal-500/60">•</span>
+                      <span className="shrink-0 text-info-500/60">•</span>
                       <span>
                         {line.iteration.toolCount} tool{line.iteration.toolCount === 1 ? "" : "s"}
                         {line.iteration.errorCount > 0 && (
-                          <span className="text-red-400"> ({line.iteration.errorCount} failed)</span>
+                          <span className="text-danger-400"> ({line.iteration.errorCount} failed)</span>
                         )}
                         {line.iteration.endTs === null && <span className="text-zinc-500"> · running</span>}
                         {line.iteration.firstAssistantText && (
@@ -1134,7 +1134,7 @@ export function SidePanel({
                 <ul className="flex flex-col gap-1 text-zinc-300">
                   {delta.files.length > 0 && (
                     <li className="flex gap-1.5">
-                      <span className="shrink-0 text-teal-500/60">•</span>
+                      <span className="shrink-0 text-info-500/60">•</span>
                       <span>
                         {delta.files.length} file{delta.files.length === 1 ? "" : "s"} changed:{" "}
                         <span className="text-zinc-400">
@@ -1145,25 +1145,25 @@ export function SidePanel({
                   )}
                   {delta.bashRuns > 0 && (
                     <li className="flex gap-1.5">
-                      <span className="shrink-0 text-teal-500/60">•</span>
+                      <span className="shrink-0 text-info-500/60">•</span>
                       <span>
                         {delta.bashRuns} command{delta.bashRuns === 1 ? "" : "s"} run
                         {delta.bashErrors > 0 && (
-                          <span className="text-red-400"> ({delta.bashErrors} failed)</span>
+                          <span className="text-danger-400"> ({delta.bashErrors} failed)</span>
                         )}
                       </span>
                     </li>
                   )}
                   <li className="flex gap-1.5 text-zinc-500">
-                    <span className="shrink-0 text-teal-500/60">•</span>
+                    <span className="shrink-0 text-info-500/60">•</span>
                     <span>
                       {delta.turns} turn{delta.turns === 1 ? "" : "s"} · {delta.stops} stop
                       {delta.stops === 1 ? "" : "s"}
                     </span>
                   </li>
                   {delta.decisions.length > 0 && (
-                    <li className="flex gap-1.5 text-orange-300">
-                      <span className="shrink-0 text-teal-500/60">•</span>
+                    <li className="flex gap-1.5 text-attn-300">
+                      <span className="shrink-0 text-info-500/60">•</span>
                       <span>
                         {delta.decisions.length} new decision{delta.decisions.length === 1 ? "" : "s"} opened
                       </span>
@@ -1194,7 +1194,7 @@ export function SidePanel({
                 type="button"
                 aria-pressed={landingNoteMode === option}
                 disabled={landingModeSaving}
-                className={`rounded px-1.5 py-0.5 capitalize focus-visible:outline-2 focus-visible:outline-sky-400 disabled:opacity-50 ${
+                className={`rounded px-1.5 py-0.5 capitalize focus-visible:outline-2 focus-visible:outline-focus-400 disabled:opacity-50 ${
                   landingNoteMode === option ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-200"
                 }`}
                 onClick={() => void changeLandingMode(option)}
@@ -1206,7 +1206,7 @@ export function SidePanel({
           <button
             type="button"
             aria-pressed={landingCapture}
-            className="ml-auto rounded border-2 border-transparent px-1.5 py-0.5 text-zinc-200 hover:brightness-125 focus-visible:outline-2 focus-visible:outline-sky-400"
+            className="ml-auto rounded border-2 border-transparent px-1.5 py-0.5 text-zinc-200 hover:brightness-125 focus-visible:outline-2 focus-visible:outline-focus-400"
             style={{
               background: `linear-gradient(#18181b, #18181b) padding-box, ${SUBTLE_RAINBOW_BORDER} border-box`,
             }}
@@ -1215,7 +1215,7 @@ export function SidePanel({
             Set landing note
           </button>
         </div>
-        {landingModeError && <p className="mb-2 text-orange-300">Couldn’t save landing-note mode.</p>}
+        {landingModeError && <p className="mb-2 text-attn-300">Couldn’t save landing-note mode.</p>}
         <div className={`relative ${landingCapture ? "mb-1" : "mb-2"}`}>
           <PanelIcon
             name="leave-note"
@@ -1262,12 +1262,12 @@ export function SidePanel({
       {parentGroups.length > 0 && (
       <div ref={fanOutRef} className="flex scroll-mt-3 flex-col gap-1.5">
       {visibleParentGroups.map((f) => (
-        <section key={f.groupId} className="rounded-lg border border-purple-500/30 bg-purple-400/5 p-3">
+        <section key={f.groupId} className="rounded-lg border border-info-500/30 bg-info-400/5 p-3">
           <h2
-            className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-purple-300 uppercase select-none"
+            className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-info-300 uppercase select-none"
             onClick={() => toggleSection(`fanout-${f.groupId}`)}
           >
-            <Chevron collapsed={collapsed.has(`fanout-${f.groupId}`)} className="text-purple-300/85" />
+            <Chevron collapsed={collapsed.has(`fanout-${f.groupId}`)} className="text-info-300/85" />
             <PanelIcon name="fan-out" className="h-4 w-4" />
             Fan-out
             {f.label && (
@@ -1284,27 +1284,27 @@ export function SidePanel({
               <li
                 key={m.childTabId}
                 className={`flex items-center gap-2 rounded px-1.5 py-1 ${
-                  m.status !== "gone" ? "cursor-pointer hover:bg-purple-500/10" : ""
+                  m.status !== "gone" ? "cursor-pointer hover:bg-info-500/10" : ""
                 }`}
                 onClick={() => m.status !== "gone" && onSelectTab(m.childTabId)}
               >
                 <span
                   className={`h-1.5 w-1.5 shrink-0 rounded-full ${
                     m.status === "flag"
-                      ? "bg-emerald-400 shadow-[0_0_6px_2px_rgba(16,185,129,0.6)]"
+                      ? "bg-ok-400 shadow-[0_0_6px_2px_rgba(16,185,129,0.6)]"
                       : m.status === "done"
-                        ? "bg-emerald-700"
+                        ? "bg-ok-700"
                         : m.status === "dead"
-                          ? "bg-red-500"
+                          ? "bg-danger-500"
                           : m.status === "gone"
                             ? "bg-zinc-700"
-                            : "bg-blue-400"
+                            : "bg-info-400"
                   }`}
                 />
                 <span className="min-w-0 flex-1 truncate text-zinc-300">{m.title}</span>
                 <span className="shrink-0 text-zinc-600">{m.status}</span>
                 <button
-                  className="shrink-0 leading-none text-zinc-600 hover:text-red-400"
+                  className="shrink-0 leading-none text-zinc-600 hover:text-danger-400"
                   title="Remove from group"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1322,7 +1322,7 @@ export function SidePanel({
       ))}
       {parentGroups.length > 1 && (
         <button
-          className="w-full rounded border border-purple-500/10 bg-purple-400/[0.015] py-0.5 text-center text-zinc-500 hover:border-purple-500/27 hover:bg-purple-400/[0.09] hover:text-purple-300/90"
+          className="w-full rounded border border-info-500/10 bg-info-400/[0.015] py-0.5 text-center text-zinc-500 hover:border-info-500/27 hover:bg-info-400/[0.09] hover:text-info-300/90"
           onClick={() => setShowAllFanOut((v) => !v)}
         >
           {showAllFanOut ? "− hide newer fan-outs" : `+ ${parentGroups.length - 1} more fan-out${parentGroups.length - 1 === 1 ? "" : "s"}`}
@@ -1337,7 +1337,7 @@ export function SidePanel({
           className={
             momentum.label === "landing note"
               ? "rounded-lg p-3"
-              : "rounded-lg border border-yellow-500/30 bg-yellow-400/5 p-3"
+              : "rounded-lg border border-attn-500/30 bg-attn-400/5 p-3"
           }
           style={
             !lockIn && momentum.label === "landing note"
@@ -1353,15 +1353,15 @@ export function SidePanel({
               : undefined
           }
         >
-          <h2 className="mb-1 flex items-center gap-1.5 font-semibold tracking-wide text-yellow-300 uppercase">
-            <Chevron collapsed={false} className="text-yellow-300" />
+          <h2 className="mb-1 flex items-center gap-1.5 font-semibold tracking-wide text-attn-300 uppercase">
+            <Chevron collapsed={false} className="text-attn-300" />
             <PanelIcon name="next" className="h-4 w-4" rainbow={!lockIn && momentum.label === "landing note"} /> Next
             <span
               className={`ml-auto font-normal text-[10px] normal-case ${
                 momentum.label === "decision"
-                  ? "text-orange-400"
+                  ? "text-attn-400"
                   : momentum.label === "blocker"
-                    ? "text-red-400"
+                    ? "text-danger-400"
                     : "text-zinc-500"
               }`}
             >
@@ -1371,7 +1371,7 @@ export function SidePanel({
           <p className="mb-2 break-words text-zinc-200">{momentum.text}</p>
           <div className="ml-auto flex w-fit gap-1.5">
             <button
-              className="rounded border border-yellow-400/40 px-2.5 py-1 font-medium text-yellow-300 hover:bg-yellow-400/10"
+              className="rounded border border-attn-400/40 px-2.5 py-1 font-medium text-attn-300 hover:bg-attn-400/10"
               title="Prefill this in the terminal — you still hit Enter"
               onClick={() => onSeedInput(momentum.text)}
             >
@@ -1379,7 +1379,7 @@ export function SidePanel({
             </button>
             <button
               ref={doneRef}
-              className="rounded bg-yellow-400 px-2.5 py-1 font-medium text-zinc-950 hover:bg-yellow-300"
+              className="rounded bg-attn-400 px-2.5 py-1 font-medium text-zinc-950 hover:bg-attn-300"
               onClick={() => void finishMomentum()}
             >
               ✓ Done
@@ -1390,15 +1390,15 @@ export function SidePanel({
 
       <section ref={decisionsRef} data-tour-target="decisions" className="scroll-mt-3">
         <h2
-          className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-orange-400 uppercase select-none"
+          className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-attn-400 uppercase select-none"
           onClick={() => toggleSection("decisions")}
         >
-          <Chevron collapsed={collapsed.has("decisions")} className="text-orange-400/85" />
+          <Chevron collapsed={collapsed.has("decisions")} className="text-attn-400/85" />
           <PanelIcon name="decisions" className="h-3.5 w-3.5" />
           Decisions {openDecisions.length > 0 && `(${openDecisions.length})`}
           {openDecisions.length > 1 && (
             <button
-              className="ml-auto font-normal text-[10px] text-orange-700 normal-case hover:text-orange-400"
+              className="ml-auto font-normal text-[10px] text-attn-700 normal-case hover:text-attn-400"
               title="Dismiss every open decision shown in this tab"
               onClick={(e) => {
                 e.stopPropagation();
@@ -1439,7 +1439,7 @@ export function SidePanel({
                       </span>
                       {g.n > 1 && (
                         <button
-                          className="ml-auto text-yellow-700 hover:text-yellow-400"
+                          className="ml-auto text-attn-700 hover:text-attn-400"
                           title="Dismiss this batch — not real decisions"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1453,26 +1453,26 @@ export function SidePanel({
                     {isExpanded && (
                       <ul className="flex flex-col gap-2">
                         {rows.map((d) => (
-                          <li key={d.id} className="relative rounded border border-yellow-800/60 bg-yellow-950/20 p-2">
+                          <li key={d.id} className="relative rounded border border-attn-800/60 bg-attn-950/20 p-2">
                             <button
-                              className="absolute top-1 right-2 flex h-5 w-5 items-center justify-center rounded focus-visible:outline-2 focus-visible:outline-sky-400 text-yellow-800 hover:text-yellow-500"
+                              className="absolute top-1 right-2 flex h-5 w-5 items-center justify-center rounded focus-visible:outline-2 focus-visible:outline-focus-400 text-attn-800 hover:text-attn-500"
                               title="Dismiss — not a real decision"
                               onClick={() => void setStatus(d, "dismissed")}
                             >
                               ✕
                             </button>
-                            <p className="break-words pr-8 text-orange-300">{d.question}</p>
+                            <p className="break-words pr-8 text-attn-300">{d.question}</p>
                             {d.assumption && (
                               <p className="mt-1 text-zinc-400">agent assumed: {d.assumption}</p>
                             )}
                             <div className="mt-1.5 flex gap-2 text-zinc-400">
-                              <button className="text-red-400 hover:text-red-300" title="Prefill answer in terminal" onClick={() => onAnswerNow(d)}>
+                              <button className="text-danger-400 hover:text-danger-300" title="Prefill answer in terminal" onClick={() => onAnswerNow(d)}>
                                 ✎ answer
                               </button>
-                              <button className="text-yellow-400 hover:text-yellow-300" title="Show surrounding conversation" onClick={() => setContext(d)}>
+                              <button className="text-attn-400 hover:text-attn-300" title="Show surrounding conversation" onClick={() => setContext(d)}>
                                 ⌕ context
                               </button>
-                              <button className="text-green-400 hover:text-green-300" title="Fine — agent's call" onClick={() => void setStatus(d, "delegated")}>
+                              <button className="text-ok-400 hover:text-ok-300" title="Fine — agent's call" onClick={() => void setStatus(d, "delegated")}>
                                 ⤳ delegate
                               </button>
                               <span className="ml-auto text-zinc-600">{ago(d.ts)}</span>
@@ -1500,15 +1500,15 @@ export function SidePanel({
 
       <section ref={blockersRef} data-tour-target="blockers" className="scroll-mt-3">
         <h2
-          className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-red-400 uppercase select-none"
+          className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-danger-400 uppercase select-none"
           onClick={() => toggleSection("blockers")}
         >
-          <Chevron collapsed={collapsed.has("blockers")} className="text-red-400/85" />
+          <Chevron collapsed={collapsed.has("blockers")} className="text-danger-400/85" />
           <PanelIcon name="blockers" className="h-4 w-4" />
           Blockers {open.length > 0 && `(${open.length})`}
           {open.length > 1 && (
             <button
-              className="ml-auto font-normal text-[10px] text-red-700 normal-case hover:text-red-400"
+              className="ml-auto font-normal text-[10px] text-danger-700 normal-case hover:text-danger-400"
               title="Resolve all open blockers"
               onClick={(e) => {
                 e.stopPropagation();
@@ -1533,9 +1533,9 @@ export function SidePanel({
             {open.length === 0 && <p className="text-zinc-600">None open.</p>}
             <ul className="flex flex-col gap-2">
               {open.map((b) => (
-                <li key={b.id} className="relative flex items-start gap-2 rounded border border-red-800/60 bg-red-950/20 p-2 pr-8">
+                <li key={b.id} className="relative flex items-start gap-2 rounded border border-danger-800/60 bg-danger-950/20 p-2 pr-8">
                   <button
-                    className="absolute top-1 right-2 flex h-5 w-5 items-center justify-center rounded focus-visible:outline-2 focus-visible:outline-sky-400 text-red-800 hover:text-red-500"
+                    className="absolute top-1 right-2 flex h-5 w-5 items-center justify-center rounded focus-visible:outline-2 focus-visible:outline-focus-400 text-danger-800 hover:text-danger-500"
                     title="Delete"
                     onClick={() => void remove(b)}
                   >
@@ -1545,14 +1545,14 @@ export function SidePanel({
                     type="checkbox"
                     checked={false}
                     onChange={() => void resolve(b)}
-                    className="mt-0.5 accent-red-500"
+                    className="mt-0.5 accent-danger-500"
                   />
                   <span className="min-w-0 flex-1">
                     {b.source !== "manual" ? (
                       // Detector blockers: human label leads, raw match line below,
                       // clamped to two lines with a ＋ to expand.
                       <>
-                        <span className="break-words text-red-300">
+                        <span className="break-words text-danger-300">
                           {b.source}
                           <button
                             className="ml-1 text-zinc-100 hover:text-white"
@@ -1571,7 +1571,7 @@ export function SidePanel({
                         </p>
                       </>
                     ) : (
-                      <span className="break-words text-red-300">{b.text}</span>
+                      <span className="break-words text-danger-300">{b.text}</span>
                     )}
                     <span className="mt-1.5 block text-right text-zinc-600">{ago(b.ts)}</span>
                   </span>
@@ -1582,7 +1582,7 @@ export function SidePanel({
               <div className="mt-2 border-t border-zinc-800 pt-2">
                 <button type="button" aria-expanded={showClearedBlockers}
                   onClick={() => setShowClearedBlockers((shown) => !shown)}
-                  className="flex w-full items-center gap-1.5 rounded py-1 text-left text-red-400/60 hover:text-red-300 focus-visible:outline-2 focus-visible:outline-sky-400">
+                  className="flex w-full items-center gap-1.5 rounded py-1 text-left text-danger-400/60 hover:text-danger-300 focus-visible:outline-2 focus-visible:outline-focus-400">
                   <Chevron collapsed={!showClearedBlockers} />
                   Cleared Blockers <span className="text-zinc-600">({done.length})</span>
                 </button>
@@ -1605,21 +1605,21 @@ export function SidePanel({
 
       <section ref={accomplishedRef} data-tour-target="accomplished" className="scroll-mt-3">
         <h2
-          className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-emerald-400 uppercase select-none"
+          className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-ok-400 uppercase select-none"
           onClick={() => toggleSection("accomplished")}
         >
-          <Chevron collapsed={collapsed.has("accomplished")} className="text-emerald-400/85" />
+          <Chevron collapsed={collapsed.has("accomplished")} className="text-ok-400/85" />
           <PanelIcon name="accomplished" className="h-4 w-4" />
           Accomplished
         </h2>
         {!collapsed.has("accomplished") && (
           <>
             {unclaimed.length > 0 && (
-              <ul className="mb-1.5 flex flex-col gap-1 border-b border-emerald-800/40 pb-1.5">
+              <ul className="mb-1.5 flex flex-col gap-1 border-b border-ok-800/40 pb-1.5">
                 {(showOlderCompletions ? recentCompletions : recentCompletions.slice(0, 1)).map((u) => (
                   <li key={u.session_id} className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_6px_2px_rgba(16,185,129,0.6)]" />
-                    <span className="flex-1 text-emerald-200">Agent finished, unclaimed</span>
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-ok-400 shadow-[0_0_6px_2px_rgba(16,185,129,0.6)]" />
+                    <span className="flex-1 text-ok-200">Agent finished, unclaimed</span>
                     <span className="text-zinc-600">{ago(u.ts)}</span>
                     <button
                       className="shrink-0 text-zinc-600 hover:text-zinc-200"
@@ -1632,7 +1632,7 @@ export function SidePanel({
                 ))}
                 {recentCompletions.length > 1 && <li>
                   <button type="button" aria-expanded={showOlderCompletions}
-                    className="flex items-center gap-1 rounded py-1 text-zinc-500 hover:text-emerald-300 focus-visible:outline-2 focus-visible:outline-sky-400"
+                    className="flex items-center gap-1 rounded py-1 text-zinc-500 hover:text-ok-300 focus-visible:outline-2 focus-visible:outline-focus-400"
                     onClick={() => setShowOlderCompletions((shown) => !shown)}>
                     <Chevron collapsed={!showOlderCompletions} />
                     {showOlderCompletions ? "Hide older completions" : `${recentCompletions.length - 1} older unclaimed completions`}
@@ -1650,14 +1650,14 @@ export function SidePanel({
                   <span className="min-w-0 flex-1">
                     {e.filePath ? (
                       <button
-                        className="block w-full truncate text-left text-emerald-300 hover:text-emerald-200 hover:underline"
+                        className="block w-full truncate text-left text-ok-300 hover:text-ok-200 hover:underline"
                         title={`Show diff — ${e.plain}`}
                         onClick={() => setDiffPath(e.filePath)}
                       >
                         {e.plain}
                       </button>
                     ) : (
-                      <span className="block truncate text-emerald-300" title={e.plain}>
+                      <span className="block truncate text-ok-300" title={e.plain}>
                         {e.plain}
                       </span>
                     )}
@@ -1684,10 +1684,10 @@ export function SidePanel({
 
       <section ref={gitLogRef} className="scroll-mt-3">
         <h2
-          className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-sky-400 uppercase select-none"
+          className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-zinc-400 uppercase select-none"
           onClick={() => toggleSection("gitlog")}
         >
-          <Chevron collapsed={collapsed.has("gitlog")} className="text-sky-400/85" />
+          <Chevron collapsed={collapsed.has("gitlog")} className="text-zinc-500" />
           <PanelIcon name="github" className="h-4 w-4" />
           Git log
         </h2>
@@ -1698,7 +1698,7 @@ export function SidePanel({
               {(showAllCommits ? commits : commits.slice(0, ROW_CAP)).map((c) => (
                 <li key={c.hash} className="flex gap-2">
                   <span className="w-8 shrink-0 text-right text-zinc-600">{ago(c.ts * 1000)}</span>
-                  <span className="min-w-0 flex-1 truncate text-sky-300" title={c.subject}>
+                  <span className="min-w-0 flex-1 truncate text-zinc-300" title={c.subject}>
                     <span className="font-mono text-zinc-500">{c.hash}</span> {c.subject}
                   </span>
                 </li>
@@ -1721,15 +1721,15 @@ export function SidePanel({
       {context && (
         // top-7 keeps the titlebar drag region reachable under the overlay
         <div className="fixed inset-x-0 top-7 bottom-0 z-30 flex items-center justify-center bg-black/60" onClick={() => setContext(null)}>
-          {/* Same skin as a decision card (border-yellow-800/60 +
-              bg-yellow-950/20), but the modal floats over a translucent
+          {/* Same skin as a decision card (border-attn-800/60 +
+              bg-attn-950/20), but the modal floats over a translucent
               overlay — so the tint is pre-composited against zinc-900 rather
               than layered. Keep in sync with the decision <li> above. */}
           <div
-            className="max-h-[70vh] w-[36rem] max-w-[90vw] overflow-y-auto rounded-lg border border-yellow-800/60 bg-[#201a17] p-4"
+            className="max-h-[70vh] w-[36rem] max-w-[90vw] overflow-y-auto rounded-lg border border-attn-800/60 bg-[#201a17] p-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="mb-2 font-semibold text-orange-300">{context.question}</h3>
+            <h3 className="mb-2 font-semibold text-attn-300">{context.question}</h3>
             {(() => {
               try {
                 const pair = JSON.parse(context.context_json) as { assistant: string; user: string | null };
@@ -1748,7 +1748,7 @@ export function SidePanel({
               }
             })()}
             <button
-              className="mt-3 rounded bg-orange-400 px-3 py-1 font-medium text-zinc-950 hover:bg-orange-300"
+              className="mt-3 rounded bg-attn-400 px-3 py-1 font-medium text-zinc-950 hover:bg-attn-300"
               onClick={() => setContext(null)}
             >
               Close
@@ -1762,9 +1762,9 @@ export function SidePanel({
           branch pill, not a block — and discloses the commit UI only on
           click, so a dirty repo doesn't permanently eat footer space. */}
       {gitBranch !== "" && (
-        <div className="flex shrink-0 flex-col gap-1.5 border-t border-sky-800/40 p-2">
+        <div className="flex shrink-0 flex-col gap-1.5 border-t border-info-800/40 p-2">
           <button
-            className="flex items-center gap-1.5 self-start rounded px-1.5 py-0.5 font-mono text-sky-400/60 hover:bg-zinc-800 hover:text-sky-300 disabled:hover:bg-transparent"
+            className="flex items-center gap-1.5 self-start rounded px-1.5 py-0.5 font-mono text-info-400/60 hover:bg-zinc-800 hover:text-info-300 disabled:hover:bg-transparent"
             disabled={!hasStageable}
             onClick={() => setFooterOpen((o) => !o)}
             title={hasStageable ? "commit + push + PR" : "no changes"}
@@ -1775,12 +1775,12 @@ export function SidePanel({
                 d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
               />
             </svg>
-            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${hasStageable ? "bg-amber-400" : "bg-zinc-700"}`} />
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${hasStageable ? "bg-attn-400" : "bg-zinc-700"}`} />
             {gitBranch}
-            {hasStageable && <Chevron collapsed={!footerOpen} className="text-sky-400/60" />}
+            {hasStageable && <Chevron collapsed={!footerOpen} className="text-info-400/60" />}
           </button>
           {prUrl && (
-            <p className="truncate text-sky-300" title={prUrl}>
+            <p className="truncate text-info-300" title={prUrl}>
               PR opened: <span className="font-mono">{prUrl}</span>
             </p>
           )}
@@ -1794,7 +1794,7 @@ export function SidePanel({
               />
               {untrackedFiles.length > 0 && (
                 <label
-                  className="flex items-start gap-1.5 rounded border border-amber-900/50 bg-amber-950/30 p-1.5 text-amber-300"
+                  className="flex items-start gap-1.5 rounded border border-attn-900/50 bg-attn-950/30 p-1.5 text-attn-300"
                   title={untrackedFiles.join("\n")}
                 >
                   <input
@@ -1810,10 +1810,10 @@ export function SidePanel({
                   </span>
                 </label>
               )}
-              {footerError && <p className="text-red-400">{footerError}</p>}
+              {footerError && <p className="text-danger-400">{footerError}</p>}
               <div className="flex gap-1.5">
                 <button
-                  className="flex-1 rounded bg-sky-900/40 px-2 py-1 font-medium text-sky-200 hover:bg-sky-900/70 disabled:opacity-40"
+                  className="flex-1 rounded bg-info-900/40 px-2 py-1 font-medium text-info-200 hover:bg-info-900/70 disabled:opacity-40"
                   disabled={!commitMsg.trim() || footerBusy !== null}
                   onClick={() => void commitAndPush("branch")}
                 >
@@ -1828,7 +1828,7 @@ export function SidePanel({
                     above. */}
                 {gitBranch === "main" && (
                   <button
-                    className="rounded border border-red-900/60 bg-zinc-950 px-2 py-1 font-medium text-red-200 hover:bg-red-950 disabled:opacity-40"
+                    className="rounded border border-danger-900/60 bg-zinc-950 px-2 py-1 font-medium text-danger-200 hover:bg-danger-950 disabled:opacity-40"
                     disabled={!commitMsg.trim() || footerBusy !== null}
                     onClick={() => void commitAndPush("main")}
                   >

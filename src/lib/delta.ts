@@ -88,3 +88,19 @@ export function summarizeDelta(rows: EventRow[], decisionsSince: DeltaDecision[]
     lastWords: lastAssistantText(rows),
   };
 }
+
+/** Plan 050 Part C: same "anything to show" test the sidebar section uses. */
+export function hasDelta(d: Delta): boolean {
+  return d.files.length > 0 || d.bashRuns > 0 || d.turns > 0 || d.stops > 0 || d.decisions.length > 0 || d.lastWords !== "";
+}
+
+/** One-line deterministic summary for a dashboard card row. */
+export function describeDelta(d: Delta): string {
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  const parts: string[] = [];
+  if (d.files.length > 0) parts.push(plural(d.files.length, "file"));
+  if (d.turns > 0) parts.push(plural(d.turns, "turn"));
+  if (d.decisions.length > 0) parts.push(plural(d.decisions.length, "new decision"));
+  if (d.bashErrors > 0) parts.push(plural(d.bashErrors, "failed command"));
+  return parts.length > 0 ? parts.join(" · ") : "Agent activity";
+}

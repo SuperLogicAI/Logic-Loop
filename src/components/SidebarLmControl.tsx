@@ -2,8 +2,9 @@ import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import { getExtractorSettings, setExtractorSettings } from "../lib/repo";
 import type { ExtractorSettings } from "../types";
+import { SIDEBAR_CONTROLS_REFRESH } from "../lib/sidebarControls";
 
-export function SidebarLmControl({ compact = false }: { compact?: boolean }) {
+export function SidebarLmControl({ compact = false, bordered = false }: { compact?: boolean; bordered?: boolean }) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [position, setPosition] = useState({ top: 0, left: 0 });
@@ -21,13 +22,16 @@ export function SidebarLmControl({ compact = false }: { compact?: boolean }) {
     };
     const reposition = () => {
       const rect = buttonRef.current?.getBoundingClientRect();
-      if (rect) setPosition({ top: rect.bottom + 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - 264)) });
+      // Clamp so the popover never extends below the window (button can sit low in a scrolled modal).
+      const height = popoverRef.current?.offsetHeight ?? 320;
+      if (rect) setPosition({ top: Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - height - 8)), left: Math.max(8, Math.min(rect.left, window.innerWidth - 264)) });
     };
     reposition();
     window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
     window.addEventListener("keydown", close, true);
-    return () => { window.removeEventListener("resize", reposition); window.removeEventListener("keydown", close, true); };
-  }, [showSettings]);
+    return () => { window.removeEventListener("resize", reposition); window.removeEventListener("scroll", reposition, true); window.removeEventListener("keydown", close, true); };
+  }, [showSettings, extractor?.backend]);
 
   useEffect(() => {
     if (!showSettings || !extractor) return;
@@ -41,7 +45,9 @@ export function SidebarLmControl({ compact = false }: { compact?: boolean }) {
 
   const saveExtractor = (settings: ExtractorSettings) => {
     setExtractor(settings);
-    void setExtractorSettings(settings).catch(() => undefined);
+    void setExtractorSettings(settings)
+      .then(() => window.dispatchEvent(new Event(SIDEBAR_CONTROLS_REFRESH)))
+      .catch(() => undefined);
   };
 
   return (
@@ -51,7 +57,7 @@ export function SidebarLmControl({ compact = false }: { compact?: boolean }) {
         aria-label="Sidebar LM settings"
         aria-expanded={showSettings}
         type="button"
-        className={`flex shrink-0 items-center justify-center gap-1 rounded-full text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-400 ${compact ? "h-10 w-10" : "h-7 px-1.5"}`}
+        className={`flex shrink-0 items-center justify-center gap-1 rounded-full text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-400 ${compact ? "h-10 w-10" : bordered ? "h-8 border border-zinc-600 px-3 hover:border-zinc-400" : "h-7 px-1.5"}`}
         onClick={() => setShowSettings((shown) => !shown)}
         title="Choose the model that extracts decisions for the sidebar"
       >
@@ -78,7 +84,7 @@ export function SidebarLmControl({ compact = false }: { compact?: boolean }) {
                 onChange={(event) => saveExtractor({ ...extractor, claudeModel: event.target.value })}
               />
               {extractor.claudeModel && extractor.claudeModel !== "sonnet" && (
-                <span className="text-amber-400">
+                <span className="text-attn-400">
                   Only sonnet is golden-set verified. Haiku missed ~1-in-7 decisions in testing.
                 </span>
               )}

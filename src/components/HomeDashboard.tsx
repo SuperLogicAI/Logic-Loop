@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import * as repo from "../lib/repo";
+import { describeDelta, type Delta } from "../lib/delta";
+import { loadTabDelta } from "../lib/tabDelta";
 import {
   buildProjectCards,
   projectDisplayName,
@@ -89,6 +91,38 @@ export function HomeDashboard({
     };
   }, []);
 
+  // Plan 050 Part C: since-you-left per live, session-bound tab. Re-read only
+  // when the set of such tabs changes, not on every agent-state tick.
+  const [tabDeltas, setTabDeltas] = useState<Map<string, Delta>>(new Map());
+  const deltaTabKey = tabs.filter((t) => t.status === "live" && t.sessionId).map((t) => `${t.id}:${t.sessionId}`).join("|");
+  useEffect(() => {
+    let cancelled = false;
+    const live = tabs.filter((t) => t.status === "live" && t.sessionId);
+    void Promise.all(live.map(async (t) => [t.id, await loadTabDelta(t)] as const)).then((pairs) => {
+      if (cancelled) return;
+      const next = new Map<string, Delta>();
+      for (const [id, delta] of pairs) if (delta) next.set(id, delta);
+      setTabDeltas(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deltaTabKey]);
+
+  const instancesByProject = useMemo(() => {
+    const map = new Map<string, SinceLeftInstance[]>();
+    for (const t of tabs) {
+      const delta = tabDeltas.get(t.id);
+      if (!delta || t.status !== "live") continue;
+      const key = expand(t.cwd);
+      const list = map.get(key) ?? [];
+      list.push({ id: t.id, title: t.title, delta });
+      map.set(key, list);
+    }
+    return map;
+  }, [tabs, tabDeltas, expand]);
+
   const homeTabs: HomeTabSummary[] = useMemo(
     () => tabs.map((t) => ({ projectKey: expand(t.cwd), status: t.status, agentState: t.agentState })),
     [tabs, expand]
@@ -112,6 +146,7 @@ export function HomeDashboard({
   const projectCount = cards.length;
   const workingProjectCount = cards.filter((c) => c.workingCount > 0).length;
   const decisionProjectCount = cards.filter((c) => (decisionCountByProject.get(c.projectKey) ?? 0) > 0).length;
+  const decisionTotal = cards.reduce((sum, c) => sum + (decisionCountByProject.get(c.projectKey) ?? 0), 0);
 
   const filtered = cards.filter((c) => {
     if (filter === "working" && c.workingCount === 0 && c.waitingCount === 0) return false;
@@ -143,7 +178,7 @@ export function HomeDashboard({
             <span>
               {projectCount} project{projectCount === 1 ? "" : "s"}
               {workingProjectCount > 0 ? ` · ${workingProjectCount} with agents working` : ""}
-              {decisionProjectCount > 0 ? ` · ${decisionProjectCount} with open decisions` : ""}
+              {decisionProjectCount > 0 ? ` · ${decisionTotal} open decisions across ${decisionProjectCount} project${decisionProjectCount === 1 ? "" : "s"}` : ""}
             </span>
           )}
           <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -159,7 +194,7 @@ export function HomeDashboard({
                 <option value="home">Home</option><option value="workspace">Last workspace</option>
               </select>
             </label>
-            <button type="button" className="rounded-md border border-sky-800/70 px-2.5 py-1.5 text-xs text-zinc-300 hover:border-sky-500 focus-visible:border-sky-400 focus-visible:outline-2 focus-visible:outline-sky-400" onClick={onOpenSetup}>Setup</button>
+            <button type="button" className="rounded-md border border-setup-800/70 px-2.5 py-1.5 text-xs text-zinc-300 hover:border-setup-500 focus-visible:border-setup-400 focus-visible:outline-2 focus-visible:outline-focus-400" onClick={onOpenSetup}>Setup</button>
             <button type="button" className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300" onClick={onOpenTour}>Tour</button>
             <button
               type="button"
@@ -179,7 +214,7 @@ export function HomeDashboard({
           </div>
         </div>
 
-        {preferenceError && <p role="alert" className="mt-2 text-xs text-amber-400">Couldn't save startup preference. Choose it again to retry.</p>}
+        {preferenceError && <p role="alert" className="mt-2 text-xs text-attn-400">Couldn't save startup preference. Choose it again to retry.</p>}
         {activeTab && (
           <div className="mt-4 flex items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-800/60 px-4 py-3">
             <div className="min-w-0 flex-1">
@@ -188,7 +223,7 @@ export function HomeDashboard({
             </div>
             <button
               type="button"
-              className="shrink-0 rounded-md bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500"
+              className="shrink-0 rounded-md bg-info-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-info-500"
               onClick={() => onContinue(activeTab.id)}
             >
               Continue
@@ -202,7 +237,7 @@ export function HomeDashboard({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search projects…"
             aria-label="Search projects"
-            className="min-w-48 flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-sky-500"
+            className="min-w-48 flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-info-500"
           />
           <div className="flex items-center gap-1" role="tablist" aria-label="Project filters">
             {(Object.keys(FILTER_LABEL) as Filter[]).map((key) => (
@@ -223,7 +258,7 @@ export function HomeDashboard({
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {catalog !== null && visible.length === 0 && (
             <p className="col-span-full py-8 text-center text-sm text-zinc-500">
-              {catalog.length === 0 ? <>No projects yet. <button type="button" className="text-sky-400 hover:text-sky-300" onClick={onOpenSetup}>Choose a folder and start a session</button></> : "No projects match this search."}
+              {catalog.length === 0 ? <>No projects yet. <button type="button" className="text-info-400 hover:text-info-300" onClick={onOpenSetup}>Choose a folder and start a session</button></> : "No projects match this search."}
             </p>
           )}
           {visible.map((card) => (
@@ -233,6 +268,8 @@ export function HomeDashboard({
               displayName={projectDisplayName(card.projectKey, allKeys, card)}
               decisionCount={decisionCountByProject.get(card.projectKey) ?? 0}
               now={now}
+              sinceLeft={instancesByProject.get(card.projectKey) ?? []}
+              onOpenTab={onContinue}
               onOpen={() => onOpenOverview(card.projectKey)}
             />
           ))}
@@ -252,19 +289,30 @@ export function HomeDashboard({
   );
 }
 
+interface SinceLeftInstance {
+  id: string;
+  title: string;
+  delta: Delta;
+}
+
 function ProjectCard({
   card,
   displayName,
   decisionCount,
   now,
+  sinceLeft,
+  onOpenTab,
   onOpen,
 }: {
   card: ProjectCardViewModel;
   displayName: string;
   decisionCount: number;
   now: number;
+  sinceLeft: SinceLeftInstance[];
+  onOpenTab: (tabId: string) => void;
   onOpen: () => void;
 }) {
+  const [sinceOpen, setSinceOpen] = useState(false);
   const statusParts: string[] = [];
   if (card.workingCount > 0) statusParts.push(`${card.workingCount} working`);
   if (card.waitingCount > 0) statusParts.push(`${card.waitingCount} waiting`);
@@ -276,7 +324,7 @@ function ProjectCard({
           {displayName}
         </h3>
         <div className="flex shrink-0 items-center gap-1">
-          {card.pinned && <span className="text-[10px] text-amber-400">pinned</span>}
+          {card.pinned && <span className="text-[10px] text-attn-400">pinned</span>}
           {card.archived && <span className="text-[10px] text-zinc-500">Archived</span>}
         </div>
       </div>
@@ -287,8 +335,38 @@ function ProjectCard({
       </p>
       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-400">
         {statusParts.length > 0 && <span>{statusParts.join(" · ")}</span>}
-        {decisionCount > 0 && <span className="text-orange-400">{decisionCount} open decision{decisionCount === 1 ? "" : "s"}</span>}
+        {decisionCount > 0 && <span className="text-attn-400">{decisionCount} open decision{decisionCount === 1 ? "" : "s"}</span>}
       </div>
+      {sinceLeft.length > 0 && (
+        <div className="mt-2 text-[11px]">
+          <button
+            type="button"
+            aria-expanded={sinceOpen}
+            className="flex w-full items-center gap-1 text-left text-info-300 hover:text-info-200 focus-visible:outline-2 focus-visible:outline-focus-400"
+            onClick={() => setSinceOpen((open) => !open)}
+          >
+            <span aria-hidden="true">{sinceOpen ? "▾" : "▸"}</span>
+            Since you left · {sinceLeft.length} session{sinceLeft.length === 1 ? "" : "s"}
+          </button>
+          {sinceOpen && (
+            <ul className="mt-1 flex flex-col gap-1">
+              {sinceLeft.map((inst) => (
+                <li key={inst.id}>
+                  <button
+                    type="button"
+                    className="w-full rounded px-1.5 py-1 text-left text-zinc-300 hover:bg-zinc-700/60 focus-visible:outline-2 focus-visible:outline-focus-400"
+                    onClick={() => onOpenTab(inst.id)}
+                  >
+                    <span className="block truncate text-zinc-200">{inst.title}</span>
+                    <span className="block text-zinc-400">{describeDelta(inst.delta)}</span>
+                    {inst.delta.lastWords && <span className="line-clamp-1 block text-zinc-500">{inst.delta.lastWords}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       <button
         type="button"
         aria-label={`Open ${displayName} overview`}

@@ -142,7 +142,7 @@ export function Terminal({ tab, visible, focused, paneOrder, splitOrientation, o
         focused && paneOrder >= 0
           ? "ring-[1.5px] ring-inset ring-white"
           : visible && paneOrder >= 0
-            ? "ring-2 ring-inset ring-sky-700"
+            ? "ring-2 ring-inset ring-info-700"
             : ""
       } ${visible && paneOrder === 1 ? splitOrientation === "vertical" ? "border-t border-zinc-700" : "border-l border-zinc-700" : ""}`}
       style={{ display: visible ? "block" : "none", order: paneOrder }}

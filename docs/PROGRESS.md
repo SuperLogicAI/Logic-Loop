@@ -820,3 +820,16 @@ scrollbar and dismiss spacing, collapsed cleared blockers, compact completion
 notices, blue Setup/hooks and orange Isolate Loop identity. Automated gates
 pass. Previously unrun manual scenarios remain disclosed rather than marked
 tested. Maintainer authorized opening a PR for the complete UI overhaul.
+
+### Phase 50 acceptance — 2026-10-06
+
+Maintainer wrote `PHASE 50 ACCEPTED` after live testing. Delivered Plan 050:
+semantic color roles (Part A, incl. inline-RGB launcher rings and fan-out
+glows missed by the first pass, now sky/neutral; Git log neutral grey),
+Traffic and Sidebar LM hidden until usable (Part B) with an explicit
+"Show in sidebar" toggle on the Setup Sidebar LM card (`sidebar_lm_pinned`),
+Since-you-left on Home cards (Part C), a Sidebar LM popover viewport clamp,
+and a clearer Home decision-count header. Automated gates pass; manual
+scenarios not run are disclosed in docs/TESTING.md rather than marked tested.
+Parked in docs/IDEAS.md: stale-decisions age-out (748 open decisions in the
+real profile). PR #69.

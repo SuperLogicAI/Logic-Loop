@@ -79,7 +79,7 @@ const loadingReads = (): OverviewReads => ({
 
 function ReadStatus({ read, label }: { read: ReadState<unknown>; label: string }) {
   if (read.state === "ready") return null;
-  return <p role="status" className={`mt-2 text-xs ${read.state === "error" ? "text-amber-400" : "text-zinc-500"}`}>
+  return <p role="status" className={`mt-2 text-xs ${read.state === "error" ? "text-attn-400" : "text-zinc-500"}`}>
     {read.state === "loading" ? `Loading ${label}…` : read.reason === "timeout"
       ? `${label} took too long. Retry to check again.` : `Couldn't load ${label}. Retry to check again.`}
   </p>;
@@ -289,7 +289,7 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
               ) : workspaceChoices.length === 1 ? (
                 <button
                   type="button"
-                  className="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500"
+                  className="rounded-md bg-info-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-info-500"
                   onClick={() => onContinueTab(workspaceChoices[0].id)}
                 >
                   Continue
@@ -311,7 +311,7 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
                   {startingSession ? "Starting…" : "New session tab"}
                 </button>
               )}
-              {sessionError && <p role="alert" className="text-xs text-orange-400">Could not start a session. Try again.</p>}
+              {sessionError && <p role="alert" className="text-xs text-attn-400">Could not start a session. Try again.</p>}
             </div>
             <button
               type="button"
@@ -362,13 +362,13 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
                 if (e.key === "Enter") { e.preventDefault(); void saveNickname(); }
                 if (e.key === "Escape" && !savingNickname) { e.stopPropagation(); setEditingNickname(false); }
               }}
-              className="w-full max-w-md rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 focus:border-sky-500" />
-            <button type="button" disabled={savingNickname} className="text-xs text-sky-400" onClick={() => void saveNickname()}>Save name</button>
+              className="w-full max-w-md rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 focus:border-info-500" />
+            <button type="button" disabled={savingNickname} className="text-xs text-info-400" onClick={() => void saveNickname()}>Save name</button>
             <button type="button" disabled={savingNickname} className="text-xs text-zinc-400" onClick={() => setEditingNickname(false)}>Cancel</button>
-            {nicknameError && <p role="alert" className="text-xs text-orange-400">Could not save the name. Try again.</p>}
+            {nicknameError && <p role="alert" className="text-xs text-attn-400">Could not save the name. Try again.</p>}
           </div>
         ) : (
-          <button type="button" disabled={reads.catalog.state !== "ready"} className="mt-1 text-xs text-sky-400"
+          <button type="button" disabled={reads.catalog.state !== "ready"} className="mt-1 text-xs text-info-400"
             onClick={() => { setNicknameDraft(data.catalog?.nickname ?? ""); setNicknameError(false); setEditingNickname(true); }}>
             {data.catalog?.nickname ? "Edit project name" : "Add project nickname"}
           </button>
@@ -383,9 +383,9 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
                 if (e.key === "Enter") void savePurpose();
                 if (e.key === "Escape") setEditingPurpose(false);
               }}
-              className="w-full max-w-md rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-sky-500"
+              className="w-full max-w-md rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-info-500"
             />
-            <button type="button" className="text-xs text-sky-400" onClick={() => void savePurpose()}>
+            <button type="button" className="text-xs text-info-400" onClick={() => void savePurpose()}>
               Save
             </button>
           </div>
@@ -402,7 +402,7 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
           </button>
         )}
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          <button type="button" className="text-xs text-sky-400 hover:text-sky-300" onClick={() => setRefresh((n) => n + 1)}>Refresh / Retry</button>
+          <button type="button" className="text-xs text-info-400 hover:text-info-300" onClick={() => setRefresh((n) => n + 1)}>Refresh / Retry</button>
           {!copyReady && <p role="status" className="text-xs text-zinc-500">Copy update is waiting for decisions, blockers, session activity, commits and your landing note. Retry unavailable sources.</p>}
         </div>
         <ReadStatus read={reads.catalog} label="project details" />
@@ -428,7 +428,7 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
                       type="button"
                       disabled={!item.route.tabId}
                       aria-describedby={`needs-choice-${i}`}
-                      className="mt-1.5 text-[11px] text-sky-400 hover:text-sky-300 disabled:text-zinc-600"
+                      className="mt-1.5 text-[11px] text-info-400 hover:text-info-300 disabled:text-zinc-600"
                       onClick={() => item.route.tabId && onContinueTab(item.route.tabId)}
                     >
                       {item.route.tabId ? "Go to workspace" : "Destination unavailable"}
