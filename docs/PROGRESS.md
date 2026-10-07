@@ -852,3 +852,36 @@ failed CI: it renamed a constant a Rust test reads (and the agent had not run
 restored, stale ids subtracted in `openDecisionsForProject`; CI to Node 22).
 Full `cargo test --lib` (160 passed, 1 ignored) and clippy now run clean locally.
 Unrun manual scenarios stay disclosed in docs/TESTING.md.
+
+### Phase 52 — Next order, two-tier Blockers, working agreement (2026-10-07)
+
+Maintainer wrote `PHASE 52 APPROVED` with all plan defaults except the
+Detected tier, which starts with every row shown (Plan 052). Built on
+`feat/phase-52-next-blockers`: Next cascade is now landing note, Now card,
+oldest decision, unstarred planned card, with blockers removed; planned
+picks say Start; landing picks show their age. Blockers split into project
+blockers (manual, red cards, counted) and a muted Accomplished-style
+Detected tier (regex rows, counted nowhere else, promote/clear). AGENTS.md
+adapter matrix corrected and the working agreement added (cap raised to
+4,096 bytes by maintainer decision); the local, gitignored CLAUDE.md imports
+AGENTS.md and points to this file for phase status (fresh clones have no
+CLAUDE.md, so Claude reads AGENTS.md directly); README extraction claims
+corrected. Gates:
+`tsc`, full `npm run check`, `vite build`, `cargo test --lib` (160 passed, 1
+ignored), clippy, `git diff --check`. Awaiting live checks (TESTING.md
+Phase 52, items 31-40) and acceptance. The 2-week working-agreement trial
+starts at merge (baseline in Plan 052).
+
+Live-review follow-ups the same day (Plan 052 revisions 7-9): Detected
+collapses to the newest 5 with `＋N`; Detected header, "clear detected" and
+row labels tinted to match Blockers; promoted cards keep the label-over-
+detail layout (`source = 'promoted:<label>'`). Gates re-run green.
+
+### Phase 52 acceptance — 2026-10-07
+
+Maintainer wrote `PHASE 52 ACCEPTED` after reviewing the rebuilt app,
+including the revision 7-9 follow-ups ("This is beautiful!"). Individual
+TESTING.md Phase 52 items were not reported one by one, so they stay
+unmarked rather than recorded as tested. The working-agreement trial starts
+at merge, with landing mode switched to Auto; reviews at +7 and +14 days
+against the baseline in Plan 052.

@@ -181,9 +181,13 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
     const read = reads[key];
     return read.state === "ready" ? read.value : undefined;
   };
+  // Plan 052: the read returns every open row; only project blockers feed
+  // Needs a choice and Copy update, detector rows are just a count line.
+  const allOpenBlockers = value("openBlockers") ?? [];
+  const detectedCount = allOpenBlockers.filter((b) => !repo.isProjectBlocker(b)).length;
   const data = {
     catalog: value("catalog"), openDecisions: value("openDecisions") ?? [],
-    openBlockers: value("openBlockers") ?? [], landing: value("landing") ?? null,
+    openBlockers: allOpenBlockers.filter(repo.isProjectBlocker), landing: value("landing") ?? null,
     workLog: value("workLog") ?? [], commits: value("commits") ?? [],
     board: value("board"), agentTime: value("agentTime"),
   };
@@ -254,13 +258,11 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
     ? computeMomentum({
         landing: data.landing,
         decisions: data.openDecisions,
-        blockers: data.openBlockers,
         plannedCard: (data.board?.cards ?? []).find((c) => c.now) ?? (data.board?.cards ?? []).find((c) => c.status === "planned") ?? null,
         // Read-only: Overview never calls any of these. computeMomentum needs
         // the shape; nothing wires a "done" control to them here.
         onLandingDone: async () => undefined,
         onDecisionDone: async () => undefined,
-        onBlockerDone: async () => undefined,
         onPlannedCardDone: async () => undefined,
       })
     : null;
@@ -351,9 +353,9 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
                   commits: data.commits,
                   openDecisions: data.openDecisions,
                   openBlockers: data.openBlockers,
-                  nextStep: computeMomentum({ landing: data.landing, decisions: data.openDecisions, blockers: data.openBlockers, plannedCard: null,
+                  nextStep: computeMomentum({ landing: data.landing, decisions: data.openDecisions, plannedCard: null,
                     onLandingDone: async () => undefined, onDecisionDone: async () => undefined,
-                    onBlockerDone: async () => undefined, onPlannedCardDone: async () => undefined })?.text ?? null,
+                    onPlannedCardDone: async () => undefined })?.text ?? null,
                 })
               }
             >
@@ -461,6 +463,11 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
                   </li>
                 ))}
               </ul>
+            )}
+            {detectedCount > 0 && (
+              <p className="mt-2 text-[11px] text-zinc-600">
+                {detectedCount} detected tool {detectedCount === 1 ? "error" : "errors"} (in the workspace Blockers panel)
+              </p>
             )}
           </section>
 

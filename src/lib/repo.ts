@@ -458,7 +458,7 @@ export async function listAttentionEvidence(runId: string): Promise<AttentionEvi
             NULL,
             NULL
      FROM blockers
-     WHERE resolved = 0
+     WHERE resolved = 0 AND ${PROJECT_BLOCKER_SQL}
      UNION ALL
      SELECT 'result:' || id,
             'result',
@@ -546,6 +546,28 @@ export async function listAttentionEvidence(runId: string): Promise<AttentionEvi
   }));
 }
 
+/** Plan 052: project blockers are the ones a human states — typed
+ * (`manual`) or promoted from a detector row (`promoted:<label>`; later
+ * also an agent's extraction). Detector rows are keyword hits on tool
+ * output and render in their own muted tier, counted nowhere else. SQL and
+ * TS forms must agree — widen both together. */
+const PROMOTED_PREFIX = "promoted:";
+export const PROJECT_BLOCKER_SQL = `(source = 'manual' OR source LIKE '${PROMOTED_PREFIX}%')`;
+export const isProjectBlocker = (b: Pick<Blocker, "source">): boolean =>
+  b.source === "manual" || b.source.startsWith(PROMOTED_PREFIX);
+
+/** A promoted row's detector label and matched text, for the card's
+ * label-over-detail layout; null for every other row. The stored text keeps
+ * its `<label>: ` prefix so plain-text readers (Inbox, Overview, Copy
+ * update, Cleared) still show the category without knowing about this. */
+export function promotedParts(b: Pick<Blocker, "source" | "text">): { label: string; detail: string } | null {
+  if (!b.source.startsWith(PROMOTED_PREFIX)) return null;
+  const label = b.source.slice(PROMOTED_PREFIX.length);
+  const prefix = `${label}: `;
+  return { label, detail: b.text.startsWith(prefix) ? b.text.slice(prefix.length) : b.text };
+}
+
+/** All rows, both tiers; callers split with `isProjectBlocker`. */
 export async function listBlockers(cwd: string): Promise<Blocker[]> {
   const d = await getDb();
   return d.select<Blocker[]>(
@@ -592,10 +614,30 @@ export async function setBlockerResolved(id: number, resolved: boolean): Promise
   await d.execute("UPDATE blockers SET resolved = $1 WHERE id = $2", [resolved ? 1 : 0, id]);
 }
 
-/** Resolve every open blocker for one project while preserving blocker history. */
+/** Resolve every open project blocker for one project while preserving
+ * blocker history. Detected rows are left for `resolveDetectedBlockers`. */
 export async function resolveAllBlockers(cwd: string): Promise<void> {
   const d = await getDb();
-  await d.execute("UPDATE blockers SET resolved = 1 WHERE cwd = $1 AND resolved = 0", [cwd]);
+  await d.execute(`UPDATE blockers SET resolved = 1 WHERE cwd = $1 AND resolved = 0 AND ${PROJECT_BLOCKER_SQL}`, [cwd]);
+}
+
+/** Resolve every open detector row for one project; project blockers stay. */
+export async function resolveDetectedBlockers(cwd: string): Promise<void> {
+  const d = await getDb();
+  await d.execute(`UPDATE blockers SET resolved = 1 WHERE cwd = $1 AND resolved = 0 AND NOT ${PROJECT_BLOCKER_SQL}`, [cwd]);
+}
+
+/** Human confirms a detector row is a real blocker: add it as a project
+ * blocker (`promoted:<label>`, keeping its session provenance; dedupes like
+ * a detector row) and resolve the detected row. */
+export async function promoteBlocker(b: Blocker): Promise<void> {
+  await addBlocker(b.cwd, `${b.source}: ${b.text}`, `${PROMOTED_PREFIX}${b.source}`, {
+    sessionId: b.session_id ?? undefined,
+    tabId: b.tab_id ?? undefined,
+    agent: b.agent ?? undefined,
+    actorId: b.actor_id ?? undefined,
+  });
+  await setBlockerResolved(b.id, true);
 }
 
 export async function deleteBlocker(id: number): Promise<void> {
@@ -1225,11 +1267,11 @@ export async function reentryCandidates(): Promise<ReentryCandidate[]> {
   return latestPerTether(rows);
 }
 
-/** Tab badges: open-blocker count per project cwd. */
+/** Tab badges: open project-blocker count per project cwd (detected rows excluded). */
 export async function blockerCounts(): Promise<Record<string, number>> {
   const d = await getDb();
   const rows = await d.select<{ cwd: string; n: number }[]>(
-    "SELECT cwd, count(*) AS n FROM blockers WHERE resolved = 0 GROUP BY cwd"
+    `SELECT cwd, count(*) AS n FROM blockers WHERE resolved = 0 AND ${PROJECT_BLOCKER_SQL} GROUP BY cwd`
   );
   return Object.fromEntries(rows.map((r) => [r.cwd, r.n]));
 }

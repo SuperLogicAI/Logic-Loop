@@ -5208,3 +5208,45 @@ Manual, rebuilt app (real profile):
 29. **Re-arm** — an old decision whose session just produced an event (resume
     that session and send one prompt) moves back to the normal list.
 30. **Lock-in / rail / min width** — unaffected; no new colors.
+
+## Phase 52 — Next order, two-tier Blockers, working agreement (2026-10-07)
+
+Automated: `momentum:check` (new cascade: landing note beats all; Now card
+beats decisions; oldest decision beats an unstarred planned card; blockers are
+not an input; done() resolves the winning row), `blockers:check` (TS/SQL tier
+rule parity; tab-badge counts, project "clear all" and "clear detected" run as
+the real repo.ts SQL against in-memory SQLite; source wiring for Inbox
+exclusion, promote, and the all-rows-shown default), `tsc`, `vite build`, full
+`npm run check`, `cargo test --lib`, clippy. No extraction prompt changed
+(golden not run). **No rebuilt-app pass by the agent.**
+
+Manual, rebuilt app (real profile):
+31. **Next order** — project with open decisions and a Now-starred card: Next
+    shows the card. Unstar it: Next shows the oldest decision. Save a landing
+    note: it wins and its label shows an age (`landing note · 2m`).
+32. **Start** — a planned/Now card in Next shows **▶ Start** (hover: "Moves
+    this card to Building and frees its Now slot"); clicking moves it to
+    Building and clears its star. Landing/decision picks still say ✓ Done.
+33. **No blocker in Next** — a project with only open blockers (no note,
+    decision, or card) shows no Next card.
+34. **Two tiers** — a project with both kinds: red cards show only blockers
+    you added; `Detected (M)` below lists open detector rows in the
+    Accomplished row shape (age, label, one mono line, full text on hover),
+    newest 5 first; `＋N` expands, `−` collapses. `Detected`, "clear
+    detected" and the row labels carry a light red/pink tint that ties them
+    to the Blockers header; age, mono text and ↑/✕ stay grey.
+35. **Counts** — tab badge, compact-rail Blockers count, Attention Inbox, and
+    Overview "Needs a choice" / Copy update include only blockers you added.
+    Overview shows `N detected tool errors (in the workspace Blockers panel)`.
+36. **Clear all vs clear detected** — header "clear all" leaves Detected rows;
+    "clear detected" leaves red cards. Confirm with a counts-only query.
+37. **Promote** — ↑ on a detected row adds a red card laid out label first
+    (pink label, white ＋), the matched text below in grey mono clamped to 2
+    lines (＋ expands, − collapses), and removes the row; the tab badge goes
+    up by one. In the Inbox and Overview the promoted blocker reads
+    `<label>: <text>`.
+38. **Cleared Blockers** — lists only blockers you added; cleared detected rows
+    don't appear.
+39. **Agent guide** — fresh `claude` session in this repo: `/context` lists
+    AGENTS.md under memory files (imported from CLAUDE.md).
+40. **Lock-in / rail / min width** — unaffected; no new colors.
