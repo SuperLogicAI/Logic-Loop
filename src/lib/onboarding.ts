@@ -18,6 +18,8 @@ export type AdapterOperation = "checking" | "enabling" | "disabling" | null;
 export interface AdapterRuntimeState {
   available: boolean | null;
   enabled: boolean | null;
+  /** Enabled but a newer hook event is missing; the control offers Update. */
+  outdated?: boolean;
   operation: AdapterOperation;
   error: string | null;
 }

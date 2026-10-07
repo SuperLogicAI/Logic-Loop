@@ -14,6 +14,7 @@ import {
   deepseekHooksRemove,
   deepseekHooksSetup,
   deepseekHooksStatus,
+  hooksOutdated,
   hooksRemove,
   hooksSetup,
   hooksStatus,
@@ -43,12 +44,13 @@ import { PanelIcon } from "./PanelIcon";
 interface AdapterActions {
   detect: () => Promise<boolean>;
   status: () => Promise<boolean>;
+  outdated?: () => Promise<boolean>;
   setup: () => Promise<void>;
   remove: () => Promise<void>;
 }
 
 const ADAPTER_ACTIONS: Record<AdapterId, AdapterActions> = {
-  claude: { detect: claudeDetect, status: hooksStatus, setup: hooksSetup, remove: hooksRemove },
+  claude: { detect: claudeDetect, status: hooksStatus, outdated: hooksOutdated, setup: hooksSetup, remove: hooksRemove },
   codex: { detect: codexDetect, status: codexHooksStatus, setup: codexHooksSetup, remove: codexHooksRemove },
   opencode: { detect: opencodeDetect, status: opencodeHooksStatus, setup: opencodeHooksSetup, remove: opencodeHooksRemove },
   antigravity: { detect: antigravityDetect, status: antigravityHooksStatus, setup: antigravityHooksSetup, remove: antigravityHooksRemove },
@@ -122,14 +124,14 @@ export function AgentStatusBar({
     let cancelled = false;
     for (const adapter of ADAPTERS) {
       const actions = ADAPTER_ACTIONS[adapter.id];
-      void actions.detect().then(async (available) => ({
-        available,
-        enabled: available ? await actions.status() : false,
-      })).then(({ available, enabled }) => {
+      void actions.detect().then(async (available) => {
+        const enabled = available ? await actions.status() : false;
+        return { available, enabled, outdated: enabled && actions.outdated ? await actions.outdated() : false };
+      }).then(({ available, enabled, outdated }) => {
         if (cancelled) return;
         setAdapterStates((current) => ({
           ...current,
-          [adapter.id]: { available, enabled, operation: null, error: null },
+          [adapter.id]: { available, enabled, outdated, operation: null, error: null },
         }));
       }).catch((error: unknown) => {
         if (cancelled) return;
@@ -155,7 +157,8 @@ export function AgentStatusBar({
   const toggleAdapter = useCallback(async (id: AdapterId) => {
     const before = adapterStates[id];
     if (!before.available || before.operation) return;
-    const enabling = !before.enabled;
+    const updating = before.enabled === true && before.outdated === true;
+    const enabling = updating || !before.enabled;
     setAdapterStates((current) => ({
       ...current,
       [id]: { ...current[id], operation: enabling ? "enabling" : "disabling", error: null },
@@ -164,7 +167,7 @@ export function AgentStatusBar({
       await (enabling ? ADAPTER_ACTIONS[id].setup() : ADAPTER_ACTIONS[id].remove());
       setAdapterStates((current) => ({
         ...current,
-        [id]: { ...current[id], enabled: enabling, operation: null, error: null },
+        [id]: { ...current[id], enabled: enabling, outdated: false, operation: null, error: null },
       }));
     } catch (error: unknown) {
       setAdapterStates((current) => ({
@@ -269,7 +272,7 @@ export function AgentStatusBar({
             const command = adapter?.command.split(" ")[0] ?? id;
             return (
               <button key={id} type="button" className={hookClass(state.enabled, id === "claude")} onClick={() => void toggleAdapter(id)} title={`Toggle ${label} structured hooks`}>
-                {command} {state.enabled === null ? "?" : state.enabled ? "on" : "off"}
+                {command} {state.enabled === null ? "?" : state.outdated ? "update" : state.enabled ? "on" : "off"}
               </button>
             );
           })}

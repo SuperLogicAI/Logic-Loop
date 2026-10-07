@@ -885,3 +885,45 @@ TESTING.md Phase 52 items were not reported one by one, so they stay
 unmarked rather than recorded as tested. The working-agreement trial starts
 at merge, with landing mode switched to Auto; reviews at +7 and +14 days
 against the baseline in Plan 052.
+
+### Phase 53 — Detector precision (2026-10-07)
+
+Maintainer wrote `PHASE 53 APPROVED`, decisions 1-5 as recommended. Built on
+`feat/phase-53-detector-precision` (Plan 053). Step 1 audit (plan table):
+Claude, OpenCode (`metadata.exit` + `output`) and Antigravity (`is_error` +
+`error`) have a structured failure signal and are wired; Codex, Pi and
+DeepSeek have none and produce no detected rows. Claude now registers
+`PostToolUseFailure` (matcher `Bash`); detectors scan only failed-command
+text via `detectorTextFor`, never successful `PostToolUse` output; "No such
+file or directory" dropped from Missing file/module. `hooks_status` now
+reports off/partial/on; a partial install shows **Update** (re-runs the
+idempotent setup; settings.json changes only through the app's toggle).
+Plan revision 1 added the OpenCode and Antigravity branches. Gates: `tsc`,
+full `npm run check`, `vite build`, `cargo test --lib`, clippy, `git diff
+--check` (results in the phase report). Awaiting live checks (TESTING.md
+Phase 53, items 41-47) and acceptance.
+
+
+### Phase 53 revision 2 — Codex detector gap (2026-10-07)
+
+Maintainer authorized a Codex-only scope extension within Phase 53.
+Context7 and current Codex source show no failure-specific hook, but recent
+rollout files and read-only DB structural counts confirm persisted
+`event_msg.item_completed` / `CommandExecution` items with integer
+`exit_code` and text `aggregated_output` (DB: 3,532 zero / 255 non-zero).
+`exec_command_end` is transient, not persisted. Codex failures now use the
+existing transcript listener and detector persistence path; integer
+non-zero exits qualify, successes and malformed/missing fields do not.
+Hook text stays unscanned. No hook registration/configuration, second
+route, terminal input, extraction prompt or historical-row changes.
+Legacy rollouts lacking completion fields remain invisible. Revision 2 is
+explicit in Plan 053; TESTING item 45 is superseded by new live item 48.
+Verified: focused `detectors:check`, `opencode:check`, full `npm run check`,
+`npx tsc --noEmit`, `npm run build`, `cargo test --lib` (162 passed, 1
+existing live-session test ignored), clippy with warnings denied, and
+`git diff --check`. Sandbox IPC/socket failures passed on permitted reruns.
+Build retains its large-chunk warning. Golden not run (prompts unchanged).
+Rebuilt-app live checks passed (Claude Update, failure row, no row on
+successful detector-source read, Codex failure/success, hooks off/on). OpenCode
+non-zero stays fixture-only; the ~7/day baseline is a one-week watch.
+**PHASE 53 ACCEPTED** (2026-10-07).

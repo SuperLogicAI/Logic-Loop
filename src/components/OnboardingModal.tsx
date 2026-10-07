@@ -372,7 +372,9 @@ export function OnboardingModal({
                       : state.error
                         ? "Retry"
                         : state.enabled
-                          ? "Disable"
+                          ? state.outdated
+                            ? "Update"
+                            : "Disable"
                           : "Enable"}
                   </button>
                 </div>

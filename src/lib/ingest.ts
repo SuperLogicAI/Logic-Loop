@@ -17,8 +17,15 @@ export function hooksRemove(): Promise<void> {
   return invoke("hooks_remove");
 }
 
+type HooksState = "off" | "partial" | "on";
+
 export function hooksStatus(): Promise<boolean> {
-  return invoke<boolean>("hooks_status");
+  return invoke<HooksState>("hooks_status").then((s) => s !== "off");
+}
+
+/** Ours installed but missing an event added since (Plan 053): Update re-runs setup. */
+export function hooksOutdated(): Promise<boolean> {
+  return invoke<HooksState>("hooks_status").then((s) => s === "partial");
 }
 
 export function claudeDetect(): Promise<boolean> {

@@ -5250,3 +5250,61 @@ Manual, rebuilt app (real profile):
 39. **Agent guide** — fresh `claude` session in this repo: `/context` lists
     AGENTS.md under memory files (imported from CLAUDE.md).
 40. **Lock-in / rail / min width** — unaffected; no new colors.
+
+## Phase 53 — Detector precision: scan failed commands only (2026-10-07)
+
+Automated: `detectors:check` (successful Bash whose stdout is `detectors.ts`
+source → no text; Claude `PostToolUseFailure` `Exit code 1 … EADDRINUSE` →
+"Port in use"; interrupt, non-Bash, Codex text, DeepSeek/Pi `{is_error}` →
+none; OpenCode `metadata.exit` 0 → none, 1 → output scanned; Antigravity
+`{is_error, error}` → scanned; "No such file or directory" alone no longer
+matches), Rust `hooks_state` off/partial/on and update-on-partial exactly one
+of ours per event, `failure_hook_registers_with_bash_matcher`, `tsc`, full
+`npm run check`, `vite build`, `cargo test --lib`, clippy. No extraction
+prompt changed (golden not run). **No rebuilt-app pass by the agent.**
+**Unverified live:** a non-zero OpenCode bash `exit` (only exit 0 was in the
+sample; the docs say non-zero is returned as `metadata.exit`, not thrown).
+
+Manual, rebuilt app (real profile):
+41. **Update control** — Claude hooks control reads `claude update` (Setup
+    modal button: **Update**). Click it; `~/.claude/settings.json` gains one
+    `PostToolUseFailure` entry (matcher `Bash`) and nothing else changes
+    (diff it against a copy taken first). The control then reads `claude on`.
+42. **Failure scanned** — Claude tab: `node -e "require('nope')"` → a
+    `Missing file/module` row in Detected.
+43. **Reads not scanned** — `grep -n "rate limit" src/lib/detectors.ts` → no
+    new Detected row.
+44. **Missing path** — `ls /definitely-missing` → no row (Decision 2).
+45. **Codex** — superseded by revision 2 / item 48: rollout completions
+    provide a structured failure signal; hook text remains unscanned.
+46. **Hooks off / on** — off: settings.json byte-identical to before setup;
+    on again: exactly one entry per event.
+47. **Rate** — Detected rows/day over the following week vs the ~7/day
+    baseline (counts only).
+
+48. **Codex rollout failure / success (Plan 053 revision 2)** — rebuilt app,
+    Codex tab with hooks enabled through the app: ask it to run
+    `node -e "require('nope')"`. A structured `CommandExecution` completion
+    with non-zero `exit_code` and `aggregated_output` should produce one
+    `Missing file/module` Detected row in that project with Codex provenance.
+    Then ask it to run `cat src/lib/detectors.ts` successfully: no new
+    Detected rows despite the detector strings in the output. Confirm no
+    terminal/state interruption and no hook update is needed. Only observe
+    counts and field types if querying the DB; never dump transcript/output.
+    Legacy rollout history without these completion fields stays invisible.
+
+Revision 2 automated coverage: Codex completion failure → exact text and
+"Port in use"; success reading detector source → null; invalid/missing exit
+or output, wrong item/event, prose, malformed JSON and non-Codex session
+context → null. Existing transcript listener wiring is checked. Counts-only
+read-only DB inspection found 3,787 completion rows (3,532 zero / 255
+non-zero), all integer exit / text output. Recent rollout files independently
+confirmed the fields. **Item 48 is unverified live; no rebuilt-app pass by
+this agent.**
+
+Revision 2 gates passed: focused `detectors:check`, `opencode:check`, full
+`npm run check`, `npx tsc --noEmit`, `npm run build`, `cargo test --lib`
+(162 passed, 1 existing live-session test ignored),
+`cargo clippy --all-targets -- -D warnings`, `git diff --check`.
+Initial tsx IPC / Rust local-server sandbox errors passed on permitted
+reruns. Build has the existing large-chunk warning; golden not run.
