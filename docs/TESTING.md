@@ -5169,10 +5169,12 @@ reachable from Setup. Maintainer to decide whether a saved model counts.
     projects`; T equals the sum of the per-card "open decisions" counts shown
     for every card (scroll to check), P the number of cards with a count.
     With exactly one such project it reads "1 project".
-22. **Sidebar LM toggle** — Setup > Sidebar LM card has a "Show in sidebar"
-    checkbox. Default settings: unchecked, no control in the header. Check it:
+22. **Sidebar LM toggle** — Setup > Sidebar LM card shows the bordered
+    "Sidebar LM" pill button with a "Show in sidebar" toggle switch stacked
+    beneath it on the right; the pill reads as a button at rest. Default
+    settings: toggle off, no control in the header. Turn it on:
     the Sidebar LM control appears in the header (expanded and compact rail)
-    without a restart, and the popover changes the model from there. Uncheck:
+    without a restart, and the popover changes the model from there. Turn it off:
     it disappears, including for a user with a configured extractor (explicit
     choice wins). The choice survives an app restart. Before any choice,
     visibility still follows the configured-extractor rule (item 9).

@@ -4,7 +4,7 @@ import { getExtractorSettings, setExtractorSettings } from "../lib/repo";
 import type { ExtractorSettings } from "../types";
 import { SIDEBAR_CONTROLS_REFRESH } from "../lib/sidebarControls";
 
-export function SidebarLmControl({ compact = false }: { compact?: boolean }) {
+export function SidebarLmControl({ compact = false, bordered = false }: { compact?: boolean; bordered?: boolean }) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [position, setPosition] = useState({ top: 0, left: 0 });
@@ -57,7 +57,7 @@ export function SidebarLmControl({ compact = false }: { compact?: boolean }) {
         aria-label="Sidebar LM settings"
         aria-expanded={showSettings}
         type="button"
-        className={`flex shrink-0 items-center justify-center gap-1 rounded-full text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-400 ${compact ? "h-10 w-10" : "h-7 px-1.5"}`}
+        className={`flex shrink-0 items-center justify-center gap-1 rounded-full text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-400 ${compact ? "h-10 w-10" : bordered ? "h-8 border border-zinc-600 px-3 hover:border-zinc-400" : "h-7 px-1.5"}`}
         onClick={() => setShowSettings((shown) => !shown)}
         title="Choose the model that extracts decisions for the sidebar"
       >

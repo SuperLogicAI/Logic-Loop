@@ -425,23 +425,31 @@ export function OnboardingModal({
             <div>
               <div className="text-sm font-medium text-zinc-100">Sidebar LM</div>
               <p className="mt-0.5 text-xs text-zinc-400">
-                Optional. Choose a local or alternate model for decision extraction. Show it in
-                the sidebar header to change models without opening Setup.
+                Optional. Choose a local or alternate model for decision extraction.
+                <br />
+                Show it in the sidebar to change models without opening Setup.
               </p>
-              <label className="mt-1.5 flex items-center gap-2 text-xs text-zinc-300">
-                <input
-                  type="checkbox"
-                  checked={optional.lm}
-                  onChange={() => {
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              <SidebarLmControl bordered />
+              <label className="flex items-center gap-2 text-xs text-zinc-300">
+                Show in sidebar
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={optional.lm}
+                  aria-label="Show Sidebar LM in the sidebar"
+                  onClick={() => {
                     void setSidebarLmPinned(!optional.lm)
                       .then(() => window.dispatchEvent(new Event(SIDEBAR_CONTROLS_REFRESH)))
                       .catch(() => undefined);
                   }}
-                />
-                Show in sidebar
+                  className={`relative h-5 w-9 shrink-0 rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-focus-400 ${optional.lm ? "bg-info-500" : "bg-zinc-700"}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-zinc-100 transition-transform ${optional.lm ? "translate-x-4" : ""}`} />
+                </button>
               </label>
             </div>
-            <SidebarLmControl />
           </div>
 
           {persistenceError && (
