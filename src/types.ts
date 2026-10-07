@@ -138,6 +138,9 @@ export interface Decision {
   assumption: string | null;
   context_json: string;
   ts: number;
+  /** Plan 051: 1 when open + older than 14 days + dormant session. Only
+   * present on rows from `listDecisions`; derived, never stored. */
+  stale?: number;
 }
 
 export interface Note {

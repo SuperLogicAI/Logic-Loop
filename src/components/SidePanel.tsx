@@ -262,9 +262,11 @@ export function SidePanel({
   const [muted, setMuted] = useState(false);
   const [showClearedBlockers, setShowClearedBlockers] = useState(false);
   const [showOlderCompletions, setShowOlderCompletions] = useState(false);
+  const [showStaleDecisions, setShowStaleDecisions] = useState(false);
   useEffect(() => {
     setShowClearedBlockers(false);
     setShowOlderCompletions(false);
+    setShowStaleDecisions(false);
   }, [cwd]);
   const [unclaimed, setUnclaimed] = useState<{ session_id: string; ts: number }[]>([]);
   const [commits, setCommits] = useState<Commit[]>([]);
@@ -661,7 +663,7 @@ export function SidePanel({
   const doneRef = useRef<HTMLButtonElement>(null);
   const momentum = computeMomentum({
     landing,
-    decisions,
+    decisions: decisions.filter((d) => !d.stale),
     blockers,
     plannedCard,
     onLandingDone: (n) => repo.setNoteStatus(n.id, "done"),
@@ -721,7 +723,8 @@ export function SidePanel({
 
   const open = blockers.filter((b) => b.resolved === 0);
   const done = blockers.filter((b) => b.resolved !== 0).slice(0, 10);
-  const openDecisions = decisions.filter((d) => d.status === "open");
+  const openDecisions = decisions.filter((d) => d.status === "open" && !d.stale);
+  const staleDecisions = decisions.filter((d) => d.status === "open" && d.stale);
   const recentCompletions = [...unclaimed].sort((a, b) => b.ts - a.ts || a.session_id.localeCompare(b.session_id));
   const closedDecisions = decisions.filter((d) => d.status !== "open").slice(0, 10);
   const decisionGroups = repo.groupDecisionsBySession(openDecisions);
@@ -754,6 +757,12 @@ export function SidePanel({
 
   const dismissSessionCluster = async (sessionId: string) => {
     await repo.dismissSession(sessionId);
+    await reload();
+    onDecisionsChanged();
+  };
+
+  const dismissStaleForProject = async () => {
+    await repo.dismissStaleDecisions(cwd);
     await reload();
     onDecisionsChanged();
   };
@@ -1485,6 +1494,48 @@ export function SidePanel({
                 );
               })}
             </div>
+            {staleDecisions.length > 0 && (
+              <div className="mt-2 border-t border-zinc-800 pt-2">
+                <div className="flex items-center gap-1.5">
+                  <button type="button" aria-expanded={showStaleDecisions}
+                    onClick={() => setShowStaleDecisions((shown) => !shown)}
+                    className="flex min-w-0 flex-1 items-center gap-1.5 rounded py-1 text-left text-zinc-500 hover:text-zinc-300 focus-visible:outline-2 focus-visible:outline-focus-400">
+                    <Chevron collapsed={!showStaleDecisions} />
+                    Stale <span className="text-zinc-600">({staleDecisions.length})</span>
+                  </button>
+                  <button type="button" className="shrink-0 rounded text-[10px] text-zinc-600 hover:text-zinc-300 focus-visible:outline-2 focus-visible:outline-focus-400"
+                    title="Dismiss every stale decision in this project: older than 14 days with no session activity"
+                    onClick={() => void dismissStaleForProject()}>
+                    dismiss stale
+                  </button>
+                </div>
+                {showStaleDecisions && (
+                  <ul className="mt-1 flex flex-col gap-1.5">
+                    {staleDecisions.map((d) => (
+                      <li key={d.id} className="relative rounded border border-zinc-800 p-2">
+                        <button
+                          className="absolute top-1 right-2 flex h-5 w-5 items-center justify-center rounded text-zinc-600 hover:text-zinc-300 focus-visible:outline-2 focus-visible:outline-focus-400"
+                          title="Dismiss — not a real decision"
+                          onClick={() => void setStatus(d, "dismissed")}
+                        >
+                          ✕
+                        </button>
+                        <p className="break-words pr-8 text-zinc-400">{d.question}</p>
+                        <div className="mt-1.5 flex gap-2 text-zinc-500">
+                          <button className="text-danger-400 hover:text-danger-300" title="Prefill answer in terminal" onClick={() => onAnswerNow(d)}>
+                            ✎ answer
+                          </button>
+                          <button className="text-ok-400 hover:text-ok-300" title="Fine — agent's call" onClick={() => void setStatus(d, "delegated")}>
+                            ⤳ delegate
+                          </button>
+                          <span className="ml-auto text-zinc-600">{ago(d.ts)}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
             {closedDecisions.length > 0 && (
               <ul className="mt-2 flex flex-col gap-1 border-t border-zinc-800 pt-2 text-zinc-600">
                 {closedDecisions.map((d) => (
