@@ -1,5 +1,11 @@
 # Manual Test Script — v2
 
+Latest audit: [computer-use checklist review, 2026-10-07–08](#computer-use-testing-audit).
+Combined rows stay open when any subcase is unverified. Latest numbered
+manual tests now use task boxes while retaining their original IDs. Boxes
+53–59 and 61–69 reflect the existing explicit maintainer passes, not a new
+execution of those agent prompts.
+
 ## v4 — Plan 033 first-useful-session re-verify (2026-09-19, live pass closed 2026-09-21)
 
 **Plan 033 ACCEPTED 2026-09-21.** Doc-gate reconciled — see docs/PROGRESS.md
@@ -1682,7 +1688,7 @@ remain unchecked below rather than being inferred from acceptance.
       and actionability-first ordering. *(live pass 2026-09-09; one Claude
       decision required asking the agent to repeat its question before the
       extractor populated it)*
-- [ ] Open Attention from terminal focus with `Cmd+K`, the compact mail icon,
+- [x] Open Attention from terminal focus with `Cmd+K`, the compact mail icon,
       and the expanded-panel header control. Confirm no `k` or other bytes
       appear in the terminal.
 - [ ] Search, use Up/Down/Enter, select a row and use `Open tab`, then press
@@ -1714,6 +1720,9 @@ remain unchecked below rather than being inferred from acceptance.
 - [ ] Dogfood Attention for three normal work sessions. Record whether it was
       used instead of scanning tabs and note duplicate, misleading, or missing
       rows before approving any pin/snooze/badge follow-up.
+      *2026-10-07–08: search, initial Up/Down selection, empty state and
+      Escape tested; route/Enter and exhaustive focus-trap cases remain open.
+      See the computer-use audit at the end of this file.*
 
 Automated evidence (2026-09-09):
 
@@ -1776,7 +1785,7 @@ Implementation built 2026-09-09 under the explicitly approved Phase 26
 sequencing exception. Phase 26 remains unaccepted and its dogfood matrix is
 unchanged.
 
-- [ ] In expanded, compact, and hidden panel modes, confirm the gray bordered
+- [x] In expanded, compact, and hidden panel modes, confirm the gray bordered
       Lock-in pill stays immediately right of Fold/Expand and adapter pills
       retain their established order.
 - [ ] While unlocked, keyboard-focus and activate each icon independently.
@@ -1794,6 +1803,8 @@ unchanged.
       presentation behavior from live underlying state.
 - [ ] Relaunch during indefinite and timed Lock-in. Confirm the app starts
       unlocked and no previous timer resumes.
+      *2026-10-07–08: timed accessible label, collapsed Unlock and manual
+      unlock passed; shortened/stale-timer and real expiry cases unrun.*
 
 Automated evidence (2026-09-09):
 
@@ -3029,13 +3040,17 @@ pending the maintainer's clean-profile macOS matrix.
       agent-authored text, so the visible behavior is the evidence here.
 - [x] The maintainer reports the app quit/relaunch re-entry check (Step 6)
       and disable-while-running check (Step 7) passed.
-- [ ] The second-tab `PI-BETA-924` prompt was canceled before completion;
+- [x] The second-tab `PI-BETA-924` prompt was canceled before completion;
       finish the two-tabs-one-cwd activity/binding check. The maintainer
       reported the rest of Step 4 passed, but did not supply separate
       Accomplished-row evidence for both tabs.
-- [ ] Complete `/resume` and `/reload`, retry/follow-up-before-idle, foreign
+      *Reconciled 2026-10-08 from the explicit 2026-09-18 maintainer
+      remaining-items pass below; not a new computer-use execution.*
+- [x] Complete `/resume` and `/reload`, retry/follow-up-before-idle, foreign
       file collision UI error, and four-adapter regression checks before
       closing Plan 026. Record any additional Step 7 details if needed.
+      *Reconciled 2026-10-08 from the explicit 2026-09-18 maintainer
+      remaining-items pass below; not a new computer-use execution.*
 
 ### Maintainer live macOS pass, remaining items (2026-09-18) — Plan 026 closed
 
@@ -4868,6 +4883,8 @@ text input in this pass. Phase 48 remains NOT ACCEPTED.
       clipboard failure/retry: not performed. The approved plan requires
       maintainer approval/hands for profile moves and global settings; no
       safe clipboard-denial method was available. Zoom remains deferred.
+      *2026-10-07–08 repeat: terminal input focused, Ctrl+Tab produced no
+      visible active-tab change. Native delivery vs handler remains unresolved.*
 
 ### Phase 48 project identity revision — 2026-10-02
 
@@ -4920,9 +4937,11 @@ frontend build, Rust library tests (160 passed, 1 ignored), Clippy and whitespac
 check passed. No extraction prompt changes; no golden run.
 
 Remaining live checks:
-- [ ] Home and Overview show dev/context_terminal (zinc-400), full path tooltip.
+- [x] Home and Overview show dev/context_terminal (zinc-400), full path tooltip.
+      *Computer-use pass 2026-10-07–08: compact path visible in both;
+      accessibility Help/container carries the full canonical path.*
 - [ ] Zero workspaces: Start session creates one correctly named/colored tab.
-- [ ] One/multiple live or restored workspaces: New session tab creates an
+- [x] One/multiple live or restored workspaces: New session tab creates an
       additional fresh shell without resuming an agent or altering existing tabs.
 - [ ] Continue/chooser selects the exact existing workspace; rapid double-click
       on the new-session action produces only one new tab; launch error is visible.
@@ -4980,6 +4999,12 @@ Release-app checks still pending (do not interpret preview as a live pass):
       inactive/hover/active states, tab reorder and window drag regions.
 - [ ] Fold/resize/Home/Overview navigation preserve PTY mount, process,
       untouched input and terminal focus/sizing.
+      *2026-10-07–08: Refresh and isolated Escape dismissal passed. AX
+      focus after Traffic Escape/Close was HTML content, not its trigger;
+      focus restoration remains unresolved. Full surface/error matrix unrun.*
+      *2026-10-07–08: compact opening and Close-to-trigger focus passed.
+      Escape from the Setup popover closed both popover and Setup and left
+      HTML-content focus. Settings edits/short-window behavior remain open.*
 
 Phase 49 implementation is ready for review; acceptance remains pending.
 
@@ -5001,7 +5026,9 @@ tests and Clippy passed. `git diff --check` passed. Existing build-size warning
 remains. No golden run; no extraction changes.
 
 Follow-up live checks pending:
-- [ ] Rebuild and check compact gear/Traffic sizing and hit targets.
+- [x] Rebuild and check compact gear/Traffic sizing and hit targets.
+      *Computer-use pass 2026-10-07–08: installed release, both compact
+      controls opened their respective UI; visual sizing inspected.*
 - [ ] Home top/side border joins the bar, hover brightens, navigation still
       works; Tour above Home launches normally, neither control drags the window.
 - [ ] Cleared Blockers defaults closed, keyboard toggle opens/closes; expand
@@ -5097,29 +5124,29 @@ confirmed: role utilities compile to `var(--color-<role>-N)` and
 has been done by the agent** — everything below is for the maintainer.
 
 Manual, in the running app:
-1. **Colors, every state** — in expanded sidebar, compact rail, hidden sidebar,
+- [ ] **1.** **Colors, every state** — in expanded sidebar, compact rail, hidden sidebar,
    and minimum width: blocker (danger), waiting/stale Inbox and open decisions
    (attn), done (ok), running dot and Inbox count (info), tab/status dots.
    Compare against the pre-change app: orange and yellow now both render amber;
    purple (fan-out) and teal (re-entry) now render sky; blue running dot is sky.
-2. **Focus ring** — Tab through sidebar controls and modals; ring is blue and
+- [ ] **2.** **Focus ring** — Tab through sidebar controls and modals; ring is blue and
    visibly distinct from the sky info accents.
-3. **Setup accent** — Setup pill and Home "Setup" button are teal.
-4. **Isolate Loop** — modal, tab badge, tab glow and "+ Isolate" hover are
+- [x] **3.** **Setup accent** — Setup pill and Home "Setup" button are teal.
+- [ ] **4.** **Isolate Loop** — modal, tab badge, tab glow and "+ Isolate" hover are
    neutral grey/white, no orange.
-5. **Lock-in** — turn on both indefinite and timed Lock-in: no hue anywhere in
+- [ ] **5.** **Lock-in** — turn on both indefinite and timed Lock-in: no hue anywhere in
    the side panel (danger/attn/ok/info all grey); tab strip unchanged.
-6. **Traffic hidden** — with no `~/.safe-router/log.db` and a fresh settings DB
+- [ ] **6.** **Traffic hidden** — with no `~/.safe-router/log.db` and a fresh settings DB
    (no `traffic_seen`), header shows no Traffic (expanded and compact).
-7. **Traffic shown** — with a log present: Traffic appears, opens the modal.
+- [ ] **7.** **Traffic shown** — with a log present: Traffic appears, opens the modal.
    Remove the log afterwards: Traffic stays (seen).
-8. **Traffic unknown** — unreadable/corrupt log: Traffic visible.
-9. **Sidebar LM** — default settings: control hidden; Setup shows the Sidebar
+- [ ] **8.** **Traffic unknown** — unreadable/corrupt log: Traffic visible.
+- [ ] **9.** **Sidebar LM** — default settings: control hidden; Setup shows the Sidebar
    LM row with a working button; choosing LM Studio (or a Claude model) makes
    it appear in the sidebar header without restart; back to default Claude CLI
    with empty model: it disappears after next focus/refresh.
-10. **Setup rows** — "Safe Router traffic" row text matches the three states.
-11. **Min width** — header row still fits at 192px with all controls shown and
+- [ ] **10.** **Setup rows** — "Safe Router traffic" row text matches the three states.
+- [ ] **11.** **Min width** — header row still fits at 192px with all controls shown and
     with none.
 
 ### Phase 50 Part C — Since you left on dashboard cards
@@ -5128,15 +5155,15 @@ Automated: `delta:check` covers `hasDelta` / `describeDelta`; `tsc`, build and
 full `npm run check` pass. **No rebuilt-app visual pass by the agent.**
 
 Manual:
-12. Leave a live session (switch tab away), let the agent do work, return to
+- [ ] **12.** Leave a live session (switch tab away), let the agent do work, return to
     Home: its project card shows `▸ Since you left · 1 session`; chevron
     expands a row with title, summary (files/turns/decisions/failed commands)
     and last words; clicking the row opens that tab.
-13. Two live sessions in one project, both with changes: line says `2 sessions`,
+- [ ] **13.** Two live sessions in one project, both with changes: line says `2 sessions`,
     both rows listed.
-14. Card with no live tab, a never-left tab, or nothing new: no line.
-15. A just-spawned tab with no bound session yet: skipped (fan-out isolation).
-16. Collapsed by default after every Home visit (not persisted); minimum width
+- [ ] **14.** Card with no live tab, a never-left tab, or nothing new: no line.
+- [ ] **15.** A just-spawned tab with no bound session yet: skipped (fan-out isolation).
+- [ ] **16.** Collapsed by default after every Home visit (not persisted); minimum width
     keeps the row readable; Lock-in does not matter on Home.
 
 ### Phase 50 follow-up — live-review fixes (commit d5acf61)
@@ -5147,17 +5174,17 @@ popover clamp (pure geometry, needs a real window). **No rebuilt-app visual
 pass by the agent.**
 
 Manual (rebuilt app, not an older install):
-17. **Launcher rest rings** — Fan out has a sky ring and Isolate loop a grey
+- [ ] **17.** **Launcher rest rings** — Fan out has a sky ring and Isolate loop a grey
     ring at rest; neither is purple or orange. Fan out hover is sky, Isolate
     hover is light grey.
-18. **Fan-out glow** — a fan-out child tab glows sky and the origin tab's
+- [ ] **18.** **Fan-out glow** — a fan-out child tab glows sky and the origin tab's
     title glows sky; no purple anywhere. A fan-out child still stands out from
     a split pane's blue border; if not, raise the glow opacity (0.55) first.
     Isolate loop tab glow is unchanged (neutral).
-19. **Git log grey** — Git log heading, chevron and commit subjects are grey
+- [ ] **19.** **Git log grey** — Git log heading, chevron and commit subjects are grey
     (hash dimmer), in normal and Lock-in. The Commit & Push footer, branch
     label and "PR opened" link stay blue. Since you left and Notes unchanged.
-20. **Sidebar LM popover** — open it from the Setup modal scrolled so the
+- [ ] **20.** **Sidebar LM popover** — open it from the Setup modal scrolled so the
     button is near the bottom: the popover stays fully on screen. Also check
     a short window, switching backends (popover grows, stays on screen), and
     scrolling the modal with it open (it follows the button).
@@ -5165,11 +5192,11 @@ Manual (rebuilt app, not an older install):
 Known gap, undecided: Sidebar LM stays hidden when a non-active backend has a
 saved model (e.g. LM Studio model saved, backend still Claude CLI); it is
 reachable from Setup. Maintainer to decide whether a saved model counts.
-21. **Home header copy** — header reads `N projects · T open decisions across P
+- [ ] **21.** **Home header copy** — header reads `N projects · T open decisions across P
     projects`; T equals the sum of the per-card "open decisions" counts shown
     for every card (scroll to check), P the number of cards with a count.
     With exactly one such project it reads "1 project".
-22. **Sidebar LM toggle** — Setup > Sidebar LM card shows the bordered
+- [ ] **22.** **Sidebar LM toggle** — Setup > Sidebar LM card shows the bordered
     "Sidebar LM" pill button with a "Show in sidebar" toggle switch stacked
     beneath it on the right; the pill reads as a button at rest. Default
     settings: toggle off, no control in the header. Turn it on:
@@ -5189,25 +5216,25 @@ total at the time). Rust untouched; no extraction prompt changed (golden not
 run). **No rebuilt-app pass by the agent.**
 
 Manual, rebuilt app (real profile):
-23. **Counts drop** — Home header/cards and tab badges fall by roughly the stale
+- [ ] **23.** **Counts drop** — Home header/cards and tab badges fall by roughly the stale
     count (about 303 total, fewer if some belong to projects without cards);
     the header total still equals the sum of the card counts.
-24. **Sidebar group** — a project with old decisions shows `Stale (N)` collapsed
+- [ ] **24.** **Sidebar group** — a project with old decisions shows `Stale (N)` collapsed
     under Decisions; expand it; answer one and dismiss one (✕), both leave the
     group; recent decisions stay in the main list.
-25. **Dismiss stale** — "dismiss stale" clears stale decisions for that whole
+- [ ] **25.** **Dismiss stale** — "dismiss stale" clears stale decisions for that whole
     project (Overview's stale line also disappears, per the project-wide
     default) and leaves recent open decisions untouched.
-26. **"dismiss all" safety** — the Decisions header "dismiss all" no longer
+- [ ] **26.** **"dismiss all" safety** — the Decisions header "dismiss all" no longer
     dismisses stale rows; they remain in `Stale (N)`.
-27. **Overview** — a project with stale decisions shows
+- [ ] **27.** **Overview** — a project with stale decisions shows
     `N stale decisions (older than 14 days, session idle)` with Dismiss all
     stale; a project without any shows no line; Pick up here and Copy update
     ignore stale decisions.
-28. **Inbox** — stale decisions no longer appear; a recent decision still does.
-29. **Re-arm** — an old decision whose session just produced an event (resume
+- [ ] **28.** **Inbox** — stale decisions no longer appear; a recent decision still does.
+- [ ] **29.** **Re-arm** — an old decision whose session just produced an event (resume
     that session and send one prompt) moves back to the normal list.
-30. **Lock-in / rail / min width** — unaffected; no new colors.
+- [ ] **30.** **Lock-in / rail / min width** — unaffected; no new colors.
 
 ## Phase 52 — Next order, two-tier Blockers, working agreement (2026-10-07)
 
@@ -5221,35 +5248,35 @@ exclusion, promote, and the all-rows-shown default), `tsc`, `vite build`, full
 (golden not run). **No rebuilt-app pass by the agent.**
 
 Manual, rebuilt app (real profile):
-31. **Next order** — project with open decisions and a Now-starred card: Next
+- [ ] **31.** **Next order** — project with open decisions and a Now-starred card: Next
     shows the card. Unstar it: Next shows the oldest decision. Save a landing
     note: it wins and its label shows an age (`landing note · 2m`).
-32. **Start** — a planned/Now card in Next shows **▶ Start** (hover: "Moves
+- [ ] **32.** **Start** — a planned/Now card in Next shows **▶ Start** (hover: "Moves
     this card to Building and frees its Now slot"); clicking moves it to
     Building and clears its star. Landing/decision picks still say ✓ Done.
-33. **No blocker in Next** — a project with only open blockers (no note,
+- [ ] **33.** **No blocker in Next** — a project with only open blockers (no note,
     decision, or card) shows no Next card.
-34. **Two tiers** — a project with both kinds: red cards show only blockers
+- [ ] **34.** **Two tiers** — a project with both kinds: red cards show only blockers
     you added; `Detected (M)` below lists open detector rows in the
     Accomplished row shape (age, label, one mono line, full text on hover),
     newest 5 first; `＋N` expands, `−` collapses. `Detected`, "clear
     detected" and the row labels carry a light red/pink tint that ties them
     to the Blockers header; age, mono text and ↑/✕ stay grey.
-35. **Counts** — tab badge, compact-rail Blockers count, Attention Inbox, and
+- [ ] **35.** **Counts** — tab badge, compact-rail Blockers count, Attention Inbox, and
     Overview "Needs a choice" / Copy update include only blockers you added.
     Overview shows `N detected tool errors (in the workspace Blockers panel)`.
-36. **Clear all vs clear detected** — header "clear all" leaves Detected rows;
+- [ ] **36.** **Clear all vs clear detected** — header "clear all" leaves Detected rows;
     "clear detected" leaves red cards. Confirm with a counts-only query.
-37. **Promote** — ↑ on a detected row adds a red card laid out label first
+- [ ] **37.** **Promote** — ↑ on a detected row adds a red card laid out label first
     (pink label, white ＋), the matched text below in grey mono clamped to 2
     lines (＋ expands, − collapses), and removes the row; the tab badge goes
     up by one. In the Inbox and Overview the promoted blocker reads
     `<label>: <text>`.
-38. **Cleared Blockers** — lists only blockers you added; cleared detected rows
+- [ ] **38.** **Cleared Blockers** — lists only blockers you added; cleared detected rows
     don't appear.
-39. **Agent guide** — fresh `claude` session in this repo: `/context` lists
+- [ ] **39.** **Agent guide** — fresh `claude` session in this repo: `/context` lists
     AGENTS.md under memory files (imported from CLAUDE.md).
-40. **Lock-in / rail / min width** — unaffected; no new colors.
+- [ ] **40.** **Lock-in / rail / min width** — unaffected; no new colors.
 
 ## Phase 53 — Detector precision: scan failed commands only (2026-10-07)
 
@@ -5266,23 +5293,23 @@ prompt changed (golden not run). **No rebuilt-app pass by the agent.**
 sample; the docs say non-zero is returned as `metadata.exit`, not thrown).
 
 Manual, rebuilt app (real profile):
-41. **Update control** — Claude hooks control reads `claude update` (Setup
+- [ ] **41.** **Update control** — Claude hooks control reads `claude update` (Setup
     modal button: **Update**). Click it; `~/.claude/settings.json` gains one
     `PostToolUseFailure` entry (matcher `Bash`) and nothing else changes
     (diff it against a copy taken first). The control then reads `claude on`.
-42. **Failure scanned** — Claude tab: `node -e "require('nope')"` → a
+- [ ] **42.** **Failure scanned** — Claude tab: `node -e "require('nope')"` → a
     `Missing file/module` row in Detected.
-43. **Reads not scanned** — `grep -n "rate limit" src/lib/detectors.ts` → no
+- [ ] **43.** **Reads not scanned** — `grep -n "rate limit" src/lib/detectors.ts` → no
     new Detected row.
-44. **Missing path** — `ls /definitely-missing` → no row (Decision 2).
-45. **Codex** — superseded by revision 2 / item 48: rollout completions
+- [ ] **44.** **Missing path** — `ls /definitely-missing` → no row (Decision 2).
+- [ ] **45.** **Codex** — superseded by revision 2 / item 48: rollout completions
     provide a structured failure signal; hook text remains unscanned.
-46. **Hooks off / on** — off: settings.json byte-identical to before setup;
+- [ ] **46.** **Hooks off / on** — off: settings.json byte-identical to before setup;
     on again: exactly one entry per event.
-47. **Rate** — Detected rows/day over the following week vs the ~7/day
+- [ ] **47.** **Rate** — Detected rows/day over the following week vs the ~7/day
     baseline (counts only).
 
-48. **Codex rollout failure / success (Plan 053 revision 2)** — rebuilt app,
+- [ ] **48.** **Codex rollout failure / success (Plan 053 revision 2)** — rebuilt app,
     Codex tab with hooks enabled through the app: ask it to run
     `node -e "require('nope')"`. A structured `CommandExecution` completion
     with non-zero `exit_code` and `aggregated_output` should produce one
@@ -5318,17 +5345,17 @@ tailer emitted `tailer-failed`, and the app-wide strip read "no transcript
 for 2 sessions". Fix: tabs carry `resumeCwd` (the SessionStart cwd, also the
 binding's `cwd`); Re-enter spawns there. Tab identity (`cwd`) is unchanged.
 
-49. **Ghost re-entry from a subfolder** — rebuilt app: open a tab at a repo
+- [ ] **49.** **Ghost re-entry from a subfolder** — rebuilt app: open a tab at a repo
     root, `cd` into a subfolder, run `claude`, send one prompt. Quit and
     relaunch the app, click Re-enter on the ghost tab. Expected: the agent's
     `! pwd` shows the subfolder; no "no transcript" strip; a decision-bearing
     reply still produces a card.
-50. **Mid-run death from a subfolder** — same setup without quitting the app:
+- [ ] **50.** **Mid-run death from a subfolder** — same setup without quitting the app:
     exit Claude so the tab goes dead, click Re-enter. Expected: resumes in the
     subfolder, no strip.
-51. **Root sessions unchanged** — a session started at the repo root re-enters
+- [ ] **51.** **Root sessions unchanged** — a session started at the repo root re-enters
     at the root (regression).
-52. **Missing launch folder** — delete the subfolder before Re-enter. Expected:
+- [ ] **52.** **Missing launch folder** — delete the subfolder before Re-enter. Expected:
     spawn falls back (shell opens, no crash); the strip may show for that
     session, which is accurate.
 
@@ -5347,25 +5374,25 @@ bar for the active tab. Claude: from the statusLine wrapper's
 rollout's `token_count` event (`last_token_usage.total_tokens /
 model_context_window`). Rebuilt app required (Rust passthrough changed).
 
-53. **Claude matches `/context`** — Claude tab with the usage-meter wrapper
+- [x] **53.** **Claude matches `/context`** — Claude tab with the usage-meter wrapper
     enabled; send a prompt. Expected: meter appears after the first response;
     run `/context` and compare. Within 1 point. Hover shows `Nk / Nk tokens`.
-54. **Claude live update** — send two more prompts that read files. Expected:
+- [x] **54.** **Claude live update** — send two more prompts that read files. Expected:
     percent rises after each response without switching tabs.
-55. **Claude `/compact`** — run `/compact`. Expected: meter hides, returns
+- [x] **55.** **Claude `/compact`** — run `/compact`. Expected: meter hides, returns
     lower after the next response.
-56. **Claude without wrapper** — disable the wrapper in the sidebar, start a
+- [x] **56.** **Claude without wrapper** — disable the wrapper in the sidebar, start a
     new Claude session. Expected: no meter, no placeholder.
-57. **Codex live update** — Codex tab, send two prompts. Expected: meter
+- [x] **57.** **Codex live update** — Codex tab, send two prompts. Expected: meter
     appears after the first turn and updates per turn. Note the Codex footer's
     context figure next to ours (Decision 2: switch formula only if the gap is
     visible).
-58. **Placement** — meter is right-aligned in both the collapsed bar (with and
+- [x] **58.** **Placement** — meter is right-aligned in both the collapsed bar (with and
     without ★ Now cards) and the expanded board header; clicking it does not
     toggle the board; long ★ Now titles truncate rather than push it off.
-59. **Tab switching** — switch between a Claude tab, a Codex tab and a plain
+- [x] **59.** **Tab switching** — switch between a Claude tab, a Codex tab and a plain
     shell tab. Expected: meter follows the active tab; shell shows none.
-60. **Thresholds** — (if reachable) bar turns amber at 70%, red at 90%.
+- [ ] **60.** **Thresholds** — (if reachable) bar turns amber at 70%, red at 90%.
 
 Automated: `context-meter:check` (both parsers, malformed input, compact,
 fill clamp, token formatting).
@@ -5379,35 +5406,35 @@ Codex figure matched closely enough that Decision 2's formula stays.
 Rebuild and relaunch first. Claude is installed globally on this machine, so
 Setup shows `claude update` (the new `PreToolUse` entry); click Update once.
 
-61. **Multiple-choice card opens** — in a Claude tab, ask the agent to "use
+- [x] **61.** **Multiple-choice card opens** — in a Claude tab, ask the agent to "use
     AskUserQuestion to ask me which of two options I prefer". Expected: while
     the picker is open, a Decision card shows the question with `○` option
     labels and "pick in terminal" (no ✎ answer / ⌕ context); the tab reads
     waiting.
-62. **Card closes with the pick** — choose an option in the terminal.
+- [x] **62.** **Card closes with the pick** — choose an option in the terminal.
     Expected: the card moves to answered with your label as the answer.
     Repeat with a multi-select question: answer lists every label picked.
-63. **Escaped picker** — trigger another one and press Esc. Expected: the card
+- [x] **63.** **Escaped picker** — trigger another one and press Esc. Expected: the card
     is dismissed by your next prompt (or the turn's Stop), not left open.
-64. **Switch to tab-only** — `shasum ~/.claude/settings.json` first. Setup →
+- [x] **64.** **Switch to tab-only** — `shasum ~/.claude/settings.json` first. Setup →
     Claude → *Logic Loop tabs only*. Expected: Logic Loop's hook entries (and
     the status-line wrapper, if on) are gone from `~/.claude/settings.json`,
     the rest of it unchanged; `~/.context-terminal/claude-settings.json`
     holds them. Caveat: Claude sessions already running at Switch time go
     silent (Claude Code reloads the global file, the overlay only applies at
     spawn) until restarted — seen live 2026-10-07.
-65. **Tab-only works** — new zsh tab, run `claude`, send a prompt. Expected:
+- [x] **65.** **Tab-only works** — new zsh tab, run `claude`, send a prompt. Expected:
     activity, decisions and the usage/context meters behave as before.
     `shasum ~/.claude/settings.json` unchanged across enable, use and disable
     (Disable/Enable while in tab-only mode).
-66. **Tab-only status line** — the status line still renders your own line
+- [x] **66.** **Tab-only status line** — the status line still renders your own line
     (the wrapper's `--settings` statusLine overrides the global one).
-67. **Tab-only resume** — quit the app with a Claude tab open, relaunch.
+- [x] **67.** **Tab-only resume** — quit the app with a Claude tab open, relaunch.
     Expected: the resumed session still sends events.
-68. **Outside terminal is silent** — in Terminal.app run `claude` in a project
+- [x] **68.** **Outside terminal is silent** — in Terminal.app run `claude` in a project
     and send a prompt. Expected: nothing arrives in Logic Loop while tab-only
     is active.
-69. **Back to Global** — Setup → Claude → *Global*. Expected:
+- [x] **69.** **Back to Global** — Setup → Claude → *Global*. Expected:
     `~/.claude/settings.json` has Logic Loop's entries again (and the wrapper
     if it was on); `~/.context-terminal/claude-settings.json` is gone.
 
@@ -5424,3 +5451,191 @@ the pre-switch copy; global hash unchanged across Disable/Enable, use, and
 app relaunch; re-entry resume (`zsh -l -c`) spawned with `--settings`; an
 outside Terminal.app session sent nothing; no duplicate hooks in a tab
 launched under tab-only after switching back to Global.
+
+<a id="computer-use-testing-audit"></a>
+
+## Computer-use checklist review — 2026-10-07–08
+
+Reviewed the 135 originally unchecked task rows, partial-result notes, and
+the 69 numbered manual items in Phases 50–55/re-entry. `docs/TESTING.md` is
+the only matching testing/test Markdown file found in the repository.
+This is a verification/documentation pass, not implementation or phase
+acceptance. Historical failures and superseded matrices are retained.
+
+Environment: running Logic Loop macOS release, three original tabs (dead
+Claude NSSA, live Claude Logic Loop, live Codex Logic Loop). Installed
+`/Applications/Logic Loop.app/Contents/MacOS/app` and local
+`src-tauri/target/release/app` had identical SHA-256:
+`a582c7294c5a330615736331c38bca77e2f9b350c9ca12d357bccc411c2c4a0a`.
+The sandbox denied process inventory, so running-process executable identity
+was not independently proven. Visible current controls include Phase 55's
+tab-only hook choice. No app rebuild/restart was performed for this UI pass.
+
+All UI actions used computer use, with accessibility observations and visual
+screenshots. No commands/prompts were typed into terminals, no hook/global
+configuration was changed, and no existing cards were dismissed, promoted,
+answered or edited. Overview created one disposable plain shell; split view
+created its companion. Both were closed after checking. Original three tabs
+remain, Codex active, expanded panel, single pane, Lock-in off. Disclosure
+and scroll position changes are incidental. Agent activity continued during
+the pass; this does not measure typing latency or prove PTY process identity.
+
+### Verified live subcases
+
+These boxes cover exactly the observed subcases. They do not close broader
+combined rows elsewhere in this file.
+
+- [x] §36: Attention opened via terminal-focused ⌘K, compact Inbox and
+  expanded header. Original Codex input remained empty; no stray `k` visible.
+- [x] §36: unmatched search showed empty-state copy; clearing it and pressing
+  Down/Up selected different decisions without first clicking a result.
+  Initial Escape returned to Terminal input; Escape after a header-triggered
+  opening returned to HTML content. Exhaustive focus-trap/route tests unrun.
+- [x] §38: gray Lock-in pill remained immediately after Fold/Expand in
+  expanded, compact and hidden modes; adapter order remained agy, claude,
+  codex, dsh, opencode, pi.
+- [x] §38: indefinite and timed modes each collapsed to one Unlock button;
+  timed accessible name said `Exit 60-minute Lock-in`; manual unlock restored
+  both choices. Semantic panel accents/usage bars became gray in both modes.
+- [x] §57 / Phase 49: real Traffic log populated, Refresh worked, Close
+  worked, isolated Escape dismissed it (confirmed visually). Unknown usage
+  was distinct from recorded numeric usage. Expanded/compact entry tested.
+- [x] Phase 49: compact gear and Traffic art inspected; both hit targets
+  opened their UI. Sidebar LM Close returned focus to the compact gear.
+- [x] Phase 49: newest unclaimed completion initially visible, `12 older`
+  expanded the other twelve, Hide restored the initial view. No dismissal.
+- [x] §71: Home and Overview displayed `dev/context_terminal` in gray;
+  accessibility Help/container retained the full canonical path.
+- [x] §71: Overview New session tab with two existing workspaces created one
+  named plain shell. No agent icon or context meter, no agent resume; original
+  agent tabs stayed present. Both disposable shells were subsequently closed.
+- [x] §44: split created a companion shell; switching left/right to top/bottom
+  created no additional tab; active split toggle returned to one pane. Stacked
+  layout visually inspected. Window/divider resize cases remain unrun.
+- [x] §71: Home Continue returned to the same live Codex workspace with
+  Terminal input focused; existing tab name/color retained, no new tab.
+- [x] Phase 50 item 3: Setup workspace pill and Home button had teal outlines.
+- [x] Phase 50 items 4/17, partial: Fan out rest ring sky; Isolate loop rest
+  ring and modal neutral gray/white. Cancel closed the modal without launch.
+- [x] Phase 50 item 21, plural case: scrolled Home and revealed older cards;
+  the 19 card counts summed to 677, matching `677 open decisions across 19
+  projects` in the header. Single-project grammar remains unverified.
+- [x] Phase 52 items 34/35, partial: Detected had 46 rows, initially five;
+  ＋41 expanded all, − restored five. Compact Blockers read `none open` despite
+  those detected rows. Overview showed `46 detected tool errors (in the
+  workspace Blockers panel)`. Mixed manual/detected tiers remain untested.
+
+### Observations requiring review
+
+- **Ctrl+Tab (§71):** focused Terminal input, one attempt produced no visible
+  active-tab switch. Repeats the 2026-10-01 observation; distinguish native
+  key delivery from the handler before calling it a confirmed app defect.
+- **Focus restoration (Phase 49):** Traffic Escape/Close left AX focus on
+  HTML content rather than its trigger. Sidebar LM Close from compact mode
+  restored its trigger correctly, but Escape with Sidebar LM opened inside
+  Setup closed both layers and left HTML-content focus. No extractor setting
+  changed. These combined focus tests remain unchecked.
+- **Lock-in (Phase 50 item 5):** observed semantic accents gray, but Set
+  landing note retained its rainbow border. The literal “no hue anywhere in
+  the side panel” expectation is not met; confirm whether that older border
+  is an intended exception. OS notification/dock suppression was not induced.
+- **Context threshold (Phase 54 item 60):** screenshots at displayed 71–73%
+  showed a sky bar; a later screenshot at 75% showed amber. Record as a
+  delayed/inconsistent transition observation, not a permanently missing
+  amber state. 90% not reached. Source/automated coverage is not visual proof.
+- **Popover (Phase 50 item 20), partial:** Setup scrolled to Sidebar LM near
+  the bottom; its default Claude popover fitted on screen. Short-window,
+  backend-growth and following-the-anchor-on-scroll cases remain unverified.
+- **Isolate Escape:** Escape while its branch field was focused did not
+  dismiss the visible modal; its Cancel control did. This is an observation,
+  not a failed checklist requirement (the styling matrix specifies no Escape
+  contract).
+
+### Disposition of remaining open tests
+
+Each originally open section is accounted for below. “Unrun” does not mean
+failed. No old historical gate is marked passed using a current-source run.
+The current gates below have their own dated evidence.
+
+| Section / items | Remaining verification or disposition |
+|---|---|
+| v4 first-useful-session `[~]` | Existing trust-prompt/reset rough edge retained; no new agent launch. |
+| §10 hook cycling | Unrun: would change global hook configuration and affect live sessions. |
+| §13 residue quick-add/tab swap | Unrun: needs two distinct project workspaces and note lifecycle; no existing notes changed. |
+| §20 historical quality-gate row | Already describes a 2026-08-27 pass; retained as historical evidence, not rerun against that revision. |
+| §23 waiting age / terminal latency | Unrun: no induced waiting agent or terminal typing. Idle ages were visible, which is a different test. |
+| §26 Antigravity commands/failure | Unrun: no fresh Antigravity session. Old no-failure-signal expectation must be compared with Phase 53's later structured-error support; do not infer current quota status from the old cooldown. |
+| §32 Antigravity marker | Unrun: requires real Antigravity structured events. |
+| §35 fan-out/warning artwork | Purple expectation superseded by Phase 50 sky; no fan-out group or warning fixture created. |
+| §36 remaining Inbox cases | Search subcases above passed; Enter/Open tab, claim-once, ambiguous/dead/stale routes, quiet boundary, query failure, persisted width, notifications/dock and three-session dogfood remain unrun. |
+| §38 keyboard/timers/relaunch | Mouse activation/labels checked; keyboard activation, stale developer timer, real 60-minute expiry and relaunch remain unrun. |
+| §43 first-run activation | Historical matrix explicitly superseded by Plan 021/033 (section's own close-out). Six current Setup rows observed, all advertise decisions/re-entry; old four-adapter capability expectation no longer applies. No clean-profile/config-corruption/permission tests. |
+| §44 split resize | Orientation/exit subcases passed above; no window/divider resizing or clipping-under-load check. |
+| §§45–47 reconciliation/golden | Guessed reconciliation and its model selector removed by Plan 016 / §48. Preserve failed old golden history and struck-out tests; no live model run. Current deterministic answer/dedup needs an agent-driven pass where not already recorded. |
+| §53 Claude usage meter | No wrapper/config/account changes, duplicate-Claude binding setup, statusline comparison or ingest-server termination. |
+| §54 Codex usage meter | Current model/account block observed, additional-limit control present. Exact account-UI comparison, two Codex tabs/models/resume, polling shutdown, router off/on and unavailable/error/hung auth fixtures unrun. |
+| §§55–56 Pi | Two stale duplicate rows reconciled from explicit 2026-09-18 maintainer evidence below them. Step 0 `/new` and isolated unauthenticated groundwork caveats retained; no new Pi turn. |
+| §57 Traffic fixtures | Real populated view checked; missing/v1/empty/malformed/locked/HTML-tag fixtures, slow/WAL concurrent writes, narrow/split/Lock-in overlay and exhaustive focus cases remain unrun. Original log preserved. |
+| §59 six-adapter/tab-icon matrix | Claude/Codex icons and icon-free plain shell observed; all-six launches, shell→agent transition, restore, long/narrow/fan-out/isolate/badge/reorder matrix unrun. |
+| §64 DeepSeek | No new session, adapter reinstall, reconciliation/cancel, filtering, isolation, provider/ingest failure, collision or cross-adapter live matrix. |
+| Ingest recovery regression | No restart or second app instance: current session is running inside Logic Loop. Live activity continued, but does not prove these restart cases. |
+| §66 Codex daemon identity | First-session-only limitation superseded by Phase 45 launch registry/session replacement. Fresh Setup prompt, two-tab isolation, outside session, late hooks and Antigravity regressions remain unrun. |
+| §69 guided tour | No clean-profile auto-start or real conditional-card walkthrough. |
+| §70 Home/Overview | Live Home navigation observed; completion claim timing, split return, catalog retention, decision route/archive separation, full Copy update trace/edit, render-error recovery, exhaustive keyboard, versioned tour, restart digest, clipboard denial, 200% zoom, VoiceOver and Reduce Motion remain unverified in this pass. Older failed observations retained alongside later repair evidence. |
+| §71 repair / identity / launches | Paths, fresh shell and live Continue subcases passed. Restart digest, re-enter/new human turn, foreign attribution, all field shortcuts, real export trace/copy, fresh/side-panel tour, disposable-profile locking, permissions/accessibility/zoom, nickname persistence/fallback/error, zero-workspace launch, exact chooser/double-click/error remain unrun. |
+| Phase 49 | Compact controls/notice disclosure passed. Full resize/narrow/200%/hover matrix, dismiss/unresolve targets, loading/stale/error/badge settings, LM edits/short window, window dragging/reorder, scrollbar pointer/drag geometry, PTY identity and focus/sizing remain unverified. Blue Setup/hooks and orange Isolate styling notes superseded by Phase 50. |
+| Phase 50 items 1–11 | Partial colors/Setup/Lock-in observations above. All-state focus/min-width checks and missing/seen/corrupt Traffic fixtures unrun. Setup detected-log text observed; other two states unrun. Default/backend-configured LM visibility and toggle persistence unrun. |
+| Phase 50 items 12–22 | No controlled one/two-session dashboard delta matrix, fresh unbound skip or repeat-collapse check; no fan-out glow fixture, full Git log/footer color matrix, short/growing popover or LM visibility toggle/restart. Plural header parity passed; singular grammar unrun. |
+| Phase 51 items 23–30 | No controlled before/after stale-count measurement, old-decision group lifecycle, bulk dismiss, export/Inbox exclusion, re-arm or minimum-width matrix. Existing decisions preserved. |
+| Phase 52 items 31–40 | No board/note/decision priority mutations, Start/star clearing, blocker-only project, manual/detected clear/promote/reopen lifecycle or fresh Claude `/context`. Counts/display subcases above do not close the combined tests. |
+| Phase 53 items 41–48 | No hook changes or terminal prompts. Existing detected history is not proof of current failure/success filtering. Real OpenCode non-zero exit and Codex completion failure/success remain unverified live. Week-long rate comparison cannot be completed in one pass. Item 45 is explicitly superseded by 48. |
+| Re-entry items 49–52 | No quit/relaunch, agent exit or folder deletion. Maintainer's general re-entry report retained; subfolder/root/fallback scenarios not independently exercised. |
+| Phase 54 items 53–60 | Boxes 53–59 reconciled from existing explicit maintainer pass. Item 60 remains open with the threshold observation above; 90% unrun. |
+| Phase 55 items 61–69 | Boxes reconciled from existing explicit maintainer pass; no fresh picker/hooks/scope/resume/outside-terminal execution. Already-running-session switch caveat retained. |
+
+### Current-source automated verification — 2026-10-08
+
+- [x] `npm run opencode:check` and full `npm run check` (46 scripts).
+- [x] `npx tsc --noEmit`.
+- [x] `npm run build`; existing large-chunk advisory only.
+- [x] `cargo test --lib`: 167 passed, 1 authenticated live-reader test ignored.
+- [x] `cargo clippy --all-targets -- -D warnings`.
+- [x] `git diff --check`.
+
+Initial tsx IPC and three Rust localhost-socket failures were sandbox
+`Operation not permitted`; permitted reruns passed. `golden` not run:
+no extraction prompts changed. No source, plan, board, commit or push changes.
+Unverified live scenarios and observation triage remain for human review;
+this audit grants no new phase acceptance.
+
+### Fix sprint from the computer-use observations — 2026-10-08
+
+Source fixes for the review items above (uncommitted on
+`feat/phase-55-adoption-blockers`). Gates: `npm run check`,
+`npx tsc --noEmit`, `npm run build`, `git diff --check`. Rust untouched.
+**No rebuilt-app pass by the agent.**
+
+- Ctrl+Tab: xterm turned it into `\t` for the PTY and stopped propagation,
+  so App's tab switch never ran. Terminal now hands Ctrl+Tab back.
+- Focus restore: WebKit doesn't focus a button on click, so Traffic and
+  Attention restored focus to `<body>`. Their header/rail/Home triggers now
+  focus themselves first.
+- Nested Escape: Setup listened in the capture phase and closed before the
+  Sidebar LM popover could stop the event. Setup now listens in bubble phase.
+- Lock-in: Set landing note button and capture input drop the rainbow border
+  under Lock-in, same gate as the Next card.
+- Isolate loop: Escape cancels (unless launching).
+- Context meter (item 60): not changed. Bar color and percent come from the
+  same value with `>= 70` amber; 71–73% sky is not reachable from source.
+  Treat as a screenshot-read on a 4px bar; recheck at ≥70%.
+
+Manual, rebuilt app:
+- [ ] **F1.** Terminal focused, Ctrl+Tab / Ctrl+Shift+Tab cycle tabs; no tab
+      character reaches the agent prompt.
+- [ ] **F2.** Open Traffic and Attention by mouse (expanded header, compact
+      rail, Home Inbox); Escape and Close return focus to the trigger.
+- [ ] **F3.** Setup → Sidebar LM popover → Escape closes only the popover;
+      second Escape closes Setup.
+- [ ] **F4.** Lock-in on: Set landing note button and capture input are grey.
+- [ ] **F5.** Isolate loop with branch field focused: Escape closes it.
+- [ ] **F6.** Context meter is amber at displayed 70–89%.
