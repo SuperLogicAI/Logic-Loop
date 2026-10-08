@@ -159,7 +159,16 @@ export function TabBar({
           bleed) hits this container's own clip edge, one level in from
           where the old outer px-2 lived. Outer px-2 dropped in favor of
           this to avoid double-padding the tab-strip/button gap. */}
-      <div className="tab-strip flex min-w-0 items-end gap-1 overflow-x-auto px-2 pt-2">
+      <div
+        className="tab-strip flex min-w-0 items-end gap-1 overflow-x-auto px-2 pt-2"
+        // The scrollbar sits inside the deep drag region, so Tauri's document
+        // mousedown would start a window drag instead of a thumb drag. A press
+        // below clientHeight is on the scrollbar: keep it from reaching Tauri.
+        onMouseDown={(e) => {
+          const el = e.currentTarget;
+          if (e.clientY >= el.getBoundingClientRect().top + el.clientHeight) e.stopPropagation();
+        }}
+      >
         {tabs.map((tab) => {
         const clock = deriveClock(tab, now);
         const agentIcon = agentIconForTab(tab);

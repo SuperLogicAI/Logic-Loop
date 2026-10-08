@@ -177,8 +177,10 @@ export function OnboardingModal({
       event.stopPropagation();
       onClose();
     };
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
+    // Bubble phase: a nested popover (Sidebar LM) handles Escape in the
+    // capture phase and stops it, so only the popover closes.
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
   const requestNotifications = async () => {

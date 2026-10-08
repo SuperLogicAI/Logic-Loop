@@ -26,6 +26,15 @@ export function IsolateLoopModal({ parentCwd, onLaunch, onCancel }: Props) {
     void gitBranches(parentCwd).then(setBranches).catch(() => setBranches([]));
   }, [parentCwd]);
 
+  // Esc cancels from anywhere in the modal, including the branch field.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !busy) onCancel();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [busy, onCancel]);
+
   const slugPreview = sanitizeSlug(newSlug);
   const filtered = branches.filter((b) => b.toLowerCase().includes(filter.toLowerCase()));
 
