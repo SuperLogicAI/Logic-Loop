@@ -284,6 +284,8 @@ pub fn run() {
             ingest::hooks_setup,
             ingest::hooks_remove,
             ingest::hooks_status,
+            ingest::claude_hooks_mode,
+            ingest::claude_hooks_mode_set,
             ingest::claude_detect,
             statusline::claude_statusline_status,
             statusline::claude_statusline_setup,

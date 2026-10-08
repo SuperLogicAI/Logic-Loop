@@ -13,6 +13,7 @@ import {
   type AdapterRuntimeState,
 } from "../lib/onboarding";
 import { validateProjectDir } from "../lib/pty";
+import { claudeHooksMode, claudeHooksModeSet, type ClaudeHooksMode } from "../lib/ingest";
 
 interface Props {
   adapterStates: Record<AdapterId, AdapterRuntimeState>;
@@ -42,6 +43,72 @@ const PROGRESS_LABELS = {
   connected: "Connected — first event received",
   error: "Setup failed",
 } as const;
+
+const CLAUDE_MODES: { id: ClaudeHooksMode; label: string; hint: string }[] = [
+  { id: "global", label: "Global", hint: "~/.claude/settings.json — also sees Claude run outside Logic Loop" },
+  {
+    id: "tabs",
+    label: "Logic Loop tabs only",
+    hint: "~/.context-terminal/claude-settings.json via --settings — your settings.json is never written (zsh tabs only)",
+  },
+];
+
+/** Plan 055: Claude install mode. Switching carries whatever is installed
+ * (hooks, status-line wrapper) across; Enable/Disable then act on that mode. */
+function ClaudeInstallMode() {
+  const [mode, setMode] = useState<ClaudeHooksMode | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    claudeHooksMode()
+      .then((m) => {
+        if (!cancelled) setMode(m);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const choose = async (next: ClaudeHooksMode) => {
+    if (busy || next === mode) return;
+    setBusy(true);
+    try {
+      await claudeHooksModeSet(next);
+      setMode(next);
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (mode === null) return null;
+  return (
+    <div className="mt-1.5 text-[11px]" role="radiogroup" aria-label="Claude hook install location">
+      <div className="flex flex-wrap gap-1">
+        {CLAUDE_MODES.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            role="radio"
+            aria-checked={mode === m.id}
+            disabled={busy}
+            title={m.hint}
+            onClick={() => void choose(m.id)}
+            className={`rounded border px-1.5 py-0.5 focus-visible:outline-2 focus-visible:outline-focus-400 disabled:cursor-wait ${
+              mode === m.id ? "border-info-700 bg-info-950 text-info-300" : "border-zinc-800 text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+      <p className="mt-1 text-zinc-500">{CLAUDE_MODES.find((m) => m.id === mode)?.hint}</p>
+      {error && <p className="mt-1 break-words text-danger-300">{error}</p>}
+    </div>
+  );
+}
 
 export function OnboardingModal({
   adapterStates,
@@ -338,6 +405,7 @@ export function OnboardingModal({
                         {adapter.configLocation}
                       </span>
                     </div>
+                    {adapter.id === "claude" && <ClaudeInstallMode />}
                     {adapter.id === "codex" && (
                       <p className="mt-1 text-[11px] text-zinc-500">
                         Select Codex above and Start session to launch it for the chosen folder.

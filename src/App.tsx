@@ -1095,6 +1095,7 @@ export default function App() {
           clearExtractionFailedWarning
         );
       }
+      decisions.onAskUserQuestionHook(p, sessionCwd.get(p.session_id), sourceContext, refreshDecisionCounts);
       // A completed or interrupted turn is a real result worth flagging when
       // unseen; SessionEnd alone is session shutdown, not a new result — it
       // only closes the epoch (via stateForHook), it doesn't land one here.

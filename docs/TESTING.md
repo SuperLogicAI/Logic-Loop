@@ -5373,3 +5373,54 @@ fill clamp, token formatting).
 **Live (2026-10-07, maintainer, rebuilt app): items 53-59 passed; item 60
 not reached (thresholds unverified live, covered by `context-meter:check`).**
 Codex figure matched closely enough that Decision 2's formula stays.
+
+## Phase 55 — Adoption blockers: multiple-choice cards, tab-only hooks (2026-10-07)
+
+Rebuild and relaunch first. Claude is installed globally on this machine, so
+Setup shows `claude update` (the new `PreToolUse` entry); click Update once.
+
+61. **Multiple-choice card opens** — in a Claude tab, ask the agent to "use
+    AskUserQuestion to ask me which of two options I prefer". Expected: while
+    the picker is open, a Decision card shows the question with `○` option
+    labels and "pick in terminal" (no ✎ answer / ⌕ context); the tab reads
+    waiting.
+62. **Card closes with the pick** — choose an option in the terminal.
+    Expected: the card moves to answered with your label as the answer.
+    Repeat with a multi-select question: answer lists every label picked.
+63. **Escaped picker** — trigger another one and press Esc. Expected: the card
+    is dismissed by your next prompt (or the turn's Stop), not left open.
+64. **Switch to tab-only** — `shasum ~/.claude/settings.json` first. Setup →
+    Claude → *Logic Loop tabs only*. Expected: Logic Loop's hook entries (and
+    the status-line wrapper, if on) are gone from `~/.claude/settings.json`,
+    the rest of it unchanged; `~/.context-terminal/claude-settings.json`
+    holds them. Caveat: Claude sessions already running at Switch time go
+    silent (Claude Code reloads the global file, the overlay only applies at
+    spawn) until restarted — seen live 2026-10-07.
+65. **Tab-only works** — new zsh tab, run `claude`, send a prompt. Expected:
+    activity, decisions and the usage/context meters behave as before.
+    `shasum ~/.claude/settings.json` unchanged across enable, use and disable
+    (Disable/Enable while in tab-only mode).
+66. **Tab-only status line** — the status line still renders your own line
+    (the wrapper's `--settings` statusLine overrides the global one).
+67. **Tab-only resume** — quit the app with a Claude tab open, relaunch.
+    Expected: the resumed session still sends events.
+68. **Outside terminal is silent** — in Terminal.app run `claude` in a project
+    and send a prompt. Expected: nothing arrives in Logic Loop while tab-only
+    is active.
+69. **Back to Global** — Setup → Claude → *Global*. Expected:
+    `~/.claude/settings.json` has Logic Loop's entries again (and the wrapper
+    if it was on); `~/.context-terminal/claude-settings.json` is gone.
+
+Automated: `ask-user-question:check` (Pre/Post parsers, malformed payloads,
+multi-select answers, stored-context round trip, waiting state); Rust:
+`PreToolUse` matcher and partial-install detection, `move_hooks` round trip
+and untouched-source guard, `move_statusline` round trip and no-op, zsh
+`claude` wrapper in interactive and `-c` resume shells, with and without the
+tab file.
+
+**Live (2026-10-07, maintainer, rebuilt app): items 61-69 passed.** Global →
+tab-only → Global round trip left `~/.claude/settings.json` byte-identical to
+the pre-switch copy; global hash unchanged across Disable/Enable, use, and
+app relaunch; re-entry resume (`zsh -l -c`) spawned with `--settings`; an
+outside Terminal.app session sent nothing; no duplicate hooks in a tab
+launched under tab-only after switching back to Global.

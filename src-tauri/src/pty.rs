@@ -318,7 +318,18 @@ const ZSH_FILES: [(&str, &str); 4] = [
         "# Logic Loop (Plan 044). A user .zshenv may move ZDOTDIR; keep that answer.\n\
          _ll_zd=$ZDOTDIR; ZDOTDIR=$LOGIC_LOOP_USER_ZDOTDIR\n\
          [[ -f $ZDOTDIR/.zshenv ]] && builtin source $ZDOTDIR/.zshenv\n\
-         LOGIC_LOOP_USER_ZDOTDIR=$ZDOTDIR; ZDOTDIR=$_ll_zd; unset _ll_zd\n",
+         LOGIC_LOOP_USER_ZDOTDIR=$ZDOTDIR; ZDOTDIR=$_ll_zd; unset _ll_zd\n\
+         # Plan 055: tab-only Claude hooks ride in as --settings while that file\n\
+         # exists. Here, not .zshrc, so the `-c` resume shell has it too; a\n\
+         # user's own `claude` function wins.\n\
+         (( $+functions[claude] )) || function claude {\n\
+           local _ll_s=$HOME/.context-terminal/claude-settings.json\n\
+           if [[ -f $_ll_s ]] && (( ! ${@[(Ie)--settings]} )); then\n\
+             command claude --settings $_ll_s \"$@\"\n\
+           else\n\
+             command claude \"$@\"\n\
+           fi\n\
+         }\n",
     ),
     (
         ".zprofile",
@@ -1384,6 +1395,51 @@ mod tests {
         assert!(lines.contains(&"user-rc"), "user .zshrc alias missing: {stdout}");
         assert!(lines.contains(&format!("zd:{cfg}").as_str()), "ZDOTDIR not handed back: {stdout}");
         assert!(lines.contains(&format!("hf:{cfg}/.zsh_history").as_str()), "HISTFILE left in app dir: {stdout}");
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// Plan 055: `claude` gets `--settings <tab file>` only while that file
+    /// exists, once, in both the interactive shell and the `-c` resume shell.
+    #[test]
+    fn zsh_integration_adds_tab_settings_to_claude_only_in_tab_mode() {
+        if !std::path::Path::new("/bin/zsh").exists() {
+            return;
+        }
+        let home = std::env::temp_dir().join(format!("ll-zsh-claude-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let bin = home.join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(home.join(".zshrc"), "path=($HOME/bin $path)\n").unwrap();
+        std::fs::write(home.join(".zshenv"), "path=($HOME/bin $path)\n").unwrap();
+        let fake = bin.join("claude");
+        std::fs::write(&fake, "#!/bin/sh\nprintf 'argv:'; printf '[%s]' \"$@\"; echo\n").unwrap();
+        std::process::Command::new("chmod").arg("+x").arg(&fake).status().unwrap();
+        let dir = write_zsh_integration(&home).expect("integration written");
+        let run = |args: &[&str], script: &str| {
+            let out = std::process::Command::new("/bin/zsh")
+                .args(args)
+                .arg(script)
+                .env_clear()
+                .env("HOME", &home)
+                .env("PATH", "/usr/bin:/bin")
+                .env("ZDOTDIR", &dir)
+                .env("LOGIC_LOOP_USER_ZDOTDIR", &home)
+                .output()
+                .unwrap();
+            String::from_utf8_lossy(&out.stdout).into_owned()
+        };
+        let script = "claude --resume abc; claude --settings x.json";
+        let global = run(&["-l", "-i", "-c"], script);
+        assert!(global.contains("argv:[--resume][abc]\n"), "global mode must not add a flag: {global}");
+
+        let tab_file = home.join(".context-terminal/claude-settings.json");
+        std::fs::write(&tab_file, "{}\n").unwrap();
+        let tab = tab_file.to_str().unwrap();
+        for args in [&["-l", "-i", "-c"][..], &["-l", "-c"][..]] {
+            let out = run(args, script);
+            assert!(out.contains(&format!("argv:[--settings][{tab}][--resume][abc]\n")), "{args:?}: {out}");
+            assert!(out.contains("argv:[--settings][x.json]\n"), "{args:?}: user's --settings kept alone: {out}");
+        }
         let _ = std::fs::remove_dir_all(&home);
     }
 

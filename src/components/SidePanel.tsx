@@ -29,6 +29,7 @@ import {
   gitUntrackedFiles,
 } from "../lib/pty";
 import { DiffModal } from "./DiffModal";
+import { askOptionsFromContext } from "../lib/askUserQuestion";
 import { cycle, HUES, RainbowText } from "./RainbowText";
 import {
   PANEL_COMPACT_WIDTH,
@@ -1475,7 +1476,11 @@ export function SidePanel({
                     </div>
                     {isExpanded && (
                       <ul className="flex flex-col gap-2">
-                        {rows.map((d) => (
+                        {rows.map((d) => {
+                          // Plan 055: multiple-choice cards — answered in the
+                          // terminal's picker, so no prefill and no turn pair.
+                          const askOptions = askOptionsFromContext(d.context_json);
+                          return (
                           <li key={d.id} className="relative rounded border border-attn-800/60 bg-attn-950/20 p-2">
                             <button
                               className="absolute top-1 right-2 flex h-5 w-5 items-center justify-center rounded focus-visible:outline-2 focus-visible:outline-focus-400 text-attn-800 hover:text-attn-500"
@@ -1488,20 +1493,34 @@ export function SidePanel({
                             {d.assumption && (
                               <p className="mt-1 text-zinc-400">agent assumed: {d.assumption}</p>
                             )}
+                            {askOptions && askOptions.length > 0 && (
+                              <ul className="mt-1 flex flex-col gap-0.5 text-zinc-400">
+                                {askOptions.map((o, i) => (
+                                  <li key={i} className="break-words" title={o.description}>○ {o.label}</li>
+                                ))}
+                              </ul>
+                            )}
                             <div className="mt-1.5 flex gap-2 text-zinc-400">
-                              <button className="text-danger-400 hover:text-danger-300" title="Prefill answer in terminal" onClick={() => onAnswerNow(d)}>
-                                ✎ answer
-                              </button>
-                              <button className="text-attn-400 hover:text-attn-300" title="Show surrounding conversation" onClick={() => setContext(d)}>
-                                ⌕ context
-                              </button>
+                              {askOptions ? (
+                                <span className="text-zinc-500">pick in terminal</span>
+                              ) : (
+                                <>
+                                  <button className="text-danger-400 hover:text-danger-300" title="Prefill answer in terminal" onClick={() => onAnswerNow(d)}>
+                                    ✎ answer
+                                  </button>
+                                  <button className="text-attn-400 hover:text-attn-300" title="Show surrounding conversation" onClick={() => setContext(d)}>
+                                    ⌕ context
+                                  </button>
+                                </>
+                              )}
                               <button className="text-ok-400 hover:text-ok-300" title="Fine — agent's call" onClick={() => void setStatus(d, "delegated")}>
                                 ⤳ delegate
                               </button>
                               <span className="ml-auto text-zinc-600">{ago(d.ts)}</span>
                             </div>
                           </li>
-                        ))}
+                          );
+                        })}
                       </ul>
                     )}
                   </div>

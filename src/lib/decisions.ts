@@ -6,7 +6,8 @@ import { buildPrompt, parseExtraction, EXTRACTION_SCHEMA, type TurnPair } from "
 import { matchAnswerNowReply } from "./decisionReconciliation";
 import { serialize } from "./extractorQueue";
 import * as repo from "./repo";
-import type { AttentionSourceContext } from "../types";
+import { answersFromPost, askContextJson, questionsFromPre } from "./askUserQuestion";
+import type { AttentionSourceContext, HookPayload } from "../types";
 
 interface PendingAssistant {
   text: string;
@@ -307,6 +308,43 @@ export function onTranscript(
   assistantBuf.delete(sessionId);
   if (assistant && cwd)
     enqueue(sessionId, cwd, { assistant: assistant.text, user: msg.text }, assistant.context, onDone, onExtractionFailed, onExtractionSucceeded);
+}
+
+// Own chain, not the extractor queue: a card must land while the picker is
+// open, not after an in-flight Sonnet call (live: 7.2s late behind one).
+// Ordering only matters among these writes (open → answer → dismiss).
+let askQueue: Promise<unknown> = Promise.resolve();
+
+/** Plan 055: Claude's multiple-choice prompts, straight from hooks — no
+ * model call. PreToolUse opens one card per question while the picker is
+ * up, PostToolUse answers them, and a Stop or new prompt dismisses any the
+ * user escaped. */
+export function onAskUserQuestionHook(
+  p: HookPayload,
+  cwd: string | undefined,
+  context: AttentionSourceContext,
+  onDone: () => void
+): void {
+  const sessionId = p.session_id;
+  let run: (() => Promise<unknown>) | null = null;
+  const questions = questionsFromPre(p);
+  const answers = answersFromPost(p);
+  if (questions.length > 0 && cwd) {
+    run = async () => {
+      for (const q of questions) {
+        const d = { question: q.question, answered: false, user_answer: null, agent_assumption: null };
+        await repo.insertDecision(sessionId, cwd, d, askContextJson(q, p["tool_use_id"]), context);
+      }
+    };
+  } else if (answers.size > 0) {
+    run = () => repo.answerAskUserQuestions(sessionId, answers);
+  } else if (!p.agent && (p.hook_event_name === "Stop" || p.hook_event_name === "UserPromptSubmit")) {
+    run = () => repo.dismissOpenAskUserQuestions(sessionId);
+  }
+  if (!run) return;
+  const step = askQueue.then(run);
+  askQueue = step.catch(() => undefined);
+  void step.then(onDone).catch(() => undefined);
 }
 
 /** Feed Stop hooks here: turn ended with no user reply. Delayed so the

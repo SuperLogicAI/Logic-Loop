@@ -50,6 +50,16 @@ fix is ever reverted or bypassed. Referenced from CLAUDE.md.
 - `~/.claude/settings.json` writes must stay idempotent and byte-identical
   reversible; the user has pre-existing hooks that must survive. Unit tests
   cover this — keep them passing.
+- **Tab-only Claude mode (Plan 055) rests on `--settings` merging, not
+  replacing.** Verified live on CLI 2.1.294 (2026-10-07): a hook in a
+  `--settings <file>` and one in project `.claude/settings.json` both fired
+  on one run, and `--settings` before a subcommand (`mcp list`, `plugin
+  list`, `--version`) is accepted. If a CLI release changes either, tab-only
+  goes silent or breaks `claude <subcommand>` in app tabs — re-probe first.
+  The zsh `claude` function lives in the app's `.zshenv`, not `.zshrc`:
+  re-entry resumes through `zsh -l -c`, which never reads `.zshrc`. The mode
+  is the tab file's existence (`{}` = tab-only with everything off); a mode
+  switch writes the global file only when its content actually changes.
 - Events table dedupe (migration 6, `dedupe_key` UNIQUE index): key is
   `tool_use_id` alone for types that carry one (PostToolUse — a real Anthropic
   API id, immune to concurrent subagents sharing one session_id); for types

@@ -747,6 +747,37 @@ export async function answerOpenDecisions(
   return result.rowsAffected;
 }
 
+/** Plan 055: close open multiple-choice cards with the label(s) picked in the
+ * terminal. Matched on the exact question text the PreToolUse card stored. */
+export async function answerAskUserQuestions(sessionId: string, answers: ReadonlyMap<string, string>): Promise<number> {
+  const d = await getDb();
+  let changed = 0;
+  for (const [question, answer] of answers) {
+    const result = await d.execute(
+      `UPDATE decisions SET status = 'answered', user_answer = $3
+       WHERE session_id = $1 AND status = 'open' AND question = $2
+         AND json_extract(context_json, '$.source') = 'ask_user_question'`,
+      [sessionId, question, boundedSubmittedReply(answer)]
+    );
+    changed += result.rowsAffected;
+  }
+  return changed;
+}
+
+/** Plan 055: a multiple-choice card still open when the turn ends or a new
+ * prompt arrives was escaped, not answered — the agent can't reach Stop or
+ * take a prompt while the picker is open. */
+export async function dismissOpenAskUserQuestions(sessionId: string): Promise<number> {
+  const d = await getDb();
+  const result = await d.execute(
+    `UPDATE decisions SET status = 'dismissed'
+     WHERE session_id = $1 AND status = 'open'
+       AND json_extract(context_json, '$.source') = 'ask_user_question'`,
+    [sessionId]
+  );
+  return result.rowsAffected;
+}
+
 export interface DecisionOwner {
   cwd: string;
   tab_id: string | null;

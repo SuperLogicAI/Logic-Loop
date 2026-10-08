@@ -962,3 +962,36 @@ label size (`text-xs`) and its bar is wider (`w-12` → `w-16`).
 
 Live checks 53-59 passed on the rebuilt app; 60 (amber/red thresholds) not
 reached live, accepted to watch in use. **PHASE 54 ACCEPTED** (2026-10-07).
+
+### Phase 55 — Adoption blockers (2026-10-07)
+
+Source: outside feedback (a prospective user's Claude called the app a
+"non-starter"). Maintainer wrote `PHASE 55 APPROVED`, decisions 1-4 as
+recommended. Built on `feat/phase-55-adoption-blockers` (Plan 055).
+(A) Claude's multiple-choice prompts (`AskUserQuestion`, a tool call the
+transcript extractor never saw) now become Decision cards straight from hooks:
+new `PreToolUse` entry matched to `AskUserQuestion` opens a card per question
+with its options and sets the tab waiting; the existing PostToolUse answers it;
+a Stop or new prompt dismisses an escaped one. No model call
+(`src/lib/askUserQuestion.ts`). (B) Tab-only Claude install: Setup → Claude →
+*Logic Loop tabs only* moves hooks and the status-line wrapper to
+`~/.context-terminal/claude-settings.json`, passed by an app-owned zsh
+`claude` function as `--settings`; `~/.claude/settings.json` is never
+written. Global stays the default. (C) README states the Sonnet default, the
+~1.4k-token per-call overhead and that multiple-choice cards are free.
+Extractor model unchanged (Sonnet). Gates: `ask-user-question:check`, full
+`npm run check`, `npx tsc --noEmit`, `npm run build` (existing large-chunk
+warning), `cargo test --lib` (167 passed, 1 ignored), clippy `-D warnings`,
+`git diff --check`. Golden not run (prompts unchanged). Awaiting live checks
+(TESTING.md Phase 55, items 61-69) and acceptance.
+
+Live fix during testing (item 61 passed): the card landed 7.2s after
+`PreToolUse` because it shared the extractor queue with an in-flight Sonnet
+call from the previous turn's Stop. Multiple-choice writes now run on their
+own chain in `decisions.ts`; ordering is kept among them only.
+
+Live checks 61-69 passed on the rebuilt app: Global → tab-only → Global left
+`~/.claude/settings.json` byte-identical; re-entry resume spawns with
+`--settings`; outside terminals stay silent. Known caveat (TESTING.md item 64):
+Claude sessions already running at Switch time go silent until restarted.
+**PHASE 55 ACCEPTED** (2026-10-07).
