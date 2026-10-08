@@ -144,6 +144,85 @@ fn apply_remove_to_settings(settings: &mut serde_json::Value, installed: &Instal
     }
 }
 
+/// Plan 055, tab-only mode: the wrapper is installed when the tab file's
+/// `statusLine.command` points at it; otherwise the command to offer wrapping
+/// is the user's own from `~/.claude/settings.json`, which this mode only reads.
+fn detect_tabs(
+    global: &serde_json::Value,
+    tab: &serde_json::Value,
+    wrapper_contents: Option<&str>,
+    wrapper_cmd_value: &str,
+) -> Installed {
+    if statusline_command(tab) == Some(wrapper_cmd_value) {
+        if let Some(original) = wrapper_contents.filter(|c| is_ours_wrapper(c)).and_then(original_from_wrapper) {
+            return Installed::Yes(original);
+        }
+    }
+    match detect(global, wrapper_contents, wrapper_cmd_value) {
+        Installed::Yes(original) => Installed::Foreign(original),
+        other => other,
+    }
+}
+
+/// The tab file's `statusLine`: the user's object (padding etc.) with only
+/// `command` swapped, so `--settings` renders the same line.
+fn tab_statusline(global: &serde_json::Value, wrapper_cmd_value: &str) -> serde_json::Value {
+    let mut statusline = global
+        .get("statusLine")
+        .filter(|v| v.is_object())
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({ "type": "command" }));
+    statusline["command"] = wrapper_cmd_value.into();
+    statusline
+}
+
+/// Pure half of `move_install`: moves an installed wrapper between the two
+/// settings values. Returns the command the wrapper must embed afterwards, or
+/// `None` when nothing was installed (or there's nothing left to wrap).
+fn move_statusline(
+    global: &mut serde_json::Value,
+    tab: &mut serde_json::Value,
+    to_tabs: bool,
+    wrapper_contents: Option<&str>,
+    wrapper_cmd_value: &str,
+) -> Option<String> {
+    if to_tabs {
+        let Installed::Yes(original) = detect(global, wrapper_contents, wrapper_cmd_value) else {
+            return None;
+        };
+        global["statusLine"]["command"] = original.clone().into();
+        tab["statusLine"] = tab_statusline(global, wrapper_cmd_value);
+        return Some(original);
+    }
+    let Installed::Yes(_) = detect_tabs(global, tab, wrapper_contents, wrapper_cmd_value) else {
+        return None;
+    };
+    if let Some(obj) = tab.as_object_mut() {
+        obj.remove("statusLine");
+    }
+    match detect(global, wrapper_contents, wrapper_cmd_value) {
+        Installed::Foreign(cmd) => {
+            global["statusLine"]["command"] = wrapper_cmd_value.into();
+            Some(cmd)
+        }
+        _ => None,
+    }
+}
+
+/// Plan 055: carry an installed wrapper across an install-mode switch.
+pub(crate) fn move_install(global: &mut serde_json::Value, tab: &mut serde_json::Value, to_tabs: bool) -> Result<(), String> {
+    let wrapper_contents = fs::read_to_string(wrapper_path()).ok();
+    match move_statusline(global, tab, to_tabs, wrapper_contents.as_deref(), &wrapper_command_value()) {
+        Some(original) => write_wrapper_file(&original),
+        None => Ok(()),
+    }
+}
+
+fn tabs_mode_path() -> Option<PathBuf> {
+    let path = crate::ingest::tab_settings_path();
+    path.exists().then_some(path)
+}
+
 fn is_executable(candidate: &Path) -> bool {
     #[cfg(unix)]
     {
@@ -223,7 +302,16 @@ fn claude_statusline_status_blocking() -> Result<StatuslineStatus, String> {
     let settings = crate::ingest::read_settings()?;
     let wrapper_cmd_value = wrapper_command_value();
     let wrapper_contents = fs::read_to_string(wrapper_path()).ok();
-    let (state, detected_command) = match detect(&settings, wrapper_contents.as_deref(), &wrapper_cmd_value) {
+    let installed = match tabs_mode_path() {
+        Some(tab_path) => detect_tabs(
+            &settings,
+            &crate::ingest::read_json_at(&tab_path)?,
+            wrapper_contents.as_deref(),
+            &wrapper_cmd_value,
+        ),
+        None => detect(&settings, wrapper_contents.as_deref(), &wrapper_cmd_value),
+    };
+    let (state, detected_command) = match installed {
         Installed::Not => ("not-installed", None),
         Installed::Yes(original) => ("installed", Some(original)),
         Installed::Foreign(cmd) => ("foreign", Some(cmd)),
@@ -234,6 +322,9 @@ fn claude_statusline_status_blocking() -> Result<StatuslineStatus, String> {
 
 #[tauri::command]
 pub fn claude_statusline_setup() -> Result<(), String> {
+    if let Some(tab_path) = tabs_mode_path() {
+        return statusline_setup_tabs(&tab_path);
+    }
     let mut settings = crate::ingest::read_settings()?;
     let wrapper_cmd_value = wrapper_command_value();
     let wrapper_contents = fs::read_to_string(wrapper_path()).ok();
@@ -251,8 +342,48 @@ pub fn claude_statusline_setup() -> Result<(), String> {
     Ok(())
 }
 
+/// Tab-only setup: writes the wrapper and the tab file; never the global file.
+fn statusline_setup_tabs(tab_path: &Path) -> Result<(), String> {
+    let global = crate::ingest::read_settings()?;
+    let mut tab = crate::ingest::read_json_at(tab_path)?;
+    let wrapper_cmd_value = wrapper_command_value();
+    let wrapper_contents = fs::read_to_string(wrapper_path()).ok();
+    let installed = detect_tabs(&global, &tab, wrapper_contents.as_deref(), &wrapper_cmd_value);
+    let original = match &installed {
+        Installed::Yes(o) => o.clone(),
+        Installed::Foreign(cmd) => cmd.clone(),
+        Installed::Not => return Err("No statusLine.command configured — nothing to wrap".into()),
+    };
+    write_wrapper_file(&original)?;
+    if matches!(installed, Installed::Foreign(_)) {
+        tab["statusLine"] = tab_statusline(&global, &wrapper_cmd_value);
+        crate::ingest::write_json_at(tab_path, &tab)?;
+    }
+    Ok(())
+}
+
+fn statusline_remove_tabs(tab_path: &Path) -> Result<(), String> {
+    let global = crate::ingest::read_settings()?;
+    let mut tab = crate::ingest::read_json_at(tab_path)?;
+    let wrapper_contents = fs::read_to_string(wrapper_path()).ok();
+    if matches!(
+        detect_tabs(&global, &tab, wrapper_contents.as_deref(), &wrapper_command_value()),
+        Installed::Yes(_)
+    ) {
+        if let Some(obj) = tab.as_object_mut() {
+            obj.remove("statusLine");
+        }
+        crate::ingest::write_json_at(tab_path, &tab)?;
+        let _ = fs::remove_file(wrapper_path());
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn claude_statusline_remove() -> Result<(), String> {
+    if let Some(tab_path) = tabs_mode_path() {
+        return statusline_remove_tabs(&tab_path);
+    }
     let mut settings = crate::ingest::read_settings()?;
     let wrapper_cmd_value = wrapper_command_value();
     let wrapper_contents = fs::read_to_string(wrapper_path()).ok();
@@ -398,5 +529,41 @@ mod tests {
         assert!(parse_cli_version("2.1.250").unwrap() < MIN_CLI_VERSION);
         assert!(parse_cli_version("2.0.999").unwrap() < MIN_CLI_VERSION);
         assert!(parse_cli_version("3.0.0").unwrap() >= MIN_CLI_VERSION);
+    }
+
+    /// Plan 055: global → tabs restores the user's command in the global file
+    /// and puts the wrapper (same padding etc.) in the tab file; tabs → global
+    /// reverses it.
+    #[test]
+    fn move_statusline_round_trips_between_global_and_tab_file() {
+        let user = serde_json::json!({ "type": "command", "command": "~/.claude/my-bar.sh", "padding": 0 });
+        let orig = serde_json::json!({ "statusLine": user, "model": "opus" });
+        let contents = generate_wrapper("~/.claude/my-bar.sh");
+        let mut global = orig.clone();
+        global["statusLine"]["command"] = WRAPPER_CMD.into();
+        let mut tab = serde_json::json!({ "hooks": {} });
+
+        let embed = move_statusline(&mut global, &mut tab, true, Some(&contents), WRAPPER_CMD);
+        assert_eq!(embed.as_deref(), Some("~/.claude/my-bar.sh"));
+        assert_eq!(global, orig, "global file back to the user's own statusLine");
+        assert_eq!(tab["statusLine"]["command"], WRAPPER_CMD);
+        assert_eq!(tab["statusLine"]["padding"], 0);
+        assert!(matches!(detect_tabs(&global, &tab, Some(&contents), WRAPPER_CMD), Installed::Yes(o) if o == "~/.claude/my-bar.sh"));
+
+        let embed = move_statusline(&mut global, &mut tab, false, Some(&contents), WRAPPER_CMD);
+        assert_eq!(embed.as_deref(), Some("~/.claude/my-bar.sh"));
+        assert_eq!(global["statusLine"]["command"], WRAPPER_CMD);
+        assert_eq!(tab, serde_json::json!({ "hooks": {} }));
+    }
+
+    #[test]
+    fn move_statusline_is_a_no_op_when_nothing_is_installed() {
+        let orig = serde_json::json!({ "statusLine": { "type": "command", "command": "bar" } });
+        let (mut global, mut tab) = (orig.clone(), serde_json::json!({}));
+        assert_eq!(move_statusline(&mut global, &mut tab, true, None, WRAPPER_CMD), None);
+        assert_eq!(move_statusline(&mut global, &mut tab, false, None, WRAPPER_CMD), None);
+        assert_eq!((global, tab), (orig.clone(), serde_json::json!({})));
+        // Tab mode offers to wrap the user's command without touching their file.
+        assert!(matches!(detect_tabs(&orig, &serde_json::json!({}), None, WRAPPER_CMD), Installed::Foreign(c) if c == "bar"));
     }
 }

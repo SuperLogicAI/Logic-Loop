@@ -5335,4 +5335,92 @@ binding's `cwd`); Re-enter spawns there. Tab identity (`cwd`) is unchanged.
 Automated: `reentry:check` covers resume vs plain restart vs legacy tab vs
 `~`. Gates: `reentry:check`, `npx tsc --noEmit`, full `npm run check`,
 `npm run build`, `git diff --check`. No Rust change, so cargo not rerun.
-**Items 49-52 unverified live.**
+**Live (2026-10-07, maintainer): re-entry confirmed on Claude and a fresh
+Codex instance after rebuild. Subfolder-specific items 49, 50 and 52 not
+separately reported.**
+
+## Phase 54 — Context meter in the Idea Board bar (2026-10-07)
+
+Plan 054. A `ctx ▬▬▭ N%` meter sits right-aligned in the Idea Board's top
+bar for the active tab. Claude: from the statusLine wrapper's
+`context_window.used_percentage` (wrapper must be enabled). Codex: from the
+rollout's `token_count` event (`last_token_usage.total_tokens /
+model_context_window`). Rebuilt app required (Rust passthrough changed).
+
+53. **Claude matches `/context`** — Claude tab with the usage-meter wrapper
+    enabled; send a prompt. Expected: meter appears after the first response;
+    run `/context` and compare. Within 1 point. Hover shows `Nk / Nk tokens`.
+54. **Claude live update** — send two more prompts that read files. Expected:
+    percent rises after each response without switching tabs.
+55. **Claude `/compact`** — run `/compact`. Expected: meter hides, returns
+    lower after the next response.
+56. **Claude without wrapper** — disable the wrapper in the sidebar, start a
+    new Claude session. Expected: no meter, no placeholder.
+57. **Codex live update** — Codex tab, send two prompts. Expected: meter
+    appears after the first turn and updates per turn. Note the Codex footer's
+    context figure next to ours (Decision 2: switch formula only if the gap is
+    visible).
+58. **Placement** — meter is right-aligned in both the collapsed bar (with and
+    without ★ Now cards) and the expanded board header; clicking it does not
+    toggle the board; long ★ Now titles truncate rather than push it off.
+59. **Tab switching** — switch between a Claude tab, a Codex tab and a plain
+    shell tab. Expected: meter follows the active tab; shell shows none.
+60. **Thresholds** — (if reachable) bar turns amber at 70%, red at 90%.
+
+Automated: `context-meter:check` (both parsers, malformed input, compact,
+fill clamp, token formatting).
+
+**Live (2026-10-07, maintainer, rebuilt app): items 53-59 passed; item 60
+not reached (thresholds unverified live, covered by `context-meter:check`).**
+Codex figure matched closely enough that Decision 2's formula stays.
+
+## Phase 55 — Adoption blockers: multiple-choice cards, tab-only hooks (2026-10-07)
+
+Rebuild and relaunch first. Claude is installed globally on this machine, so
+Setup shows `claude update` (the new `PreToolUse` entry); click Update once.
+
+61. **Multiple-choice card opens** — in a Claude tab, ask the agent to "use
+    AskUserQuestion to ask me which of two options I prefer". Expected: while
+    the picker is open, a Decision card shows the question with `○` option
+    labels and "pick in terminal" (no ✎ answer / ⌕ context); the tab reads
+    waiting.
+62. **Card closes with the pick** — choose an option in the terminal.
+    Expected: the card moves to answered with your label as the answer.
+    Repeat with a multi-select question: answer lists every label picked.
+63. **Escaped picker** — trigger another one and press Esc. Expected: the card
+    is dismissed by your next prompt (or the turn's Stop), not left open.
+64. **Switch to tab-only** — `shasum ~/.claude/settings.json` first. Setup →
+    Claude → *Logic Loop tabs only*. Expected: Logic Loop's hook entries (and
+    the status-line wrapper, if on) are gone from `~/.claude/settings.json`,
+    the rest of it unchanged; `~/.context-terminal/claude-settings.json`
+    holds them. Caveat: Claude sessions already running at Switch time go
+    silent (Claude Code reloads the global file, the overlay only applies at
+    spawn) until restarted — seen live 2026-10-07.
+65. **Tab-only works** — new zsh tab, run `claude`, send a prompt. Expected:
+    activity, decisions and the usage/context meters behave as before.
+    `shasum ~/.claude/settings.json` unchanged across enable, use and disable
+    (Disable/Enable while in tab-only mode).
+66. **Tab-only status line** — the status line still renders your own line
+    (the wrapper's `--settings` statusLine overrides the global one).
+67. **Tab-only resume** — quit the app with a Claude tab open, relaunch.
+    Expected: the resumed session still sends events.
+68. **Outside terminal is silent** — in Terminal.app run `claude` in a project
+    and send a prompt. Expected: nothing arrives in Logic Loop while tab-only
+    is active.
+69. **Back to Global** — Setup → Claude → *Global*. Expected:
+    `~/.claude/settings.json` has Logic Loop's entries again (and the wrapper
+    if it was on); `~/.context-terminal/claude-settings.json` is gone.
+
+Automated: `ask-user-question:check` (Pre/Post parsers, malformed payloads,
+multi-select answers, stored-context round trip, waiting state); Rust:
+`PreToolUse` matcher and partial-install detection, `move_hooks` round trip
+and untouched-source guard, `move_statusline` round trip and no-op, zsh
+`claude` wrapper in interactive and `-c` resume shells, with and without the
+tab file.
+
+**Live (2026-10-07, maintainer, rebuilt app): items 61-69 passed.** Global →
+tab-only → Global round trip left `~/.claude/settings.json` byte-identical to
+the pre-switch copy; global hash unchanged across Disable/Enable, use, and
+app relaunch; re-entry resume (`zsh -l -c`) spawned with `--settings`; an
+outside Terminal.app session sent nothing; no duplicate hooks in a tab
+launched under tab-only after switching back to Global.

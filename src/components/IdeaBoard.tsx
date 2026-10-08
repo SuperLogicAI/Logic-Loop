@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import * as repo from "../lib/repo";
 import { PanelIcon } from "./PanelIcon";
 import {
@@ -39,6 +39,7 @@ function Chevron({ collapsed }: { collapsed: boolean }) {
 
 interface Props {
   cwd: string; // project key of the active tab — same value SidePanel receives
+  trailing?: ReactNode; // Plan 054: right-aligned in the bar (context meter)
 }
 
 const COLUMNS: { status: BoardStatus; label: string }[] = [
@@ -59,7 +60,7 @@ export function topPlannedCard(cards: Card[]): Card | null {
   return cards.filter((c) => c.status === "planned")[0] ?? null;
 }
 
-export function IdeaBoard({ cwd }: Props) {
+export function IdeaBoard({ cwd, trailing }: Props) {
   const [md, setMd] = useState<string | null>(null); // null = not loaded yet
   const [collapsed, setCollapsed] = useState(true);
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
@@ -198,6 +199,7 @@ export function IdeaBoard({ cwd }: Props) {
             Idea Board {cards.length > 0 && `(${cards.length})`}
           </span>
         )}
+        {trailing}
       </div>
     );
   }
@@ -219,6 +221,7 @@ export function IdeaBoard({ cwd }: Props) {
           Idea Board {cards.length > 0 && `(${cards.length})`}
         </span>
         {capNotice && <span className="text-attn-600">Now is full ({NOW_CAP}/{NOW_CAP}) — remove one first</span>}
+        {trailing}
       </div>
       <div className="flex min-h-0 flex-1 gap-2 overflow-x-auto px-2 pb-2">
         {COLUMNS.map((col) => (

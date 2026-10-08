@@ -93,7 +93,7 @@ All six get activity and state tracking, fan-out, decision extraction and sessio
 
 | Agent | Connects through |
 | --- | --- |
-| **Claude Code** | Hooks in `~/.claude/settings.json` + JSONL transcript |
+| **Claude Code** | Hooks in `~/.claude/settings.json` (or Logic Loop tabs only, via `--settings`) + JSONL transcript |
 | **Codex** | Hooks in `~/.codex/hooks.json` + rollout transcript |
 | **OpenCode** | Global in-process plugin |
 | **Antigravity** (`agy`) | Hooks in `~/.gemini/config/hooks.json` + transcript |
@@ -120,13 +120,14 @@ Three features call a model, using the backend chosen on Setup's **Sidebar LM** 
 | Landing-note draft | The session's last few turns | When you leave a tab in Auto mode (Manual skips it) |
 | Commit message | The staged diff | When you use the Commit & Push footer |
 
-On Claude or Codex CLI these calls count against your own plan limits. LM Studio or Ollama keeps them on your machine.
+On Claude CLI the default model is Sonnet (`claude -p --model sonnet`), run stripped: no MCP servers, tools, settings or CLAUDE.md, so each call carries about 1.4k tokens of fixed overhead plus the turn itself. Claude's multiple-choice prompts become Decision cards straight from hooks, with no model call. On Claude or Codex CLI these calls count against your own plan limits. LM Studio or Ollama keeps them on your machine.
 
 ### What it touches
 
 - **Agent config**, only when you click Enable: the file listed per agent above. Disabling removes Logic Loop's entry byte for byte; your own hooks stay.
+- **Claude, tab-only mode** (Setup → Claude → *Logic Loop tabs only*): hooks and the status-line wrapper go in `~/.context-terminal/claude-settings.json` instead, passed as `--settings` to `claude` in Logic Loop's zsh tabs. Your `~/.claude/settings.json` is never written, which suits a settings file kept in git or synced across machines. Trade-off: Claude run outside Logic Loop tabs (another terminal, an IDE, bash/fish tabs) isn't seen.
 - **Claude status line**, only if you opt in: wraps your existing `statusLine.command` to read usage. Your line still renders; turning it off restores the original.
-- **`~/.context-terminal/`**: the database, settings and app-owned zsh startup files. Only zsh tabs Logic Loop opens use them: they load your own dotfiles, then add `--no-daemon` to `codex` so each tab reports its own session. Your dotfiles are never edited.
+- **`~/.context-terminal/`**: the database, settings and app-owned zsh startup files. Only zsh tabs Logic Loop opens use them: they load your own dotfiles, then add `--no-daemon` to `codex` so each tab reports its own session, and in tab-only mode add `--settings` to `claude`. Your dotfiles are never edited.
 - **`.logic-loop/board.md`** inside a project: the Idea Board, plain markdown you can commit.
 - **Localhost**: hooks post to a local ingest server guarded by a bearer token.
 

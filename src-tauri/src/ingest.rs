@@ -24,6 +24,24 @@ pub(crate) fn settings_path() -> PathBuf {
     PathBuf::from(home_or_tmp()).join(".claude/settings.json")
 }
 
+/// Plan 055: tab-only install. Logic Loop's Claude hooks (and statusLine
+/// wrapper) live here instead of `~/.claude/settings.json`; the app's zsh
+/// `claude` function passes it as `--settings` (pty.rs). Its existence is the
+/// mode: present = tab-only (even as `{}` with everything off), absent = global.
+pub(crate) fn tab_settings_path() -> PathBuf {
+    config_dir().join("claude-settings.json")
+}
+
+/// Where Logic Loop's own Claude entries are read and written in the current mode.
+pub(crate) fn claude_target_path() -> PathBuf {
+    let tab = tab_settings_path();
+    if tab.exists() {
+        tab
+    } else {
+        settings_path()
+    }
+}
+
 /// Sessions with an active transcript tailer.
 #[derive(Default)]
 pub struct TailerRegistry(Mutex<HashSet<String>>);
@@ -372,7 +390,7 @@ fn header_value(request: &tiny_http::Request, name: &'static str) -> Option<Stri
 /// distinct emit from `/event`'s hook payloads, and never written to the
 /// `events` table — statusLine reruns on nearly every assistant message, and
 /// this is transient per-tab display state, not an append-only fact.
-/// `model`/`rate_limits` are passed through opaquely so a field this server
+/// `model`/`rate_limits`/`context_window` are passed through opaquely so a field this server
 /// doesn't know about still reaches the frontend, which owns display
 /// validation (clamping, missing-field states, staleness).
 fn emit_statusline(app: &AppHandle, payload: serde_json::Value, tab_id: Option<String>) {
@@ -387,6 +405,8 @@ fn emit_statusline(app: &AppHandle, payload: serde_json::Value, tab_id: Option<S
         "session_id": session_id,
         "model": obj.get("model").cloned().unwrap_or(serde_json::Value::Null),
         "rate_limits": obj.get("rate_limits").cloned().unwrap_or(serde_json::Value::Null),
+        // Plan 054: context meter in the Idea Board bar.
+        "context_window": obj.get("context_window").cloned().unwrap_or(serde_json::Value::Null),
     });
     if let Some(key) = project_key {
         out["project_key"] = key.into();
@@ -648,13 +668,19 @@ fn accepts_synthetic_transcript(agent: Option<&str>) -> bool {
 
 /// `PostToolUseFailure` (Plan 053) is Claude Code's separate hook for failed
 /// tool calls; detectors scan only its `error` text, never successful output.
-const HOOK_EVENTS: [&str; 6] = [
+///
+/// `PreToolUse` (Plan 055) is matched to `AskUserQuestion` only: Claude's
+/// multiple-choice prompt is a tool call, so this is the one moment the open
+/// question exists as structured data. Prints nothing, exits 0 — never a
+/// permission decision.
+const HOOK_EVENTS: [&str; 7] = [
     "Notification",
     "Stop",
     "PostToolUse",
     "PostToolUseFailure",
     "UserPromptSubmit",
     "SessionStart",
+    "PreToolUse",
 ];
 
 fn is_ours(entry: &serde_json::Value) -> bool {
@@ -667,15 +693,22 @@ fn is_ours(entry: &serde_json::Value) -> bool {
 }
 
 pub(crate) fn read_settings() -> Result<serde_json::Value, String> {
-    match fs::read_to_string(settings_path()) {
-        Ok(s) => serde_json::from_str(&s).map_err(|e| format!("settings.json is not valid JSON: {e}")),
+    read_json_at(&settings_path())
+}
+
+pub(crate) fn write_settings(v: &serde_json::Value) -> Result<(), String> {
+    write_json_at(&settings_path(), v)
+}
+
+pub(crate) fn read_json_at(path: &Path) -> Result<serde_json::Value, String> {
+    match fs::read_to_string(path) {
+        Ok(s) => serde_json::from_str(&s).map_err(|e| format!("{} is not valid JSON: {e}", path.display())),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(serde_json::json!({})),
         Err(e) => Err(e.to_string()),
     }
 }
 
-pub(crate) fn write_settings(v: &serde_json::Value) -> Result<(), String> {
-    let path = settings_path();
+pub(crate) fn write_json_at(path: &Path, v: &serde_json::Value) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -709,6 +742,8 @@ fn apply_setup(settings: &mut serde_json::Value) -> Result<(), String> {
             entry["matcher"] = "*".into();
         } else if event == "PostToolUseFailure" {
             entry["matcher"] = "Bash".into();
+        } else if event == "PreToolUse" {
+            entry["matcher"] = "AskUserQuestion".into();
         }
         hooks
             .entry(event)
@@ -754,16 +789,18 @@ pub fn claude_detect() -> bool {
 
 #[tauri::command]
 pub fn hooks_setup() -> Result<(), String> {
-    let mut settings = read_settings()?;
+    let path = claude_target_path();
+    let mut settings = read_json_at(&path)?;
     apply_setup(&mut settings)?;
-    write_settings(&settings)
+    write_json_at(&path, &settings)
 }
 
 #[tauri::command]
 pub fn hooks_remove() -> Result<(), String> {
-    let mut settings = read_settings()?;
+    let path = claude_target_path();
+    let mut settings = read_json_at(&path)?;
     strip_ours(&mut settings);
-    write_settings(&settings)
+    write_json_at(&path, &settings)
 }
 
 /// "off" = none of ours, "on" = ours on every `HOOK_EVENTS` event, "partial" =
@@ -783,7 +820,61 @@ fn hooks_state(settings: &serde_json::Value) -> &'static str {
 
 #[tauri::command]
 pub fn hooks_status() -> Result<&'static str, String> {
-    Ok(hooks_state(&read_settings()?))
+    Ok(hooks_state(&read_json_at(&claude_target_path())?))
+}
+
+/// Moves our hooks from one settings value to another, only if any are
+/// installed — an untouched source stays byte-identical (no strip, no
+/// empty-array cleanup of the user's own entries).
+fn move_hooks(from: &mut serde_json::Value, to: &mut serde_json::Value) -> Result<(), String> {
+    if hooks_state(from) == "off" {
+        return Ok(());
+    }
+    strip_ours(from);
+    apply_setup(to)
+}
+
+#[tauri::command]
+pub fn claude_hooks_mode() -> &'static str {
+    if tab_settings_path().exists() {
+        "tabs"
+    } else {
+        "global"
+    }
+}
+
+/// Plan 055: switch where Logic Loop's Claude entries live, carrying whatever
+/// is installed (hooks, statusLine wrapper) across. `~/.claude/settings.json`
+/// is written only when it actually changes — removing our own entries on the
+/// way to tab-only, or adding them back on the way to global.
+#[tauri::command]
+pub fn claude_hooks_mode_set(mode: String) -> Result<(), String> {
+    let to_tabs = match mode.as_str() {
+        "tabs" => true,
+        "global" => false,
+        _ => return Err(format!("unknown mode: {mode}")),
+    };
+    let tab_path = tab_settings_path();
+    if to_tabs == tab_path.exists() {
+        return Ok(());
+    }
+    let mut global = read_settings()?;
+    let before = global.clone();
+    let mut tab = read_json_at(&tab_path)?;
+    if to_tabs {
+        move_hooks(&mut global, &mut tab)?;
+    } else {
+        move_hooks(&mut tab, &mut global)?;
+    }
+    crate::statusline::move_install(&mut global, &mut tab, to_tabs)?;
+    if global != before {
+        write_settings(&global)?;
+    }
+    if to_tabs {
+        write_json_at(&tab_path, &tab)
+    } else {
+        fs::remove_file(&tab_path).map_err(|e| e.to_string())
+    }
 }
 
 #[cfg(test)]
@@ -1109,6 +1200,41 @@ mod tests {
             assert_eq!(n, 1, "{ev}: exactly one of ours after update");
         }
         assert_eq!(s["hooks"]["Stop"][0]["hooks"][0]["command"], "echo user-owned");
+    }
+
+    #[test]
+    fn ask_user_question_hook_registers_with_its_own_matcher() {
+        let mut s = foreign_settings();
+        apply_setup(&mut s).unwrap();
+        assert_eq!(s["hooks"]["PreToolUse"].as_array().unwrap().len(), 1);
+        assert_eq!(s["hooks"]["PreToolUse"][0]["matcher"], "AskUserQuestion");
+        // A 6-event install (before Plan 055) reads as partial → Update.
+        s["hooks"].as_object_mut().unwrap().remove("PreToolUse");
+        assert_eq!(hooks_state(&s), "partial");
+    }
+
+    /// Plan 055: mode switches move only our entries; a global file with
+    /// nothing of ours is left exactly as it was.
+    #[test]
+    fn move_hooks_round_trips_and_leaves_untouched_sources_alone() {
+        let orig = foreign_settings();
+        let mut global = orig.clone();
+        apply_setup(&mut global).unwrap();
+        let mut tab = serde_json::json!({});
+        move_hooks(&mut global, &mut tab).unwrap();
+        assert_eq!(hooks_state(&global), "off");
+        assert_eq!(hooks_state(&tab), "on");
+        assert_eq!(global, orig, "global back to its pre-setup content");
+        move_hooks(&mut tab, &mut global).unwrap();
+        assert_eq!(hooks_state(&global), "on");
+        assert_eq!(hooks_state(&tab), "off");
+
+        let mut untouched = serde_json::json!({ "hooks": { "Stop": [] }, "model": "opus" });
+        let before = untouched.clone();
+        let mut tab = serde_json::json!({});
+        move_hooks(&mut untouched, &mut tab).unwrap();
+        assert_eq!(untouched, before, "no install → no strip, empty arrays kept");
+        assert_eq!(tab, serde_json::json!({}));
     }
 
     #[test]

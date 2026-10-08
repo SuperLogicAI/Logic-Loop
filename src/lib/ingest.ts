@@ -28,6 +28,18 @@ export function hooksOutdated(): Promise<boolean> {
   return invoke<HooksState>("hooks_status").then((s) => s === "partial");
 }
 
+/** Plan 055: where Claude hooks live. "tabs" = `--settings` on Logic Loop's
+ * zsh tabs only; `~/.claude/settings.json` is never written. */
+export type ClaudeHooksMode = "global" | "tabs";
+
+export function claudeHooksMode(): Promise<ClaudeHooksMode> {
+  return invoke<ClaudeHooksMode>("claude_hooks_mode");
+}
+
+export function claudeHooksModeSet(mode: ClaudeHooksMode): Promise<void> {
+  return invoke("claude_hooks_mode_set", { mode });
+}
+
 export function claudeDetect(): Promise<boolean> {
   return invoke<boolean>("claude_detect");
 }
@@ -444,6 +456,10 @@ export function stateForHook(p: HookPayload): AgentState | null {
     case "Notification":
     case "PermissionRequest":
       return stoppedSessions.has(p.session_id) ? null : "waiting";
+    // Plan 055: the only PreToolUse we install is AskUserQuestion's — the
+    // agent is blocked on your pick, same as a permission prompt.
+    case "PreToolUse":
+      return p["tool_name"] === "AskUserQuestion" && !stoppedSessions.has(p.session_id) ? "waiting" : null;
     case "Stop":
     // Codex-only terminal events (Plan: Codex interruption/session-end
     // lifecycle). Both are turn/session-terminal, same as Stop: close the
