@@ -5625,6 +5625,9 @@ Source fixes for the review items above (uncommitted on
 - Lock-in: Set landing note button and capture input drop the rainbow border
   under Lock-in, same gate as the Next card.
 - Isolate loop: Escape cancels (unless launching).
+- Tab-strip scrollbar: a mouse press on it hit Tauri's deep drag region
+  (document mousedown, `preventDefault`) and started a window drag instead of
+  a thumb drag. Presses below the strip's `clientHeight` now stop there.
 - Context meter (item 60): not changed. Bar color and percent come from the
   same value with `>= 70` amber; 71–73% sky is not reachable from source.
   Treat as a screenshot-read on a 4px bar; recheck at ≥70%.
@@ -5639,3 +5642,7 @@ Manual, rebuilt app:
 - [ ] **F4.** Lock-in on: Set landing note button and capture input are grey.
 - [ ] **F5.** Isolate loop with branch field focused: Escape closes it.
 - [ ] **F6.** Context meter is amber at displayed 70–89%.
+- [ ] **F7.** Enough tabs to overflow: mouse click-drag on the tab-strip
+      scrollbar thumb scrolls tabs (window does not move); click on the track
+      pages; trackpad two-finger scroll still works; empty strip space above
+      the tabs and right of the last one still drags the window.
