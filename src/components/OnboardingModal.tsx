@@ -192,6 +192,9 @@ export function OnboardingModal({
 
   const containKeyboard = (event: ReactKeyboardEvent<HTMLElement>) => {
     event.stopPropagation();
+    // The stop above keeps Escape from reaching the window listener while
+    // focus is inside the dialog, so close here too.
+    if (event.key === "Escape") { event.preventDefault(); onClose(); return; }
     if (event.key !== "Tab") return;
     const focusable = Array.from(
       dialogRef.current?.querySelectorAll<HTMLElement>(
