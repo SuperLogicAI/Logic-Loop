@@ -5643,15 +5643,84 @@ Manual, rebuilt app (F1–F2 passed, maintainer 2026-10-08):
 - [x] **F2.** Open Traffic and Attention by mouse (expanded header, compact
       rail, Home Inbox); Escape and Close return focus to the trigger.
 - [ ] **F3.** Setup → Sidebar LM popover → Escape closes only the popover;
-      second Escape closes Setup.
-- [ ] **F4.** Lock-in on: Set landing note button and capture input are grey.
-- [ ] **F5.** Isolate loop with branch field focused: Escape closes it.
-- [ ] **F6.** Context meter is amber at displayed 70–89%.
+      second Escape closes Setup. Failed 2026-10-08 (see below); fixed in
+      source, retest on a rebuilt app. Also: Escape right after opening
+      Setup (Close button focused) closes it.
+- [x] **F4.** Lock-in on: Set landing note button and capture input are grey.
+- [x] **F5.** Isolate loop with branch field focused: Escape closes it.
+- [x] **F6.** Context meter is amber at displayed 70–89% (maintainer saw
+      amber in the 80s, 2026-10-08).
 - [ ] **F7.** Enough tabs to overflow: mouse click-drag on the tab-strip
       scrollbar thumb scrolls tabs (window does not move); click on the track
       pages; trackpad two-finger scroll still works; empty strip space above
       the tabs and right of the last one still drags the window.
-- [ ] **F8.** Claude tab with a long live screen: drag the window edge back
+- [Failed] **F8.** Claude tab with a long live screen: drag the window edge back
       and forth, toggle Lock-in and Fold a few times. Terminal snaps to the
       new width ~0.1s after you stop; select-all/copy shows no (or at most
       one) leftover duplicate frame, versus many before.
+
+Computer-use follow-up — 2026-10-08, approximately 08:31–08:44 HST:
+
+Tested the running `/Applications/Logic Loop.app/Contents/MacOS/app`
+(binary modified 2026-10-08 08:26:13). No dev server or app restart was
+used; the binary's source revision was not independently established.
+Native accessibility observations sometimes lagged visible modal state;
+screenshots were used to confirm outcomes.
+
+- **F3 failed, twice:** first Escape closed Sidebar LM only and focused its
+  trigger. Second Escape left Setup open. Clicking ordinary Setup text and
+  pressing Escape then closed Setup. No model setting changed.
+- **F4 passed:** Lock-in removed the rainbow from Set landing note and from
+  the active capture input after clicking the button. Turning Lock-in off
+  restored the button's rainbow. Capture and Lock-in were restored to off;
+  no note was saved.
+- **F5 passed:** clicked the Isolate loop branch input, pressed Escape,
+  and confirmed the dialog disappeared without launching a worktree.
+- **F6 failed observation:** during this Codex session the bottom `ctx`
+  label displayed **88%**, while its fill was visibly blue with Lock-in
+  off. Later **90%** displayed a red fill. The earlier Claude tab showed
+  14%. This records visible behavior, not a diagnosed cause; source/build
+  parity and the amber threshold still need investigation.
+- **F7 partial, box stays open:** opened nine temporary plain-shell tabs.
+  Thumb drag moved the strip from original agent tabs to later shell tabs;
+  clicking the left track paged back. Horizontal Computer Use scroll calls
+  in both directions produced no visible movement; this does not verify a
+  physical two-finger trackpad gesture. Attempted an empty-space window
+  drag, but app-cropped screenshots do not establish desktop position.
+  Dragging to the right of the last tab remains unverified.
+- **F8 failed observation:** on a resumed Claude Code v2.1.294 session,
+  narrowed the window from 2400 to approximately 2000 screenshot pixels,
+  widened it again, and repeatedly toggled Fold and Lock-in. Settled screens
+  reflowed correctly. Select-all/copy into a new local TextEdit document
+  showed multiple repeated PR-response blocks at different line widths,
+  exceeding the “at most one” criterion. No pre-resize copy baseline was
+  captured, so the amount introduced by this pass is not established.
+  Exact ~0.1-second timing was not measurable with these observations.
+  Scratch copy retained locally at `/private/tmp/logic-loop-f8-copy.rtf`;
+  it contains session content and was not added to the repository.
+
+Cleanup incident: closing temporary shells overshot and closed the idle
+Claude tab. Its conversation was restored using a single Fan out launch
+with `claude --resume` and its saved session ID; the final response and
+prompt were verified visually. The replacement is named `context_terminal`
+and has fan-out styling; sidebar binding awaits a new structured event.
+The other original tabs remain. No agent prompt was submitted.
+
+Documentation-only change; `git diff --check` passed. No source fixes,
+plan/board changes, commit, push, or new phase acceptance. Human review of
+F3/F6/F8 and the remaining F7 subcases is pending.
+
+Maintainer triage, 2026-10-08:
+
+- **F6 passed.** Color and label come from the same value in one render
+  (`>= 70` amber, `>= 90` red); the 08:25 build's CSS defines
+  `.bg-attn-400` as amber, and only Lock-in remaps it (to grey). The
+  maintainer saw amber in the 80s directly. The 88%-blue report, like the
+  earlier 71–73% "sky" one, reads as a screenshot color misjudgment of a
+  4px-tall bar, not app behavior.
+- **F3 root cause (regression from #78):** Setup's dialog
+  `onKeyDownCapture` stops propagation of every key, so Escape with focus
+  inside Setup never reached the bubble-phase window listener. Clicking
+  plain text moved focus to `<body>`, which is why Escape then worked.
+  Fix: the dialog's key handler closes Setup on Escape itself; Sidebar LM's
+  window capture listener still stops Escape first while its popover is open.
