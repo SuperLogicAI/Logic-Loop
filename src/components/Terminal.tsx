@@ -112,7 +112,7 @@ export function Terminal({ tab, visible, focused, paneOrder, splitOrientation, o
   // Fit on visibility + container resize (fitting while hidden yields bogus dims).
   useEffect(() => {
     if (!visible || !containerRef.current) return;
-    let raf = 0;
+    let timer = 0;
     const doFit = () => {
       const fit = fitRef.current;
       const term = termRef.current;
@@ -127,14 +127,17 @@ export function Terminal({ tab, visible, focused, paneOrder, splitOrientation, o
     };
     doFit();
     if (focused) termRef.current?.focus();
-    // coalesce resize storms to one fit per frame
+    // Trailing debounce, not per-frame: every PTY resize makes TUIs (Claude
+    // Code) redraw, and xterm's reflow leaves stale copies of the old frame
+    // in the buffer. One resize after the drag/Lock-in/fold settles.
+    // ponytail: fixed 120ms; text keeps the old width while dragging.
     const ro = new ResizeObserver(() => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(doFit);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(doFit, 120);
     });
     ro.observe(containerRef.current);
     return () => {
-      cancelAnimationFrame(raf);
+      window.clearTimeout(timer);
       ro.disconnect();
     };
   }, [visible, focused, tab.ptyId, tab.status]);

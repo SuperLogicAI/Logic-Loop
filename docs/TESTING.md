@@ -5625,6 +5625,11 @@ Source fixes for the review items above (uncommitted on
 - Lock-in: Set landing note button and capture input drop the rainbow border
   under Lock-in, same gate as the Next card.
 - Isolate loop: Escape cancels (unless launching).
+- Resize redraw residue: PTY resize was sent every animation frame, so a
+  window drag or Lock-in/fold made Claude Code redraw dozens of times and
+  xterm reflow left duplicate frames in the buffer (visible when copying).
+  Now one trailing resize 120ms after the size settles. Reduces, can't fully
+  remove: a single resize can still leave one stale frame.
 - Tab-strip scrollbar: a mouse press on it hit Tauri's deep drag region
   (document mousedown, `preventDefault`) and started a window drag instead of
   a thumb drag. Presses below the strip's `clientHeight` now stop there.
@@ -5632,10 +5637,10 @@ Source fixes for the review items above (uncommitted on
   same value with `>= 70` amber; 71–73% sky is not reachable from source.
   Treat as a screenshot-read on a 4px bar; recheck at ≥70%.
 
-Manual, rebuilt app:
-- [ ] **F1.** Terminal focused, Ctrl+Tab / Ctrl+Shift+Tab cycle tabs; no tab
+Manual, rebuilt app (F1–F2 passed, maintainer 2026-10-08):
+- [x] **F1.** Terminal focused, Ctrl+Tab / Ctrl+Shift+Tab cycle tabs; no tab
       character reaches the agent prompt.
-- [ ] **F2.** Open Traffic and Attention by mouse (expanded header, compact
+- [x] **F2.** Open Traffic and Attention by mouse (expanded header, compact
       rail, Home Inbox); Escape and Close return focus to the trigger.
 - [ ] **F3.** Setup → Sidebar LM popover → Escape closes only the popover;
       second Escape closes Setup.
@@ -5646,3 +5651,7 @@ Manual, rebuilt app:
       scrollbar thumb scrolls tabs (window does not move); click on the track
       pages; trackpad two-finger scroll still works; empty strip space above
       the tabs and right of the last one still drags the window.
+- [ ] **F8.** Claude tab with a long live screen: drag the window edge back
+      and forth, toggle Lock-in and Fold a few times. Terminal snaps to the
+      new width ~0.1s after you stop; select-all/copy shows no (or at most
+      one) leftover duplicate frame, versus many before.
