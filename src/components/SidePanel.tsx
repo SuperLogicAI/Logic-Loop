@@ -116,7 +116,7 @@ function RailButton({
   icon: ReactNode;
   count?: number;
   className?: string;
-  onClick: () => void;
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
   const shownCount = count === undefined ? null : count > 99 ? "99+" : String(count);
   return (
@@ -882,7 +882,7 @@ export function SidePanel({
             icon={<PanelIcon name="attention" className="h-5 w-5" />}
             count={!lockIn && inboxBadgeEnabled ? attentionCount || undefined : undefined}
             className={lockIn ? "text-zinc-500" : attentionStale ? "text-attn-300" : attentionCount > 0 ? "text-info-300" : "text-zinc-600"}
-            onClick={onOpenAttention}
+            onClick={(e) => { e.currentTarget.focus(); onOpenAttention(); }}
           />
           {hasWarnings && (
             <RailButton
@@ -1231,10 +1231,12 @@ export function SidePanel({
           <button
             type="button"
             aria-pressed={landingCapture}
-            className="ml-auto rounded border-2 border-transparent px-1.5 py-0.5 text-zinc-200 hover:brightness-125 focus-visible:outline-2 focus-visible:outline-focus-400"
-            style={{
-              background: `linear-gradient(#18181b, #18181b) padding-box, ${SUBTLE_RAINBOW_BORDER} border-box`,
-            }}
+            className={`ml-auto rounded border-2 px-1.5 py-0.5 text-zinc-200 hover:brightness-125 focus-visible:outline-2 focus-visible:outline-focus-400 ${lockIn ? "border-zinc-600" : "border-transparent"}`}
+            style={
+              lockIn
+                ? undefined
+                : { background: `linear-gradient(#18181b, #18181b) padding-box, ${SUBTLE_RAINBOW_BORDER} border-box` }
+            }
             onClick={toggleLandingCapture}
           >
             Set landing note
@@ -1249,10 +1251,10 @@ export function SidePanel({
           <input
             ref={noteInputRef}
             className={`w-full rounded py-1 pr-2 pl-7 text-zinc-200 outline-none placeholder:text-zinc-500 ${
-              landingCapture ? "border-2 border-transparent" : "border border-zinc-100 bg-zinc-800"
+              landingCapture ? `border-2 ${lockIn ? "border-zinc-600 bg-zinc-800" : "border-transparent"}` : "border border-zinc-100 bg-zinc-800"
             }`}
             style={
-              landingCapture
+              landingCapture && !lockIn
                 ? { background: `linear-gradient(#27272a, #27272a) padding-box, ${SUBTLE_RAINBOW_BORDER} border-box` }
                 : undefined
             }

@@ -207,7 +207,7 @@ export function HomeDashboard({
             <button
               type="button"
               className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
-              onClick={onOpenAttention}
+              onClick={(e) => { e.currentTarget.focus(); onOpenAttention(); }}
             >
               Inbox{inboxBadgeEnabled && attentionCount > 0 ? ` (${attentionCount})` : ""}
             </button>

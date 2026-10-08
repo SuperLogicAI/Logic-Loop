@@ -66,6 +66,9 @@ export function Terminal({ tab, visible, focused, paneOrder, splitOrientation, o
           .catch(() => undefined); // fall through to default paste path
         return false;
       }
+      // Ctrl+Tab switches tabs (App's window handler). Without this xterm
+      // writes \t to the PTY and stops propagation, so the switch never runs.
+      if (e.ctrlKey && e.key === "Tab") return false;
       return true;
     });
     termRef.current = term;
