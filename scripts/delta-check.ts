@@ -65,6 +65,21 @@ assert.equal(
   "2 files · 1 turn · 1 new decision · 3 failed commands"
 );
 
+// Claude Code's PostToolUseFailure: a failed command counts as run + failed;
+// an interrupt counts as run only; a failed Edit is not a changed file.
+const failed = summarizeDelta(
+  [
+    row("hook:PostToolUse", { tool_name: "Bash", tool_input: { command: "ls" }, tool_response: {} }, 1),
+    row("hook:PostToolUseFailure", { tool_name: "Bash", tool_input: { command: "ls /nope" }, error: "No such file" }, 2),
+    row("hook:PostToolUseFailure", { tool_name: "Bash", tool_input: { command: "sleep 99" }, error: "x", is_interrupt: true }, 3),
+    row("hook:PostToolUseFailure", { tool_name: "Edit", tool_input: { file_path: "/p/x.ts" }, error: "no match" }, 4),
+  ],
+  []
+);
+assert.equal(failed.bashRuns, 3);
+assert.equal(failed.bashErrors, 1);
+assert.deepEqual(failed.files, []);
+
 // --- buildBrief (Plan 058) ---
 const emptyDelta: Delta = { files: [], bashRuns: 0, bashErrors: 0, turns: 0, stops: 0, decisions: [], lastWords: "" };
 const busy: Delta = {

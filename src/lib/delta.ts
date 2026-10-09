@@ -54,10 +54,21 @@ export function summarizeDelta(rows: EventRow[], decisionsSince: DeltaDecision[]
   for (const r of rows) {
     if (r.type === "hook:UserPromptSubmit") turns++;
     if (r.type === "hook:Stop") stops++;
-    if (r.type !== "hook:PostToolUse") continue;
+    // Claude Code reports a failed tool as PostToolUseFailure, not PostToolUse
+    // with is_error (Plan 058 live check) — count it as a failed run, same
+    // interrupt rule as detectors.ts.
+    const failure = r.type === "hook:PostToolUseFailure";
+    if (r.type !== "hook:PostToolUse" && !failure) continue;
     const p = parsePayload(r);
     if (!p) continue;
     const tool = p["tool_name"];
+    if (failure) {
+      if (tool === "Bash" || tool === "run_command") {
+        bashRuns++;
+        if (p["is_interrupt"] !== true) bashErrors++;
+      }
+      continue; // a failed edit changed nothing
+    }
     const input = (p["tool_input"] ?? {}) as Record<string, unknown>;
     // write_to_file/replace_file_content are Antigravity's own edit tools
     // (Phase 16) — file_path is normalized onto tool_input in antigravity.rs.

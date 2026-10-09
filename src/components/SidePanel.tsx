@@ -1127,7 +1127,7 @@ export function SidePanel({
           </h2>
           {!collapsed.has("since-left") && (
             <div className="flex flex-col gap-1.5 text-zinc-300">
-              <p className="truncate text-zinc-400" title={brief.context}>{brief.context}</p>
+              <p className="break-words text-zinc-400">{brief.context}</p>
               {brief.goal && (
                 <p className="truncate" title={brief.goal}>
                   <span className="text-zinc-500">Goal: </span>

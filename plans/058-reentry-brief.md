@@ -55,6 +55,11 @@ no migration, no Rust, no model call.
    fields would show the same text. The compact rail's Since You Left icon
    follows the brief's visibility. Section links scroll even when the panel
    is already expanded (`openRailSection` now bumps a tick).
+   *Revision 2 (live check 80):* failed commands were never counted —
+   Claude Code reports them as `PostToolUseFailure`, which the Phase 14
+   delta ignored; now counted (interrupts excluded, failed edits aren't
+   changed files). The context line wraps instead of truncating, which hid
+   the dirty ●.
 3. **Evidence one click away.** Changed → file names expand inline; each
    opens the existing diff pop-out. Needs you → jumps to Decisions. Next →
    jumps to the Next card. A loop run shows "N iterations" in Changed and
