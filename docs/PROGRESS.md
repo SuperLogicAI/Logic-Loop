@@ -1027,4 +1027,9 @@ range, splits by local day. Project Overview shows "Your time" beside agent
 time; Copy update gains a **Time** section (per-day lines + total). History
 starts clean (no backfill). Plain shell tabs without a session aren't
 counted. Query has no `events(type)` index: 0.15 s on a 262k-row DB.
-Awaiting live checks (TESTING.md Phase 57, items 74-79) and acceptance.
+Revised live: the time row moved to the top of Project Overview (info-tinted
+card, larger totals, range tabs now page-wide), "tracking since" no longer
+counts pre-057 `tab_left` rows, and the card adds an all-time total. Live
+checks 74-79 passed (stopwatch 5/5 min, time away 0, idle 20 → 15, split
+5 not 10, Copy update Time section, `tab_active` ≤1 per tab-minute).
+**PHASE 57 ACCEPTED** (2026-10-08).

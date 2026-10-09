@@ -2,7 +2,7 @@
 
 Status: **APPROVED 2026-10-08 (`PHASE 57 APPROVED`, decisions 1-4 as
 recommended). Branch `feat/phase-57-time-in-projects`. Built; gates green;
-awaiting live checks (TESTING.md items 74-79) and acceptance.**
+live checks 74-79 passed. ACCEPTED 2026-10-08 (`PHASE 57 ACCEPTED`).**
 
 Source: ROADMAP "Project dashboard follow-ons" → "Spend + human time"
 ("Optional manual time tracker … Unknown ≠ zero; estimated ≠ invoiced").

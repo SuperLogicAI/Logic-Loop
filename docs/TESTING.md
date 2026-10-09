@@ -5783,11 +5783,11 @@ time" with range Today.
     come back. Expected: those 10 min are not added.
 - [x] **76.** **Idle cap** — stay focused on the tab, touch nothing for 20 min.
     Expected: adds 15 min, not 20.
-- [ ] **77.** **Same-project split counts once** — split two tabs of the same
+- [x] **77.** **Same-project split counts once** — split two tabs of the same
     project for 5 min. Expected: adds 5 min, not 10.
 - [x] **78.** **Copy update has hours** — open Copy update. Expected: a
     **Time** section with today's line and a Total.
-- [ ] **79.** **Row rate is sane** — counts only:
+- [x] **79.** **Row rate is sane** — counts only:
     `sqlite3 <db> "SELECT type, count(*) FROM events WHERE type IN ('tab_entered','tab_active') GROUP BY type"`.
     Expected: `tab_active` grows ~1/min per visible tab while active, not per keystroke.
 
