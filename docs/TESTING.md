@@ -5777,15 +5777,15 @@ Run in the built app, not `npm run tauri dev` (LANDMINES: a dev reload kills
 every tab). Use one project with an agent tab; check Project Overview → "Your
 time" with range Today.
 
-- [ ] **74.** **Matches a stopwatch** — work in one project tab ~5 min (type,
+- [x] **74.** **Matches a stopwatch** — work in one project tab ~5 min (type,
     scroll). Expected: "Your time" today rose by the stopwatch time ±1 min.
-- [ ] **75.** **Time away doesn't count** — Cmd-Tab to another app for 10 min,
+- [x] **75.** **Time away doesn't count** — Cmd-Tab to another app for 10 min,
     come back. Expected: those 10 min are not added.
-- [ ] **76.** **Idle cap** — stay focused on the tab, touch nothing for 20 min.
+- [x] **76.** **Idle cap** — stay focused on the tab, touch nothing for 20 min.
     Expected: adds 15 min, not 20.
 - [ ] **77.** **Same-project split counts once** — split two tabs of the same
     project for 5 min. Expected: adds 5 min, not 10.
-- [ ] **78.** **Copy update has hours** — open Copy update. Expected: a
+- [x] **78.** **Copy update has hours** — open Copy update. Expected: a
     **Time** section with today's line and a Total.
 - [ ] **79.** **Row rate is sane** — counts only:
     `sqlite3 <db> "SELECT type, count(*) FROM events WHERE type IN ('tab_entered','tab_active') GROUP BY type"`.

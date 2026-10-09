@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import * as repo from "../lib/repo";
-import { observedAgentTime, humanTime, humanTimeLines, formatDuration, HUMAN_IDLE_CAP_MS, projectDisplayName, projectFolderLabel, buildProjectWorkLog, commitsInRange, dashboardRangeStart, projectWorkspaceChoices, type DashboardRange, type WorkLogEntry } from "../lib/dashboard";
+import { observedAgentTime, humanTime, humanTimeLines, formatDuration, projectDisplayName, projectFolderLabel, buildProjectWorkLog, commitsInRange, dashboardRangeStart, projectWorkspaceChoices, type DashboardRange, type WorkLogEntry } from "../lib/dashboard";
 import { dashboardReads, observeDashboardRead, type ReadState, type ReadDiagnostic } from "../lib/dashboardLoader";
 import { computeMomentum } from "../lib/momentum";
 import { parseBoard, peekBoard, EXAMPLE_BOARD, type BoardStatus } from "../lib/board";
@@ -67,7 +67,7 @@ interface OverviewValues {
   commits: Commit[];
   board: { state: "ready" | "missing"; cards: ReturnType<typeof parseBoard>; isExample: boolean };
   agentTime: ReturnType<typeof observedAgentTime>;
-  humanTime: ReturnType<typeof humanTime>;
+  humanTime: ReturnType<typeof humanTime> & { allTimeMs: number };
   reentry: ReentryCandidate[];
 }
 
@@ -168,9 +168,11 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
       }, "board", 30_000),
       watch("agentTime", async () => observedAgentTime((await repo.projectAgentTimeObservations(projectKey))
         .map((o) => ({ sessionId: o.session_id, runId: o.run_id, state: o.state, observedAt: o.observed_at })))),
-      // Read one cap early so an interval opened just before the range is clipped, not lost.
-      watch("humanTime", async () => humanTime((await repo.projectHumanTimeEvents(projectKey, since - HUMAN_IDLE_CAP_MS))
-        .map((e) => ({ tabId: e.tab_id, type: e.type, ts: e.ts })), until, since), `humanTime:${range}`),
+      // One all-time read (~0.15 s on a 262k-row DB): the range total clips it, the all-time line doesn't.
+      watch("humanTime", async () => {
+        const events = (await repo.projectHumanTimeEvents(projectKey, 0)).map((e) => ({ tabId: e.tab_id, type: e.type, ts: e.ts }));
+        return { ...humanTime(events, until, since), allTimeMs: humanTime(events, until, 0).totalMs };
+      }, `humanTime:${range}`),
       watch("reentry", () => repo.reentryCandidates().then((rows) => rows.filter((r) => r.project_key === projectKey))),
     ];
     return () => {
@@ -470,6 +472,7 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
                 {data.humanTime.sinceDate > dashboardRangeStart(range, Date.now()) && (
                   <> (tracking since {new Date(data.humanTime.sinceDate).toLocaleDateString()})</>
                 )}
+                {" · "}{formatDuration(data.humanTime.allTimeMs)} all time
                 <span className="block text-[11px] text-zinc-600">
                   Counted while a tab in this project is visible and you're active; gaps over 15 min count as 15.
                 </span>

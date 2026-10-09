@@ -60,6 +60,9 @@ migration (`events` is already generic and append-only).
    time) moved to the top of Project Overview with the range tabs, which
    are page-wide; the work log header shows the range. Bug fixed:
    "tracking since" counted pre-057 `tab_left` rows (showed 10/2 on day 1).
+   *Revision 2 (2026-10-08):* the card also shows an all-time total ("·
+   Xh Ym all time") from one all-time read, instead of an "All" range tab
+   (that would drag the work log and the 30-day-capped git read along).
 6. **Copy update gets hours.** Add one line per day in range
    (`2026-10-08  1h 25m`) plus the total to the existing Copy update draft
    — still an editable draft, nothing sent.
