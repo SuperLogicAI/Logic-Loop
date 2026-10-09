@@ -246,7 +246,7 @@ fn run_extractor_blocking(
     model: Option<String>,
     schema: Option<String>,
 ) -> Result<String, String> {
-    let model = model.filter(|m| !m.is_empty()).unwrap_or_else(|| "sonnet".into());
+    let model = model.filter(|m| !m.is_empty()).unwrap_or_else(|| "claude-haiku-5-5".into());
     match backend.as_str() {
         "lmstudio" => {
             let url = lmstudio_url.unwrap_or_else(|| "http://127.0.0.1:1234".into());

@@ -133,6 +133,11 @@ fix is ever reverted or bypassed. Referenced from CLAUDE.md.
   the shipped per-path defaults. See
   `plans/014-reconciliation-haiku-default.md`.
 
+  **Update (Plan 056, 2026-10-08):** the ~1-in-7 miss was Haiku 4.5. Haiku
+  5.5 passed 140/140 over 10 full golden runs and 50/50 on
+  `09-question-in-code`; extraction now defaults to the pinned
+  `claude-haiku-5-5` (not the `haiku` alias, which is how 4.5 got in).
+
   Any future extractor call site (`decisions.ts`, `landing.ts`,
   `commitMessage.ts`) must keep passing the `model` arg through
   `run_extractor` — a new call site that skips it silently reverts to the

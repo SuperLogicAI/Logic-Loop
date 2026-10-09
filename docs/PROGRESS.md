@@ -995,3 +995,21 @@ Live checks 61-69 passed on the rebuilt app: Global → tab-only → Global left
 `--settings`; outside terminals stay silent. Known caveat (TESTING.md item 64):
 Claude sessions already running at Switch time go silent until restarted.
 **PHASE 55 ACCEPTED** (2026-10-07).
+
+### Phase 56 — Haiku 5.5 default Sidebar LM (2026-10-08)
+
+Plan: `plans/056-haiku-default.md` (`PHASE 56 APPROVED`, decisions 1-4 as
+recommended). Branch `feat/phase-56-haiku-default`. Claude Sidebar LM
+default `sonnet` → pinned `claude-haiku-5-5` (extraction, landing notes,
+commit messages; `extractor.rs`). Evidence: golden 140/140 over 10 full runs
+and 50/50 on `09-question-in-code` (Haiku 4.5's ~1-in-7 miss); bench 42/42
+per model, Haiku ~10× cheaper uncached and 0.5 s faster at the median.
+Sonnet is pinned as `claude-sonnet-5-5` in Sidebar LM copy (bare `sonnet`
+still accepted); the warning names both verified models, case-insensitive
+(macOS autocapitalized `sonnet`). `npm run golden` defaults to Haiku and
+prints median cost/time per call. README prices both models. Gates: golden ×3 (Haiku) +
+×1 (`EXTRACTOR_MODEL=sonnet`) clean, `npm run check`, `npx tsc --noEmit`,
+`npm run build` (existing large-chunk warning), `cargo test --lib` (167
+passed, 1 ignored), clippy `-D warnings`, `git diff --check`. Live checks 70-73 passed
+(spawns confirmed `--model claude-haiku-5-5`; landing note and commit
+message drafts usable). **PHASE 56 ACCEPTED** (2026-10-08).

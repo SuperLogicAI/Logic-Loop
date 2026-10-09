@@ -39,7 +39,14 @@ const EXTRACTOR_TETHER = "__logic_loop_extractor__";
 const CLAUDE_SYSTEM_PROMPT =
   "You output only the JSON object specified by the user prompt. No prose, no code fences, no explanation.";
 
+// Per-call cost (API list price, from the CLI's own total_cost_usd) and wall
+// time, for the summary line — the source of README's priced model table.
+const costs: number[] = [];
+const times: number[] = [];
+const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+
 function runClaude(prompt: string, model: string): string {
+  const t0 = Date.now();
   const stdout = execFileSync(
     "claude",
     [
@@ -66,7 +73,9 @@ function runClaude(prompt: string, model: string): string {
       env: { ...process.env, LOGIC_LOOP_TAB_ID: EXTRACTOR_TETHER },
     }
   );
-  const parsed = JSON.parse(stdout) as { structured_output?: unknown; result?: string };
+  const parsed = JSON.parse(stdout) as { structured_output?: unknown; result?: string; total_cost_usd?: number };
+  times.push(Date.now() - t0);
+  if (typeof parsed.total_cost_usd === "number") costs.push(parsed.total_cost_usd);
   if (parsed.structured_output !== undefined && parsed.structured_output !== null) {
     return typeof parsed.structured_output === "string"
       ? parsed.structured_output
@@ -160,10 +169,10 @@ for (const file of files) {
   const f = JSON.parse(readFileSync(join(dir, file), "utf8")) as Fixture;
 
   const prompt = buildPrompt({ assistant: f.assistant, user: f.user });
-  // EXTRACTOR_MODEL overrides; unset mirrors decisions.ts's shipped default
-  // (sonnet — haiku showed a ~1-in-7 false positive on 09-question-in-code
-  // across repeated runs).
-  const model = process.env.EXTRACTOR_MODEL ?? "sonnet";
+  // EXTRACTOR_MODEL overrides; unset mirrors extractor.rs's shipped default
+  // (claude-haiku-5-5 — 140/140 over 10 full runs, 50/50 on
+  // 09-question-in-code, where Haiku 4.5 false-positived ~1 in 7; Plan 056).
+  const model = process.env.EXTRACTOR_MODEL ?? "claude-haiku-5-5";
   let raw: string;
   try {
     spawns++;
@@ -192,4 +201,8 @@ console.log(
     ? `\nALL ${files.length} GOLDEN CASES PASS (${backend}, ${spawns} spawns)`
     : `\n${failures}/${files.length} FAILED (${backend}, ${spawns} spawns)`
 );
+if (times.length > 0)
+  console.log(
+    `per call (median): ${costs.length > 0 ? `$${median(costs).toFixed(5)}, ` : ""}${(median(times) / 1000).toFixed(1)}s wall`
+  );
 process.exit(failures === 0 ? 0 : 1);

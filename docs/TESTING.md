@@ -5748,3 +5748,25 @@ Maintainer triage, 2026-10-08:
   Claude Code redraws for. Maintainer reproduced the same per-resize copies
   with Claude Code in a standard terminal, so it is upstream behavior; F8
   criterion reworded and passed.
+
+## Phase 56 — Haiku 5.5 default Sidebar LM (2026-10-08)
+
+Rebuild and relaunch first. Leave Sidebar LM's Claude model field blank
+unless an item says otherwise.
+
+- [x] **70.** **Default is Haiku** — in a Claude tab, end a turn with the agent asking
+    you a question. Expected: a Decision card appears; while the extractor
+    runs, `ps -ax | grep "claude -p"` shows `--model claude-haiku-5-5`.
+- [x] **71.** **Sonnet still selectable** — type `sonnet` in Sidebar LM. Expected: no
+    warning; the next extraction spawns with `--model sonnet`. Type `opus`:
+    the "Only claude-haiku-5-5 and claude-sonnet-5-5 are golden-set verified" warning
+    shows. Clear the field afterwards.
+- [x] **72.** **Landing note on Haiku** — switch away from a Claude tab that had
+    agent activity. Expected: the landing-note draft is pre-filled and reads
+    usable (Haiku has no golden coverage here).
+- [x] **73.** **Commit message on Haiku** — stage a real diff and open the Commit & Push
+    footer. Expected: the drafted message reads usable.
+
+Automated: `npm run golden` (default Haiku) ×3 and
+`EXTRACTOR_MODEL=sonnet npm run golden` ×1 clean, 2026-10-08; per-call
+medians Haiku $0.00017–$0.00020 / 3.1 s, Sonnet $0.00181 / 3.3 s (cache hits).
