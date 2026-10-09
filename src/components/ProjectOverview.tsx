@@ -444,7 +444,7 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
         </p>}
 
         {/* Plan 057: time first, with the page-wide range — the work log below can run very long. */}
-        <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="mt-5 grid grid-cols-1 gap-4 rounded-lg border border-info-500/40 bg-info-500/5 p-4 lg:grid-cols-2">
           <section>
             <div className="flex items-center justify-between">
               <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Your time</h3>
@@ -465,7 +465,8 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
             </div>
             {reads.humanTime.state !== "ready" ? <ReadStatus read={reads.humanTime} label="your time" /> : data.humanTime?.sinceDate ? (
               <p className="mt-2 text-xs text-zinc-300">
-                {formatDuration(data.humanTime.totalMs)} {range === "today" ? "today" : `in the last ${RANGE_LABEL[range]}`}
+                <span className="text-base font-semibold text-zinc-100">{formatDuration(data.humanTime.totalMs)}</span>{" "}
+                {range === "today" ? "today" : `in the last ${RANGE_LABEL[range]}`}
                 {data.humanTime.sinceDate > dashboardRangeStart(range, Date.now()) && (
                   <> (tracking since {new Date(data.humanTime.sinceDate).toLocaleDateString()})</>
                 )}
@@ -481,8 +482,8 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
             <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Agent time (observed)</h3>
             {reads.agentTime.state !== "ready" ? <ReadStatus read={reads.agentTime} label="agent time" /> : data.agentTime?.sinceDate ? (
               <p className="mt-2 text-xs text-zinc-300">
-                {Math.floor(data.agentTime.totalMs / 3_600_000)}h {Math.floor((data.agentTime.totalMs % 3_600_000) / 60_000)}m
-                across {data.agentTime.sessionCount} session{data.agentTime.sessionCount === 1 ? "" : "s"} since{" "}
+                <span className="text-base font-semibold text-zinc-100">{formatDuration(data.agentTime.totalMs)}</span>
+                {" "}across {data.agentTime.sessionCount} session{data.agentTime.sessionCount === 1 ? "" : "s"} since{" "}
                 {new Date(data.agentTime.sinceDate).toLocaleDateString()}
                 <span className="block text-[11px] text-zinc-600">Parallel sessions can exceed wall clock.</span>
               </p>
