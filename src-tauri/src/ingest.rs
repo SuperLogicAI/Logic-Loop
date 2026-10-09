@@ -270,17 +270,28 @@ pub fn start(app: AppHandle) {
                         obj.insert("agent".into(), agent.into());
                     }
                 }
-                // Plan 059: a Codex hook names its root session; the usage
-                // reader finds that root's rollouts (parent + children).
-                if recognized_agent(agent_header.as_deref()) == Some("codex") {
-                    if let Some(root) = payload.get("session_id").and_then(|v| v.as_str()) {
-                        crate::usage::watch(
-                            &app,
-                            root,
-                            payload.get("tab_id").and_then(|v| v.as_str()),
-                            payload.get("project_key").and_then(|v| v.as_str()),
-                        );
-                    }
+                // Plan 059: a hook names its root session; the usage reader
+                // finds that root's files (parent + children). Codex: rollouts
+                // by session_meta. Claude: the gated main transcript plus its
+                // subagents/ dir.
+                let usage_agent = match recognized_agent(agent_header.as_deref()) {
+                    Some("codex") => Some("codex"),
+                    None => Some("claude"),
+                    _ => None,
+                };
+                if let (Some(agent), Some(root)) = (usage_agent, payload.get("session_id").and_then(|v| v.as_str())) {
+                    let transcript = payload
+                        .get("transcript_path")
+                        .and_then(|v| v.as_str())
+                        .filter(|t| agent != "claude" || is_transcript_path(t, None));
+                    crate::usage::watch(
+                        &app,
+                        agent,
+                        root,
+                        payload.get("tab_id").and_then(|v| v.as_str()),
+                        payload.get("project_key").and_then(|v| v.as_str()),
+                        transcript,
+                    );
                 }
                 let _ = app.emit("ingest://hook", payload);
             }

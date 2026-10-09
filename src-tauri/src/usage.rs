@@ -24,9 +24,10 @@ const BATCH: usize = 500;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ThreadMeta {
+    agent: &'static str,
     root: String,
     thread: String,
-    /// "main", "worker", or Codex's own label for an internal child (e.g. "guardian").
+    /// "main", "worker"/"subagent", or Codex's own label for an internal child (e.g. "guardian").
     kind: String,
 }
 
@@ -70,6 +71,8 @@ struct ThreadHealth {
 struct RootInfo {
     tab_id: Option<String>,
     project_key: Option<String>,
+    /// Claude only: the main transcript; children live in `<stem>/subagents/`.
+    transcript: Option<PathBuf>,
 }
 
 #[derive(Default)]
@@ -157,7 +160,7 @@ pub(crate) fn parse_session_meta(line: &str) -> Option<ThreadMeta> {
             }
         }
     };
-    Some(ThreadMeta { root, thread, kind })
+    Some(ThreadMeta { agent: "codex", root, thread, kind })
 }
 
 fn count(u: &serde_json::Value, key: &str) -> Option<u64> {
@@ -198,6 +201,49 @@ pub(crate) fn parse_codex_usage(line: &str, path: &str, offset: u64) -> Option<U
     })
 }
 
+/// One Claude transcript `assistant` line → a usage snapshot. A message
+/// spans several lines (one per content block, output growing); each line
+/// is a snapshot and the latest per `message.id` wins downstream. Input is
+/// normalized to total input: Claude's `input_tokens` excludes cache reads
+/// and writes. Thread = `agent-<agentId>` for subagent lines, else the root.
+pub(crate) fn parse_claude_usage(line: &str, path: &str, offset: u64) -> Option<UsageRec> {
+    if !line.contains("\"assistant\"") || !line.contains("\"usage\"") {
+        return None;
+    }
+    let v: serde_json::Value = serde_json::from_str(line).ok()?;
+    if v.get("type")?.as_str()? != "assistant" {
+        return None;
+    }
+    let m = v.get("message")?;
+    let u = m.get("usage")?;
+    let fresh = count(u, "input_tokens")?;
+    let cache_read = count(u, "cache_read_input_tokens")?;
+    let cache_write = count(u, "cache_creation_input_tokens")?;
+    let root = str_field(&v, "sessionId")?.to_string();
+    let thread = match str_field(&v, "agentId") {
+        Some(id) => format!("agent-{id}"),
+        None => root.clone(),
+    };
+    Some(UsageRec {
+        agent: "claude",
+        root_session_id: root,
+        thread_id: thread,
+        response_id: str_field(m, "id")?.to_string(),
+        source_ts: rfc3339_ms(str_field(&v, "timestamp")?)?,
+        source_path: path.to_string(),
+        source_offset: offset,
+        input: fresh.checked_add(cache_read)?.checked_add(cache_write)?,
+        cache_read,
+        cache_write,
+        output: count(u, "output_tokens")?,
+    })
+}
+
+fn is_claude_turn(line: &str) -> bool {
+    line.contains("\"assistant\"")
+        && serde_json::from_str::<serde_json::Value>(line).is_ok_and(|v| v.get("type").and_then(|t| t.as_str()) == Some("assistant"))
+}
+
 fn is_turn_complete(line: &str) -> bool {
     line.contains("\"task_complete\"")
         && serde_json::from_str::<serde_json::Value>(line).is_ok_and(|v| {
@@ -215,7 +261,7 @@ pub(crate) struct ScanOut {
 }
 
 /// Read complete lines from `offset`. Never consumes a line without its `\n`.
-pub(crate) fn scan_from(path: &Path, offset: u64) -> std::io::Result<ScanOut> {
+pub(crate) fn scan_from(path: &Path, offset: u64, agent: &str) -> std::io::Result<ScanOut> {
     let mut f = File::open(path)?;
     let len = f.metadata()?.len();
     let start = if len < offset { 0 } else { offset }; // truncated/replaced: re-read (dedupe absorbs it)
@@ -231,9 +277,14 @@ pub(crate) fn scan_from(path: &Path, offset: u64) -> std::io::Result<ScanOut> {
             break;
         }
         let line = String::from_utf8_lossy(&buf);
-        if let Some(rec) = parse_codex_usage(&line, &path_s, out.end) {
+        let (rec, turn) = if agent == "claude" {
+            (parse_claude_usage(&line, &path_s, out.end), is_claude_turn as fn(&str) -> bool)
+        } else {
+            (parse_codex_usage(&line, &path_s, out.end), is_turn_complete as fn(&str) -> bool)
+        };
+        if let Some(rec) = rec {
             out.records.push(rec);
-        } else if is_turn_complete(&line) {
+        } else if turn(&line) {
             out.turns += 1;
         }
         out.end += n as u64;
@@ -271,11 +322,51 @@ fn sessions_dir() -> Option<PathBuf> {
     crate::home::home().map(|h| PathBuf::from(h).join(".codex").join("sessions"))
 }
 
-/// Register a Codex root session seen on a hook, then wake discovery.
-pub fn watch(app: &AppHandle, root: &str, tab_id: Option<&str>, project_key: Option<&str>) {
+fn claude_projects_dir() -> Option<PathBuf> {
+    crate::home::home().map(|h| PathBuf::from(h).join(".claude").join("projects"))
+}
+
+/// A Claude main transcript we may read: `<projects>/<dir>/<root>.jsonl`,
+/// resolved, under the projects dir, named for its own session.
+pub(crate) fn claude_main_ok(path: &Path, projects: &Path, root: &str) -> bool {
+    let (Ok(p), Ok(base)) = (path.canonicalize(), projects.canonicalize()) else { return false };
+    p.starts_with(&base) && p.file_name().and_then(|n| n.to_str()) == Some(&format!("{root}.jsonl"))
+}
+
+/// Child transcripts beside a main one: `<stem>/subagents/agent-*.jsonl`,
+/// resolved and still under the session's own directory.
+pub(crate) fn claude_children(main: &Path) -> Vec<(PathBuf, String)> {
+    let dir = main.with_extension("").join("subagents");
+    let Ok(base) = dir.canonicalize() else { return Vec::new() };
+    let Ok(entries) = std::fs::read_dir(&base) else { return Vec::new() };
+    let mut out = Vec::new();
+    for e in entries.flatten() {
+        let Ok(p) = e.path().canonicalize() else { continue };
+        let Some(name) = p.file_name().and_then(|n| n.to_str()).map(str::to_string) else { continue };
+        if p.starts_with(&base) && p.is_file() && name.starts_with("agent-") && name.ends_with(".jsonl") {
+            out.push((p, name.trim_end_matches(".jsonl").to_string()));
+        }
+    }
+    out
+}
+
+/// Register a root session seen on a hook, then wake discovery. Claude
+/// passes its main transcript (already gated to `~/.claude/projects/`).
+pub fn watch(app: &AppHandle, agent: &'static str, root: &str, tab_id: Option<&str>, project_key: Option<&str>, transcript: Option<&str>) {
     if root.is_empty() {
         return;
     }
+    let transcript = match (agent, transcript) {
+        ("claude", Some(t)) => {
+            let path = PathBuf::from(t);
+            match claude_projects_dir() {
+                Some(projects) if claude_main_ok(&path, &projects, root) => Some(path),
+                _ => return,
+            }
+        }
+        ("claude", None) => return,
+        _ => None,
+    };
     let state = app.state::<UsageState>();
     {
         let Ok(mut inner) = state.inner.lock() else { return };
@@ -285,6 +376,9 @@ pub fn watch(app: &AppHandle, root: &str, tab_id: Option<&str>, project_key: Opt
         }
         if info.project_key.is_none() {
             info.project_key = project_key.filter(|k| !k.is_empty()).map(str::to_string);
+        }
+        if info.transcript.is_none() {
+            info.transcript = transcript;
         }
     }
     if let Ok(poke) = state.poke.lock() {
@@ -311,13 +405,50 @@ fn discovery_loop(app: AppHandle, rx: Receiver<()>) {
         if let Some(dir) = sessions_dir() {
             discover(&app, &dir);
         }
+        discover_claude(&app);
+    }
+}
+
+fn spawn_reader(app: &AppHandle, path: PathBuf, meta: ThreadMeta) {
+    let app = app.clone();
+    // ponytail: one polling thread per transcript/rollout file, alive until app
+    // exit (same model as ingest's tailer); switch to notify/kqueue if counts grow.
+    std::thread::spawn(move || read_loop(app, path, meta));
+}
+
+/// Claude: the main transcript plus whatever children exist now. Completed
+/// children (and ones whose Start hook was missed) are found by listing.
+fn discover_claude(app: &AppHandle) {
+    let state = app.state::<UsageState>();
+    let mut start = Vec::new();
+    {
+        let Ok(mut inner) = state.inner.lock() else { return };
+        let mains: Vec<(String, PathBuf)> = inner
+            .roots
+            .iter()
+            .filter_map(|(root, info)| info.transcript.clone().map(|t| (root.clone(), t)))
+            .collect();
+        for (root, main) in mains {
+            let mut files = vec![(main.clone(), ThreadMeta { agent: "claude", root: root.clone(), thread: root.clone(), kind: "main".into() })];
+            for (child, name) in claude_children(&main) {
+                files.push((child, ThreadMeta { agent: "claude", root: root.clone(), thread: name, kind: "subagent".into() }));
+            }
+            for (path, meta) in files {
+                if inner.readers.insert(path.clone()) {
+                    start.push((path, meta));
+                }
+            }
+        }
+    }
+    for (path, meta) in start {
+        spawn_reader(app, path, meta);
     }
 }
 
 fn discover(app: &AppHandle, dir: &Path) {
     let state = app.state::<UsageState>();
-    if state.inner.lock().map(|i| i.roots.is_empty()).unwrap_or(true) {
-        return;
+    if state.inner.lock().map(|i| !i.roots.values().any(|r| r.transcript.is_none())).unwrap_or(true) {
+        return; // no Codex roots
     }
     let mut files = Vec::new();
     rollouts_under(dir, &mut files, 4); // all YYYY/MM/DD dirs: resumes and children cross dates
@@ -352,10 +483,7 @@ fn discover(app: &AppHandle, dir: &Path) {
         }
     }
     for (path, meta) in start {
-        let app = app.clone();
-        // ponytail: one polling thread per rollout file, alive until app exit
-        // (same model as ingest's tailer); switch to notify/kqueue if counts grow.
-        std::thread::spawn(move || read_loop(app, path, meta));
+        spawn_reader(app, path, meta);
     }
 }
 
@@ -375,7 +503,12 @@ fn read_loop(app: AppHandle, path: PathBuf, meta: ThreadMeta) {
     let mut last_status = "";
     loop {
         let info = root_info(&app, &meta.root);
-        let status = match scan_from(&path, offset) {
+        // A Claude main transcript checks for new children every pass, so a
+        // child's spend shows within a second of its file appearing.
+        if meta.agent == "claude" && meta.kind == "main" {
+            discover_claude(&app);
+        }
+        let status = match scan_from(&path, offset, meta.agent) {
             Ok(out) => {
                 offset = out.end;
                 turns += out.turns;
@@ -403,7 +536,7 @@ fn read_loop(app: AppHandle, path: PathBuf, meta: ThreadMeta) {
             let _ = app.emit(
                 "usage://thread",
                 ThreadHealth {
-                    agent: "codex",
+                    agent: meta.agent,
                     root_session_id: meta.root.clone(),
                     thread_id: meta.thread.clone(),
                     kind: meta.kind.clone(),
@@ -451,7 +584,7 @@ mod tests {
 
     #[test]
     fn session_meta_kinds() {
-        assert_eq!(parse_session_meta(META_MAIN).unwrap(), ThreadMeta { root: "T1".into(), thread: "T1".into(), kind: "main".into() });
+        assert_eq!(parse_session_meta(META_MAIN).unwrap(), ThreadMeta { agent: "codex", root: "T1".into(), thread: "T1".into(), kind: "main".into() });
         assert_eq!(parse_session_meta(META_WORKER).unwrap().kind, "worker");
         let g = parse_session_meta(META_GUARD).unwrap();
         assert_eq!((g.root.as_str(), g.thread.as_str(), g.kind.as_str()), ("T1", "T3", "guardian"));
@@ -479,19 +612,19 @@ mod tests {
         let done = "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\"}}\n";
         let l3 = rec("T1", "r2", "2026-10-07T18:16:11Z", 20, 5, 2); // no newline yet
         std::fs::write(&p, format!("{l1}{l2}{done}{l3}")).unwrap();
-        let a = scan_from(&p, 0).unwrap();
+        let a = scan_from(&p, 0, "codex").unwrap();
         assert_eq!(a.records.len(), 1);
         assert_eq!(a.records[0].source_offset, l1.len() as u64);
         assert_eq!(a.turns, 1);
         assert_eq!(a.end, (l1.len() + l2.len() + done.len()) as u64);
         std::fs::OpenOptions::new().append(true).open(&p).unwrap().write_all(b"\n").unwrap();
-        let b = scan_from(&p, a.end).unwrap();
+        let b = scan_from(&p, a.end, "codex").unwrap();
         assert_eq!(b.records.len(), 1);
         assert_eq!(b.records[0].response_id, "r2");
         assert_eq!(b.records[0].source_offset, a.end);
         // Replaced by a shorter file: start over (dedupe by path + offset absorbs replays).
         std::fs::write(&p, &l1).unwrap();
-        assert_eq!(scan_from(&p, b.end).unwrap().end, l1.len() as u64);
+        assert_eq!(scan_from(&p, b.end, "codex").unwrap().end, l1.len() as u64);
     }
 
     #[test]
@@ -512,5 +645,58 @@ mod tests {
         let partial = d.join("2026/10/03/rollout-c.jsonl");
         std::fs::write(&partial, META_MAIN).unwrap();
         assert!(first_line(&partial).is_none());
+    }
+
+    fn claude_line(agent_id: Option<&str>, msg: &str, out: u64) -> String {
+        let agent = agent_id.map(|a| format!(r#""agentId":"{a}","isSidechain":true,"#)).unwrap_or_default();
+        format!(
+            r#"{{"type":"assistant",{agent}"sessionId":"S1","timestamp":"2026-10-09T08:25:40.488Z","message":{{"id":"{msg}","role":"assistant","content":[{{"type":"text","text":"ignored"}}],"usage":{{"input_tokens":2,"cache_creation_input_tokens":14689,"cache_read_input_tokens":100,"output_tokens":{out}}}}}}}"#
+        )
+    }
+
+    #[test]
+    fn claude_usage_normalizes_input_and_threads_children() {
+        let r = parse_claude_usage(&claude_line(None, "m1", 80), "/t", 7).unwrap();
+        assert_eq!((r.agent, r.root_session_id.as_str(), r.thread_id.as_str(), r.response_id.as_str()), ("claude", "S1", "S1", "m1"));
+        assert_eq!((r.input, r.cache_read, r.cache_write, r.output), (2 + 100 + 14689, 100, 14689, 80));
+        let c = parse_claude_usage(&claude_line(Some("abe0"), "m2", 4), "/t", 0).unwrap();
+        assert_eq!(c.thread_id, "agent-abe0");
+        let user = claude_line(None, "m1", 1).replacen("\"type\":\"assistant\"", "\"type\":\"user\"", 1);
+        assert!(parse_claude_usage(&user, "/t", 0).is_none());
+        let no_id = claude_line(None, "", 1);
+        assert!(parse_claude_usage(&no_id, "/t", 0).is_none());
+    }
+
+    #[test]
+    fn claude_scan_keeps_every_block_snapshot() {
+        let d = tmp("claude-scan");
+        let p = d.join("S1.jsonl");
+        // One message over two block lines (output grows) plus a user line.
+        let lines = [claude_line(None, "m1", 8), "{\"type\":\"user\",\"sessionId\":\"S1\"}".to_string(), claude_line(None, "m1", 362)];
+        std::fs::write(&p, lines.iter().map(|l| format!("{l}\n")).collect::<String>()).unwrap();
+        let out = scan_from(&p, 0, "claude").unwrap();
+        assert_eq!(out.records.iter().map(|r| r.output).collect::<Vec<_>>(), vec![8, 362]);
+        assert!(out.records[1].source_offset > out.records[0].source_offset);
+    }
+
+    #[test]
+    fn claude_paths_stay_inside_the_session() {
+        let d = tmp("claude-paths");
+        let projects = d.join("projects");
+        let session = projects.join("-proj");
+        std::fs::create_dir_all(session.join("S1").join("subagents")).unwrap();
+        let main = session.join("S1.jsonl");
+        std::fs::write(&main, "").unwrap();
+        std::fs::write(session.join("S1/subagents/agent-a1.jsonl"), "").unwrap();
+        std::fs::write(session.join("S1/subagents/notes.txt"), "").unwrap();
+        let outside = d.join("elsewhere.jsonl");
+        std::fs::write(&outside, "").unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&outside, session.join("S1/subagents/agent-evil.jsonl")).unwrap();
+        assert!(claude_main_ok(&main, &projects, "S1"));
+        assert!(!claude_main_ok(&main, &projects, "S2"), "file must be named for its own session");
+        assert!(!claude_main_ok(&outside, &projects, "elsewhere"));
+        let kids: Vec<String> = claude_children(&main).into_iter().map(|(_, n)| n).collect();
+        assert_eq!(kids, vec!["agent-a1".to_string()]);
     }
 }

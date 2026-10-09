@@ -5892,3 +5892,35 @@ aggregation, odometer = newest root, shared-root dedupe across tabs,
 spark text, coverage per root. `cargo test --lib usage`: RFC 3339 parsing,
 session_meta kinds (main / worker / guardian), record validation, partial
 last line retried, file replacement, discovery across date dirs.
+
+### Phase 59 checkpoint 3: Claude spend meter
+
+Reinstall first. Same surfaces as checkpoint 2, now for Claude tabs.
+
+- [x] **94.** **Claude reconciliation** — open a fresh Logic Loop shell tab
+    (no agent running in it) and run:
+
+    ```bash
+    echo 'Spawn exactly one subagent that reads package.json and replies with its "name" field. No edits.' \
+      | claude -p --output-format json --allowedTools Read Task Agent \
+      | jq '[.modelUsage[]] | {input: (map(.inputTokens) | add), cache_read: (map(.cacheReadInputTokens) | add),
+            cache_write: (map(.cacheCreationInputTokens) | add), output: (map(.outputTokens) | add)}
+            | . + {expected_units: (.input + .cache_read*0.1 + .cache_write*1.25 + .output*5 | floor)}'
+    ```
+
+    Expected: the tab's dock shows a spend chip; Overview → Agent spend
+    lists that session with a `main` and one `subagent` row, and its total
+    matches `expected_units` (rounded the same way, e.g. "47k"). Sum every
+    `modelUsage` entry: a subagent on another model is a separate entry.
+    Passed 2026-10-09: main 48,238 matched exactly; subagent 12,902 (second
+    model entry); dock 61k = 61,140.
+- [ ] **95.** **Claude live** — in an interactive Claude tab, ask for 2
+    parallel subagents that each read `src/App.tsx`. Expected: the dock
+    chip and Home card line rise while they run; Overview shows `main` + 2
+    `subagent` rows; coverage reads "3/3 threads recorded".
+
+Automated: `cargo test --lib usage` adds Claude input normalization
+(input + cache read + cache write), `agentId` → `agent-<id>` thread, block
+lines kept as ordered snapshots (latest per message.id wins in the query),
+and transcript paths confined to the session's own directory (name must
+match the session; symlinked children escaping it are skipped).

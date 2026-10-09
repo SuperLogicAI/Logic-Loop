@@ -2,8 +2,8 @@
 
 Status: **APPROVED 2026-10-09 (`PHASE 59 APPROVED`, decisions 1-5 as
 recommended), rev 3. Branch `feat/phase-59-token-spend-meter`. Checkpoint 1
-accepted live (87, 88, 90; 89 pending). Checkpoint 2 built; gates green;
-awaiting live checks 91-93.** One phase, three
+accepted live (87, 88, 90; 89 pending). Checkpoints 2-3 built; gates green;
+awaiting live checks 89, 91-95.** One phase, three
 checkpoints, one `PHASE 59 ACCEPTED` at the end.
 
 *Revision 1 (build, checkpoint 1):* "hooks not installed/trusted →
@@ -36,6 +36,19 @@ fallback (Revision 3's lesson). Coverage lives in memory from
 arrives). Readers start on a Codex hook, so after an app restart a tab's
 meter shows persisted rows but no new ones until Codex next acts.
 "unsupported" = completed turns (`task_complete`) without usage records.
+*Revision 6 (build, checkpoint 3):* Claude thread id is `agent-<agentId>`
+when a line carries `agentId`, else the root session — so a child's lines
+dedupe by `message.id` whether they sit in `subagents/` or (older CLIs) in
+the main file. Readers start on any Claude hook whose `transcript_path`
+passes the existing `~/.claude/projects/` gate and is named for its own
+session; a main transcript's reader re-lists `subagents/` each pass.
+Manual checks: 94 reconciliation (fresh shell tab, `claude -p` JSON →
+expected units), 95 live (interactive tab, 2 subagents).
+*Revision 7 (live check 95):* the text sparkline (block glyphs, scaled to
+its own 15-min peak) read as a slider pinned at 100% whenever spend rose,
+at any magnitude. Now 15 one-minute bars on a fixed full scale of 200k
+units/min (~ the maintainer's Checkpoint 0 p99, 214k), clipping above.
+No color or alert — not the deferred redline (Decision 5).
 *Open issue found at check 88 (not fixed here):* hook delivery lagged
 30-50 s during a burst of parallel subagent tool calls (all hooks, parent
 included; transcript tailing stayed ~1 s). Likely the single-threaded

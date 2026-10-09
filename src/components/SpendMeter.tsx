@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import * as repo from "../lib/repo";
 import { formatTokens } from "../lib/contextMeter";
-import { spendCoverage, spendSummary, sparkText, WEIGHTS, type SpendSummary, type UsageRow, type UsageThread } from "../lib/spend";
+import { SPARK_FULL_SCALE, sparkHeights, spendCoverage, spendSummary, WEIGHTS, type SpendSummary, type UsageRow, type UsageThread } from "../lib/spend";
 
-const UNIT_NOTE = `Effort units: fresh input ×${WEIGHTS.fresh}, cache read ×${WEIGHTS.cacheRead}, cache write ×${WEIGHTS.cacheWrite}, output ×${WEIGHTS.output}. Not dollars.`;
+const UNIT_NOTE = `Effort units: fresh input ×${WEIGHTS.fresh}, cache read ×${WEIGHTS.cacheRead}, cache write ×${WEIGHTS.cacheWrite}, output ×${WEIGHTS.output}. Not dollars. Bars: last 15 min, full height = ${formatTokens(SPARK_FULL_SCALE)} units/min.`;
 
 function ago(ts: number | null, now: number): string {
   if (ts === null) return "no samples yet";
@@ -19,8 +19,25 @@ export function spendTitle(s: SpendSummary, threads: UsageThread[], now: number)
   return `${formatTokens(Math.round(s.ratePerMin))} units/min (5-min avg) · session total ${formatTokens(Math.round(s.total))} · last sample ${ago(s.lastSampleAt, now)}${coverage}\n${UNIT_NOTE}`;
 }
 
-export function spendText(s: SpendSummary): string {
-  return `${sparkText(s.sparkline)} ${formatTokens(Math.round(s.ratePerMin))} u/min · ${formatTokens(Math.round(s.total))} total`;
+/** 15 one-minute bars, oldest first, on a fixed scale (not the line's own peak). */
+function Sparkline({ values }: { values: number[] }) {
+  return (
+    <span className="inline-flex h-3 items-end gap-px align-middle" aria-hidden="true">
+      {sparkHeights(values).map((h, i) => (
+        <span key={i} className={`w-0.5 ${h > 0 ? "bg-zinc-400" : "bg-zinc-700"}`} style={{ height: h > 0 ? `${Math.max(h * 100, 15)}%` : "1px" }} />
+      ))}
+    </span>
+  );
+}
+
+/** Sparkline + "41k u/min · 1.2M total". */
+export function SpendLine({ s }: { s: SpendSummary }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 tabular-nums">
+      <Sparkline values={s.sparkline} />
+      {formatTokens(Math.round(s.ratePerMin))} u/min · {formatTokens(Math.round(s.total))} total
+    </span>
+  );
 }
 
 /** Re-render on an interval so the 5-min rate decays without new samples. */
@@ -57,7 +74,7 @@ export function SpendChip({ tabId, sessionId, refresh, threads }: { tabId: strin
   if (!s) return null;
   return (
     <span className="shrink-0 cursor-default text-xs text-zinc-500 tabular-nums" title={spendTitle(s, threads, now)}>
-      {spendText(s)}
+      <SpendLine s={s} />
     </span>
   );
 }
@@ -95,7 +112,7 @@ export function AgentSpendSection({ tabs, refresh, threads }: { tabs: { id: stri
           return (
             <div key={tab.id} className="text-xs text-zinc-300">
               <p className="text-zinc-200" title={spendTitle(s, threads, now)}>
-                {tab.title} · <span className="tabular-nums">{spendText(s)}</span>
+                {tab.title} · <SpendLine s={s} />
               </p>
               <table className="mt-1 w-full max-w-md text-[11px] text-zinc-400 tabular-nums">
                 <thead>

@@ -4,7 +4,8 @@ import {
   addSpend,
   addSubagentStates,
   effortUnits,
-  sparkText,
+  SPARK_FULL_SCALE,
+  sparkHeights,
   spendCoverage,
   spendSummary,
   subagentLabel,
@@ -132,8 +133,8 @@ assert.equal(spendSummary([], NOW), null);
 const a1 = spendSummary([row(NOW - 10)], NOW)!;
 assert.equal(addSpend([a1, a1])!.total, 22_000);
 assert.equal(addSpend([a1, spendSummary([row(NOW - 10, { root_session_id: "S" })], NOW)!])!.total, 44_000);
-assert.equal(sparkText([0, 1, 7]), "▁▂█");
-assert.equal(sparkText([0, 0]), "▁▁");
+// Fixed scale: 44k/min is ~a fifth of full height, not "maxed" (live check 95 finding).
+assert.deepEqual(sparkHeights([0, 44_000, SPARK_FULL_SCALE, 3 * SPARK_FULL_SCALE, -5]), [0, 0.22, 1, 1, 0]);
 // Coverage counts this root's threads only.
 const th = (thread_id: string, root: string, status: "pending" | "recorded" | "unsupported" | "unreadable") =>
   ({ agent: "codex", root_session_id: root, thread_id, kind: "main", tab_id: null, project_key: null, status });

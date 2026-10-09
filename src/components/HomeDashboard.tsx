@@ -3,7 +3,7 @@ import * as repo from "../lib/repo";
 import { describeDelta, type Delta } from "../lib/delta";
 import { loadTabDelta } from "../lib/tabDelta";
 import { addSpend, addSubagentStates, spendSummary, subagentLabel, subagentState, type SpendSummary, type SubagentState, type UsageThread } from "../lib/spend";
-import { spendText, spendTitle } from "./SpendMeter";
+import { SpendLine, spendTitle } from "./SpendMeter";
 import {
   buildProjectCards,
   projectDisplayName,
@@ -406,7 +406,7 @@ function ProjectCard({
       </div>
       {spend && (
         <p className="mt-1 text-[11px] text-zinc-500 tabular-nums" title={spendTitle(spend, usageThreads, now)}>
-          {spendText(spend)}
+          <SpendLine s={spend} />
         </p>
       )}
       {sinceLeft.length > 0 && (

@@ -188,10 +188,14 @@ export function addSpend(summaries: SpendSummary[]): SpendSummary | null {
   return out;
 }
 
-const BLOCKS = "▁▂▃▄▅▆▇█";
-export function sparkText(values: number[]): string {
-  const max = Math.max(...values);
-  return values.map((v) => (max <= 0 || v <= 0 ? BLOCKS[0] : BLOCKS[Math.min(7, Math.ceil((v / max) * 7))])).join("");
+/** Sparkline full scale, in units/min. Fixed, not relative to the line's own
+ * peak — a relative scale makes any rising spend look maxed. ~ the
+ * maintainer's p99 per-minute spend from the Checkpoint 0 sampler (214k). */
+export const SPARK_FULL_SCALE = 200_000;
+
+/** Bar heights 0..1 against the fixed full scale; above it clips at 1. */
+export function sparkHeights(values: number[]): number[] {
+  return values.map((v) => Math.min(Math.max(v, 0) / SPARK_FULL_SCALE, 1));
 }
 
 /** Coverage for one root: threads whose usage is recorded vs all discovered. */
