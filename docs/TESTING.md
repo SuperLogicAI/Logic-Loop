@@ -5642,22 +5642,27 @@ Manual, rebuilt app (F1–F2 passed, maintainer 2026-10-08):
       character reaches the agent prompt.
 - [x] **F2.** Open Traffic and Attention by mouse (expanded header, compact
       rail, Home Inbox); Escape and Close return focus to the trigger.
-- [ ] **F3.** Setup → Sidebar LM popover → Escape closes only the popover;
-      second Escape closes Setup. Failed 2026-10-08 (see below); fixed in
-      source, retest on a rebuilt app. Also: Escape right after opening
-      Setup (Close button focused) closes it.
+- [x] **F3.** Setup → Sidebar LM popover → Escape closes only the popover;
+      second Escape closes Setup. Also: Escape right after opening Setup
+      (Close button focused) closes it. Failed 2026-10-08 (see below); fixed
+      in #79 and passed on a rebuilt app (maintainer, 2026-10-08).
 - [x] **F4.** Lock-in on: Set landing note button and capture input are grey.
 - [x] **F5.** Isolate loop with branch field focused: Escape closes it.
 - [x] **F6.** Context meter is amber at displayed 70–89% (maintainer saw
       amber in the 80s, 2026-10-08).
-- [ ] **F7.** Enough tabs to overflow: mouse click-drag on the tab-strip
+- [x] **F7.** Enough tabs to overflow: mouse click-drag on the tab-strip
       scrollbar thumb scrolls tabs (window does not move); click on the track
       pages; trackpad two-finger scroll still works; empty strip space above
-      the tabs and right of the last one still drags the window.
-- [Failed] **F8.** Claude tab with a long live screen: drag the window edge back
+      the tabs and right of the last one still drags the window. (Maintainer
+      passed all subcases, 2026-10-08.)
+- [x] **F8.** Claude tab with a long live screen: drag the window edge back
       and forth, toggle Lock-in and Fold a few times. Terminal snaps to the
-      new width ~0.1s after you stop; select-all/copy shows no (or at most
-      one) leftover duplicate frame, versus many before.
+      new width ~0.1s after you stop; select-all/copy shows at most one
+      leftover duplicate frame per settled width change (not one per frame,
+      as before #78); Codex shows none. Criterion reworded 2026-10-08: the
+      per-change copy is Claude Code's own resize redraw, reproduced by the
+      maintainer in a standard terminal, not a Logic Loop bug. Passed
+      (maintainer rerun, below).
 
 Computer-use follow-up — 2026-10-08, approximately 08:31–08:44 HST:
 
@@ -5724,3 +5729,22 @@ Maintainer triage, 2026-10-08:
   plain text moved focus to `<body>`, which is why Escape then worked.
   Fix: the dialog's key handler closes Setup on Escape itself; Sidebar LM's
   window capture listener still stops Escape first while its popover is open.
+- **F8 maintainer rerun (post-#78 app, quit/reopen between runs, same
+  conversation).** Copies kept outside the repo; compared structurally
+  (12-word shingles, punctuation/box-drawing stripped), no content read.
+  Fold runs reuse the same agent's resize-run "before" copy as baseline.
+
+  | Run | Duplicated blocks | Duplicated words | Baseline text repeated |
+  |-----|-------------------|------------------|------------------------|
+  | 1 Claude, resize | 1 | 160 | up to 2× |
+  | 2 Claude, fold + resize | 4 | 648 | up to 4× |
+  | 3 Codex, resize | 0 | 0 | 1× |
+  | 4 Codex, fold + resize | 0 | 0 | 1× |
+
+  Codex leaves no residue. Claude leaves about one copy per settled width
+  change: resize alone meets "at most one"; fold + resize (several discrete
+  width changes) does not. The 120ms debounce removed the per-frame copies
+  but cannot merge separate settled changes, each of which is a real resize
+  Claude Code redraws for. Maintainer reproduced the same per-resize copies
+  with Claude Code in a standard terminal, so it is upstream behavior; F8
+  criterion reworded and passed.
