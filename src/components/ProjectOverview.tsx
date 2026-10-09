@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import * as repo from "../lib/repo";
-import { observedAgentTime, projectDisplayName, projectFolderLabel, buildProjectWorkLog, commitsInRange, dashboardRangeStart, projectWorkspaceChoices, type DashboardRange, type WorkLogEntry } from "../lib/dashboard";
+import { observedAgentTime, humanTime, humanTimeLines, formatDuration, HUMAN_IDLE_CAP_MS, projectDisplayName, projectFolderLabel, buildProjectWorkLog, commitsInRange, dashboardRangeStart, projectWorkspaceChoices, type DashboardRange, type WorkLogEntry } from "../lib/dashboard";
 import { dashboardReads, observeDashboardRead, type ReadState, type ReadDiagnostic } from "../lib/dashboardLoader";
 import { computeMomentum } from "../lib/momentum";
 import { parseBoard, peekBoard, EXAMPLE_BOARD, type BoardStatus } from "../lib/board";
@@ -67,6 +67,7 @@ interface OverviewValues {
   commits: Commit[];
   board: { state: "ready" | "missing"; cards: ReturnType<typeof parseBoard>; isExample: boolean };
   agentTime: ReturnType<typeof observedAgentTime>;
+  humanTime: ReturnType<typeof humanTime>;
   reentry: ReentryCandidate[];
 }
 
@@ -74,7 +75,7 @@ type OverviewReads = { [K in keyof OverviewValues]: ReadState<OverviewValues[K]>
 const loadingReads = (): OverviewReads => ({
   catalog: { state: "loading" }, openDecisions: { state: "loading" }, openBlockers: { state: "loading" },
   landing: { state: "loading" }, workLog: { state: "loading" }, commits: { state: "loading" },
-  board: { state: "loading" }, agentTime: { state: "loading" }, reentry: { state: "loading" },
+  board: { state: "loading" }, agentTime: { state: "loading" }, humanTime: { state: "loading" }, reentry: { state: "loading" },
 });
 
 /** Plan 051: stale decisions (open, >14 days, dormant session) are left out of
@@ -167,6 +168,9 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
       }, "board", 30_000),
       watch("agentTime", async () => observedAgentTime((await repo.projectAgentTimeObservations(projectKey))
         .map((o) => ({ sessionId: o.session_id, runId: o.run_id, state: o.state, observedAt: o.observed_at })))),
+      // Read one cap early so an interval opened just before the range is clipped, not lost.
+      watch("humanTime", async () => humanTime((await repo.projectHumanTimeEvents(projectKey, since - HUMAN_IDLE_CAP_MS))
+        .map((e) => ({ tabId: e.tab_id, type: e.type, ts: e.ts })), until, since), `humanTime:${range}`),
       watch("reentry", () => repo.reentryCandidates().then((rows) => rows.filter((r) => r.project_key === projectKey))),
     ];
     return () => {
@@ -189,11 +193,11 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
     catalog: value("catalog"), openDecisions: value("openDecisions") ?? [],
     openBlockers: allOpenBlockers.filter(repo.isProjectBlocker), landing: value("landing") ?? null,
     workLog: value("workLog") ?? [], commits: value("commits") ?? [],
-    board: value("board"), agentTime: value("agentTime"),
+    board: value("board"), agentTime: value("agentTime"), humanTime: value("humanTime"),
   };
   const choiceReady = reads.openDecisions.state === "ready" && reads.openBlockers.state === "ready";
   const momentumReady = choiceReady && reads.landing.state === "ready" && reads.board.state === "ready";
-  const copyReady = choiceReady && reads.workLog.state === "ready" && reads.commits.state === "ready" && reads.landing.state === "ready";
+  const copyReady = choiceReady && reads.workLog.state === "ready" && reads.commits.state === "ready" && reads.landing.state === "ready" && reads.humanTime.state === "ready";
   const workspaceChoices = projectWorkspaceChoices(tabs, projectKey, expand);
   const liveTabs = workspaceChoices.filter((t) => t.status === "live");
   const openTethers = new Set(tabs.map((t) => t.id));
@@ -353,6 +357,7 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
                   commits: data.commits,
                   openDecisions: data.openDecisions,
                   openBlockers: data.openBlockers,
+                  timeLines: data.humanTime ? humanTimeLines(data.humanTime) : [],
                   nextStep: computeMomentum({ landing: data.landing, decisions: data.openDecisions, plannedCard: null,
                     onLandingDone: async () => undefined, onDecisionDone: async () => undefined,
                     onPlannedCardDone: async () => undefined })?.text ?? null,
@@ -556,6 +561,22 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
         </div>
 
         <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <section>
+            <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Your time</h3>
+            {reads.humanTime.state !== "ready" ? <ReadStatus read={reads.humanTime} label="your time" /> : data.humanTime?.sinceDate ? (
+              <p className="mt-2 text-xs text-zinc-300">
+                {formatDuration(data.humanTime.totalMs)} {range === "today" ? "today" : `in the last ${RANGE_LABEL[range]}`}
+                {data.humanTime.sinceDate > dashboardRangeStart(range, Date.now()) && (
+                  <> (tracking since {new Date(data.humanTime.sinceDate).toLocaleDateString()})</>
+                )}
+                <span className="block text-[11px] text-zinc-600">
+                  Counted while a tab in this project is visible and you're active; gaps over 15 min count as 15.
+                </span>
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-zinc-600">Hidden — no time tracked in this range yet.</p>
+            )}
+          </section>
           <section>
             <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Agent time (observed)</h3>
             {reads.agentTime.state !== "ready" ? <ReadStatus read={reads.agentTime} label="agent time" /> : data.agentTime?.sinceDate ? (

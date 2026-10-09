@@ -604,7 +604,8 @@ needs its own plan; order by what real users hit after 048 ships.
   reconstruct trends from current state or commit volume.
 - **GitHub context:** remote link, PR/CI state, PR creation. Spike first:
   existing `gh` auth, no new token store.
-- **Spend + human time:** spike for one trustworthy per-project token source
+- **Spend + human time:** human time done in Plan 057 ("Your time" +
+  Copy update hours); spend still open. Spike for one trustworthy per-project token source
   (current Claude/Codex meters are account-wide). Unknown ≠ zero; estimated ≠
   invoiced. Optional manual time tracker. No attribution → no cost UI.
 - **Opt-in LLM summaries:** ingestion-time only, cited, deterministic fallback.

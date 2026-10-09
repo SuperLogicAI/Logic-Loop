@@ -1013,3 +1013,18 @@ prints median cost/time per call. README prices both models. Gates: golden ×3 (
 passed, 1 ignored), clippy `-D warnings`, `git diff --check`. Live checks 70-73 passed
 (spawns confirmed `--model claude-haiku-5-5`; landing note and commit
 message drafts usable). **PHASE 56 ACCEPTED** (2026-10-08).
+
+### Phase 57 — Human time in projects (2026-10-08)
+
+Plan: `plans/057-time-in-projects.md` (`PHASE 57 APPROVED`, decisions 1-4 as
+recommended, 15 min idle cap). Two new append-only event types beside
+`tab_left`, same writer and bound-session rule: `tab_entered` (tab joins the
+visible set while focused, or window refocus) and `tab_active` (human input
+presence — keydown/pointerdown/wheel, never content — at most one per tab per
+minute). `humanTime` (`dashboard.ts`, pure) counts per-tab intervals capped
+at 15 min, nothing from `tab_left`, unions a project's tabs, clips to the
+range, splits by local day. Project Overview shows "Your time" beside agent
+time; Copy update gains a **Time** section (per-day lines + total). History
+starts clean (no backfill). Plain shell tabs without a session aren't
+counted. Query has no `events(type)` index: 0.15 s on a 262k-row DB.
+Awaiting live checks (TESTING.md Phase 57, items 74-79) and acceptance.

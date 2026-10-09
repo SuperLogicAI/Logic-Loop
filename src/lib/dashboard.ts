@@ -247,6 +247,102 @@ export function observedAgentTime(observations: readonly AgentTimeObservation[])
   };
 }
 
+// --- Human time (Plan 057) ---
+
+export const HUMAN_IDLE_CAP_MS = 15 * 60_000;
+
+export interface HumanTimeEvent {
+  tabId: string;
+  type: "tab_entered" | "tab_active" | "tab_left";
+  ts: number;
+}
+
+export interface HumanTime {
+  totalMs: number;
+  /** Local calendar day (YYYY-MM-DD) → ms, oldest first. */
+  byDay: [string, number][];
+  /** First tracking event seen in the read, null when there is none. */
+  sinceDate: number | null;
+}
+
+function localDay(ts: number): string {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Per tab, each `tab_entered`/`tab_active` opens an interval that the tab's
+ * next event closes, capped at `capMs` (idle). Nothing opens at `tab_left`.
+ * The last open interval runs to `now`, capped — a crash that skipped
+ * `tab_left` leaves at most one cap on that tab. Intervals are clipped to
+ * [rangeStart, now] and unioned across tabs, so a same-project split counts
+ * once. */
+export function humanTime(
+  events: readonly HumanTimeEvent[],
+  now: number,
+  rangeStart: number,
+  capMs = HUMAN_IDLE_CAP_MS
+): HumanTime {
+  const byTab = new Map<string, HumanTimeEvent[]>();
+  for (const e of events) {
+    const list = byTab.get(e.tabId);
+    if (list) list.push(e);
+    else byTab.set(e.tabId, [e]);
+  }
+
+  const intervals: [number, number][] = [];
+  for (const list of byTab.values()) {
+    list.sort((a, b) => a.ts - b.ts);
+    list.forEach((cur, i) => {
+      if (cur.type === "tab_left") return;
+      const until = i + 1 < list.length ? list[i + 1].ts : now;
+      const start = Math.max(cur.ts, rangeStart);
+      const end = Math.min(cur.ts + capMs, until, now);
+      if (end > start) intervals.push([start, end]);
+    });
+  }
+
+  intervals.sort((a, b) => a[0] - b[0]);
+  const merged: [number, number][] = [];
+  for (const [s, e] of intervals) {
+    const last = merged[merged.length - 1];
+    if (last && s <= last[1]) last[1] = Math.max(last[1], e);
+    else merged.push([s, e]);
+  }
+
+  const days = new Map<string, number>();
+  let totalMs = 0;
+  for (const [s, e] of merged) {
+    totalMs += e - s;
+    let cursor = s;
+    while (cursor < e) {
+      const midnight = new Date(cursor);
+      midnight.setHours(24, 0, 0, 0);
+      const stop = Math.min(e, midnight.getTime());
+      const day = localDay(cursor);
+      days.set(day, (days.get(day) ?? 0) + stop - cursor);
+      cursor = stop;
+    }
+  }
+
+  const first = events.reduce((min, e) => Math.min(min, e.ts), Infinity);
+  return {
+    totalMs,
+    byDay: [...days.entries()].sort(([a], [b]) => a.localeCompare(b)),
+    sinceDate: Number.isFinite(first) ? first : null,
+  };
+}
+
+export function formatDuration(ms: number): string {
+  const minutes = Math.floor(ms / 60_000);
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
+/** Copy update's Time section: one line per tracked day, then the total. */
+export function humanTimeLines(time: HumanTime): string[] {
+  if (time.totalMs === 0) return [];
+  return [...time.byDay.map(([day, ms]) => `${day}  ${formatDuration(ms)}`), `Total  ${formatDuration(time.totalMs)}`];
+}
+
 // --- Copy update (Plan 048 §3 "Copy update") ---
 
 export interface UpdateMarkdownDecision {
@@ -268,6 +364,8 @@ export interface UpdateMarkdownInput {
   decisionsNeeded: readonly UpdateMarkdownDecision[];
   blockerLines: readonly string[];
   nextStep: string | null;
+  /** Plan 057: "2026-10-08  1h 25m" lines; section omitted when absent/empty. */
+  timeLines?: readonly string[];
 }
 
 export const OMITTED_LINE = "Technical details omitted; review in the workspace.";
@@ -344,6 +442,10 @@ export function buildUpdateMarkdown(input: UpdateMarkdownInput): string {
   lines.push(`## ${exportSafeTitle(input.projectName)} — update (${exportSafeLine(input.rangeLabel)})`);
   lines.push("**Progress**");
   lines.push(...bulletsOrNoneRecorded(progress));
+  if (input.timeLines && input.timeLines.length > 0) {
+    lines.push("**Time**");
+    lines.push(...input.timeLines.map((t) => `- ${t}`));
+  }
   lines.push("**Decisions needed**");
   lines.push(
     ...bulletsOrNoneRecorded(

@@ -9,6 +9,9 @@ import {
   buildProjectCards,
   buildUpdateMarkdown,
   observedAgentTime,
+  humanTime,
+  humanTimeLines,
+  HUMAN_IDLE_CAP_MS,
   projectDisplayName,
   projectFolderLabel,
   sortProjectCards,
@@ -573,3 +576,55 @@ assert.equal(projectFolderLabel("/Users/vandershark/Desktop/dev/context_terminal
 assert.equal(projectFolderLabel("/Users/vandershark/Desktop/dev/pair_agentic/"), "dev/pair_agentic");
 assert.equal(projectFolderLabel("/repo"), "repo");
 assert.equal(projectFolderLabel("/"), "/");
+
+// --- humanTime (Plan 057) ---
+
+const MIN = 60_000;
+const T0 = new Date(2026, 9, 8, 10, 0).getTime(); // local 10:00, mid-day
+const ev = (tabId: string, type: "tab_entered" | "tab_active" | "tab_left", ts: number) => ({ tabId, type, ts });
+const total = (events: ReturnType<typeof ev>[], now = T0 + 120 * MIN, rangeStart = 0) =>
+  humanTime(events, now, rangeStart).totalMs / MIN;
+
+assert.equal(HUMAN_IDLE_CAP_MS, 15 * MIN);
+assert.equal(total([ev("a", "tab_entered", T0), ev("a", "tab_left", T0 + 5 * MIN)]), 5, "plain enter→left");
+assert.equal(
+  total([ev("a", "tab_entered", T0), ev("a", "tab_active", T0 + 5 * MIN), ev("a", "tab_left", T0 + 40 * MIN)]),
+  20,
+  "idle gap counts as at most 15 min"
+);
+assert.equal(
+  total([ev("a", "tab_entered", T0), ev("a", "tab_left", T0 + 5 * MIN), ev("a", "tab_entered", T0 + 30 * MIN), ev("a", "tab_left", T0 + 35 * MIN)]),
+  10,
+  "time away (left→entered) counts nothing"
+);
+assert.equal(
+  total([ev("a", "tab_entered", T0), ev("b", "tab_entered", T0), ev("a", "tab_left", T0 + 5 * MIN), ev("b", "tab_left", T0 + 5 * MIN)]),
+  5,
+  "same-project split counts once"
+);
+assert.equal(total([ev("a", "tab_entered", T0)], T0 + 60 * MIN), 15, "open interval capped");
+assert.equal(total([ev("a", "tab_entered", T0)], T0 + 5 * MIN), 5, "open interval runs to now");
+assert.equal(
+  total([ev("a", "tab_entered", T0 - 5 * MIN), ev("a", "tab_left", T0 + 5 * MIN)], T0 + 60 * MIN, T0),
+  5,
+  "interval clipped to range start"
+);
+const lateNight = new Date(2026, 9, 8, 23, 55).getTime();
+assert.deepEqual(
+  humanTime([ev("a", "tab_entered", lateNight), ev("a", "tab_left", lateNight + 10 * MIN)], lateNight + 60 * MIN, 0).byDay,
+  [["2026-10-08", 5 * MIN], ["2026-10-09", 5 * MIN]],
+  "interval split at local midnight"
+);
+assert.deepEqual(humanTime([], T0, 0), { totalMs: 0, byDay: [], sinceDate: null });
+
+const timed = humanTime([ev("a", "tab_entered", T0), ev("a", "tab_left", T0 + 85 * MIN)], T0 + 120 * MIN, 0);
+assert.deepEqual(humanTimeLines(timed), ["2026-10-08  0h 15m", "Total  0h 15m"]);
+assert.deepEqual(humanTimeLines(humanTime([], T0, 0)), []);
+const updateWithTime = buildUpdateMarkdown({
+  projectName: "P", rangeLabel: "R", progressLines: [], commitSubjects: [], decisionsNeeded: [], blockerLines: [],
+  nextStep: null, timeLines: ["2026-10-08  1h 25m", "Total  1h 25m"],
+});
+assert.ok(updateWithTime.includes("**Time**\n- 2026-10-08  1h 25m\n- Total  1h 25m\n**Decisions needed**"), "Time section sits after Progress");
+assert.ok(!emptyUpdate.includes("**Time**"), "no Time section without tracked time");
+
+console.log("dashboard-check: human time ok");

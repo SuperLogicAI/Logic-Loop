@@ -1783,6 +1783,23 @@ export async function projectAgentTimeObservations(cwd: string): Promise<AgentTi
   );
 }
 
+/** Plan 057: a project's human-time events since `since`. */
+export async function projectHumanTimeEvents(
+  cwd: string,
+  since: number
+): Promise<{ tab_id: string; type: "tab_entered" | "tab_active" | "tab_left"; ts: number }[]> {
+  const d = await getDb();
+  return d.select(
+    `SELECT json_extract(payload_json, '$.tab_id') AS tab_id, type, ts
+     FROM events
+     WHERE type IN ('tab_entered', 'tab_active', 'tab_left')
+       AND ts >= $2
+       AND json_extract(payload_json, '$.project_key') = $1
+     ORDER BY ts`,
+    [cwd, since]
+  );
+}
+
 /** Project work-log ownership is the session, never the reused terminal tether.
  * One indexed join replaces one JSON/tether scan for every historical session.
  * SidePanel's tether-oriented eventsSince contract is intentionally separate. */
