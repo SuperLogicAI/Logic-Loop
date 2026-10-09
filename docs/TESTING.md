@@ -5914,7 +5914,7 @@ Reinstall first. Same surfaces as checkpoint 2, now for Claude tabs.
     `modelUsage` entry: a subagent on another model is a separate entry.
     Passed 2026-10-09: main 48,238 matched exactly; subagent 12,902 (second
     model entry); dock 61k = 61,140.
-- [ ] **95.** **Claude live** — in an interactive Claude tab, ask for 2
+- [x] **95.** **Claude live** — in an interactive Claude tab, ask for 2
     parallel subagents that each read `src/App.tsx`. Expected: the dock
     chip and Home card line rise while they run; Overview shows `main` + 2
     `subagent` rows; coverage reads "3/3 threads recorded".

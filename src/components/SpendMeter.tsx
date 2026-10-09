@@ -109,7 +109,11 @@ export function AgentSpendSection({ tabs, refresh, threads }: { tabs: { id: stri
     .map((t) => ({ tab: t, s: spendSummary(byTab.get(t.id) ?? [], now) }))
     .filter((x): x is { tab: (typeof tabs)[number]; s: SpendSummary } => x.s !== null);
   if (rows.length === 0) return null;
-  const kindOf = (threadId: string) => threads.find((t) => t.thread_id === threadId)?.kind ?? "thread";
+  // Before a session's reader reports (e.g. right after an app restart), infer
+  // what the ids alone say: the root's own thread is main; Claude children are agent-*.
+  const kindOf = (threadId: string, root: string | null) =>
+    threads.find((t) => t.thread_id === threadId)?.kind ??
+    (threadId === root ? "main" : threadId.startsWith("agent-") ? "subagent" : "thread");
   return (
     <section className="mt-5">
       <div className="flex h-6 items-center">
@@ -135,7 +139,7 @@ export function AgentSpendSection({ tabs, refresh, threads }: { tabs: { id: stri
                   {s.threads.map((t) => (
                     <tr key={t.threadId}>
                       <td>
-                        {kindOf(t.threadId)} <span className="text-zinc-600">{t.threadId.slice(-6)}</span>
+                        {kindOf(t.threadId, s.rootSessionId)} <span className="text-zinc-600">{t.threadId.slice(-6)}</span>
                       </td>
                       <td className="text-right">{formatTokens(Math.round(t.ratePerMin))}</td>
                       <td className="text-right">{formatTokens(Math.round(t.total))}</td>
