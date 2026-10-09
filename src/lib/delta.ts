@@ -122,7 +122,6 @@ export interface BriefInput {
   delta: Delta;
   loopIterations: number | null; // Phase 15 loop run, else null
   project: string;
-  agent: string;
   branch: string;
   dirty: boolean;
   goal: string | null; // board Now card title — an explicit human pick only
@@ -170,7 +169,7 @@ export function buildBrief(input: BriefInput): Brief | null {
   const branch = input.branch ? ` · ${input.branch}${input.dirty ? " ●" : ""}` : "";
   const goal = input.goal?.trim() || null;
   return {
-    context: `${input.project} · ${input.agent}${branch}`,
+    context: `${input.project}${branch}`, // the agent is the panel's icon, not text
     goal,
     youLeft,
     changed,

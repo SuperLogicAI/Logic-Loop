@@ -71,6 +71,9 @@ no migration, no Rust, no model call.
    (no age) when everything it counts happened after you came back to the
    tab (Plan 057's `tab_entered`), i.e. you watched it live; otherwise
    **Since you left · Nm ago**. Contents and links are identical.
+   *Post-acceptance (2026-10-08, PR #87):* the context line shows the
+   agent as the tab bar's icon instead of its name ("<icon> project ·
+   branch ●"); icons moved to `src/lib/agentIcons.ts`, shared by both.
 3. **Evidence one click away.** Changed → file names expand inline; each
    opens the existing diff pop-out. Needs you → jumps to Decisions. Next →
    jumps to the Next card. A loop run shows "N iterations" in Changed and

@@ -41,6 +41,28 @@ function sectionPaths(section: string): string[] {
  * Diff paths are repo-relative and `file_path` is absolute, so they're
  * matched by path suffix — anchored at a separator, so `src/b/x.ts` never
  * matches a row for `src/a/x.ts`. A rename matches on either side. */
+/** How the pop-out colours each unified-diff line. File headers exist only
+ * between `diff --git` and the file's first `@@`, so inside a hunk a removed
+ * `-- comment` (shown as `--- comment`) is still a removed line. */
+export type DiffLineRole = "meta" | "hunk" | "add" | "del" | "ctx";
+export function diffLineRoles(lines: readonly string[]): DiffLineRole[] {
+  let inHunk = false;
+  return lines.map((line) => {
+    if (line.startsWith("diff --git")) {
+      inHunk = false;
+      return "meta";
+    }
+    if (line.startsWith("@@")) {
+      inHunk = true;
+      return "hunk";
+    }
+    if (!inHunk) return "meta";
+    if (line.startsWith("+")) return "add";
+    if (line.startsWith("-")) return "del";
+    return "ctx";
+  });
+}
+
 export function extractFileDiff(diff: string, filePath: string): string {
   if (!diff || !filePath) return "";
   const target = filePath.replace(/\\/g, "/");

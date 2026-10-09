@@ -1,7 +1,7 @@
 // Self-check for the Accomplished diff pop-out's file-section slicing.
 // Run: npm run diff:check
 import { strict as assert } from "node:assert";
-import { dirOf, extractFileDiff } from "../src/lib/diff";
+import { diffLineRoles, dirOf, extractFileDiff } from "../src/lib/diff";
 
 const section = (path: string) =>
   [
@@ -84,5 +84,31 @@ const nested = [
 ].join("\n");
 assert.equal(extractFileDiff(nested, "/repo/fake"), "", "a header inside hunk content must not become its own section");
 assert.ok(extractFileDiff(nested, "/repo/docs/x.md").includes("+diff --git"), "hunk content stays with its own section");
+
+// Pop-out line colours: headers only before a file's first @@, so a removed
+// `-- comment` inside a hunk (`--- comment`) stays a removed line.
+assert.deepEqual(
+  diffLineRoles([
+    "diff --git a/q.sql b/q.sql",
+    "index ac87985..8b49935 100644",
+    "--- a/q.sql",
+    "+++ b/q.sql",
+    "@@ -1,3 +1,3 @@ heading",
+    " select 1;",
+    "--- old comment",
+    "+++ new comment",
+    "-removed",
+    "+",
+    "",
+    "diff --git a/r.md b/r.md",
+    "new file mode 100644",
+    "--- /dev/null",
+    "+++ b/r.md",
+    "@@ -0,0 +1 @@",
+    "+hello",
+  ]),
+  ["meta", "meta", "meta", "meta", "hunk", "ctx", "del", "add", "del", "add", "ctx",
+   "meta", "meta", "meta", "meta", "hunk", "add"]
+);
 
 console.log("diff-check: all assertions passed");

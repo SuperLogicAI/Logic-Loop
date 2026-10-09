@@ -1,26 +1,7 @@
 import { useState } from "react";
-import antigravityIcon from "../../agents/agy.svg";
-import claudeIcon from "../../agents/claude.svg";
-import codexIcon from "../../agents/codex.svg";
-import deepseekIcon from "../../agents/dsh.svg";
-import opencodeIcon from "../../agents/opencode.svg";
-import piIcon from "../../agents/pi.svg";
+import { AGENT_ICONS, type AgentIcon } from "../lib/agentIcons";
 import { deriveClock, formatAge } from "../lib/ingest";
 import type { Tab } from "../types";
-
-interface AgentIcon {
-  src: string;
-  label: string;
-}
-
-const AGENT_ICONS: Record<string, AgentIcon> = {
-  antigravity: { src: antigravityIcon, label: "Antigravity" },
-  claude: { src: claudeIcon, label: "Claude" },
-  codex: { src: codexIcon, label: "Codex" },
-  deepseek: { src: deepseekIcon, label: "DeepSeek" },
-  opencode: { src: opencodeIcon, label: "OpenCode" },
-  pi: { src: piIcon, label: "Pi" },
-};
 
 function agentIconForTab(tab: Tab): AgentIcon | null {
   // Claude's legacy hook has no explicit adapter marker. Only apply that
