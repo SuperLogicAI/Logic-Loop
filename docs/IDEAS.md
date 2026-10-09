@@ -1537,36 +1537,3 @@ many of the 748 are genuinely recent before choosing, using counts only.
 
 **Not in scope:** auto-dismissing or deleting rows, changing extraction
 (invariant #5), changing what counts as a decision.
-
-## Agent Flows — visual agent-to-agent connector (2026-10-08, maintainer idea)
-
-![Agent Flows concept](assets/idea-agent-flows-concept.png)
-
-**Idea.** A Home sub-page, "Agent Flows": an n8n-style canvas where each node
-is a project's agent (concept: Logic Loop → Pair Agentic → Logic.IO /
-Project X). Drawing a connection lets the downstream agent see the upstream
-agent's work, opening agent-to-agent workflows. Super rough draft; long-term,
-not v1.
-
-**Collides with a decided line — read before planning.** ROADMAP "Adapters —
-v2" (decided 2026-07-19, reconfirmed 2026-08-27): Logic Loop observes, it
-does not orchestrate. As literally sketched it would break three invariants:
-#1 (an agent "seeing another's terminal" means reading PTY output for
-meaning), #4 (a flow that triggers the next agent is autonomous input), #5
-(one agent's output becomes another's prompt — untrusted text as
-instructions, prompt-injection across projects). Building it means
-re-opening the positioning call, not just a plan.
-
-**Compliant shape, if it's ever revisited:** edges carry *structured*
-artifacts the ingestion layer already has — results, decisions, landing
-notes, commits — never terminal bytes. A connection is a human-clicked
-handoff: "Start Pair Agentic with Logic Loop's latest result as context",
-delivered as spawn-time config (allowed under #4, like fan-out), with the
-handed-over text visibly quoted as data. The canvas itself is then a view
-over cross-project links, i.e. a dumb panel (#3). Prior art to read first:
-the external terminal multiplexer reviewed in ROADMAP "Adapters — v2"
-(agent-initiated pane orchestration — the model we rejected).
-
-**Decisions needed (maintainer, when/if promoted):** re-open "observe, not
-orchestrate" or keep handoffs strictly human-triggered; what an edge
-carries; whether flows persist as saved templates.
