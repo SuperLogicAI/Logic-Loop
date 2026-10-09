@@ -1,6 +1,6 @@
 // Self-check for the Phase 14a since-you-left digest. Run: npm run delta:check
 import { strict as assert } from "node:assert";
-import { buildBrief, describeDelta, hasDelta, summarizeDelta, type Delta, type EventRow } from "../src/lib/delta";
+import { briefTitle, buildBrief, describeDelta, hasDelta, summarizeDelta, type Delta, type EventRow } from "../src/lib/delta";
 
 const row = (type: string, payload: unknown, ts: number): EventRow => ({
   id: ts,
@@ -119,5 +119,13 @@ assert.equal(buildBrief({ ...base, delta: emptyDelta, agentWaiting: false })?.ch
 // Nothing to come back to → no card.
 assert.equal(buildBrief({ ...base, delta: emptyDelta, agentWaiting: false, landing: null }), null);
 assert.equal(buildBrief({ ...base, delta: emptyDelta, agentWaiting: false, landing: "  " }), null, "blank note is no note");
+
+// --- briefTitle (Plan 058 revision 6) ---
+const turnAt = (ts: number) => row("hook:UserPromptSubmit", {}, ts);
+assert.equal(briefTitle([turnAt(50)], [], 40), "Progress", "everything after you came back → Progress");
+assert.equal(briefTitle([turnAt(30), turnAt(50)], [], 40), "Since you left", "anything while away → Since you left");
+assert.equal(briefTitle([turnAt(50)], [], null), "Since you left", "return not recorded → still away");
+assert.equal(briefTitle([], [], 40), "Since you left", "nothing happened (note / waiting brought it back)");
+assert.equal(briefTitle([turnAt(50)], [{ id: 9, question: "Q", ts: 30 }], 40), "Since you left", "a decision while away counts");
 
 console.log("delta-check: all assertions passed");

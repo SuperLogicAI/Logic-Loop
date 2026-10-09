@@ -4,7 +4,7 @@ import { ask } from "@tauri-apps/plugin-dialog";
 import * as repo from "../lib/repo";
 import { burst } from "../lib/confetti";
 import { generateCommitMessage } from "../lib/commitMessage";
-import { buildBrief, summarizeDelta, type Delta } from "../lib/delta";
+import { briefTitle, buildBrief, summarizeDelta, type Delta } from "../lib/delta";
 import { collapseNoopRuns, groupIterations, isLoopRun, type Iteration } from "../lib/loop";
 import { deriveClock, formatAge, sessionStatusLabel } from "../lib/ingest";
 import { adapterSupportsDecisions } from "../lib/onboarding";
@@ -282,6 +282,7 @@ export function SidePanel({
   const [delta, setDelta] = useState<Delta | null>(null); // since-you-left digest (Phase 14a)
   const [loopIterations, setLoopIterations] = useState<Iteration[] | null>(null); // loop digest (Phase 15), null = flat delta shape
   const [leftAt, setLeftAt] = useState<number | null>(null); // Plan 058 brief: when you last left this tab
+  const [briefHeading, setBriefHeading] = useState<"Since you left" | "Progress">("Since you left");
   const [briefChangedOpen, setBriefChangedOpen] = useState(false);
   const [lastWordsOpen, setLastWordsOpen] = useState(false); // Plan 058: collapsed by default
   const [landing, setLanding] = useState<Note | null>(null); // active project, momentum
@@ -453,12 +454,14 @@ export function SidePanel({
         setDelta(null);
         setLoopIterations(null);
       } else {
-        const [rows, decisionsSince] = await Promise.all([
+        const [rows, decisionsSince, returnedAt] = await Promise.all([
           repo.eventsSince(tabTether, sessionId, since).catch(() => []),
           repo.decisionsOpenedSince(cwd, since).catch(() => []),
+          repo.firstEnteredSince(tabTether, since).catch(() => null),
         ]);
         const decisionsScoped = repo.scopeBySession(decisionsSince, sessionId);
         setDelta(summarizeDelta(rows, decisionsScoped));
+        setBriefHeading(briefTitle(rows, decisionsScoped, returnedAt));
         // Loop digest (Phase 15) takes over the section when the window
         // contains a qualifying run; otherwise the flat delta above renders.
         const iters = groupIterations(rows, decisionsScoped);
@@ -912,7 +915,7 @@ export function SidePanel({
           <div className="my-1 w-7 shrink-0 border-t border-zinc-800" />
           {brief && (
             <RailButton
-              label="Since You Left"
+              label={briefHeading === "Progress" ? "Progress" : "Since You Left"}
               section="since-left"
               icon={<PanelIcon name="since-left" className="h-5 w-5" />}
               className="text-info-400"
@@ -1122,8 +1125,10 @@ export function SidePanel({
           >
             <Chevron collapsed={collapsed.has("since-left")} className="text-info-300/85" />
             <PanelIcon name="since-left" className="h-4 w-4" />
-            Since you left
-            {leftAt != null && <span className="font-normal normal-case text-info-300/70">· {formatAge(now - leftAt)} ago</span>}
+            {briefHeading}
+            {briefHeading === "Since you left" && leftAt != null && (
+              <span className="font-normal normal-case text-info-300/70">· {formatAge(now - leftAt)} ago</span>
+            )}
           </h2>
           {!collapsed.has("since-left") && (
             <div className="flex flex-col gap-1.5 text-zinc-300">

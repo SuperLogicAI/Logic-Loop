@@ -67,6 +67,10 @@ no migration, no Rust, no model call.
    sits inside the Changed row (it rendered below Next).
    *Revision 5 (live check 84):* Next is also hidden when it repeats the
    Goal (the cascade's second step is the Now card).
+   *Revision 6 (maintainer, live check 84):* the card is titled **Progress**
+   (no age) when everything it counts happened after you came back to the
+   tab (Plan 057's `tab_entered`), i.e. you watched it live; otherwise
+   **Since you left · Nm ago**. Contents and links are identical.
 3. **Evidence one click away.** Changed → file names expand inline; each
    opens the existing diff pop-out. Needs you → jumps to Decisions. Next →
    jumps to the Next card. A loop run shows "N iterations" in Changed and

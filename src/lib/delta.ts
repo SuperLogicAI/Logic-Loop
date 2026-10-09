@@ -180,3 +180,14 @@ export function buildBrief(input: BriefInput): Brief | null {
     next: input.next && input.next !== youLeft && input.next !== goal ? input.next : null,
   };
 }
+
+/** Plan 058: "Progress" when every counted event happened after you came back
+ * (you watched it live); "Since you left" when anything happened while you
+ * were away, when nothing happened at all (a note or a waiting decision
+ * brought the card back), or when your return wasn't recorded. */
+export function briefTitle(rows: EventRow[], decisions: DeltaDecision[], returnedAt: number | null): "Since you left" | "Progress" {
+  if (returnedAt == null) return "Since you left";
+  const live = hasDelta(summarizeDelta(rows, decisions));
+  const away = hasDelta(summarizeDelta(rows.filter((r) => r.ts < returnedAt), decisions.filter((x) => x.ts < returnedAt)));
+  return live && !away ? "Progress" : "Since you left";
+}
