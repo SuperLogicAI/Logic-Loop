@@ -93,11 +93,11 @@ const busy: Delta = {
   lastWords: "Done.",
 };
 const base = {
-  delta: busy, loopIterations: null, project: "Logic Loop", agent: "claude", branch: "feat/x", dirty: true,
+  delta: busy, loopIterations: null, project: "Logic Loop", branch: "feat/x", dirty: true,
   goal: "Re-entry brief", landing: "Write plan 058", agentWaiting: true, next: "Answer Q1",
 };
 assert.deepEqual(buildBrief(base), {
-  context: "Logic Loop · claude · feat/x ●",
+  context: "Logic Loop · feat/x ●",
   goal: "Re-entry brief",
   youLeft: "Write plan 058",
   changed: "3 files · 5 commands (1 failed) · 4 turns",
@@ -105,8 +105,8 @@ assert.deepEqual(buildBrief(base), {
   next: "Answer Q1",
 });
 assert.equal(buildBrief({ ...base, goal: null })?.goal, null, "no Now card → goal hidden");
-assert.equal(buildBrief({ ...base, dirty: false })?.context, "Logic Loop · claude · feat/x", "clean branch has no dot");
-assert.equal(buildBrief({ ...base, branch: "" })?.context, "Logic Loop · claude", "no git → no branch");
+assert.equal(buildBrief({ ...base, dirty: false })?.context, "Logic Loop · feat/x", "clean branch has no dot");
+assert.equal(buildBrief({ ...base, branch: "" })?.context, "Logic Loop", "no git → no branch");
 assert.equal(buildBrief({ ...base, landing: null })?.youLeft, null);
 assert.equal(buildBrief({ ...base, next: "Write plan 058" })?.next, null, "Next repeating the landing note is hidden");
 assert.equal(buildBrief({ ...base, next: "Re-entry brief" })?.next, null, "Next repeating the Goal is hidden");

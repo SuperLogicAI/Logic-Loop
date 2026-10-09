@@ -4,6 +4,7 @@ import { ask } from "@tauri-apps/plugin-dialog";
 import * as repo from "../lib/repo";
 import { burst } from "../lib/confetti";
 import { generateCommitMessage } from "../lib/commitMessage";
+import { AGENT_ICONS } from "../lib/agentIcons";
 import { briefTitle, buildBrief, summarizeDelta, type Delta } from "../lib/delta";
 import { collapseNoopRuns, groupIterations, isLoopRun, type Iteration } from "../lib/loop";
 import { deriveClock, formatAge, sessionStatusLabel } from "../lib/ingest";
@@ -690,6 +691,9 @@ export function SidePanel({
     },
   });
 
+  // Same mark as the tab bar; unknown adapters fall back to their name.
+  const briefAgent = agent ?? "claude";
+  const briefAgentIcon = AGENT_ICONS[briefAgent] ?? null;
   // Plan 058 re-entry brief: Since You Left as four fields. Only with an
   // anchor (delta is null until this tab has been left once).
   const brief = delta
@@ -697,7 +701,6 @@ export function SidePanel({
         delta,
         loopIterations: loopIterations?.length ?? null,
         project: cwd.split("/").filter(Boolean).pop() ?? cwd,
-        agent: agent ?? "claude",
         branch: gitBranch,
         dirty: gitDirty,
         goal: plannedCard?.now ? plannedCard.title : null,
@@ -1132,7 +1135,20 @@ export function SidePanel({
           </h2>
           {!collapsed.has("since-left") && (
             <div className="flex flex-col gap-1.5 text-zinc-300">
-              <p className="break-words text-zinc-400">{brief.context}</p>
+              <p className="break-words text-zinc-400">
+                {briefAgentIcon ? (
+                  <img
+                    src={briefAgentIcon.src}
+                    alt={`${briefAgentIcon.label} agent`}
+                    title={`${briefAgentIcon.label} agent`}
+                    draggable={false}
+                    className="mr-1.5 inline-block h-3.5 w-3.5 object-contain align-[-2px]"
+                  />
+                ) : (
+                  `${briefAgent} · `
+                )}
+                {brief.context}
+              </p>
               {brief.goal && (
                 <p className="truncate" title={brief.goal}>
                   <span className="text-zinc-500">Goal: </span>
