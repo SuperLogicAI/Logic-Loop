@@ -63,6 +63,8 @@ no migration, no Rust, no model call.
    *Revision 3 (live check 81):* Changed is a toggle (with chevron) only
    when there are files or a loop digest to open; with commands only it was
    underlined but opened nothing.
+   *Revision 4 (live check 81):* the opened file list / loop digest now
+   sits inside the Changed row (it rendered below Next).
 3. **Evidence one click away.** Changed → file names expand inline; each
    opens the existing diff pop-out. Needs you → jumps to Decisions. Next →
    jumps to the Next card. A loop run shows "N iterations" in Changed and

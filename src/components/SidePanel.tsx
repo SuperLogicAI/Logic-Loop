@@ -1155,6 +1155,61 @@ export function SidePanel({
                   ) : (
                     <span className="text-zinc-600">no agent activity</span>
                   )}
+                  {briefChangedOpen && delta && (loopIterations ? (
+                    <ul className="flex flex-col gap-1 text-zinc-300">
+                      <li className="flex gap-1.5 text-zinc-500">
+                        <span className="shrink-0 text-info-500/60">•</span>
+                        <span>
+                          {loopIterations.length} iteration{loopIterations.length === 1 ? "" : "s"} while you were away
+                        </span>
+                      </li>
+                      {loopIterations.flatMap((it) => it.decisions).map((d) => (
+                        <li key={d.id} className="flex gap-1.5 text-attn-300">
+                          <span className="shrink-0 text-info-500/60">•</span>
+                          <span>decision opened: {d.question}</span>
+                        </li>
+                      ))}
+                      {collapseNoopRuns(loopIterations).map((line, i) =>
+                        line.kind === "noop-run" ? (
+                          <li key={i} className="flex gap-1.5 text-zinc-600">
+                            <span className="shrink-0 text-info-500/60">•</span>
+                            <span>
+                              ×{line.count} no change
+                            </span>
+                          </li>
+                        ) : (
+                          <li key={i} className="flex gap-1.5">
+                            <span className="shrink-0 text-info-500/60">•</span>
+                            <span>
+                              {line.iteration.toolCount} tool{line.iteration.toolCount === 1 ? "" : "s"}
+                              {line.iteration.errorCount > 0 && (
+                                <span className="text-danger-400"> ({line.iteration.errorCount} failed)</span>
+                              )}
+                              {line.iteration.endTs === null && <span className="text-zinc-500"> · running</span>}
+                              {line.iteration.firstAssistantText && (
+                                <span className="text-zinc-400"> — {line.iteration.firstAssistantText}</span>
+                              )}
+                            </span>
+                          </li>
+                        )
+                      )}
+                    </ul>
+                  ) : delta.files.length > 0 && (
+                    <ul className="mt-1 flex flex-col gap-0.5 rounded bg-black/20 p-1.5">
+                      {delta.files.map((f) => (
+                        <li key={f}>
+                          <button
+                            type="button"
+                            className="block w-full truncate text-left text-ok-300 hover:text-ok-200 hover:underline"
+                            title={`Show diff — ${f}`}
+                            onClick={() => setDiffPath(f)}
+                          >
+                            {f.split("/").filter(Boolean).pop()}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ))}
                 </dd>
                 <dt className="text-zinc-500">Needs you</dt>
                 <dd>
@@ -1177,61 +1232,6 @@ export function SidePanel({
                   </>
                 )}
               </dl>
-              {briefChangedOpen && delta && (loopIterations ? (
-                <ul className="flex flex-col gap-1 text-zinc-300">
-                  <li className="flex gap-1.5 text-zinc-500">
-                    <span className="shrink-0 text-info-500/60">•</span>
-                    <span>
-                      {loopIterations.length} iteration{loopIterations.length === 1 ? "" : "s"} while you were away
-                    </span>
-                  </li>
-                  {loopIterations.flatMap((it) => it.decisions).map((d) => (
-                    <li key={d.id} className="flex gap-1.5 text-attn-300">
-                      <span className="shrink-0 text-info-500/60">•</span>
-                      <span>decision opened: {d.question}</span>
-                    </li>
-                  ))}
-                  {collapseNoopRuns(loopIterations).map((line, i) =>
-                    line.kind === "noop-run" ? (
-                      <li key={i} className="flex gap-1.5 text-zinc-600">
-                        <span className="shrink-0 text-info-500/60">•</span>
-                        <span>
-                          ×{line.count} no change
-                        </span>
-                      </li>
-                    ) : (
-                      <li key={i} className="flex gap-1.5">
-                        <span className="shrink-0 text-info-500/60">•</span>
-                        <span>
-                          {line.iteration.toolCount} tool{line.iteration.toolCount === 1 ? "" : "s"}
-                          {line.iteration.errorCount > 0 && (
-                            <span className="text-danger-400"> ({line.iteration.errorCount} failed)</span>
-                          )}
-                          {line.iteration.endTs === null && <span className="text-zinc-500"> · running</span>}
-                          {line.iteration.firstAssistantText && (
-                            <span className="text-zinc-400"> — {line.iteration.firstAssistantText}</span>
-                          )}
-                        </span>
-                      </li>
-                    )
-                  )}
-                </ul>
-              ) : delta.files.length > 0 && (
-                <ul className="flex flex-col gap-0.5 rounded bg-black/20 p-1.5">
-                  {delta.files.map((f) => (
-                    <li key={f}>
-                      <button
-                        type="button"
-                        className="block w-full truncate text-left text-ok-300 hover:text-ok-200 hover:underline"
-                        title={`Show diff — ${f}`}
-                        onClick={() => setDiffPath(f)}
-                      >
-                        {f.split("/").filter(Boolean).pop()}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ))}
               {delta?.lastWords && (
                 <div>
                   <button
