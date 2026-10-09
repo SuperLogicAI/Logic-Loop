@@ -1696,6 +1696,14 @@ baseline exists yet; add one from the user's own history once there is data.
 **Decisions needed:** the effort weights;
 whether v1's badge also lives in the tab strip.
 
+**Follow-up: per-user bar thresholds (parked 2026-10-09).** Plan 059 ships
+fixed amber/red thresholds (110k / 200k units/min) taken from the
+maintainer's own history. A heavier user would see constant red, a lighter
+one never amber. `usage_records` now holds every response, so compute each
+user's own p90/p99 per active minute locally (e.g. last 30 days), falling
+back to the constants until there's enough history. Same idea can later
+drive a real redline/notification, if one is ever wanted.
+
 ## Cost by project — API-equivalent estimate
 
 **Why the ROADMAP gates it** ("No attribution → no cost UI", "estimated ≠

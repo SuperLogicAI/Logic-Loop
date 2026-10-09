@@ -49,6 +49,19 @@ its own 15-min peak) read as a slider pinned at 100% whenever spend rose,
 at any magnitude. Now 15 one-minute bars on a fixed full scale of 200k
 units/min (~ the maintainer's Checkpoint 0 p99, 214k), clipping above.
 No color or alert — not the deferred redline (Decision 5).
+*Revision 8 (maintainer, after check 95):* the rate window grows with the
+session — its age since the first recorded response, clamped to 1-5 min —
+instead of always dividing by 5 (a 30-s-old session that spent 50k read
+10k/min; now 50k/min). Continuous, so no handoff jump; a resumed session
+starts at 5. Window is inclusive at its edge (a young session's first
+sample sits on it). Tooltip adds "last 1 min" for bursts later on.
+*Revision 9 (maintainer, Decision 5 amended after check 95):* bars are
+blue (context-meter palette), amber per minute ≥ 110k units (~ maintainer
+p90), red ≥ 200k (~ p99), from the Checkpoint 0 sampler. Color only — no
+notification, badge, or recolored number. Fixed constants for now; per-user
+p90/p99 computed locally from `usage_records` (fallback to these until
+enough history) is the follow-up, so a heavier user's red line sits at
+their own p99.
 *Open issue found at check 88 (not fixed here):* hook delivery lagged
 30-50 s during a burst of parallel subagent tool calls (all hooks, parent
 included; transcript tailing stayed ~1 s). Likely the single-threaded

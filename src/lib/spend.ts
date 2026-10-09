@@ -112,6 +112,11 @@ export interface UsageThread {
 /** Approved weights (Plan 059 Decision 1), model-independent. Reasoning is inside output. */
 export const WEIGHTS = { fresh: 1, cacheRead: 0.1, cacheWrite: 1.25, output: 5 } as const;
 export const RATE_WINDOW_MS = 5 * 60_000;
+/** The rate window grows with the session from 1 min to RATE_WINDOW_MS, so a
+ * young session isn't diluted by minutes it hasn't lived (50k in its first
+ * 30 s reads 50k/min, not 10k), with no jump when it reaches full size. */
+export const MIN_RATE_WINDOW_MS = 60_000;
+export const BURST_WINDOW_MS = 60_000;
 export const SPARK_MINUTES = 15;
 
 export function effortUnits(r: Pick<UsageRow, "input" | "cache_read" | "cache_write" | "output">): number {
@@ -126,8 +131,13 @@ export interface ThreadSpend {
 }
 
 export interface SpendSummary {
-  /** Units/min over the trailing 5 minutes, by source time — backfilled history never counts as current. */
+  /** Units/min over the trailing window (1-5 min, growing with the session's
+   * age), by source time — backfilled history never counts as current. */
   ratePerMin: number;
+  /** Window behind `ratePerMin`, in minutes. */
+  windowMin: number;
+  /** Units in the last minute alone — the instantaneous pace, for the tooltip. */
+  burstPerMin: number;
   /** Units per minute for the last 15 minutes, oldest first. */
   sparkline: number[];
   /** Odometer: the current session's total (the root with the newest sample). */
@@ -142,26 +152,35 @@ export function spendSummary(rows: UsageRow[], now: number): SpendSummary | null
   let newest = rows[0];
   for (const r of rows) if (r.source_ts > newest.source_ts) newest = r;
   const root = newest.root_session_id;
+  let firstAt = newest.source_ts;
+  for (const r of rows) if (r.root_session_id === root && r.source_ts < firstAt) firstAt = r.source_ts;
+  const windowMs = Math.min(Math.max(now - firstAt, MIN_RATE_WINDOW_MS), RATE_WINDOW_MS);
+  const windowMin = windowMs / 60_000;
   const sparkline = new Array<number>(SPARK_MINUTES).fill(0);
   const threads = new Map<string, ThreadSpend>();
   let windowUnits = 0;
+  let burstUnits = 0;
   let total = 0;
   for (const r of rows) {
     const u = effortUnits(r);
     const age = now - r.source_ts;
-    const inWindow = age >= 0 && age < RATE_WINDOW_MS;
+    // Inclusive: a young session's first sample sits exactly on the edge.
+    const inWindow = age >= 0 && age <= windowMs;
     if (inWindow) windowUnits += u;
+    if (age >= 0 && age < BURST_WINDOW_MS) burstUnits += u;
     const bucket = SPARK_MINUTES - 1 - Math.floor(age / 60_000);
     if (age >= 0 && bucket >= 0) sparkline[bucket] += u;
     if (r.root_session_id !== root) continue;
     total += u;
     const t = threads.get(r.thread_id) ?? { threadId: r.thread_id, ratePerMin: 0, total: 0 };
     t.total += u;
-    if (inWindow) t.ratePerMin += u / (RATE_WINDOW_MS / 60_000);
+    if (inWindow) t.ratePerMin += u / windowMin;
     threads.set(r.thread_id, t);
   }
   return {
-    ratePerMin: windowUnits / (RATE_WINDOW_MS / 60_000),
+    ratePerMin: windowUnits / windowMin,
+    windowMin,
+    burstPerMin: burstUnits / (BURST_WINDOW_MS / 60_000),
     sparkline,
     total,
     rootSessionId: root,
@@ -174,12 +193,14 @@ export function spendSummary(rows: UsageRow[], now: number): SpendSummary | null
 export function addSpend(summaries: SpendSummary[]): SpendSummary | null {
   if (summaries.length === 0) return null;
   const seen = new Set<string>();
-  const out: SpendSummary = { ratePerMin: 0, sparkline: new Array<number>(SPARK_MINUTES).fill(0), total: 0, rootSessionId: null, lastSampleAt: null, threads: [] };
+  const out: SpendSummary = { ratePerMin: 0, windowMin: 0, burstPerMin: 0, sparkline: new Array<number>(SPARK_MINUTES).fill(0), total: 0, rootSessionId: null, lastSampleAt: null, threads: [] };
   for (const s of summaries) {
     const dup = s.rootSessionId !== null && seen.has(s.rootSessionId);
     if (s.rootSessionId) seen.add(s.rootSessionId);
     if (dup) continue;
     out.ratePerMin += s.ratePerMin;
+    out.burstPerMin += s.burstPerMin;
+    out.windowMin = Math.max(out.windowMin, s.windowMin);
     s.sparkline.forEach((v, i) => (out.sparkline[i] += v));
     out.total += s.total;
     out.lastSampleAt = Math.max(out.lastSampleAt ?? 0, s.lastSampleAt ?? 0) || null;
@@ -192,6 +213,18 @@ export function addSpend(summaries: SpendSummary[]): SpendSummary | null {
  * peak — a relative scale makes any rising spend look maxed. ~ the
  * maintainer's p99 per-minute spend from the Checkpoint 0 sampler (214k). */
 export const SPARK_FULL_SCALE = 200_000;
+
+/** Bar color thresholds, units/min (Plan 059 Decision 5, amended): amber
+ * above ~ the maintainer's p90 minute (111k), red at ~ p99 (214k) — the
+ * Checkpoint 0 Codex sampler. ponytail: fixed constants from one user's
+ * history; per-user p90/p99 from usage_records is the upgrade path. Per bar,
+ * by level, never by jump size — a busy minute is routinely 2-4× a typical one. */
+export const SPEND_AMBER = 110_000;
+export const SPEND_RED = SPARK_FULL_SCALE;
+
+export function spendLevel(perMin: number): "zero" | "normal" | "high" | "peak" {
+  return perMin <= 0 ? "zero" : perMin >= SPEND_RED ? "peak" : perMin >= SPEND_AMBER ? "high" : "normal";
+}
 
 /** Bar heights 0..1 against the fixed full scale; above it clips at 1. */
 export function sparkHeights(values: number[]): number[] {

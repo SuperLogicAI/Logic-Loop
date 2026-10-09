@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import * as repo from "../lib/repo";
 import { formatTokens } from "../lib/contextMeter";
-import { SPARK_FULL_SCALE, sparkHeights, spendCoverage, spendSummary, WEIGHTS, type SpendSummary, type UsageRow, type UsageThread } from "../lib/spend";
+import { SPARK_FULL_SCALE, SPEND_AMBER, SPEND_RED, sparkHeights, spendCoverage, spendLevel, spendSummary, WEIGHTS, type SpendSummary, type UsageRow, type UsageThread } from "../lib/spend";
 
-const UNIT_NOTE = `Effort units: fresh input ×${WEIGHTS.fresh}, cache read ×${WEIGHTS.cacheRead}, cache write ×${WEIGHTS.cacheWrite}, output ×${WEIGHTS.output}. Not dollars. Bars: last 15 min, full height = ${formatTokens(SPARK_FULL_SCALE)} units/min.`;
+const UNIT_NOTE = `Effort units: fresh input ×${WEIGHTS.fresh}, cache read ×${WEIGHTS.cacheRead}, cache write ×${WEIGHTS.cacheWrite}, output ×${WEIGHTS.output}. Not dollars. Bars: last 15 min, full height = ${formatTokens(SPARK_FULL_SCALE)} units/min; amber ≥ ${formatTokens(SPEND_AMBER)}, red ≥ ${formatTokens(SPEND_RED)}.`;
 
 function ago(ts: number | null, now: number): string {
   if (ts === null) return "no samples yet";
@@ -16,15 +16,24 @@ function ago(ts: number | null, now: number): string {
 export function spendTitle(s: SpendSummary, threads: UsageThread[], now: number): string {
   const cov = spendCoverage(threads, s.rootSessionId);
   const coverage = cov.seen === 0 ? "" : ` · ${cov.recorded}/${cov.seen} threads recorded${cov.recorded < cov.seen ? " (incomplete)" : ""}`;
-  return `${formatTokens(Math.round(s.ratePerMin))} units/min (5-min avg) · session total ${formatTokens(Math.round(s.total))} · last sample ${ago(s.lastSampleAt, now)}${coverage}\n${UNIT_NOTE}`;
+  const window = s.windowMin >= 5 ? "5-min avg" : `avg over ${Math.max(1, Math.round(s.windowMin))} min (session is young)`;
+  return `${formatTokens(Math.round(s.ratePerMin))} units/min (${window}) · last 1 min: ${formatTokens(Math.round(s.burstPerMin))} · session total ${formatTokens(Math.round(s.total))} · last sample ${ago(s.lastSampleAt, now)}${coverage}\n${UNIT_NOTE}`;
 }
 
-/** 15 one-minute bars, oldest first, on a fixed scale (not the line's own peak). */
+const BAR_COLOR = { zero: "bg-zinc-700", normal: "bg-info-500", high: "bg-attn-400", peak: "bg-danger-500" } as const;
+
+/** 15 one-minute bars, oldest first, on a fixed scale (not the line's own
+ * peak), colored by each minute's own level — same palette as the context meter. */
 function Sparkline({ values }: { values: number[] }) {
+  const heights = sparkHeights(values);
   return (
     <span className="inline-flex h-3 items-end gap-px align-middle" aria-hidden="true">
-      {sparkHeights(values).map((h, i) => (
-        <span key={i} className={`w-0.5 ${h > 0 ? "bg-zinc-400" : "bg-zinc-700"}`} style={{ height: h > 0 ? `${Math.max(h * 100, 15)}%` : "1px" }} />
+      {values.map((v, i) => (
+        <span
+          key={i}
+          className={`w-0.5 ${BAR_COLOR[spendLevel(v)]}`}
+          style={{ height: heights[i] > 0 ? `${Math.max(heights[i] * 100, 15)}%` : "1px" }}
+        />
       ))}
     </span>
   );

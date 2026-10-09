@@ -6,6 +6,9 @@ import {
   effortUnits,
   SPARK_FULL_SCALE,
   sparkHeights,
+  SPEND_AMBER,
+  SPEND_RED,
+  spendLevel,
   spendCoverage,
   spendSummary,
   subagentLabel,
@@ -106,19 +109,34 @@ const row = (ts: number, over: Partial<UsageRow> = {}): UsageRow => ({
   agent: "codex", root_session_id: "R", thread_id: "T1", source_ts: ts,
   input: 152_000, cache_read: 150_000, cache_write: 0, output: 1000, ...over,
 });
-const steady = Array.from({ length: 20 }, (_, i) => row(NOW - i * 15_000 - 1)); // 4/min for 5 min
+const steady = Array.from({ length: 24 }, (_, i) => row(NOW - i * 15_000 - 1)); // 4/min for 6 min
 const sum = spendSummary(steady, NOW)!;
+assert.equal(sum.windowMin, 5);
 assert.equal(Math.round(sum.ratePerMin), 88_000);
-assert.equal(sum.total, 20 * 22_000);
+assert.equal(sum.total, 24 * 22_000);
+assert.equal(sum.burstPerMin, 4 * 22_000, "last 1 min = 4 responses");
+// Growing window: a young session divides by its age (floor 1 min), not 5.
+const young = spendSummary([row(NOW - 30_000, { input: 50_000, cache_read: 0, output: 0 })], NOW)!;
+assert.equal(young.windowMin, 1);
+assert.equal(young.ratePerMin, 50_000, "50k in the first 30 s reads 50k/min, not 10k");
+const three = spendSummary([row(NOW - 3 * MIN + 1), row(NOW - 10)], NOW)!;
+assert.ok(Math.abs(three.windowMin - 3) < 0.001);
+assert.equal(Math.round(three.ratePerMin), Math.round((2 * 22_000) / three.windowMin));
+// No handoff jump: the window's size is continuous as the session reaches 5 min.
+const win = (age: number) => spendSummary([row(NOW - age)], NOW)!.windowMin;
+assert.ok(5 - win(5 * MIN - 1) < 0.001);
+assert.equal(win(5 * MIN + 1), 5);
+assert.equal(win(20 * MIN), 5);
 assert.equal(sum.lastSampleAt, NOW - 1);
 // Backfilled history counts in the total, never in the current rate.
 const old = spendSummary([row(NOW - 3 * 60 * MIN)], NOW)!;
 assert.equal(old.ratePerMin, 0);
 assert.equal(old.total, 22_000);
 assert.ok(old.sparkline.every((v) => v === 0));
-// Window edge: exactly 5 min old is out; just inside is in.
-assert.equal(spendSummary([row(NOW - 5 * MIN)], NOW)!.ratePerMin, 0);
-assert.ok(spendSummary([row(NOW - 5 * MIN + 1)], NOW)!.ratePerMin > 0);
+// Window edge (5-min session): just past 5 min is out; at or inside is in.
+const edge = (age: number) => spendSummary([row(NOW - 10 * MIN), row(NOW - age)], NOW)!.ratePerMin;
+assert.equal(edge(5 * MIN + 1), 0);
+assert.ok(edge(5 * MIN) > 0);
 // Sparkline: newest minute last.
 const spark = spendSummary([row(NOW - 10), row(NOW - 3 * MIN - 10)], NOW)!.sparkline;
 assert.equal(spark.length, 15);
@@ -135,6 +153,9 @@ assert.equal(addSpend([a1, a1])!.total, 22_000);
 assert.equal(addSpend([a1, spendSummary([row(NOW - 10, { root_session_id: "S" })], NOW)!])!.total, 44_000);
 // Fixed scale: 44k/min is ~a fifth of full height, not "maxed" (live check 95 finding).
 assert.deepEqual(sparkHeights([0, 44_000, SPARK_FULL_SCALE, 3 * SPARK_FULL_SCALE, -5]), [0, 0.22, 1, 1, 0]);
+// Bar colors by each minute's own level: the 39k run in check 95 stays blue.
+assert.deepEqual([0, 39_000, SPEND_AMBER - 1, SPEND_AMBER, SPEND_RED - 1, SPEND_RED, 900_000].map(spendLevel),
+  ["zero", "normal", "normal", "high", "high", "peak", "peak"]);
 // Coverage counts this root's threads only.
 const th = (thread_id: string, root: string, status: "pending" | "recorded" | "unsupported" | "unreadable") =>
   ({ agent: "codex", root_session_id: root, thread_id, kind: "main", tab_id: null, project_key: null, status });
