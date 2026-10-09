@@ -318,6 +318,8 @@ Validates the already-parked "Model traffic panel (Safe Router)" idea in
 Safe Router traffic: Codex's own account/usage interface. The router log
 does not establish Codex subscription quotas. Account hot-swap remains a
 separate, unplanned action feature; a read-only meter must not switch accounts.
+Per-session spend (not quota) is a different source: see "Token spend: TSPM
++ cost by project" (2026-10-08) at the end of this file.
 
 ## Codex model and account-limit meters in the project sidebar — build brief
 
@@ -1572,3 +1574,152 @@ the external terminal multiplexer reviewed in ROADMAP "Adapters — v2"
 **Decisions needed (maintainer, when/if promoted):** re-open "observe, not
 orchestrate" or keep handoffs strictly human-triggered; what an edge
 carries; whether flows persist as saved templates.
+
+---
+
+# Token spend: TSPM + cost by project (2026-10-08, maintainer idea + research spike)
+
+## Spend-source findings (research spike, 2026-10-08)
+
+Read-only spike (Codex, source pinned to openai/codex `2351d9e`; local
+rollouts inspected structurally only — field names and numbers, no content).
+These replace earlier assumptions; check them before planning anything below.
+
+- **Codex has a per-response ledger.** Rollout lines `type:
+  "token_usage_record"` carry `session_id`, `thread_id`, `turn_id`,
+  `response_id`, and `usage.{input_tokens, cached_input_tokens,
+  cache_write_input_tokens, output_tokens, reasoning_output_tokens,
+  total_tokens}`. Cached ⊂ input, reasoning ⊂ output. Written at response
+  completion. Prefer it over `token_count`, which current Codex defers until
+  pending tools finish (a long tool call or subagent wait leaves the parent
+  silent). No model field: a model-weighted price needs model attribution
+  from elsewhere.
+- **Codex children are invisible in the parent's total.** `spawn_agent`
+  children get their own rollout file and `thread_id`, share the root
+  `session_id`, and carry `parent_thread_id` / `source.subagent` (including
+  non-worker kinds, e.g. a `guardian` child). One local example: parent
+  781k tokens, child 309k, true total 1.09M. Aggregate unique
+  `thread_id + response_id` across the root session's threads; don't sum
+  `turn_token_usage`/`thread_token_usage` snapshots (forks can seed history
+  → double count).
+- **Codex lifecycle.** Compaction keeps the cumulative total; resume
+  restores it; a new session starts fresh even in the same tab.
+- **Our Codex ingestion can't do this today.** One tailer per hook
+  `session_id`, started at the file's current end (`ingest.rs` `ensure_tailer`),
+  no child discovery, no history backfill.
+- **Claude statusLine `context_window.total_input_tokens/total_output_tokens`
+  are NOT session totals** — they describe the latest response's context
+  (Claude Code changelog 2.1.132). No odometer from them. `cost.total_cost_usd`
+  is an estimated session cost; it includes subagents (verified at session
+  end, Checkpoint 0 below); live statusLine cadence during a child run is
+  still unverified. Our statusLine mirror
+  forwards only `model`/`rate_limits`/`context_window` — `cost` is dropped.
+- **Claude transcripts work but need dedupe.** Main and `subagents/agent-*.jsonl`
+  files carry `message.usage`, but one response spans several lines (one
+  child: 16 assistant rows, 7 `message.id`s; output grew 8 → 362 across
+  blocks). Sum per `message.id`, last-seen values. More fragile than Codex
+  (invariant #1 caveat applies to both formats).
+- **Claude OpenTelemetry** (`claude_code.token.usage`, `claude_code.cost.usage`)
+  officially includes subagent requests. Strongest Claude source, but a new
+  integration that needs explicit approval.
+- **Both CLIs document `SubagentStart`/`SubagentStop` hooks** (agent id, type,
+  parent session; stop gives the child transcript path). Logic Loop installs
+  neither. Start re-fires on child resume → track an active-ID set, not
+  starts minus stops; a crash or interrupt can drop a Stop → needs an
+  "unknown" state.
+- **Account quota % is not a rate source.** Codex `rate_limits` percentages
+  were whole numbers in all 13k local samples and include activity outside
+  this app. Fine for the existing account meters, useless for per-session
+  rate.
+
+**Checkpoint 0 results (2026-10-09).**
+
+- *Codex sampler* (175 local sessions, 6,579 responses, numbers only): no
+  duplicate `thread_id + response_id`; cached + cache-write ≤ input on every
+  line (subset confirmed); 32 of 284 rollouts (older CLIs) have no usage
+  records → coverage label is required. Raw tokens run ~7× effort units
+  (cache re-reads), so raw tokens/min is not usable. Per active minute:
+  p50 41k · p90 111k · p99 214k · max 362k units. A session's peak minute is
+  typically 2-4× its median (one big response) → the dial uses a **5-min
+  rolling average**, sparkline per minute. Children were up to 45% of a
+  session's spend; parent-only peaks understate (112k vs 217k). No runaway
+  in history, so no redline calibration yet; baseline is skewed to one repo.
+- *Claude headless run* (CLI 2.1.295, `claude -p` with process-scoped
+  `--settings`, user settings excluded, one subagent, $0.22): parent
+  transcript (dedupe by `message.id`) + `subagents/agent-<id>.jsonl` sum
+  **exactly** to Claude's own session `modelUsage`/`total_cost_usd`
+  (10 in / 31,668 cache write / 55,643 cache read / 366 out). So session cost
+  includes children, and transcript aggregation is a verified source. Child
+  rows are timestamped during the run (08:25:40, :26:02, :26:23 between
+  SubagentStart :25:34 and SubagentStop :26:24) → written live (inferred from
+  timestamps). `SubagentStart`/`SubagentStop` fired with `agent_id` +
+  `agent_type`. stream-json usage is an early snapshot (output 16 vs final
+  198) and omits the child's final message — not a source.
+- *Still open, TUI-only:* whether statusLine `cost` updates during a child
+  run (needs an interactive session; probe files are ready). Only matters if
+  statusLine `cost` is used — the transcript route doesn't depend on it.
+
+## TSPM — tokens spent per minute (speedometer + odometer)
+
+**Failure mode (passes the ROADMAP Safe Router gate):** with several agents
+running you can't tell which one is burning budget until the invoice. Two
+concrete cases: a modest task spending far faster than it should, and an
+agent spawning subagents to excess. Read-only and fail-open; never
+auto-stops anything (invariant #4) — it tells the human.
+
+**Display (Home project cards):** a rate (speedometer: recent spend/min,
+5-min rolling average — Checkpoint 0 showed 1-min too noisy — per-minute
+sparkline) plus the session total
+(odometer). Unit is **effort units**, not dollars: fixed relative weights
+(fresh input 1, cache read 0.1, cache write ~1.25, output 5, reasoning
+counted in output), model-independent. Raw tokens/min is misleading — a
+150k cached context at 4 turns/min reads 612k tokens/min on a trivial task;
+weighted it's ~88k units. Breakdown (output/min, fresh input/min) in the
+tooltip. Data arrives at response completion, so always show sample age
+("last sample 40 s ago"); silence is not zero. No redline in v1 — no
+baseline exists yet; add one from the user's own history once there is data.
+
+- **v1 — active-subagent badge (Claude + Codex, hooks only).** Install
+  `SubagentStart`/`SubagentStop` in both adapters' hook lists; keep an
+  active agent-ID set per session; show "N subagents" on the project card
+  with an unknown state when a Stop may have been missed. Stable hook
+  contract, no transcript parsing. Catches the runaway case directly.
+- **v2 — Codex TSPM + odometer.** `token_usage_record` across parent and
+  child rollouts (child discovery via `parent_thread_id`/root `session_id`,
+  history backfill, dedupe on `thread_id + response_id`). New ingestion
+  work, not a frontend formula. Schema-drift tripwire like Plan 018's.
+- **v3 — Claude TSPM.** Transcript aggregation: parent + `subagents/`
+  files, `message.id` dedupe (verified exact at Checkpoint 0). statusLine
+  `cost` is an optional cross-check; OpenTelemetry not needed. Don't ship a parent-only
+  gauge labelled as session spend.
+
+**Decisions needed:** the effort weights;
+whether v1's badge also lives in the tab strip.
+
+## Cost by project — API-equivalent estimate
+
+**Why the ROADMAP gates it** ("No attribution → no cost UI", "estimated ≠
+invoiced", "unknown ≠ zero"): a dollar figure reads as fact. On a
+subscription plan nobody pays per token, so "$47" is a hypothetical API
+price, not a cost — dangerous if shown to a client. Price tables go stale;
+Codex records lack a model field; unbound tabs, outside sessions and
+missed children undercount silently, and a confident $12 for a real $30 is
+worse than no number.
+
+**What changed:** attribution is no longer blocked for Codex — the
+per-session ledger above plus `bindSession` gives per-project totals once
+v2's child aggregation exists. Claude waits on Experiment 1.
+
+**Admissible shape:** labelled "API-equivalent estimate", never "cost";
+dated, versioned price table with "prices as of <date>"; coverage shown
+beside the figure ("3 of 4 sessions recorded"); bound tabs only. Builds on
+TSPM v2's ledger — same data, prices applied at display time.
+
+**For client billing, use real invoices instead:** a separate API key or
+workspace per client makes the provider console the source of truth, and
+Safe Router already logs `keyId` per request (`TrafficRow`, `repo.ts`).
+Anything a client sees should come from there, not from in-app estimates.
+
+**Decision needed:** does the maintainer bill clients for agent usage
+(flat vs pass-through; subscription vs API keys)? That decides whether
+this is worth building at all.
