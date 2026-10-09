@@ -119,7 +119,7 @@ export function AgentSpendSection({ tabs, refresh, threads }: { tabs: { id: stri
       <div className="flex h-6 items-center">
         <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase" title={UNIT_NOTE}>Agent spend (effort units)</h3>
       </div>
-      <div className="mt-2 flex flex-col gap-3">
+      <div className="mt-2 grid grid-cols-1 items-start gap-x-8 gap-y-4 lg:grid-cols-2">
         {rows.map(({ tab, s }) => {
           const cov = spendCoverage(threads, s.rootSessionId);
           return (

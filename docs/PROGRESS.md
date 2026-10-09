@@ -1052,3 +1052,32 @@ there's something to open and opens inline, Next hidden when it repeats the
 note or the Goal, and the card is titled **Progress** when you watched the
 activity live (Plan 057's `tab_entered`). Live checks 80-86 passed.
 **PHASE 58 ACCEPTED** (2026-10-08).
+
+### Phase 59 — Token spend meter (2026-10-09)
+
+Plan: `plans/059-token-spend-meter.md` (`PHASE 59 APPROVED`, decisions 1-5
+as recommended, Decision 5 amended). Source: IDEAS "Token spend: TSPM +
+cost by project", with a Codex spend-source spike and a Checkpoint 0
+sampler/reconciliation. Three checkpoints:
+(1) `SubagentStart`/`SubagentStop` hooks for Claude and Codex (Codex gains
+an "outdated"/update path that keeps existing entries and their trust in
+place); subagent hooks never start a tailer or touch parent tab state;
+"N subagents" badge on Home cards and the dock, keyed by tab tether, "?"
+for a possibly-lost Stop, aging out after 10 min.
+(2) A usage-only Rust reader (`usage.rs`) and migration 13
+(`usage_records`): Codex rollouts for a root session across all date
+dirs (parent, workers, guardians), backfilled and followed, never fed to
+extraction. Effort units (fresh 1 / cache read 0.1 / cache write 1.25 /
+output 5), not dollars.
+(3) Claude transcripts plus `subagents/`, input normalized, latest
+snapshot per `message.id`.
+UI: dock chip, Home card line, Overview "Agent spend" (two columns, per
+thread, coverage). Revised live (9 revisions in the plan): badge keyed by
+tether after a stale-binding miss; fixed-scale 15-bar sparkline instead of
+self-scaled glyphs; rate window grows with the session (1-5 min) plus a
+last-1-min tooltip figure; bars blue / amber ≥110k / red ≥200k units/min
+from the maintainer's own history. Live checks 87-95 passed (94 reconciled
+exactly with Claude's `modelUsage`; 92 showed a real 89k cache-expiry turn
+after restart). Open: hook delivery lagged 30-50 s under a subagent burst
+(pre-existing, LANDMINES); per-user thresholds parked in IDEAS.
+**PHASE 59 ACCEPTED** (2026-10-09).

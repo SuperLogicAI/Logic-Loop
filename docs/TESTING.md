@@ -5851,8 +5851,13 @@ Run in the built app. Checkpoints 2-3 add items 91-94.
     Stops landed ~10 s after the children finished. A lone `SubagentStop`
     with empty `agent_type` and no Start (likely a Claude Code internal
     helper) did not affect the count.
-- [ ] **89.** **Codex badge** — same in a Codex tab (ask it to spawn 2
+- [x] **89.** **Codex badge** — same in a Codex tab (ask it to spawn 2
     agents).
+    *Passed 2026-10-09 (computer use, Codex v0.162.0):* fresh tab, two
+    parallel workers read `package.json` and both reported `logic-loop`.
+    Dock showed `2 subagents`, then cleared. Repeated with two new workers
+    pausing 45 seconds before replying so Home could be observed: Home
+    showed `2 subagents`, then cleared after completion. No edits requested.
 - [x] **90.** **Dead tab** — start one such subagent, then while it runs
     press Ctrl+C twice and `exit` the shell so the tab dies. Expected: the
     badge reads "1 subagent ?" (or nothing, if Claude sent a Stop on quit),
@@ -5872,18 +5877,57 @@ events; outdated is false when off or complete.
 
 Reinstall first (Rust + migration 13). Units are effort units, not dollars.
 
-- [ ] **91.** **Codex meter + children** — in a Codex tab, ask it to spawn
+- [x] **91.** **Codex meter + children** — in a Codex tab, ask it to spawn
     2 agents that each read a file. Expected: within ~2 s of responses the
     dock (left of ctx) shows `▁▂▅ 41k u/min · 1.2M total`; hover shows the
     5-min rate, session total, last-sample age and "N/N threads recorded".
     The Home card shows the same line. Overview → Agent spend lists `main`
     plus two `worker` rows, and the total includes them.
-- [ ] **92.** **Restart** — quit and reopen the app mid-session, then send
+- [x] **92.** **Restart** — quit and reopen the app mid-session, then send
     one prompt in that Codex tab. Expected: the total continues (no double
     count after the full backfill); the rate reflects only recent
     responses, not backfilled history.
-- [ ] **93.** **Decay** — leave the Codex tab idle 5+ minutes. Expected:
+    *Blocked 2026-10-09 (computer use):* baseline for the fresh test tab
+    was `92k total`. Cmd+Q warned that all four open sessions would be
+    terminated. Automatic approval review rejected confirming Quit because
+    that concrete impact needed approval; cancelled the dialog and asked
+    the maintainer. No restart performed; this box stays open.
+    *Passed 2026-10-09 (maintainer):* dock read `1.1M total` before quitting
+    and `1.1M` after relaunch (bars in their original minutes, rate 0 —
+    last pre-restart response was 5 min earlier). One "reply ok" then took
+    it to `1.3M`: real spend, not a double count — 114 usage rows for 114
+    distinct responses; the first post-restart turn cost 89k units because
+    the provider's prompt cache had expired (105k of 184k input cached vs
+    182k before). Overview afterwards: `3 of 3 threads recorded` (main +
+    guardian + a new guardian `…2aa1a8`).
+- [x] **93.** **Decay** — leave the Codex tab idle 5+ minutes. Expected:
     the rate falls to 0 and "last sample" age grows; the total stays.
+    *Passed 2026-10-09 (computer use):* test tab left untouched after the
+    second worker prompt. Rate fell through `27k`, `14k`, `2k`, then `0`
+    u/min; total remained `92k`. Overview's last-sample age grew from
+    `26s` to `4m`, `5m`, and `7m`, with `5/5 threads recorded` throughout.
+    Returned to the tab and visually confirmed dock `0 u/min · 92k total`.
+
+*91 passed 2026-10-09 (maintainer):* dock hover in the Codex tab showed the
+rate with its window, last 1 min, session total, last-sample age, weights
+and scale. Once, 2 min after a restart, the tooltip lacked the coverage
+part while the Overview later showed `3 of 3`; not reproduced — most
+likely the hover came before the thread reports arrived.
+
+Computer-use evidence (2026-10-09) for **91**, not yet a complete pass:
+the dock showed spend during the worker run (`44k total`), then `60k total`
+after the first prompt; `92k total` after the observation repeat. Overview
+listed the test root `…eb48d4` as `main`, and four `worker` rows (two per
+prompt), with `5/5 threads recorded`. Its accessible tooltip included the
+rate window, last-minute rate, session total and last-sample age. Home
+showed the spend line, but its numbers aggregate the project's other live
+sessions, so they differ from this tab's dock. The dock's native hover
+tooltip and the precise ~2-second response-to-display interval were not
+captured. Leave **91** open for those subchecks and disposition of the
+Home scope expectation. Focused assertions passed via
+`node --import tsx scripts/spend-check.ts`; `npm run spend:check` hit the
+sandbox's tsx IPC `EPERM`. No source changes or full gate rerun in this
+manual test pass.
 
 Automated: `npm run spend:check` covers effort units (incl. the 88k/min
 IDEAS example and the fresh-input floor), the 5-min window edges,

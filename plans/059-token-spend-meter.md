@@ -1,9 +1,9 @@
 # Token spend meter: subagent badge + TSPM (v1-v3)
 
 Status: **APPROVED 2026-10-09 (`PHASE 59 APPROVED`, decisions 1-5 as
-recommended), rev 3. Branch `feat/phase-59-token-spend-meter`. Checkpoint 1
-accepted live (87, 88, 90; 89 pending). Checkpoints 2-3 built; gates green;
-awaiting live checks 89, 91-95.** One phase, three
+recommended; Decision 5 amended in Revision 9), rev 3. Branch
+`feat/phase-59-token-spend-meter`. Built; gates green; live checks 87-95
+passed. ACCEPTED 2026-10-09 (`PHASE 59 ACCEPTED`).** One phase, three
 checkpoints, one `PHASE 59 ACCEPTED` at the end.
 
 *Revision 1 (build, checkpoint 1):* "hooks not installed/trusted →
