@@ -5824,3 +5824,71 @@ Automated: `npm run delta:check` covers the full brief, no goal, clean/
 dirty/no branch, no note, Next deduped against the note, nothing needs
 you, loop run, last-words-only, note-only, and the null (hidden) case.
 
+
+## Phase 59 — Token spend meter (checkpoint 1: subagent badge)
+
+Run in the built app. Checkpoints 2-3 add items 91-94.
+
+- [x] **87.** **Hook update** — with existing Claude and Codex hooks
+    installed, open the status bar. Expected: both toggles read "update";
+    clicking updates; other tools' entries in `~/.codex/hooks.json` and
+    Claude settings are kept, in their original order. Next fresh Codex
+    session shows "Hooks need review" listing only SubagentStart and
+    SubagentStop; trust them.
+    *Passed 2026-10-09:* Claude settings gained only SubagentStart/Stop at
+    the end; the foreign `dcg` PreToolUse hook and the other 7 events kept
+    their order (vs `settings.before.json`). Codex hooks.json has all 9
+    events (no foreign entries live — cargo test covers neighbours); review
+    prompt trusted.
+- [x] **88.** **Claude badge** — in a Claude tab, ask for 2 parallel
+    subagents that each read `src/App.tsx` in full and list its top-level
+    functions (real work — Claude Code blocks a standalone `sleep`).
+    Expected: dock (next to ctx) and the project's Home
+    card show "2 subagents", then nothing once both finish. Parent tab state,
+    Since You Left counts and notifications are unaffected.
+    *Passed 2026-10-09 (rebuilt, rev 3):* dock and Home card showed "2
+    subagents", cleared on finish. Starts/Stops paired on the tab tether;
+    Stops landed ~10 s after the children finished. A lone `SubagentStop`
+    with empty `agent_type` and no Start (likely a Claude Code internal
+    helper) did not affect the count.
+- [ ] **89.** **Codex badge** — same in a Codex tab (ask it to spawn 2
+    agents).
+- [x] **90.** **Dead tab** — start one such subagent, then while it runs
+    press Ctrl+C twice and `exit` the shell so the tab dies. Expected: the
+    badge reads "1 subagent ?" (or nothing, if Claude sent a Stop on quit),
+    never a stuck "1 subagent". Quitting the agent and starting/resuming
+    Claude in the same shell also reads "?" (session switch). A "?" clears
+    10 minutes after it appears.
+
+Automated: `npm run spend:check` covers Start/Stop pairing, Start re-fire
+on resume, Stop without Start, dead tab and parent SessionEnd → unknown,
+resume after end, Claude /compact SessionStart, (ts, id) ordering, empty
+agent_id, per-project sums, labels, and that lifecycle hooks never drive
+parent state or land a result. `cargo test --lib`: Codex update keeps
+existing entries and foreign neighbours in place and adds only the missing
+events; outdated is false when off or complete.
+
+### Phase 59 checkpoint 2: Codex spend meter
+
+Reinstall first (Rust + migration 13). Units are effort units, not dollars.
+
+- [ ] **91.** **Codex meter + children** — in a Codex tab, ask it to spawn
+    2 agents that each read a file. Expected: within ~2 s of responses the
+    dock (left of ctx) shows `▁▂▅ 41k u/min · 1.2M total`; hover shows the
+    5-min rate, session total, last-sample age and "N/N threads recorded".
+    The Home card shows the same line. Overview → Agent spend lists `main`
+    plus two `worker` rows, and the total includes them.
+- [ ] **92.** **Restart** — quit and reopen the app mid-session, then send
+    one prompt in that Codex tab. Expected: the total continues (no double
+    count after the full backfill); the rate reflects only recent
+    responses, not backfilled history.
+- [ ] **93.** **Decay** — leave the Codex tab idle 5+ minutes. Expected:
+    the rate falls to 0 and "last sample" age grows; the total stays.
+
+Automated: `npm run spend:check` covers effort units (incl. the 88k/min
+IDEAS example and the fresh-input floor), the 5-min window edges,
+backfill never counting as current rate, sparkline buckets, parent + child
+aggregation, odometer = newest root, shared-root dedupe across tabs,
+spark text, coverage per root. `cargo test --lib usage`: RFC 3339 parsing,
+session_meta kinds (main / worker / guardian), record validation, partial
+last line retried, file replacement, discovery across date dirs.

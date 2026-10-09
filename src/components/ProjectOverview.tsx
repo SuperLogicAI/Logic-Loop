@@ -7,6 +7,8 @@ import { computeMomentum } from "../lib/momentum";
 import { parseBoard, peekBoard, EXAMPLE_BOARD, type BoardStatus } from "../lib/board";
 import { resolveAttentionRoute, type AttentionTabSnapshot } from "../lib/attention";
 import { type CopyUpdateData } from "./CopyUpdateModal";
+import { AgentSpendSection } from "./SpendMeter";
+import type { UsageThread } from "../lib/spend";
 import type { AttentionEvidence, Blocker, Commit, Decision, Note, ReentryCandidate, Tab } from "../types";
 
 type Range = DashboardRange;
@@ -120,9 +122,12 @@ interface Props {
   onContinueTab: (tabId: string) => void;
   onStartSession: (projectKey: string) => Promise<void>;
   onOpenCopyUpdate: (data: CopyUpdateData) => void;
+  /** Plan 059 */
+  spendRefresh: number;
+  usageThreads: UsageThread[];
 }
 
-export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onContinueTab, onStartSession, onOpenCopyUpdate }: Props) {
+export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onContinueTab, onStartSession, onOpenCopyUpdate, spendRefresh, usageThreads }: Props) {
   const [startingSession, setStartingSession] = useState(false);
   const startingSessionRef = useRef(false);
   const [sessionError, setSessionError] = useState(false);
@@ -498,6 +503,8 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
             )}
           </section>
         </div>
+
+        <AgentSpendSection tabs={tabs.filter((t) => expand(t.cwd) === projectKey)} refresh={spendRefresh} threads={usageThreads} />
 
         <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <section>

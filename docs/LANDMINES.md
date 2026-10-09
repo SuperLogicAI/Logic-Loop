@@ -211,6 +211,31 @@ fix is ever reverted or bypassed. Referenced from CLAUDE.md.
   no code-side way to force re-trust, only manual `config.toml` surgery by the
   user, so flag it loudly in the phase report rather than assuming an
   install-time hooks.json rewrite alone fixes existing installs.
+  *Update (Plan 059, 2026-10-09):* current Codex (pinned upstream source,
+  `startup_hooks_review.rs`) shows a "Hooks need review" prompt for new or
+  changed hooks — Review / Trust all / Continue without trusting — so the
+  silent failure above was the older behavior. The trust key carries the
+  group and handler index, so `codex::apply_setup` now updates in place: an
+  existing entry of ours keeps its position (unchanged text keeps its trust)
+  and only missing events are appended. Never reintroduce
+  strip-and-append there. Never edit trust state from code.
+- A subagent lifecycle hook (`SubagentStart`/`SubagentStop`) must never
+  start a transcript tailer or touch the parent's tab state (Plan 059). Its
+  `transcript_path` can be a child's file — tailed under the shared
+  `session_id`, the child's lines would feed the parent's extraction — and
+  its cwd/payload would overwrite the parent's session context. `ingest.rs`
+  skips `ensure_tailer` for them; `App.tsx`'s hook handler persists them and
+  returns before any parent mutation.
+- A tab's bound `sessionId` goes stale after a Claude `/clear` or in-tab
+  `/resume` (the takeover rule above keeps the old one). Anything that must
+  follow the conversation actually in the tab — Since You Left, the Plan 059
+  subagent badge, any future spend meter — queries by tether (`$.tab_id`)
+  with session as the untethered fallback, never by `tab.sessionId` alone.
+- Hook delivery can lag 30-50 s under a burst of parallel subagent tool
+  calls (seen 2026-10-09, Plan 059 check 88): every hook was late, parent
+  included, while transcript tailing stayed ~1 s. Suspected: the
+  single-threaded ingest HTTP loop plus sequential 2 s-timeout curls. Open —
+  don't treat hook arrival time as event time.
 - **RESOLVED upstream in agy 1.1.27** (re-verified live 2026-09-07, four
   hook-config matrices incl. multiple named hooks + mixed matchers + reversed
   registration order — all fired sequentially as documented). Originally

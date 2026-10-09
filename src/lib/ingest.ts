@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { UsageRecordInput } from "./repo";
+import type { UsageThread } from "./spend";
 import type {
   AgentState,
   AttentionSourceContext,
@@ -88,6 +90,11 @@ export function codexHooksStatus(): Promise<boolean> {
   return invoke<boolean>("codex_hooks_status");
 }
 
+/** Plan 059: installed but missing an event (e.g. the Subagent hooks). */
+export function codexHooksOutdated(): Promise<boolean> {
+  return invoke<boolean>("codex_hooks_outdated");
+}
+
 export function antigravityDetect(): Promise<boolean> {
   return invoke<boolean>("antigravity_detect");
 }
@@ -157,6 +164,18 @@ export function onTailerFailed(
   cb: (p: { session_id: string; path: string }) => void
 ): Promise<UnlistenFn> {
   return listen<{ session_id: string; path: string }>("ingest://tailer-failed", (e) => cb(e.payload));
+}
+
+/** Plan 059: validated usage snapshots from the usage-only reader. */
+export function onUsageRecords(
+  cb: (p: { tab_id: string | null; project_key: string | null; records: UsageRecordInput[] }) => void
+): Promise<UnlistenFn> {
+  return listen<{ tab_id: string | null; project_key: string | null; records: UsageRecordInput[] }>("usage://records", (e) => cb(e.payload));
+}
+
+/** Plan 059: per-thread usage coverage (pending / recorded / unsupported / unreadable). */
+export function onUsageThread(cb: (p: UsageThread) => void): Promise<UnlistenFn> {
+  return listen<UsageThread>("usage://thread", (e) => cb(e.payload));
 }
 
 /** Adapter setup warning (e.g. foreign PostToolUse hook collision in agy < 1.1.27). */
@@ -472,6 +491,11 @@ export function stateForHook(p: HookPayload): AgentState | null {
     default:
       return null;
   }
+}
+
+/** Plan 059: subagent lifecycle hooks feed the active-subagent badge only. */
+export function isSubagentLifecycle(p: HookPayload): boolean {
+  return p.hook_event_name === "SubagentStart" || p.hook_event_name === "SubagentStop";
 }
 
 /** Codex subagents share the parent's session/tether, so event name and
