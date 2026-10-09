@@ -4,7 +4,7 @@ import { ask } from "@tauri-apps/plugin-dialog";
 import * as repo from "../lib/repo";
 import { burst } from "../lib/confetti";
 import { generateCommitMessage } from "../lib/commitMessage";
-import { summarizeDelta, type Delta } from "../lib/delta";
+import { buildBrief, summarizeDelta, type Delta } from "../lib/delta";
 import { collapseNoopRuns, groupIterations, isLoopRun, type Iteration } from "../lib/loop";
 import { deriveClock, formatAge, sessionStatusLabel } from "../lib/ingest";
 import { adapterSupportsDecisions } from "../lib/onboarding";
@@ -281,6 +281,9 @@ export function SidePanel({
   const decisions = decisionView.scope === decisionScope ? decisionView.rows : [];
   const [delta, setDelta] = useState<Delta | null>(null); // since-you-left digest (Phase 14a)
   const [loopIterations, setLoopIterations] = useState<Iteration[] | null>(null); // loop digest (Phase 15), null = flat delta shape
+  const [leftAt, setLeftAt] = useState<number | null>(null); // Plan 058 brief: when you last left this tab
+  const [briefChangedOpen, setBriefChangedOpen] = useState(false);
+  const [lastWordsOpen, setLastWordsOpen] = useState(false); // Plan 058: collapsed by default
   const [landing, setLanding] = useState<Note | null>(null); // active project, momentum
   const [notes, setNotes] = useState<Note[]>([]); // active project, open notes & reminders
   const [context, setContext] = useState<Decision | null>(null);
@@ -357,8 +360,10 @@ export function SidePanel({
       return next;
     });
 
+  const [jumpTick, setJumpTick] = useState(0);
   const openRailSection = (section: RailSection) => {
     pendingSectionRef.current = section;
+    setJumpTick((t) => t + 1); // re-runs the scroll effect even when already expanded (Plan 058 brief links)
     setCollapsed((current) => {
       const firstParentGroup = section === "fan-out" ? fanOut.find((group) => group.isParent) : undefined;
       const collapseKey = firstParentGroup ? `fanout-${firstParentGroup.groupId}` : section;
@@ -385,7 +390,7 @@ export function SidePanel({
     const target = pendingSectionRef.current;
     refs[target].current?.scrollIntoView({ block: "start" });
     pendingSectionRef.current = null;
-  }, [mode]);
+  }, [mode, jumpTick]);
 
   // A fan-out child never picked up its own tether (its CLI fires no Claude
   // Code hooks, so `sessionId` stays null forever) is not the same "no
@@ -440,8 +445,10 @@ export function SidePanel({
     if (isUnboundFanOutChild) {
       setDelta(null);
       setLoopIterations(null);
+      setLeftAt(null);
     } else {
       const since = await repo.lastLeft(tabTether).catch(() => null);
+      setLeftAt(since);
       if (since == null) {
         setDelta(null);
         setLoopIterations(null);
@@ -680,6 +687,23 @@ export function SidePanel({
     },
   });
 
+  // Plan 058 re-entry brief: Since You Left as four fields. Only with an
+  // anchor (delta is null until this tab has been left once).
+  const brief = delta
+    ? buildBrief({
+        delta,
+        loopIterations: loopIterations?.length ?? null,
+        project: cwd.split("/").filter(Boolean).pop() ?? cwd,
+        agent: agent ?? "claude",
+        branch: gitBranch,
+        dirty: gitDirty,
+        goal: plannedCard?.now ? plannedCard.title : null,
+        landing: landing?.body ?? null,
+        agentWaiting: agentState === "waiting",
+        next: momentum?.text ?? null,
+      })
+    : null;
+
   const finishMomentum = async () => {
     if (!momentum) return;
     if (doneRef.current) burst(doneRef.current);
@@ -744,14 +768,6 @@ export function SidePanel({
   const recentCompletions = [...unclaimed].sort((a, b) => b.ts - a.ts || a.session_id.localeCompare(b.session_id));
   const closedDecisions = decisions.filter((d) => d.status !== "open").slice(0, 10);
   const decisionGroups = repo.groupDecisionsBySession(openDecisions);
-  const hasDelta =
-    delta !== null &&
-    (delta.files.length > 0 ||
-      delta.bashRuns > 0 ||
-      delta.turns > 0 ||
-      delta.stops > 0 ||
-      delta.decisions.length > 0 ||
-      delta.lastWords !== "");
   const hasWarnings = adapterWarnings.length > 0 || blindPaths.length > 0 || sessionBlind;
 
   // Most recent cluster expanded by default, older ones collapsed. Reseeds
@@ -894,7 +910,7 @@ export function SidePanel({
             />
           )}
           <div className="my-1 w-7 shrink-0 border-t border-zinc-800" />
-          {hasDelta && (
+          {brief && (
             <RailButton
               label="Since You Left"
               section="since-left"
@@ -1098,13 +1114,7 @@ export function SidePanel({
         </p>
       )}
       <div className="sidebar-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-scroll p-3 pr-2">
-      {delta &&
-        (delta.files.length > 0 ||
-          delta.bashRuns > 0 ||
-          delta.turns > 0 ||
-          delta.stops > 0 ||
-          delta.decisions.length > 0 ||
-          delta.lastWords !== "") && (
+      {brief && (
         <section ref={sinceLeftRef} data-tour-target="since-left" className="scroll-mt-3 rounded-lg border border-info-500/30 bg-info-400/5 p-3">
           <h2
             className="mb-1.5 flex cursor-pointer items-center gap-1.5 font-semibold tracking-wide text-info-300 uppercase select-none"
@@ -1113,96 +1123,129 @@ export function SidePanel({
             <Chevron collapsed={collapsed.has("since-left")} className="text-info-300/85" />
             <PanelIcon name="since-left" className="h-4 w-4" />
             Since you left
+            {leftAt != null && <span className="font-normal normal-case text-info-300/70">· {formatAge(now - leftAt)} ago</span>}
           </h2>
-          {!collapsed.has("since-left") &&
-            (loopIterations ? (
-              <ul className="flex flex-col gap-1 text-zinc-300">
-                <li className="flex gap-1.5 text-zinc-500">
-                  <span className="shrink-0 text-info-500/60">•</span>
-                  <span>
-                    {loopIterations.length} iteration{loopIterations.length === 1 ? "" : "s"} while you were away
-                  </span>
-                </li>
-                {loopIterations.flatMap((it) => it.decisions).map((d) => (
-                  <li key={d.id} className="flex gap-1.5 text-attn-300">
-                    <span className="shrink-0 text-info-500/60">•</span>
-                    <span>decision opened: {d.question}</span>
-                  </li>
-                ))}
-                {collapseNoopRuns(loopIterations).map((line, i) =>
-                  line.kind === "noop-run" ? (
-                    <li key={i} className="flex gap-1.5 text-zinc-600">
-                      <span className="shrink-0 text-info-500/60">•</span>
-                      <span>
-                        ×{line.count} no change
-                      </span>
-                    </li>
+          {!collapsed.has("since-left") && (
+            <div className="flex flex-col gap-1.5 text-zinc-300">
+              <p className="truncate text-zinc-400" title={brief.context}>{brief.context}</p>
+              {brief.goal && (
+                <p className="truncate" title={brief.goal}>
+                  <span className="text-zinc-500">Goal: </span>
+                  {brief.goal}
+                </p>
+              )}
+              <dl className="grid grid-cols-[4.75rem_1fr] gap-x-2 gap-y-1">
+                <dt className="text-zinc-500">You left</dt>
+                <dd className={brief.youLeft ? "break-words" : "text-zinc-600"}>{brief.youLeft ? `“${brief.youLeft}”` : "no note"}</dd>
+                <dt className="text-zinc-500">Changed</dt>
+                <dd>
+                  {brief.changed ? (
+                    <button
+                      type="button"
+                      className="text-left hover:text-zinc-100 hover:underline"
+                      aria-expanded={briefChangedOpen}
+                      onClick={() => setBriefChangedOpen((o) => !o)}
+                    >
+                      {brief.changed}
+                    </button>
                   ) : (
-                    <li key={i} className="flex gap-1.5">
-                      <span className="shrink-0 text-info-500/60">•</span>
-                      <span>
-                        {line.iteration.toolCount} tool{line.iteration.toolCount === 1 ? "" : "s"}
-                        {line.iteration.errorCount > 0 && (
-                          <span className="text-danger-400"> ({line.iteration.errorCount} failed)</span>
-                        )}
-                        {line.iteration.endTs === null && <span className="text-zinc-500"> · running</span>}
-                        {line.iteration.firstAssistantText && (
-                          <span className="text-zinc-400"> — {line.iteration.firstAssistantText}</span>
-                        )}
-                      </span>
-                    </li>
-                  )
+                    <span className="text-zinc-600">no agent activity</span>
+                  )}
+                </dd>
+                <dt className="text-zinc-500">Needs you</dt>
+                <dd>
+                  {brief.needsYou ? (
+                    <button type="button" className="text-left text-attn-300 hover:underline" onClick={() => openRailSection("decisions")}>
+                      {brief.needsYou}
+                    </button>
+                  ) : (
+                    <span className="text-zinc-600">nothing</span>
+                  )}
+                </dd>
+                {brief.next && (
+                  <>
+                    <dt className="text-zinc-500">Next</dt>
+                    <dd>
+                      <button type="button" className="text-left hover:text-zinc-100 hover:underline" onClick={() => openRailSection("next")}>
+                        {brief.next}
+                      </button>
+                    </dd>
+                  </>
                 )}
-              </ul>
-            ) : (
-              <>
+              </dl>
+              {briefChangedOpen && delta && (loopIterations ? (
                 <ul className="flex flex-col gap-1 text-zinc-300">
-                  {delta.files.length > 0 && (
-                    <li className="flex gap-1.5">
-                      <span className="shrink-0 text-info-500/60">•</span>
-                      <span>
-                        {delta.files.length} file{delta.files.length === 1 ? "" : "s"} changed:{" "}
-                        <span className="text-zinc-400">
-                          {delta.files.map((f) => f.split("/").filter(Boolean).pop()).join(", ")}
-                        </span>
-                      </span>
-                    </li>
-                  )}
-                  {delta.bashRuns > 0 && (
-                    <li className="flex gap-1.5">
-                      <span className="shrink-0 text-info-500/60">•</span>
-                      <span>
-                        {delta.bashRuns} command{delta.bashRuns === 1 ? "" : "s"} run
-                        {delta.bashErrors > 0 && (
-                          <span className="text-danger-400"> ({delta.bashErrors} failed)</span>
-                        )}
-                      </span>
-                    </li>
-                  )}
                   <li className="flex gap-1.5 text-zinc-500">
                     <span className="shrink-0 text-info-500/60">•</span>
                     <span>
-                      {delta.turns} turn{delta.turns === 1 ? "" : "s"} · {delta.stops} stop
-                      {delta.stops === 1 ? "" : "s"}
+                      {loopIterations.length} iteration{loopIterations.length === 1 ? "" : "s"} while you were away
                     </span>
                   </li>
-                  {delta.decisions.length > 0 && (
-                    <li className="flex gap-1.5 text-attn-300">
+                  {loopIterations.flatMap((it) => it.decisions).map((d) => (
+                    <li key={d.id} className="flex gap-1.5 text-attn-300">
                       <span className="shrink-0 text-info-500/60">•</span>
-                      <span>
-                        {delta.decisions.length} new decision{delta.decisions.length === 1 ? "" : "s"} opened
-                      </span>
+                      <span>decision opened: {d.question}</span>
                     </li>
+                  ))}
+                  {collapseNoopRuns(loopIterations).map((line, i) =>
+                    line.kind === "noop-run" ? (
+                      <li key={i} className="flex gap-1.5 text-zinc-600">
+                        <span className="shrink-0 text-info-500/60">•</span>
+                        <span>
+                          ×{line.count} no change
+                        </span>
+                      </li>
+                    ) : (
+                      <li key={i} className="flex gap-1.5">
+                        <span className="shrink-0 text-info-500/60">•</span>
+                        <span>
+                          {line.iteration.toolCount} tool{line.iteration.toolCount === 1 ? "" : "s"}
+                          {line.iteration.errorCount > 0 && (
+                            <span className="text-danger-400"> ({line.iteration.errorCount} failed)</span>
+                          )}
+                          {line.iteration.endTs === null && <span className="text-zinc-500"> · running</span>}
+                          {line.iteration.firstAssistantText && (
+                            <span className="text-zinc-400"> — {line.iteration.firstAssistantText}</span>
+                          )}
+                        </span>
+                      </li>
+                    )
                   )}
                 </ul>
-                {delta.lastWords && (
-                  <p className="mt-1.5 break-words rounded bg-black/20 p-1.5 text-zinc-400">
-                    <span className="text-zinc-600">agent's last words: </span>
-                    {delta.lastWords}
-                  </p>
-                )}
-              </>
-            ))}
+              ) : delta.files.length > 0 && (
+                <ul className="flex flex-col gap-0.5 rounded bg-black/20 p-1.5">
+                  {delta.files.map((f) => (
+                    <li key={f}>
+                      <button
+                        type="button"
+                        className="block w-full truncate text-left text-ok-300 hover:text-ok-200 hover:underline"
+                        title={`Show diff — ${f}`}
+                        onClick={() => setDiffPath(f)}
+                      >
+                        {f.split("/").filter(Boolean).pop()}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ))}
+              {delta?.lastWords && (
+                <div>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-zinc-500 hover:text-zinc-300"
+                    aria-expanded={lastWordsOpen}
+                    onClick={() => setLastWordsOpen((o) => !o)}
+                  >
+                    <Chevron collapsed={!lastWordsOpen} className="text-zinc-500" />
+                    agent's last words
+                  </button>
+                  {lastWordsOpen && (
+                    <p className="mt-1 break-words rounded bg-black/20 p-1.5 text-zinc-400">{delta.lastWords}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </section>
       )}
       <section ref={notesRef} className="scroll-mt-3 border-b border-zinc-800 pb-3">

@@ -1,6 +1,6 @@
 // Self-check for the Phase 14a since-you-left digest. Run: npm run delta:check
 import { strict as assert } from "node:assert";
-import { describeDelta, hasDelta, summarizeDelta, type EventRow } from "../src/lib/delta";
+import { buildBrief, describeDelta, hasDelta, summarizeDelta, type Delta, type EventRow } from "../src/lib/delta";
 
 const row = (type: string, payload: unknown, ts: number): EventRow => ({
   id: ts,
@@ -64,5 +64,44 @@ assert.equal(
   describeDelta({ ...empty, files: ["a", "b"], turns: 1, decisions: [{ id: 1, question: "q", ts: 1 }], bashErrors: 3 }),
   "2 files · 1 turn · 1 new decision · 3 failed commands"
 );
+
+// --- buildBrief (Plan 058) ---
+const emptyDelta: Delta = { files: [], bashRuns: 0, bashErrors: 0, turns: 0, stops: 0, decisions: [], lastWords: "" };
+const busy: Delta = {
+  ...emptyDelta,
+  files: ["/p/a.ts", "/p/b.ts", "/p/c.ts"],
+  bashRuns: 5,
+  bashErrors: 1,
+  turns: 4,
+  stops: 1,
+  decisions: [{ id: 1, question: "Q1", ts: 1 }, { id: 2, question: "Q2", ts: 2 }],
+  lastWords: "Done.",
+};
+const base = {
+  delta: busy, loopIterations: null, project: "Logic Loop", agent: "claude", branch: "feat/x", dirty: true,
+  goal: "Re-entry brief", landing: "Write plan 058", agentWaiting: true, next: "Answer Q1",
+};
+assert.deepEqual(buildBrief(base), {
+  context: "Logic Loop · claude · feat/x ●",
+  goal: "Re-entry brief",
+  youLeft: "Write plan 058",
+  changed: "3 files · 5 commands (1 failed) · 4 turns",
+  needsYou: "2 new decisions · agent waiting",
+  next: "Answer Q1",
+});
+assert.equal(buildBrief({ ...base, goal: null })?.goal, null, "no Now card → goal hidden");
+assert.equal(buildBrief({ ...base, dirty: false })?.context, "Logic Loop · claude · feat/x", "clean branch has no dot");
+assert.equal(buildBrief({ ...base, branch: "" })?.context, "Logic Loop · claude", "no git → no branch");
+assert.equal(buildBrief({ ...base, landing: null })?.youLeft, null);
+assert.equal(buildBrief({ ...base, next: "Write plan 058" })?.next, null, "Next repeating the landing note is hidden");
+assert.equal(buildBrief({ ...base, delta: { ...busy, decisions: [] }, agentWaiting: false })?.needsYou, null);
+assert.equal(buildBrief({ ...base, loopIterations: 3 })?.changed, "3 iterations while away");
+assert.equal(buildBrief({ ...base, delta: { ...emptyDelta, lastWords: "hi" } })?.changed, "agent replied");
+// Decision 3: a note alone, no agent activity, still brings the brief back.
+assert.equal(buildBrief({ ...base, delta: emptyDelta, agentWaiting: false })?.youLeft, "Write plan 058");
+assert.equal(buildBrief({ ...base, delta: emptyDelta, agentWaiting: false })?.changed, null);
+// Nothing to come back to → no card.
+assert.equal(buildBrief({ ...base, delta: emptyDelta, agentWaiting: false, landing: null }), null);
+assert.equal(buildBrief({ ...base, delta: emptyDelta, agentWaiting: false, landing: "  " }), null, "blank note is no note");
 
 console.log("delta-check: all assertions passed");

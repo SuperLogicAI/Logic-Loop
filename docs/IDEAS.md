@@ -755,6 +755,8 @@ when it's picked up:
 
 ## B. Compact re-entry brief — extends Phase 14's delta, not a new panel
 
+**Shipped as Phase 58 (`plans/058-reentry-brief.md`, 2026-10-08).**
+
 Phase 14 (`src/lib/delta.ts`) already computes files/commands/turns/last
 words. Astra's ask is presentation, not new data: render it as one
 structured block at the top of the side panel instead of separate stat

@@ -104,3 +104,66 @@ export function describeDelta(d: Delta): string {
   if (d.bashErrors > 0) parts.push(plural(d.bashErrors, "failed command"));
   return parts.length > 0 ? parts.join(" · ") : "Agent activity";
 }
+
+// --- Re-entry brief (Plan 058): the since-you-left card as four fields. ---
+
+export interface BriefInput {
+  delta: Delta;
+  loopIterations: number | null; // Phase 15 loop run, else null
+  project: string;
+  agent: string;
+  branch: string;
+  dirty: boolean;
+  goal: string | null; // board Now card title — an explicit human pick only
+  landing: string | null; // open landing note body
+  agentWaiting: boolean;
+  next: string | null; // momentum text
+}
+
+export interface Brief {
+  context: string;
+  goal: string | null;
+  youLeft: string | null;
+  changed: string | null;
+  needsYou: string | null;
+  next: string | null;
+}
+
+/** Deterministic, no prose generation. Null when there's nothing to come
+ * back to: no agent activity, no landing note, nothing waiting on you. */
+export function buildBrief(input: BriefInput): Brief | null {
+  const { delta } = input;
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+
+  let changed: string | null = null;
+  if (input.loopIterations != null) {
+    changed = `${plural(input.loopIterations, "iteration")} while away`;
+  } else {
+    const parts: string[] = [];
+    if (delta.files.length > 0) parts.push(plural(delta.files.length, "file"));
+    if (delta.bashRuns > 0) {
+      parts.push(plural(delta.bashRuns, "command") + (delta.bashErrors > 0 ? ` (${delta.bashErrors} failed)` : ""));
+    }
+    if (delta.turns > 0) parts.push(plural(delta.turns, "turn"));
+    changed = parts.length > 0 ? parts.join(" · ") : delta.lastWords ? "agent replied" : null;
+  }
+
+  const needs: string[] = [];
+  if (delta.decisions.length > 0) needs.push(plural(delta.decisions.length, "new decision"));
+  if (input.agentWaiting) needs.push("agent waiting");
+  const needsYou = needs.length > 0 ? needs.join(" · ") : null;
+
+  const youLeft = input.landing?.trim() || null;
+  if (!changed && !needsYou && !youLeft) return null;
+
+  const branch = input.branch ? ` · ${input.branch}${input.dirty ? " ●" : ""}` : "";
+  return {
+    context: `${input.project} · ${input.agent}${branch}`,
+    goal: input.goal?.trim() || null,
+    youLeft,
+    changed,
+    needsYou,
+    // The Next cascade starts at the landing note — don't say it twice.
+    next: input.next && input.next !== youLeft ? input.next : null,
+  };
+}
