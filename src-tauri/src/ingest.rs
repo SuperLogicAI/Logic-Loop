@@ -229,7 +229,14 @@ pub fn start(app: AppHandle) {
                     let _ = request.respond(tiny_http::Response::empty(204));
                     continue;
                 }
-                if let Some(path) = payload.get("transcript_path").and_then(|v| v.as_str()) {
+                // Plan 059: a subagent lifecycle hook never starts a tailer —
+                // its path can be a child's file, which would then be tailed
+                // as the parent session's transcript.
+                if let Some(path) = payload
+                    .get("transcript_path")
+                    .and_then(|v| v.as_str())
+                    .filter(|_| !is_subagent_lifecycle(&payload))
+                {
                     if is_transcript_path(path, recognized_agent(agent_header.as_deref())) {
                         if let Some(sid) = payload.get("session_id").and_then(|v| v.as_str()) {
                             ensure_tailer(&app, sid.to_string(), path.to_string());
@@ -262,6 +269,29 @@ pub fn start(app: AppHandle) {
                     if let Some(agent) = recognized_agent(agent_header.as_deref()) {
                         obj.insert("agent".into(), agent.into());
                     }
+                }
+                // Plan 059: a hook names its root session; the usage reader
+                // finds that root's files (parent + children). Codex: rollouts
+                // by session_meta. Claude: the gated main transcript plus its
+                // subagents/ dir.
+                let usage_agent = match recognized_agent(agent_header.as_deref()) {
+                    Some("codex") => Some("codex"),
+                    None => Some("claude"),
+                    _ => None,
+                };
+                if let (Some(agent), Some(root)) = (usage_agent, payload.get("session_id").and_then(|v| v.as_str())) {
+                    let transcript = payload
+                        .get("transcript_path")
+                        .and_then(|v| v.as_str())
+                        .filter(|t| agent != "claude" || is_transcript_path(t, None));
+                    crate::usage::watch(
+                        &app,
+                        agent,
+                        root,
+                        payload.get("tab_id").and_then(|v| v.as_str()),
+                        payload.get("project_key").and_then(|v| v.as_str()),
+                        transcript,
+                    );
                 }
                 let _ = app.emit("ingest://hook", payload);
             }
@@ -422,6 +452,13 @@ fn emit_statusline(app: &AppHandle, payload: serde_json::Value, tab_id: Option<S
 /// Tail a session's JSONL transcript from its current end, emitting new lines.
 /// ponytail: threads poll every 500ms and live until app exit — fine for a
 /// handful of sessions; switch to notify/kqueue if thread count ever matters.
+fn is_subagent_lifecycle(payload: &serde_json::Value) -> bool {
+    matches!(
+        payload.get("hook_event_name").and_then(|v| v.as_str()),
+        Some("SubagentStart" | "SubagentStop")
+    )
+}
+
 fn ensure_tailer(app: &AppHandle, session_id: String, path: String) {
     use tauri::Manager;
     let registry = app.state::<TailerRegistry>();
@@ -673,7 +710,10 @@ fn accepts_synthetic_transcript(agent: Option<&str>) -> bool {
 /// multiple-choice prompt is a tool call, so this is the one moment the open
 /// question exists as structured data. Prints nothing, exits 0 — never a
 /// permission decision.
-const HOOK_EVENTS: [&str; 7] = [
+///
+/// `SubagentStart`/`SubagentStop` (Plan 059) feed the active-subagent badge
+/// only; the frontend persists them and returns before any parent mutation.
+const HOOK_EVENTS: [&str; 9] = [
     "Notification",
     "Stop",
     "PostToolUse",
@@ -681,6 +721,8 @@ const HOOK_EVENTS: [&str; 7] = [
     "UserPromptSubmit",
     "SessionStart",
     "PreToolUse",
+    "SubagentStart",
+    "SubagentStop",
 ];
 
 fn is_ours(entry: &serde_json::Value) -> bool {

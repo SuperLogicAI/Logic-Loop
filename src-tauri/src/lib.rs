@@ -15,6 +15,7 @@ mod pi;
 mod pty;
 mod statusline;
 mod safe_router_traffic;
+mod usage;
 // pub: main.rs calls antigravity::run_hook_mode directly, ahead of
 // app_lib::run(), to intercept `--antigravity-hook` before the GUI boots.
 pub mod antigravity;
@@ -197,6 +198,35 @@ pub fn run() {
         sql: "ALTER TABLE session_bindings ADD COLUMN tab_title TEXT;
               ALTER TABLE session_bindings ADD COLUMN tab_color TEXT;",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 13,
+        description: "usage records (token spend meter)",
+        // Plan 059: append-only usage snapshots. (source_path, source_offset)
+        // is the snapshot identity, so backfill replays are ignored; readers
+        // pick the latest snapshot per (agent, thread_id, response_id).
+        // Input is normalized: total input including cache reads/writes.
+        sql: "CREATE TABLE IF NOT EXISTS usage_records (
+                id INTEGER PRIMARY KEY,
+                agent TEXT NOT NULL,
+                root_session_id TEXT NOT NULL,
+                thread_id TEXT NOT NULL,
+                response_id TEXT NOT NULL,
+                tab_id TEXT,
+                project_key TEXT,
+                source_ts INTEGER NOT NULL,
+                source_path TEXT NOT NULL,
+                source_offset INTEGER NOT NULL,
+                input INTEGER NOT NULL,
+                cache_read INTEGER NOT NULL,
+                cache_write INTEGER NOT NULL,
+                output INTEGER NOT NULL
+              );
+              CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_source
+                ON usage_records(source_path, source_offset);
+              CREATE INDEX IF NOT EXISTS idx_usage_tab ON usage_records(tab_id, source_ts);
+              CREATE INDEX IF NOT EXISTS idx_usage_root ON usage_records(root_session_id, source_ts);",
+        kind: MigrationKind::Up,
     }];
 
     tauri::Builder::default()
@@ -210,6 +240,7 @@ pub fn run() {
         )
         .manage(PtyManager::default())
         .manage(ingest::TailerRegistry::default())
+        .manage(usage::UsageState::default())
         .setup(|app| {
             // Default menu's Quit (⌘Q) calls native terminate, bypassing the
             // JS quit guard entirely. Custom Quit item closes windows instead,
@@ -246,6 +277,7 @@ pub fn run() {
                 .build()?;
             app.set_menu(menu)?;
             ingest::start(app.handle().clone());
+            usage::start(app.handle().clone());
             Ok(())
         })
         .on_menu_event(|app, event| {
@@ -299,6 +331,7 @@ pub fn run() {
             codex::codex_hooks_setup,
             codex::codex_hooks_remove,
             codex::codex_hooks_status,
+            codex::codex_hooks_outdated,
             antigravity::antigravity_detect,
             antigravity::antigravity_hooks_setup,
             antigravity::antigravity_hooks_remove,

@@ -5824,3 +5824,147 @@ Automated: `npm run delta:check` covers the full brief, no goal, clean/
 dirty/no branch, no note, Next deduped against the note, nothing needs
 you, loop run, last-words-only, note-only, and the null (hidden) case.
 
+
+## Phase 59 — Token spend meter (checkpoint 1: subagent badge)
+
+Run in the built app. Checkpoints 2-3 add items 91-94.
+
+- [x] **87.** **Hook update** — with existing Claude and Codex hooks
+    installed, open the status bar. Expected: both toggles read "update";
+    clicking updates; other tools' entries in `~/.codex/hooks.json` and
+    Claude settings are kept, in their original order. Next fresh Codex
+    session shows "Hooks need review" listing only SubagentStart and
+    SubagentStop; trust them.
+    *Passed 2026-10-09:* Claude settings gained only SubagentStart/Stop at
+    the end; the foreign `dcg` PreToolUse hook and the other 7 events kept
+    their order (vs `settings.before.json`). Codex hooks.json has all 9
+    events (no foreign entries live — cargo test covers neighbours); review
+    prompt trusted.
+- [x] **88.** **Claude badge** — in a Claude tab, ask for 2 parallel
+    subagents that each read `src/App.tsx` in full and list its top-level
+    functions (real work — Claude Code blocks a standalone `sleep`).
+    Expected: dock (next to ctx) and the project's Home
+    card show "2 subagents", then nothing once both finish. Parent tab state,
+    Since You Left counts and notifications are unaffected.
+    *Passed 2026-10-09 (rebuilt, rev 3):* dock and Home card showed "2
+    subagents", cleared on finish. Starts/Stops paired on the tab tether;
+    Stops landed ~10 s after the children finished. A lone `SubagentStop`
+    with empty `agent_type` and no Start (likely a Claude Code internal
+    helper) did not affect the count.
+- [x] **89.** **Codex badge** — same in a Codex tab (ask it to spawn 2
+    agents).
+    *Passed 2026-10-09 (computer use, Codex v0.162.0):* fresh tab, two
+    parallel workers read `package.json` and both reported `logic-loop`.
+    Dock showed `2 subagents`, then cleared. Repeated with two new workers
+    pausing 45 seconds before replying so Home could be observed: Home
+    showed `2 subagents`, then cleared after completion. No edits requested.
+- [x] **90.** **Dead tab** — start one such subagent, then while it runs
+    press Ctrl+C twice and `exit` the shell so the tab dies. Expected: the
+    badge reads "1 subagent ?" (or nothing, if Claude sent a Stop on quit),
+    never a stuck "1 subagent". Quitting the agent and starting/resuming
+    Claude in the same shell also reads "?" (session switch). A "?" clears
+    10 minutes after it appears.
+
+Automated: `npm run spend:check` covers Start/Stop pairing, Start re-fire
+on resume, Stop without Start, dead tab and parent SessionEnd → unknown,
+resume after end, Claude /compact SessionStart, (ts, id) ordering, empty
+agent_id, per-project sums, labels, and that lifecycle hooks never drive
+parent state or land a result. `cargo test --lib`: Codex update keeps
+existing entries and foreign neighbours in place and adds only the missing
+events; outdated is false when off or complete.
+
+### Phase 59 checkpoint 2: Codex spend meter
+
+Reinstall first (Rust + migration 13). Units are effort units, not dollars.
+
+- [x] **91.** **Codex meter + children** — in a Codex tab, ask it to spawn
+    2 agents that each read a file. Expected: within ~2 s of responses the
+    dock (left of ctx) shows `▁▂▅ 41k u/min · 1.2M total`; hover shows the
+    5-min rate, session total, last-sample age and "N/N threads recorded".
+    The Home card shows the same line. Overview → Agent spend lists `main`
+    plus two `worker` rows, and the total includes them.
+- [x] **92.** **Restart** — quit and reopen the app mid-session, then send
+    one prompt in that Codex tab. Expected: the total continues (no double
+    count after the full backfill); the rate reflects only recent
+    responses, not backfilled history.
+    *Blocked 2026-10-09 (computer use):* baseline for the fresh test tab
+    was `92k total`. Cmd+Q warned that all four open sessions would be
+    terminated. Automatic approval review rejected confirming Quit because
+    that concrete impact needed approval; cancelled the dialog and asked
+    the maintainer. No restart performed; this box stays open.
+    *Passed 2026-10-09 (maintainer):* dock read `1.1M total` before quitting
+    and `1.1M` after relaunch (bars in their original minutes, rate 0 —
+    last pre-restart response was 5 min earlier). One "reply ok" then took
+    it to `1.3M`: real spend, not a double count — 114 usage rows for 114
+    distinct responses; the first post-restart turn cost 89k units because
+    the provider's prompt cache had expired (105k of 184k input cached vs
+    182k before). Overview afterwards: `3 of 3 threads recorded` (main +
+    guardian + a new guardian `…2aa1a8`).
+- [x] **93.** **Decay** — leave the Codex tab idle 5+ minutes. Expected:
+    the rate falls to 0 and "last sample" age grows; the total stays.
+    *Passed 2026-10-09 (computer use):* test tab left untouched after the
+    second worker prompt. Rate fell through `27k`, `14k`, `2k`, then `0`
+    u/min; total remained `92k`. Overview's last-sample age grew from
+    `26s` to `4m`, `5m`, and `7m`, with `5/5 threads recorded` throughout.
+    Returned to the tab and visually confirmed dock `0 u/min · 92k total`.
+
+*91 passed 2026-10-09 (maintainer):* dock hover in the Codex tab showed the
+rate with its window, last 1 min, session total, last-sample age, weights
+and scale. Once, 2 min after a restart, the tooltip lacked the coverage
+part while the Overview later showed `3 of 3`; not reproduced — most
+likely the hover came before the thread reports arrived.
+
+Computer-use evidence (2026-10-09) for **91**, not yet a complete pass:
+the dock showed spend during the worker run (`44k total`), then `60k total`
+after the first prompt; `92k total` after the observation repeat. Overview
+listed the test root `…eb48d4` as `main`, and four `worker` rows (two per
+prompt), with `5/5 threads recorded`. Its accessible tooltip included the
+rate window, last-minute rate, session total and last-sample age. Home
+showed the spend line, but its numbers aggregate the project's other live
+sessions, so they differ from this tab's dock. The dock's native hover
+tooltip and the precise ~2-second response-to-display interval were not
+captured. Leave **91** open for those subchecks and disposition of the
+Home scope expectation. Focused assertions passed via
+`node --import tsx scripts/spend-check.ts`; `npm run spend:check` hit the
+sandbox's tsx IPC `EPERM`. No source changes or full gate rerun in this
+manual test pass.
+
+Automated: `npm run spend:check` covers effort units (incl. the 88k/min
+IDEAS example and the fresh-input floor), the 5-min window edges,
+backfill never counting as current rate, sparkline buckets, parent + child
+aggregation, odometer = newest root, shared-root dedupe across tabs,
+spark text, coverage per root. `cargo test --lib usage`: RFC 3339 parsing,
+session_meta kinds (main / worker / guardian), record validation, partial
+last line retried, file replacement, discovery across date dirs.
+
+### Phase 59 checkpoint 3: Claude spend meter
+
+Reinstall first. Same surfaces as checkpoint 2, now for Claude tabs.
+
+- [x] **94.** **Claude reconciliation** — open a fresh Logic Loop shell tab
+    (no agent running in it) and run:
+
+    ```bash
+    echo 'Spawn exactly one subagent that reads package.json and replies with its "name" field. No edits.' \
+      | claude -p --output-format json --allowedTools Read Task Agent \
+      | jq '[.modelUsage[]] | {input: (map(.inputTokens) | add), cache_read: (map(.cacheReadInputTokens) | add),
+            cache_write: (map(.cacheCreationInputTokens) | add), output: (map(.outputTokens) | add)}
+            | . + {expected_units: (.input + .cache_read*0.1 + .cache_write*1.25 + .output*5 | floor)}'
+    ```
+
+    Expected: the tab's dock shows a spend chip; Overview → Agent spend
+    lists that session with a `main` and one `subagent` row, and its total
+    matches `expected_units` (rounded the same way, e.g. "47k"). Sum every
+    `modelUsage` entry: a subagent on another model is a separate entry.
+    Passed 2026-10-09: main 48,238 matched exactly; subagent 12,902 (second
+    model entry); dock 61k = 61,140.
+- [x] **95.** **Claude live** — in an interactive Claude tab, ask for 2
+    parallel subagents that each read `src/App.tsx`. Expected: the dock
+    chip and Home card line rise while they run; Overview shows `main` + 2
+    `subagent` rows; coverage reads "3/3 threads recorded".
+
+Automated: `cargo test --lib usage` adds Claude input normalization
+(input + cache read + cache write), `agentId` → `agent-<id>` thread, block
+lines kept as ordered snapshots (latest per message.id wins in the query),
+and transcript paths confined to the session's own directory (name must
+match the session; symlinked children escaping it are skipped).

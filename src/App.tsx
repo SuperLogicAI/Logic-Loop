@@ -13,6 +13,8 @@ import {
   onAdapterWarning,
   onHookEvent,
   onStatusline,
+  onUsageRecords,
+  onUsageThread,
   onTailerFailed,
   onTranscriptLine,
   seedUnclaimedTabs,
@@ -21,6 +23,8 @@ import {
   shouldNotify,
   sourceContextForHook,
   isTerminalResult,
+  isSubagentHook,
+  isSubagentLifecycle,
   stateForHook,
 } from "./lib/ingest";
 import { detectBlockers, detectorTextFor, detectorTextForTranscript } from "./lib/detectors";
@@ -30,6 +34,9 @@ import { initNotifications, notify, requestNotifications } from "./lib/notify";
 import { adapterIdForHook, type AdapterId } from "./lib/onboarding";
 import { IdeaBoard } from "./components/IdeaBoard";
 import { ContextMeter } from "./components/ContextMeter";
+import { SubagentChip } from "./components/SubagentChip";
+import { SpendChip } from "./components/SpendMeter";
+import type { UsageThread } from "./lib/spend";
 import { claudeContext, codexContext, type ContextUsage } from "./lib/contextMeter";
 import { SidebarControls } from "./components/SidebarControls";
 import { SidePanel } from "./components/SidePanel";
@@ -621,6 +628,10 @@ export default function App() {
   const [isolateLoopModalOpen, setIsolateLoopModalOpen] = useState(false);
   const [fanOutModalOpen, setFanOutModalOpen] = useState(false);
   const [fanOutRefresh, setFanOutRefresh] = useState(0);
+  const [subagentRefresh, setSubagentRefresh] = useState(0); // Plan 059: badge re-read
+  const [spendRefresh, setSpendRefresh] = useState(0); // Plan 059: usage rows re-read
+  const [usageThreadMap, setUsageThreadMap] = useState<Record<string, UsageThread>>({});
+  const usageThreads = useMemo(() => Object.values(usageThreadMap), [usageThreadMap]);
   const dismissSpawnMember = useCallback(async (groupId: string, childTabId: string) => {
     await repo.removeSpawnMember(groupId, childTabId).catch(() => undefined);
     setFanOutRefresh((n) => n + 1);
@@ -996,6 +1007,18 @@ export default function App() {
           });
         }
       }
+      // Plan 059: subagent lifecycle feeds the badge only. Persist and stop
+      // here, before the parent mutations below (session cwd/context, tab
+      // binding, landing-note activity, tab identity, notifications).
+      if (isSubagentLifecycle(p)) {
+        if (isSubagentHook(p)) {
+          void repo
+            .addHookEvent(p.session_id, `hook:${p.hook_event_name}`, JSON.stringify(p))
+            .then(() => setSubagentRefresh((n) => n + 1))
+            .catch(() => undefined); // fail open
+        }
+        return;
+      }
       // Turn provenance (Phase 15): only UserPromptSubmit carries it, stamped
       // onto a clone before the row is written — payload_json is append-only,
       // this is the one chance to record it.
@@ -1252,6 +1275,37 @@ export default function App() {
       unlisteners.forEach((u) => u());
     };
   }, [expand, refreshBlockerCounts, refreshDecisionCounts, scheduleAttentionRefresh]);
+
+  // Plan 059: usage-only reader → usage_records (via repo), coverage in
+  // memory. Own listener (StrictMode-safe); never touches transcript or
+  // hook ingestion. Backfill arrives in bursts, so re-reads are coalesced.
+  useEffect(() => {
+    let cancelled = false;
+    const unlisteners: Array<() => void> = [];
+    const keep = (u: () => void) => (cancelled ? u() : unlisteners.push(u));
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const bump = () => {
+      if (timer || cancelled) return;
+      timer = setTimeout(() => {
+        timer = null;
+        setSpendRefresh((n) => n + 1);
+      }, 1000);
+    };
+    void onUsageRecords((p) => {
+      if (cancelled) return;
+      void repo.addUsageRecords(p.tab_id, p.project_key, p.records).then(bump).catch(() => undefined); // fail open
+    }).then(keep);
+    void onUsageThread((t) => {
+      if (cancelled) return;
+      setUsageThreadMap((prev) => ({ ...prev, [`${t.agent}:${t.thread_id}`]: t }));
+      bump();
+    }).then(keep);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      unlisteners.forEach((u) => u());
+    };
+  }, []);
 
   // Plan 023: live statusLine mirror. Self-contained listener (StrictMode-
   // safe cancelled+unlisten, same shape as the drag-drop effect below) —
@@ -1808,7 +1862,13 @@ export default function App() {
           {activeTab && (
             <IdeaBoard
               cwd={expand(activeTab.cwd)}
-              trailing={activeContext && <ContextMeter usage={activeContext} agent={activeTab.agent === "codex" ? "Codex" : "Claude"} />}
+              trailing={
+                <span className="ml-auto flex shrink-0 items-center gap-3">
+                  <SubagentChip tabId={activeTab.id} sessionId={activeTab.sessionId} live={activeTab.status === "live"} refresh={subagentRefresh} />
+                  <SpendChip tabId={activeTab.id} sessionId={activeTab.sessionId} refresh={spendRefresh} threads={usageThreads} />
+                  {activeContext && <ContextMeter usage={activeContext} agent={activeTab.agent === "codex" ? "Codex" : "Claude"} />}
+                </span>
+              }
             />
           )}
         </div>
@@ -1821,6 +1881,9 @@ export default function App() {
             {surface.kind === "home" && (
               <HomeDashboard
                 tabs={tabs}
+                subagentRefresh={subagentRefresh}
+                spendRefresh={spendRefresh}
+                usageThreads={usageThreads}
                 expand={expand}
                 activeTab={activeTab}
                 openDecisionOwners={openDecisionOwners}
@@ -1847,6 +1910,8 @@ export default function App() {
                 onContinueTab={focusTab}
                 onStartSession={startProjectSession}
                 onOpenCopyUpdate={setCopyUpdateData}
+                spendRefresh={spendRefresh}
+                usageThreads={usageThreads}
               />
             )}
           </DashboardErrorBoundary>

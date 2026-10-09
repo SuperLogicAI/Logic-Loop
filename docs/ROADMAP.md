@@ -608,4 +608,7 @@ needs its own plan; order by what real users hit after 048 ships.
   Copy update hours); spend still open. Spike for one trustworthy per-project token source
   (current Claude/Codex meters are account-wide). Unknown ≠ zero; estimated ≠
   invoiced. Optional manual time tracker. No attribution → no cost UI.
+  Spike done 2026-10-08: Codex has a per-session source (`token_usage_record`,
+  children aggregated); Claude still open — see IDEAS "Token spend: TSPM +
+  cost by project".
 - **Opt-in LLM summaries:** ingestion-time only, cited, deterministic fallback.

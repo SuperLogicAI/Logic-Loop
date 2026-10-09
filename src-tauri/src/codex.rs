@@ -8,7 +8,7 @@ use std::path::PathBuf;
 /// with the shared `X-Logic-Loop-Agent: codex` marker added (see
 /// `ingest::hook_command_with_agent`) so downstream code can tell a Codex
 /// event apart from Claude's without guessing from payload shape.
-const CODEX_HOOK_EVENTS: [&str; 7] = [
+const CODEX_HOOK_EVENTS: [&str; 9] = [
     "SessionStart",
     "Stop",
     "PostToolUse",
@@ -19,6 +19,10 @@ const CODEX_HOOK_EVENTS: [&str; 7] = [
     // as Stop — an interrupted turn is idle, not an error.
     "Interrupt",
     "SessionEnd",
+    // Plan 059: active-subagent badge. Worker children only — Codex's
+    // guardian/internal children fire no lifecycle hooks.
+    "SubagentStart",
+    "SubagentStop",
 ];
 
 const CODEX_AGENT: &str = "codex";
@@ -74,27 +78,49 @@ fn strip_ours(settings: &mut serde_json::Value) {
     hooks.retain(|_, v| v.as_array().is_none_or(|a| !a.is_empty()));
 }
 
+fn desired_entry(event: &str) -> serde_json::Value {
+    let mut entry = serde_json::json!({
+        "hooks": [{ "type": "command", "command": crate::ingest::hook_command_with_agent(Some(CODEX_AGENT)) }]
+    });
+    if event == "PostToolUse" {
+        entry["matcher"] = "*".into();
+    }
+    entry
+}
+
+/// Plan 059: in-place, not strip-and-append. Codex trust keys include the
+/// event/group index, so an existing entry of ours is rewritten where it
+/// sits (unchanged text keeps its trust); only events without one get a new
+/// entry appended. Extra duplicates of ours are dropped.
 fn apply_setup(settings: &mut serde_json::Value) -> Result<(), String> {
-    strip_ours(settings);
     if !settings.get("hooks").is_some_and(|h| h.is_object()) {
         settings["hooks"] = serde_json::json!({});
     }
     let hooks = settings["hooks"].as_object_mut().ok_or("hooks not an object")?;
     for event in CODEX_HOOK_EVENTS {
-        let mut entry = serde_json::json!({
-            "hooks": [{ "type": "command", "command": crate::ingest::hook_command_with_agent(Some(CODEX_AGENT)) }]
-        });
-        if event == "PostToolUse" {
-            entry["matcher"] = "*".into();
-        }
-        hooks
+        let arr = hooks
             .entry(event)
             .or_insert_with(|| serde_json::json!([]))
             .as_array_mut()
-            .ok_or_else(|| format!("hooks.{event} is not an array"))?
-            .push(entry);
+            .ok_or_else(|| format!("hooks.{event} is not an array"))?;
+        match arr.iter().position(is_ours) {
+            Some(i) => {
+                arr[i] = desired_entry(event);
+                let mut seen = 0;
+                arr.retain(|e| !is_ours(e) || { seen += 1; seen == 1 });
+            }
+            None => arr.push(desired_entry(event)),
+        }
     }
     Ok(())
+}
+
+/// Installed (any entry of ours) but missing an event — an install from
+/// before an event was added. The UI then offers Update (Plan 059).
+fn is_outdated(settings: &serde_json::Value) -> bool {
+    let has_ours = |event: &str| settings["hooks"][event].as_array().is_some_and(|a| a.iter().any(is_ours));
+    let present = CODEX_HOOK_EVENTS.iter().filter(|e| has_ours(e)).count();
+    present > 0 && present < CODEX_HOOK_EVENTS.len()
 }
 
 fn is_executable(candidate: &std::path::Path) -> bool {
@@ -151,6 +177,11 @@ pub fn codex_hooks_status() -> Result<bool, String> {
         .filter_map(|v| v.as_array())
         .flatten()
         .any(is_ours))
+}
+
+#[tauri::command]
+pub fn codex_hooks_outdated() -> Result<bool, String> {
+    Ok(is_outdated(&read_settings()?))
 }
 
 #[cfg(test)]
@@ -220,6 +251,38 @@ mod tests {
         }
         strip_ours(&mut s);
         assert_eq!(s, serde_json::json!({ "hooks": {} }), "Interrupt/SessionEnd not fully removed");
+    }
+
+    #[test]
+    fn update_adds_missing_events_without_moving_existing_entries() {
+        let mut s = serde_json::json!({});
+        apply_setup(&mut s).unwrap();
+        // An install from before Plan 059, with foreign hooks before and after ours.
+        for ev in ["SubagentStart", "SubagentStop"] {
+            s["hooks"].as_object_mut().unwrap().remove(ev);
+        }
+        let ours = s["hooks"]["Stop"][0].clone();
+        s["hooks"]["Stop"] = serde_json::json!([
+            { "hooks": [{ "type": "command", "command": "before" }] },
+            ours,
+            { "hooks": [{ "type": "command", "command": "after" }] }
+        ]);
+        assert!(is_outdated(&s));
+        let stop_before = s["hooks"]["Stop"].clone();
+        apply_setup(&mut s).unwrap();
+        assert!(!is_outdated(&s));
+        assert_eq!(s["hooks"]["Stop"], stop_before, "existing entry and neighbours must not move");
+        for ev in ["SubagentStart", "SubagentStop"] {
+            assert!(s["hooks"][ev][0]["hooks"][0]["command"].as_str().is_some(), "{ev} missing");
+        }
+    }
+
+    #[test]
+    fn outdated_is_false_when_off_or_complete() {
+        let mut s = foreign_settings();
+        assert!(!is_outdated(&s));
+        apply_setup(&mut s).unwrap();
+        assert!(!is_outdated(&s));
     }
 
     #[test]

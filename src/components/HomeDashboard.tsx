@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import * as repo from "../lib/repo";
 import { describeDelta, type Delta } from "../lib/delta";
 import { loadTabDelta } from "../lib/tabDelta";
+import { addSpend, addSubagentStates, spendSummary, subagentLabel, subagentState, type SpendSummary, type SubagentState, type UsageThread } from "../lib/spend";
+import { SpendLine, spendTitle } from "./SpendMeter";
 import {
   buildProjectCards,
   projectDisplayName,
@@ -31,6 +33,11 @@ function age(ts: number, now: number): string {
 
 interface Props {
   tabs: Tab[];
+  /** Plan 059: bumped on each subagent lifecycle hook. */
+  subagentRefresh: number;
+  /** Plan 059: bumped when usage rows land; coverage per thread. */
+  spendRefresh: number;
+  usageThreads: UsageThread[];
   expand: (cwd: string) => string;
   /** Current workspace pane, if any — Home never changes it, only reads it
    * for the "Continue" callout (Plan 048 §3: "most recently used live or
@@ -54,6 +61,9 @@ interface Props {
 
 export function HomeDashboard({
   tabs,
+  subagentRefresh,
+  spendRefresh,
+  usageThreads,
   expand,
   activeTab,
   openDecisionOwners,
@@ -109,6 +119,51 @@ export function HomeDashboard({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deltaTabKey]);
+
+  // Plan 059: observed worker subagents per project, summed over its tabs.
+  const [subagentsByProject, setSubagentsByProject] = useState<Map<string, SubagentState>>(new Map());
+  const subagentTabKey = tabs.map((t) => `${t.id}:${t.sessionId ?? ""}:${t.status}`).join("|");
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all(
+      tabs.map(async (t) => [expand(t.cwd), subagentState(await repo.subagentEvents(t.id, t.sessionId ?? null), t.status === "live", Date.now())] as const)
+    )
+      .then((pairs) => {
+        if (cancelled) return;
+        const next = new Map<string, SubagentState>();
+        for (const [key, state] of pairs) next.set(key, addSubagentStates(next.get(key), state));
+        setSubagentsByProject(next);
+      })
+      .catch(() => undefined); // fail open: no badge
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subagentTabKey, subagentRefresh]);
+
+  // Plan 059: spend per project, summed over its tabs (one snapshot per Home visit/refresh).
+  const [spendByProject, setSpendByProject] = useState<Map<string, SpendSummary>>(new Map());
+  useEffect(() => {
+    let cancelled = false;
+    const at = Date.now();
+    void Promise.all(tabs.map(async (t) => [expand(t.cwd), spendSummary(await repo.usageRows(t.id, t.sessionId ?? null), at)] as const))
+      .then((pairs) => {
+        if (cancelled) return;
+        const grouped = new Map<string, SpendSummary[]>();
+        for (const [key, s] of pairs) if (s) grouped.set(key, [...(grouped.get(key) ?? []), s]);
+        const next = new Map<string, SpendSummary>();
+        for (const [key, list] of grouped) {
+          const sum = addSpend(list);
+          if (sum) next.set(key, sum);
+        }
+        setSpendByProject(next);
+      })
+      .catch(() => undefined); // fail open: no spend line
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subagentTabKey, spendRefresh]);
 
   const instancesByProject = useMemo(() => {
     const map = new Map<string, SinceLeftInstance[]>();
@@ -267,6 +322,9 @@ export function HomeDashboard({
               card={card}
               displayName={projectDisplayName(card.projectKey, allKeys, card)}
               decisionCount={decisionCountByProject.get(card.projectKey) ?? 0}
+              subagents={subagentLabel(subagentsByProject.get(card.projectKey))}
+              spend={spendByProject.get(card.projectKey) ?? null}
+              usageThreads={usageThreads}
               now={now}
               sinceLeft={instancesByProject.get(card.projectKey) ?? []}
               onOpenTab={onContinue}
@@ -299,6 +357,9 @@ function ProjectCard({
   card,
   displayName,
   decisionCount,
+  subagents,
+  spend,
+  usageThreads,
   now,
   sinceLeft,
   onOpenTab,
@@ -307,6 +368,9 @@ function ProjectCard({
   card: ProjectCardViewModel;
   displayName: string;
   decisionCount: number;
+  subagents: string | null;
+  spend: SpendSummary | null;
+  usageThreads: UsageThread[];
   now: number;
   sinceLeft: SinceLeftInstance[];
   onOpenTab: (tabId: string) => void;
@@ -335,8 +399,16 @@ function ProjectCard({
       </p>
       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-400">
         {statusParts.length > 0 && <span>{statusParts.join(" · ")}</span>}
+        {subagents && (
+          <span title="Worker subagents seen via hooks. ? = started but no stop seen and the tab or session ended.">{subagents}</span>
+        )}
         {decisionCount > 0 && <span className="text-attn-400">{decisionCount} open decision{decisionCount === 1 ? "" : "s"}</span>}
       </div>
+      {spend && (
+        <p className="mt-1 text-[11px] text-zinc-500 tabular-nums" title={spendTitle(spend, usageThreads, now)}>
+          <SpendLine s={spend} />
+        </p>
+      )}
       {sinceLeft.length > 0 && (
         <div className="mt-2 text-[11px]">
           <button

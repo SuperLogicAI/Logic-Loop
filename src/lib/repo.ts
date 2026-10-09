@@ -26,6 +26,7 @@ import { parseLandingNoteMode } from "./landingMode";
 import { projectKeyOf } from "./pty";
 import { resolveHomeStartSurface } from "./dashboard";
 import { staleDecisionSql } from "./staleDecisions";
+import type { SubagentEventRow, UsageRow } from "./spend";
 
 // The pending load, not the resolved handle: concurrent first callers used to
 // each run Database.load, and tauri-plugin-sql opens a new pool per load (only
@@ -1210,6 +1211,87 @@ export async function eventsSince(
 /** Decisions opened on this project since `since` — scope to the tab's own
  * session with `scopeBySession` at the call site, same as every other
  * cwd-wide read. */
+/** Plan 059: a tab's subagent lifecycle rows plus the parent session
+ * boundaries `subagentState` needs. Keyed by tether like `eventsSince`, so
+ * it follows the conversation actually in the tab even when the tab's bound
+ * session is stale (a Claude /clear or in-tab /resume never rebinds — see
+ * LANDMINES). `agent_id` is an id field only. */
+export async function subagentEvents(tether: string, sessionId: string | null): Promise<SubagentEventRow[]> {
+  const d = await getDb();
+  return d.select<SubagentEventRow[]>(
+    `SELECT id, ts, session_id, type, json_extract(payload_json, '$.agent_id') AS agent_id FROM events
+     WHERE type IN ('hook:SubagentStart', 'hook:SubagentStop', 'hook:SessionStart', 'hook:SessionEnd')
+       AND (
+         json_extract(payload_json, '$.tab_id') = $1
+         OR (json_extract(payload_json, '$.tab_id') IS NULL AND session_id = $2)
+       )
+     ORDER BY ts, id`,
+    [tether, sessionId ?? ""]
+  );
+}
+
+/** Plan 059: one validated usage snapshot from the Rust usage reader. */
+export interface UsageRecordInput {
+  agent: string;
+  root_session_id: string;
+  thread_id: string;
+  response_id: string;
+  source_ts: number;
+  source_path: string;
+  source_offset: number;
+  input: number;
+  cache_read: number;
+  cache_write: number;
+  output: number;
+}
+
+const USAGE_COLS = 13;
+const isCount = (n: unknown): n is number => typeof n === "number" && Number.isInteger(n) && n >= 0;
+
+/** Append usage snapshots; a replayed (source_path, source_offset) is ignored.
+ * Rows failing validation are dropped (fail open). */
+export async function addUsageRecords(tabId: string | null, projectKey: string | null, records: UsageRecordInput[]): Promise<void> {
+  const valid = records.filter(
+    (r) =>
+      [r.agent, r.root_session_id, r.thread_id, r.response_id, r.source_path].every((s) => typeof s === "string" && s !== "") &&
+      [r.source_ts, r.source_offset, r.input, r.cache_read, r.cache_write, r.output].every(isCount)
+  );
+  if (valid.length === 0) return;
+  const d = await getDb();
+  for (let i = 0; i < valid.length; i += 100) {
+    const chunk = valid.slice(i, i + 100);
+    const params: unknown[] = [];
+    const values = chunk.map((r, j) => {
+      params.push(r.agent, r.root_session_id, r.thread_id, r.response_id, tabId, projectKey, r.source_ts, r.source_path, r.source_offset, r.input, r.cache_read, r.cache_write, r.output);
+      const b = j * USAGE_COLS;
+      return `(${Array.from({ length: USAGE_COLS }, (_, k) => `$${b + k + 1}`).join(", ")})`;
+    });
+    await d.execute(
+      `INSERT OR IGNORE INTO usage_records
+         (agent, root_session_id, thread_id, response_id, tab_id, project_key, source_ts, source_path, source_offset, input, cache_read, cache_write, output)
+       VALUES ${values.join(", ")}`,
+      params
+    );
+  }
+}
+
+/** Plan 059: a tab's usage — latest snapshot per response, by source order.
+ * Keyed by tether like `subagentEvents` (a tab's bound session goes stale
+ * after /clear); untethered rows fall back to the session. */
+export async function usageRows(tether: string, sessionId: string | null): Promise<UsageRow[]> {
+  const d = await getDb();
+  return d.select<UsageRow[]>(
+    `SELECT agent, root_session_id, thread_id, source_ts, input, cache_read, cache_write, output FROM (
+       SELECT *, ROW_NUMBER() OVER (
+         PARTITION BY agent, thread_id, response_id ORDER BY source_ts DESC, source_offset DESC
+       ) AS rn
+       FROM usage_records
+       WHERE tab_id = $1 OR (tab_id IS NULL AND root_session_id = $2)
+     ) WHERE rn = 1`,
+    [tether, sessionId ?? ""]
+  );
+}
+
 export async function decisionsOpenedSince(cwd: string, since: number): Promise<Decision[]> {
   const d = await getDb();
   return d.select<Decision[]>(

@@ -9,6 +9,7 @@ import {
   codexDetect,
   codexHooksRemove,
   codexHooksSetup,
+  codexHooksOutdated,
   codexHooksStatus,
   deepseekDetect,
   deepseekHooksRemove,
@@ -51,7 +52,7 @@ interface AdapterActions {
 
 const ADAPTER_ACTIONS: Record<AdapterId, AdapterActions> = {
   claude: { detect: claudeDetect, status: hooksStatus, outdated: hooksOutdated, setup: hooksSetup, remove: hooksRemove },
-  codex: { detect: codexDetect, status: codexHooksStatus, setup: codexHooksSetup, remove: codexHooksRemove },
+  codex: { detect: codexDetect, status: codexHooksStatus, outdated: codexHooksOutdated, setup: codexHooksSetup, remove: codexHooksRemove },
   opencode: { detect: opencodeDetect, status: opencodeHooksStatus, setup: opencodeHooksSetup, remove: opencodeHooksRemove },
   antigravity: { detect: antigravityDetect, status: antigravityHooksStatus, setup: antigravityHooksSetup, remove: antigravityHooksRemove },
   pi: { detect: piDetect, status: piHooksStatus, setup: piHooksSetup, remove: piHooksRemove },
