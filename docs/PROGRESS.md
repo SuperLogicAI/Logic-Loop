@@ -1081,3 +1081,33 @@ exactly with Claude's `modelUsage`; 92 showed a real 89k cache-expiry turn
 after restart). Open: hook delivery lagged 30-50 s under a subagent burst
 (pre-existing, LANDMINES); per-user thresholds parked in IDEAS.
 **PHASE 59 ACCEPTED** (2026-10-09).
+Merged to `main` via PR #88 (2026-10-09).
+
+### Phase 60 — Seen ≠ reviewed ≠ resolved (2026-10-09)
+
+Plan: `plans/060-seen-reviewed-resolved.md`; **PHASE 60 APPROVED**
+(2026-10-09), defaults 1–4 including the documented provenance limitations.
+Source: IDEAS C (first half), the pair to Phase 58's
+brief in that file's suggested sequence. Docs sync in the same change:
+ROADMAP's Plan 048 row (was "build in progress") and spend follow-on (spend
+shipped in Phase 59, cost by project still gated), IDEAS shipped markers for
+TSPM (059) and Plan 050's two entries.
+
+Built on `feat/phase-60-seen-reviewed`: migration 14 starts tracking clean;
+Accomplished keeps seen results until a result-specific review/dismiss or a
+subsequent explicitly human-labelled prompt. The SQL selects the newest row
+before resolution; older results never resurface. Rows carry session/tab
+identity and Open navigation; closed tabs stay reviewable. Next decisions
+use Ask / Delegate / Dismiss, never a Done→answered write. The brief has
+separate review and decision links. Project Overview callback wiring follows
+the momentum interface without changing its behavior.
+Built-app checks 96–103 passed, including restart persistence and maintainer
+Dock badge observation. **PHASE 60 ACCEPTED** (2026-10-09).
+
+Verification: focused queue/momentum/delta/unclaimed checks,
+`npm run opencode:check`, `npm run check`, `npx tsc --noEmit`,
+`npm run build`, `cargo test --lib` (177 passed, 1 ignored),
+`cargo clippy --all-targets -- -D warnings`, `git diff --check` passed.
+Before PR submission, full `cargo test` and `review-queue:check` also passed.
+Sandbox localhost/IPC restrictions required escalated check execution.
+Build emits the existing chunk-size warning. No golden (no prompt change).

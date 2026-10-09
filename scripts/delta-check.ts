@@ -94,14 +94,14 @@ const busy: Delta = {
 };
 const base = {
   delta: busy, loopIterations: null, project: "Logic Loop", branch: "feat/x", dirty: true,
-  goal: "Re-entry brief", landing: "Write plan 058", agentWaiting: true, next: "Answer Q1",
+  goal: "Re-entry brief", landing: "Write plan 058", agentWaiting: true, next: "Answer Q1", reviewsToDo: 0,
 };
 assert.deepEqual(buildBrief(base), {
   context: "Logic Loop · feat/x ●",
   goal: "Re-entry brief",
   youLeft: "Write plan 058",
   changed: "3 files · 5 commands (1 failed) · 4 turns",
-  needsYou: "2 new decisions · agent waiting",
+  needsYou: [{ text: "2 new decisions", target: "decisions" }, { text: "agent waiting", target: null }],
   next: "Answer Q1",
 });
 assert.equal(buildBrief({ ...base, goal: null })?.goal, null, "no Now card → goal hidden");
@@ -110,7 +110,14 @@ assert.equal(buildBrief({ ...base, branch: "" })?.context, "Logic Loop", "no git
 assert.equal(buildBrief({ ...base, landing: null })?.youLeft, null);
 assert.equal(buildBrief({ ...base, next: "Write plan 058" })?.next, null, "Next repeating the landing note is hidden");
 assert.equal(buildBrief({ ...base, next: "Re-entry brief" })?.next, null, "Next repeating the Goal is hidden");
-assert.equal(buildBrief({ ...base, delta: { ...busy, decisions: [] }, agentWaiting: false })?.needsYou, null);
+assert.deepEqual(buildBrief({ ...base, delta: { ...busy, decisions: [] }, agentWaiting: false })?.needsYou, []);
+assert.deepEqual(buildBrief({ ...base, reviewsToDo: 1 })?.needsYou, [
+  { text: "2 new decisions", target: "decisions" },
+  { text: "1 to review", target: "accomplished" },
+  { text: "agent waiting", target: null },
+], "review and decision links remain distinct, even with activity while away");
+assert.deepEqual(buildBrief({ ...base, delta: emptyDelta, landing: null, agentWaiting: false, reviewsToDo: 2 })?.needsYou,
+  [{ text: "2 to review", target: "accomplished" }], "outstanding reviews alone keep the brief visible");
 assert.equal(buildBrief({ ...base, loopIterations: 3 })?.changed, "3 iterations while away");
 assert.equal(buildBrief({ ...base, delta: { ...emptyDelta, lastWords: "hi" } })?.changed, "agent replied");
 // Decision 3: a note alone, no agent activity, still brings the brief back.

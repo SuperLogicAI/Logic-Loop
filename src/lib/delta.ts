@@ -127,6 +127,7 @@ export interface BriefInput {
   goal: string | null; // board Now card title — an explicit human pick only
   landing: string | null; // open landing note body
   agentWaiting: boolean;
+  reviewsToDo: number; // all outstanding results in this tab's session
   next: string | null; // momentum text
 }
 
@@ -135,7 +136,7 @@ export interface Brief {
   goal: string | null;
   youLeft: string | null;
   changed: string | null;
-  needsYou: string | null;
+  needsYou: { text: string; target: "decisions" | "accomplished" | null }[];
   next: string | null;
 }
 
@@ -158,13 +159,13 @@ export function buildBrief(input: BriefInput): Brief | null {
     changed = parts.length > 0 ? parts.join(" · ") : delta.lastWords ? "agent replied" : null;
   }
 
-  const needs: string[] = [];
-  if (delta.decisions.length > 0) needs.push(plural(delta.decisions.length, "new decision"));
-  if (input.agentWaiting) needs.push("agent waiting");
-  const needsYou = needs.length > 0 ? needs.join(" · ") : null;
+  const needsYou: Brief["needsYou"] = [];
+  if (delta.decisions.length > 0) needsYou.push({ text: plural(delta.decisions.length, "new decision"), target: "decisions" });
+  if (input.reviewsToDo > 0) needsYou.push({ text: `${input.reviewsToDo} to review`, target: "accomplished" });
+  if (input.agentWaiting) needsYou.push({ text: "agent waiting", target: null });
 
   const youLeft = input.landing?.trim() || null;
-  if (!changed && !needsYou && !youLeft) return null;
+  if (!changed && needsYou.length === 0 && !youLeft) return null;
 
   const branch = input.branch ? ` · ${input.branch}${input.dirty ? " ●" : ""}` : "";
   const goal = input.goal?.trim() || null;

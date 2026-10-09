@@ -39,7 +39,8 @@ const cardNoNext: Card = { ...nowCard, title: "No-next card", next: null };
 
 const resolvers = {
   onLandingDone: async () => {},
-  onDecisionDone: async () => {},
+  onDecisionDelegate: async () => {},
+  onDecisionDismiss: async () => {},
   onPlannedCardDone: async () => {},
 };
 
@@ -82,7 +83,7 @@ assert.equal(withCard?.text, plannedCard.next);
 const withCardNoNext = computeMomentum({ landing: null, decisions: [], plannedCard: cardNoNext, ...resolvers });
 assert.equal(withCardNoNext?.text, cardNoNext.title);
 
-// The picked item's done() calls exactly its own resolver, with the winning
+// The picked item's actions call exactly their own resolver, with the winning
 // row — not a fixed/first row.
 let doneCalledWith: unknown = null;
 const spied = computeMomentum({
@@ -90,12 +91,26 @@ const spied = computeMomentum({
   decisions: [decisionNew, decisionOld],
   plannedCard: null,
   ...resolvers,
-  onDecisionDone: async (d: Decision) => {
+  onDecisionDelegate: async (d: Decision) => {
     doneCalledWith = d;
   },
 });
-await spied?.done();
-assert.equal(doneCalledWith, decisionOld, "done() resolves the exact winning decision, not just any decision");
+assert.deepEqual(spied?.actions.map((a) => a.label), ["⤳ Delegate", "✕ Dismiss"], "decision has no Done/answered action");
+await spied?.actions[0].run();
+assert.equal(doneCalledWith, decisionOld, "delegate resolves the exact winning decision");
+let dismissed: Decision | null = null;
+const dismissPick = computeMomentum({ landing: null, decisions: [decisionNew, decisionOld], plannedCard: null, ...resolvers,
+  onDecisionDismiss: async (d) => { dismissed = d; },
+});
+await dismissPick?.actions[1].run();
+assert.equal(dismissed, decisionOld, "dismiss uses its own resolver and the winning decision");
+let landingDone: Note | null = null;
+const landingPick = computeMomentum({ landing: note, decisions: [decisionOld], plannedCard: nowCard, ...resolvers,
+  onLandingDone: async (n) => { landingDone = n; },
+});
+assert.deepEqual(landingPick?.actions.map((a) => a.label), ["✓ Done"]);
+await landingPick?.actions[0].run();
+assert.equal(landingDone, note);
 
 let cardDoneWith: unknown = null;
 const spiedCard = computeMomentum({
@@ -107,7 +122,8 @@ const spiedCard = computeMomentum({
     cardDoneWith = c;
   },
 });
-await spiedCard?.done();
-assert.equal(cardDoneWith, nowCard, "done() on a Now pick resolves that card, not the decision");
+assert.deepEqual(spiedCard?.actions.map((a) => a.label), ["▶ Start"]);
+await spiedCard?.actions[0].run();
+assert.equal(cardDoneWith, nowCard, "Start on a Now pick resolves that card, not the decision");
 
 console.log("momentum-check: all assertions passed");

@@ -11,6 +11,8 @@ import { deriveClock, formatAge, sessionStatusLabel } from "../lib/ingest";
 import { adapterSupportsDecisions } from "../lib/onboarding";
 import { parseBoard, readBoard, spliceCard, writeBoard, type Card } from "../lib/board";
 import { computeMomentum } from "../lib/momentum";
+import { resolveAttentionRoute, type AttentionTabSnapshot } from "../lib/attention";
+import type { ReviewResult } from "../lib/reviewQueue";
 import { topPlannedCard } from "./IdeaBoard";
 import { PanelIcon } from "./PanelIcon";
 import { SidebarControls } from "./SidebarControls";
@@ -76,6 +78,7 @@ interface Props {
   agent?: string; // active tab's adapter marker ("codex"/"opencode"/"antigravity"), undefined for plain Claude
   fanOut: FanOutRollup[]; // every fan-out group the active tab belongs to (as parent, possibly several; as child, at most one), oldest first
   onSelectTab: (id: string) => void; // jump to a fan-out child/parent tab
+  reviewTabs: (AttentionTabSnapshot & { title: string })[];
   onDismissMember: (groupId: string, childTabId: string) => void; // drop a lingering row from the fan-out rollup
   onBlockersChanged: () => void;
   onDecisionsChanged: () => void;
@@ -242,6 +245,7 @@ export function SidePanel({
   agent,
   fanOut,
   onSelectTab,
+  reviewTabs,
   onDismissMember,
   onBlockersChanged,
   onDecisionsChanged,
@@ -272,7 +276,8 @@ export function SidePanel({
     setShowOlderCompletions(false);
     setShowStaleDecisions(false);
   }, [cwd]);
-  const [unclaimed, setUnclaimed] = useState<{ session_id: string; ts: number }[]>([]);
+  const [reviewView, setReviewView] = useState<{ cwd: string; rows: ReviewResult[] }>({ cwd: "", rows: [] });
+  const resultsToReview = reviewView.cwd === cwd ? reviewView.rows : [];
   const [commits, setCommits] = useState<Commit[]>([]);
   const [blockers, setBlockers] = useState<Blocker[]>([]);
   // The component survives tab switches. Keep the loaded owner beside its
@@ -348,10 +353,24 @@ export function SidePanel({
       return next;
     });
 
-  const dismissUnclaimed = async (sessionId: string) => {
-    await repo.addEvent(sessionId, "result_claimed", JSON.stringify({ v: 1, project_key: cwd }));
-    await reload();
-    onAttentionChanged();
+  const [reviewSaving, setReviewSaving] = useState<Set<number>>(new Set());
+  const [reviewError, setReviewError] = useState<number | null>(null);
+  const finishReview = async (result: ReviewResult, action: "reviewed" | "dismissed") => {
+    setReviewSaving((current) => new Set(current).add(result.id));
+    setReviewError(null);
+    try {
+      await repo.reviewResult(result, action);
+      await reload();
+      onAttentionChanged();
+    } catch {
+      setReviewError(result.id);
+    } finally {
+      setReviewSaving((current) => {
+        const next = new Set(current);
+        next.delete(result.id);
+        return next;
+      });
+    }
   };
 
   const toggleSection = (key: string) =>
@@ -417,7 +436,7 @@ export function SidePanel({
       repo.listDecisions(cwd, tabTether, sessionId).catch(() => []),
       repo.latestLandingNote(cwd).catch(() => null),
       repo.listNotes(cwd, "residue").catch(() => []),
-      repo.unclaimedResults(cwd).catch(() => []),
+      repo.resultsToReview(cwd).catch(() => []),
       gitCurrentBranch(cwd).catch(() => ""),
       gitHasChanges(cwd).catch(() => false),
       gitUntrackedFiles(cwd).catch(() => []),
@@ -432,7 +451,7 @@ export function SidePanel({
     setDecisionView({ scope: decisionScope, rows: isUnboundFanOutChild ? [] : dc });
     setLanding(ln);
     setNotes(nt.filter((n) => n.status === "open").slice(0, 3));
-    setUnclaimed(uc);
+    setReviewView({ cwd, rows: uc });
     setGitBranch(branch);
     setGitDirty(dirty);
     setUntrackedFiles(untracked);
@@ -680,7 +699,8 @@ export function SidePanel({
     decisions: decisions.filter((d) => !d.stale),
     plannedCard,
     onLandingDone: (n) => repo.setNoteStatus(n.id, "done"),
-    onDecisionDone: (d) => repo.setDecisionStatus(d.id, "answered"),
+    onDecisionDelegate: (d) => repo.setDecisionStatus(d.id, "delegated"),
+    onDecisionDismiss: (d) => repo.setDecisionStatus(d.id, "dismissed"),
     // Start (the button's label for this kind) advances the card into
     // Building rather than clearing it — the work started. Also clears
     // `now`: acted on, the slot frees up for the next pick.
@@ -706,14 +726,15 @@ export function SidePanel({
         goal: plannedCard?.now ? plannedCard.title : null,
         landing: landing?.body ?? null,
         agentWaiting: agentState === "waiting",
+        reviewsToDo: sessionId ? resultsToReview.filter((r) => r.session_id === sessionId).length : 0,
         next: momentum?.text ?? null,
       })
     : null;
 
-  const finishMomentum = async () => {
+  const finishMomentum = async (run: () => Promise<void>) => {
     if (!momentum) return;
     if (doneRef.current) burst(doneRef.current);
-    await momentum.done();
+    await run();
     await reload();
     onBlockersChanged();
     onDecisionsChanged();
@@ -771,7 +792,7 @@ export function SidePanel({
   const detected = blockers.filter((b) => b.resolved === 0 && !repo.isProjectBlocker(b));
   const openDecisions = decisions.filter((d) => d.status === "open" && !d.stale);
   const staleDecisions = decisions.filter((d) => d.status === "open" && d.stale);
-  const recentCompletions = [...unclaimed].sort((a, b) => b.ts - a.ts || a.session_id.localeCompare(b.session_id));
+  const recentCompletions = resultsToReview;
   const closedDecisions = decisions.filter((d) => d.status !== "open").slice(0, 10);
   const decisionGroups = repo.groupDecisionsBySession(openDecisions);
   const hasWarnings = adapterWarnings.length > 0 || blindPaths.length > 0 || sessionBlind;
@@ -968,11 +989,11 @@ export function SidePanel({
             onClick={() => openRailSection("blockers")}
           />
           <RailButton
-            label={unclaimed.length > 0 ? `Accomplished: ${unclaimed.length} unclaimed` : "Accomplished: no unclaimed results"}
+            label={`Accomplished: ${resultsToReview.length} to review`}
             section="accomplished"
             icon={<PanelIcon name="accomplished" className="h-5 w-5" />}
-            count={!lockIn ? unclaimed.length || undefined : undefined}
-            className={unclaimed.length > 0 ? "text-ok-400" : "text-zinc-600"}
+            count={!lockIn ? resultsToReview.length || undefined : undefined}
+            className={resultsToReview.length > 0 ? "text-ok-400" : "text-zinc-600"}
             onClick={() => openRailSection("accomplished")}
           />
         </div>
@@ -1234,10 +1255,17 @@ export function SidePanel({
                 </dd>
                 <dt className="text-zinc-500">Needs you</dt>
                 <dd>
-                  {brief.needsYou ? (
-                    <button type="button" className="text-left text-attn-300 hover:underline" onClick={() => openRailSection("decisions")}>
-                      {brief.needsYou}
-                    </button>
+                  {brief.needsYou.length > 0 ? (
+                    brief.needsYou.map((item, i) => (
+                      <span key={item.text}>
+                        {i > 0 && " · "}
+                        {item.target ? (
+                          <button type="button" className="text-left text-attn-300 hover:underline" onClick={() => item.target && openRailSection(item.target)}>
+                            {item.text}
+                          </button>
+                        ) : <span className="text-attn-300">{item.text}</span>}
+                      </span>
+                    ))
                   ) : (
                     <span className="text-zinc-600">nothing</span>
                   )}
@@ -1462,7 +1490,7 @@ export function SidePanel({
             </span>
           </h2>
           <p className="mb-2 break-words text-zinc-200">{momentum.text}</p>
-          <div className="ml-auto flex w-fit gap-1.5">
+          <div className="ml-auto flex w-fit flex-wrap justify-end gap-1.5">
             <button
               className="rounded border border-attn-400/40 px-2.5 py-1 font-medium text-attn-300 hover:bg-attn-400/10"
               title="Prefill this in the terminal — you still hit Enter"
@@ -1470,14 +1498,17 @@ export function SidePanel({
             >
               ↳ Ask
             </button>
-            <button
-              ref={doneRef}
-              className="rounded bg-attn-400 px-2.5 py-1 font-medium text-zinc-950 hover:bg-attn-300"
-              title={momentum.label === "planned" ? "Moves this card to Building and frees its Now slot" : undefined}
-              onClick={() => void finishMomentum()}
-            >
-              {momentum.label === "planned" ? "▶ Start" : "✓ Done"}
-            </button>
+            {momentum.actions.map((action, i) => (
+              <button
+                key={action.label}
+                ref={i === 0 ? doneRef : undefined}
+                className="rounded bg-attn-400 px-2.5 py-1 font-medium text-zinc-950 hover:bg-attn-300"
+                title={momentum.label === "planned" ? "Moves this card to Building and frees its Now slot" : undefined}
+                onClick={() => void finishMomentum(action.run)}
+              >
+                {action.label}
+              </button>
+            ))}
           </div>
         </section>
       )}
@@ -1817,37 +1848,59 @@ export function SidePanel({
         >
           <Chevron collapsed={collapsed.has("accomplished")} className="text-ok-400/85" />
           <PanelIcon name="accomplished" className="h-4 w-4" />
-          Accomplished
+          Accomplished: {resultsToReview.length} to review
         </h2>
         {!collapsed.has("accomplished") && (
           <>
-            {unclaimed.length > 0 && (
+            {resultsToReview.length > 0 && (
               <ul className="mb-1.5 flex flex-col gap-1 border-b border-ok-800/40 pb-1.5">
-                {(showOlderCompletions ? recentCompletions : recentCompletions.slice(0, 1)).map((u) => (
-                  <li key={u.session_id} className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-ok-400 shadow-[0_0_6px_2px_rgba(16,185,129,0.6)]" />
-                    <span className="flex-1 text-ok-200">Agent finished, unclaimed</span>
-                    <span className="text-zinc-600">{ago(u.ts)}</span>
-                    <button
-                      className="shrink-0 text-zinc-600 hover:text-zinc-200"
-                      title="Dismiss"
-                      onClick={() => void dismissUnclaimed(u.session_id)}
-                    >
-                      ✕
-                    </button>
-                  </li>
-                ))}
+                {(showOlderCompletions ? recentCompletions : recentCompletions.slice(0, 1)).map((u) => {
+                  const route = resolveAttentionRoute({
+                    id: `result:${u.id}`, kind: "result", projectKey: u.project_key,
+                    sessionId: u.session_id, tabId: u.tab_id, adapterId: u.adapter_id,
+                    actorId: null, createdAt: u.ts, lastActivityAt: null, text: "Agent finished",
+                    evidenceId: u.id, runId: null, observedState: null, archived: false,
+                  }, reviewTabs);
+                  const owner = reviewTabs.find((t) => t.id === route.tabId);
+                  const icon = AGENT_ICONS[u.adapter_id ?? "claude"];
+                  return (
+                    <li key={u.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded bg-black/10 p-1.5">
+                      {icon ? <img src={icon.src} alt={icon.label} className="h-3.5 w-3.5 shrink-0" /> : <span>{u.adapter_id}</span>}
+                      <span className="min-w-0 flex-1 truncate text-ok-200" title={owner?.title ?? u.session_id}>
+                        Agent finished · {owner?.title ?? "tab closed"}
+                      </span>
+                      <span className="text-zinc-600">{ago(u.ts)}</span>
+                      <div className="flex w-full flex-wrap items-center gap-2">
+                        <span className={`flex items-center gap-1.5 ${u.claimed_ts == null ? "text-ok-300" : "text-zinc-500"}`}>
+                          {u.claimed_ts == null ? <>
+                            <span className="h-1.5 w-1.5 rounded-full bg-ok-400 shadow-[0_0_6px_var(--color-ok-400)]" />
+                            unseen
+                          </> : `○ seen ${ago(u.claimed_ts)} ago`}
+                        </span>
+                        {owner && owner.id !== tabTether && (
+                          <button type="button" className="text-info-300 hover:underline" onClick={() => onSelectTab(owner.id)}>↗ Open</button>
+                        )}
+                        <button type="button" disabled={reviewSaving.has(u.id)} className="ml-auto text-ok-300 hover:underline disabled:opacity-50"
+                          onClick={() => void finishReview(u, "reviewed")}>✓ Reviewed</button>
+                        <button type="button" disabled={reviewSaving.has(u.id)} className="text-zinc-500 hover:text-zinc-200 disabled:opacity-50"
+                          aria-label="Dismiss result" onClick={() => void finishReview(u, "dismissed")}>✕</button>
+                      </div>
+                      {reviewError === u.id && <p className="w-full text-attn-300">Couldn’t save review. Try again.</p>}
+                    </li>
+                  );
+                })}
                 {recentCompletions.length > 1 && <li>
                   <button type="button" aria-expanded={showOlderCompletions}
                     className="flex items-center gap-1 rounded py-1 text-zinc-500 hover:text-ok-300 focus-visible:outline-2 focus-visible:outline-focus-400"
                     onClick={() => setShowOlderCompletions((shown) => !shown)}>
                     <Chevron collapsed={!showOlderCompletions} />
-                    {showOlderCompletions ? "Hide older completions" : `${recentCompletions.length - 1} older unclaimed completions`}
+                    {showOlderCompletions ? "Hide older completions" : `${recentCompletions.length - 1} older results to review`}
                   </button>
                 </li>}
               </ul>
             )}
-            {toolEvents.length === 0 && unclaimed.length === 0 && (
+            {resultsToReview.length > 0 && <p className="mb-2 text-zinc-500">Results are also closed by your next prompt.</p>}
+            {toolEvents.length === 0 && resultsToReview.length === 0 && (
               <p className="text-zinc-600">No tool activity recorded.</p>
             )}
             <ul className="flex flex-col gap-1.5">

@@ -7,7 +7,7 @@ import type { Card } from "./board";
 export interface MomentumItem {
   label: string;
   text: string;
-  done: () => Promise<void>;
+  actions: { label: string; run: () => Promise<void> }[];
 }
 
 export interface MomentumInput {
@@ -16,7 +16,8 @@ export interface MomentumInput {
   /** The caller's board pick: a Now-starred card if any, else the top planned card. */
   plannedCard: Card | null;
   onLandingDone: (note: Note) => Promise<void>;
-  onDecisionDone: (decision: Decision) => Promise<void>;
+  onDecisionDelegate: (decision: Decision) => Promise<void>;
+  onDecisionDismiss: (decision: Decision) => Promise<void>;
   onPlannedCardDone: (card: Card) => Promise<void>;
 }
 
@@ -26,7 +27,7 @@ export interface MomentumInput {
  *  Nothing open → null. Do not reorder without updating
  *  scripts/momentum-check.ts's fixtures. */
 export function computeMomentum(input: MomentumInput): MomentumItem | null {
-  const { landing, decisions, plannedCard, onLandingDone, onDecisionDone, onPlannedCardDone } = input;
+  const { landing, decisions, plannedCard, onLandingDone, onDecisionDelegate, onDecisionDismiss, onPlannedCardDone } = input;
 
   const oldestOpenDecision = decisions
     .filter((d) => d.status === "open")
@@ -34,10 +35,10 @@ export function computeMomentum(input: MomentumInput): MomentumItem | null {
   const planned = (card: Card): MomentumItem => ({
     label: "planned",
     text: card.next ?? card.title,
-    done: () => onPlannedCardDone(card),
+    actions: [{ label: "▶ Start", run: () => onPlannedCardDone(card) }],
   });
 
-  if (landing) return { label: "landing note", text: landing.body, done: () => onLandingDone(landing) };
+  if (landing) return { label: "landing note", text: landing.body, actions: [{ label: "✓ Done", run: () => onLandingDone(landing) }] };
   if (plannedCard?.now) return planned(plannedCard);
   if (oldestOpenDecision)
     return {
@@ -45,7 +46,10 @@ export function computeMomentum(input: MomentumInput): MomentumItem | null {
       // Wrapped like answerNow's prefill (App.tsx) — this is the agent's
       // question, seeding it verbatim would read as the user asking it back.
       text: `Re: "${oldestOpenDecision.question}" — `,
-      done: () => onDecisionDone(oldestOpenDecision),
+      actions: [
+        { label: "⤳ Delegate", run: () => onDecisionDelegate(oldestOpenDecision) },
+        { label: "✕ Dismiss", run: () => onDecisionDismiss(oldestOpenDecision) },
+      ],
     };
   if (plannedCard) return planned(plannedCard);
   return null;
