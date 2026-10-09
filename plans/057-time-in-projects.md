@@ -56,6 +56,10 @@ migration (`events` is already generic and append-only).
    <date>" when tracking began inside the range. Footnote: "Counted while
    a tab in this project is visible and you're active; gaps over 15 min
    count as 15." Hidden until the first `tab_entered` exists.
+   *Revision (2026-10-08, live check):* the time row (Your time + Agent
+   time) moved to the top of Project Overview with the range tabs, which
+   are page-wide; the work log header shows the range. Bug fixed:
+   "tracking since" counted pre-057 `tab_left` rows (showed 10/2 on day 1).
 6. **Copy update gets hours.** Add one line per day in range
    (`2026-10-08  1h 25m`) plus the total to the existing Copy update draft
    — still an editable draft, nothing sent.

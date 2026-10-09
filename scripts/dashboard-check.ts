@@ -616,6 +616,12 @@ assert.deepEqual(
   "interval split at local midnight"
 );
 assert.deepEqual(humanTime([], T0, 0), { totalMs: 0, byDay: [], sinceDate: null });
+assert.equal(
+  humanTime([ev("a", "tab_left", T0 - 600 * MIN), ev("a", "tab_entered", T0)], T0 + 5 * MIN, 0).sinceDate,
+  T0,
+  "pre-057 tab_left rows never set tracking-since"
+);
+assert.equal(humanTime([ev("a", "tab_left", T0)], T0 + 5 * MIN, 0).sinceDate, null, "tab_left alone is not tracking");
 
 const timed = humanTime([ev("a", "tab_entered", T0), ev("a", "tab_left", T0 + 85 * MIN)], T0 + 120 * MIN, 0);
 assert.deepEqual(humanTimeLines(timed), ["2026-10-08  0h 15m", "Total  0h 15m"]);

@@ -261,7 +261,8 @@ export interface HumanTime {
   totalMs: number;
   /** Local calendar day (YYYY-MM-DD) → ms, oldest first. */
   byDay: [string, number][];
-  /** First tracking event seen in the read, null when there is none. */
+  /** First tab_entered/tab_active in the read, null when there is none —
+   * tab_left predates Plan 057, so it never marks when tracking began. */
   sinceDate: number | null;
 }
 
@@ -324,7 +325,7 @@ export function humanTime(
     }
   }
 
-  const first = events.reduce((min, e) => Math.min(min, e.ts), Infinity);
+  const first = events.reduce((min, e) => (e.type === "tab_left" ? min : Math.min(min, e.ts)), Infinity);
   return {
     totalMs,
     byDay: [...days.entries()].sort(([a], [b]) => a.localeCompare(b)),

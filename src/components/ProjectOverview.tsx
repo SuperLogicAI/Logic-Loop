@@ -443,6 +443,55 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
           {data?.catalog?.firstSeenAt ? ` · first seen ${age(data.catalog.firstSeenAt, now)}` : ""}
         </p>}
 
+        {/* Plan 057: time first, with the page-wide range — the work log below can run very long. */}
+        <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <section>
+            <div className="flex items-center justify-between">
+              <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Your time</h3>
+              <div className="flex gap-1" role="tablist" aria-label="Range">
+                {(Object.keys(RANGE_LABEL) as Range[]).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    aria-selected={range === key}
+                    className={`rounded px-1.5 py-0.5 text-[10px] ${range === key ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
+                    onClick={() => setRange(key)}
+                  >
+                    {RANGE_LABEL[key]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {reads.humanTime.state !== "ready" ? <ReadStatus read={reads.humanTime} label="your time" /> : data.humanTime?.sinceDate ? (
+              <p className="mt-2 text-xs text-zinc-300">
+                {formatDuration(data.humanTime.totalMs)} {range === "today" ? "today" : `in the last ${RANGE_LABEL[range]}`}
+                {data.humanTime.sinceDate > dashboardRangeStart(range, Date.now()) && (
+                  <> (tracking since {new Date(data.humanTime.sinceDate).toLocaleDateString()})</>
+                )}
+                <span className="block text-[11px] text-zinc-600">
+                  Counted while a tab in this project is visible and you're active; gaps over 15 min count as 15.
+                </span>
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-zinc-600">Hidden — no time tracked in this range yet.</p>
+            )}
+          </section>
+          <section>
+            <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Agent time (observed)</h3>
+            {reads.agentTime.state !== "ready" ? <ReadStatus read={reads.agentTime} label="agent time" /> : data.agentTime?.sinceDate ? (
+              <p className="mt-2 text-xs text-zinc-300">
+                {Math.floor(data.agentTime.totalMs / 3_600_000)}h {Math.floor((data.agentTime.totalMs % 3_600_000) / 60_000)}m
+                across {data.agentTime.sessionCount} session{data.agentTime.sessionCount === 1 ? "" : "s"} since{" "}
+                {new Date(data.agentTime.sinceDate).toLocaleDateString()}
+                <span className="block text-[11px] text-zinc-600">Parallel sessions can exceed wall clock.</span>
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-zinc-600">Hidden — no lifecycle observations yet.</p>
+            )}
+          </section>
+        </div>
+
         <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <section>
             <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Needs a choice</h3>
@@ -497,21 +546,7 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
 
           <section>
             <div className="flex items-center justify-between">
-              <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Work log</h3>
-              <div className="flex gap-1" role="tablist" aria-label="Work log range">
-                {(Object.keys(RANGE_LABEL) as Range[]).map((key) => (
-                  <button
-                    key={key}
-                    type="button"
-                    role="tab"
-                    aria-selected={range === key}
-                    className={`rounded px-1.5 py-0.5 text-[10px] ${range === key ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
-                    onClick={() => setRange(key)}
-                  >
-                    {RANGE_LABEL[key]}
-                  </button>
-                ))}
-              </div>
+              <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Work log · {RANGE_LABEL[range]}</h3>
             </div>
             <ReadStatus read={reads.workLog} label="session activity" />
             <ReadStatus read={reads.commits} label="local commits" />
@@ -561,36 +596,6 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
         </div>
 
         <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <section>
-            <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Your time</h3>
-            {reads.humanTime.state !== "ready" ? <ReadStatus read={reads.humanTime} label="your time" /> : data.humanTime?.sinceDate ? (
-              <p className="mt-2 text-xs text-zinc-300">
-                {formatDuration(data.humanTime.totalMs)} {range === "today" ? "today" : `in the last ${RANGE_LABEL[range]}`}
-                {data.humanTime.sinceDate > dashboardRangeStart(range, Date.now()) && (
-                  <> (tracking since {new Date(data.humanTime.sinceDate).toLocaleDateString()})</>
-                )}
-                <span className="block text-[11px] text-zinc-600">
-                  Counted while a tab in this project is visible and you're active; gaps over 15 min count as 15.
-                </span>
-              </p>
-            ) : (
-              <p className="mt-2 text-xs text-zinc-600">Hidden — no time tracked in this range yet.</p>
-            )}
-          </section>
-          <section>
-            <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Agent time (observed)</h3>
-            {reads.agentTime.state !== "ready" ? <ReadStatus read={reads.agentTime} label="agent time" /> : data.agentTime?.sinceDate ? (
-              <p className="mt-2 text-xs text-zinc-300">
-                {Math.floor(data.agentTime.totalMs / 3_600_000)}h {Math.floor((data.agentTime.totalMs % 3_600_000) / 60_000)}m
-                across {data.agentTime.sessionCount} session{data.agentTime.sessionCount === 1 ? "" : "s"} since{" "}
-                {new Date(data.agentTime.sinceDate).toLocaleDateString()}
-                <span className="block text-[11px] text-zinc-600">Parallel sessions can exceed wall clock.</span>
-              </p>
-            ) : (
-              <p className="mt-2 text-xs text-zinc-600">Hidden — no lifecycle observations yet.</p>
-            )}
-          </section>
-
           <section>
             <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Workspaces</h3>
             <ReadStatus read={reads.reentry} label="closed workspaces" />
