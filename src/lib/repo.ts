@@ -1176,6 +1176,17 @@ export async function lastLeft(tether: string): Promise<number | null> {
   return rows[0]?.ts ?? null;
 }
 
+/** Plan 058: first time the human came back to this tab after `since`
+ * (Plan 057's tab_entered), or null if they haven't been recorded back. */
+export async function firstEnteredSince(tether: string, since: number): Promise<number | null> {
+  const d = await getDb();
+  const rows = await d.select<{ ts: number | null }[]>(
+    `SELECT MIN(ts) AS ts FROM events WHERE type = 'tab_entered' AND ts > $2 AND json_extract(payload_json, '$.tab_id') = $1`,
+    [tether, since]
+  );
+  return rows[0]?.ts ?? null;
+}
+
 /** Every event on this tab's own session since `since`, oldest first —
  * the raw material `summarizeDelta` reduces. */
 export async function eventsSince(

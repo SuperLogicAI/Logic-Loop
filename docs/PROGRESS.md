@@ -1033,3 +1033,22 @@ counts pre-057 `tab_left` rows, and the card adds an all-time total. Live
 checks 74-79 passed (stopwatch 5/5 min, time away 0, idle 20 → 15, split
 5 not 10, Copy update Time section, `tab_active` ≤1 per tab-minute).
 **PHASE 57 ACCEPTED** (2026-10-08).
+
+### Phase 58 — Compact re-entry brief (2026-10-08)
+
+Plan: `plans/058-reentry-brief.md` (`PHASE 58 APPROVED`, decisions 1-4 as
+recommended). The Since You Left card becomes a four-field brief: project ·
+agent · branch, Goal (board Now card only), You left (landing note),
+Changed (files · commands · turns, or loop iterations), Needs you (new
+decisions · agent waiting), Next (momentum, hidden when it repeats the
+note). Changed expands to files (each opens the diff pop-out) or the loop
+digest; Needs you and Next jump to their sections; agent's last words are
+collapsed by default. Shows whenever the tab has been left and there's
+activity, a note, or something waiting. `buildBrief` (`delta.ts`) is pure;
+no ingestion, migration, Rust or model call. Revised live (6 revisions in the plan):
+failed commands now counted (Claude Code's `PostToolUseFailure` — a Phase 14
+gap), context line wraps so the dirty ● shows, Changed toggles only when
+there's something to open and opens inline, Next hidden when it repeats the
+note or the Goal, and the card is titled **Progress** when you watched the
+activity live (Plan 057's `tab_entered`). Live checks 80-86 passed.
+**PHASE 58 ACCEPTED** (2026-10-08).

@@ -1,4 +1,6 @@
-@import "tailwindcss";
+/* Scan src/ only: a scanned non-module file (docs/, plans/ Markdown) makes
+   @tailwindcss/vite send full-reload, and a reload kills every tab (LANDMINES). */
+@import "tailwindcss" source(".");
 
 /* Semantic color roles (Plan 050). Components use these, never raw hues.
    attn = needs you / stale, ok = done, danger = blocker, info = neutral
