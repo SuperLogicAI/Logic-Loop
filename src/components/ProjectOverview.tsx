@@ -446,7 +446,7 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
         {/* Plan 057: time first, with the page-wide range — the work log below can run very long. */}
         <div className="mt-5 grid grid-cols-1 gap-4 rounded-lg border border-info-500/40 bg-info-500/5 p-4 lg:grid-cols-2">
           <section>
-            <div className="flex items-center justify-between">
+            <div className="flex h-6 items-center justify-between">
               <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Your time</h3>
               <div className="flex gap-1" role="tablist" aria-label="Range">
                 {(Object.keys(RANGE_LABEL) as Range[]).map((key) => (
@@ -479,7 +479,10 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
             )}
           </section>
           <section>
-            <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Agent time (observed)</h3>
+            {/* Same h-6 header row as Your time (whose range tabs are taller) so both columns line up. */}
+            <div className="flex h-6 items-center">
+              <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Agent time (observed)</h3>
+            </div>
             {reads.agentTime.state !== "ready" ? <ReadStatus read={reads.agentTime} label="agent time" /> : data.agentTime?.sinceDate ? (
               <p className="mt-2 text-xs text-zinc-300">
                 <span className="text-base font-semibold text-zinc-100">{formatDuration(data.agentTime.totalMs)}</span>
