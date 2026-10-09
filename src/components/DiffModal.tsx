@@ -1,6 +1,15 @@
-import { useEffect, useState } from "react";
-import { loadFileDiff } from "../lib/diff";
+import { useEffect, useMemo, useState } from "react";
+import { diffLineRoles, loadFileDiff, type DiffLineRole } from "../lib/diff";
 import { basename } from "../lib/repo";
+
+// Semantic roles (Plan 050) so Lock-in greys these with everything else.
+const LINE_CLASS: Record<DiffLineRole, string> = {
+  meta: "text-zinc-500",
+  hunk: "text-info-300",
+  add: "text-ok-300",
+  del: "text-danger-300",
+  ctx: "",
+};
 
 interface Props {
   filePath: string; // agent-reported path off the Accomplished row
@@ -8,12 +17,14 @@ interface Props {
   onClose: () => void;
 }
 
-/** Read-only diff pop-out for an Accomplished row. Raw unified diff, no
- * highlighting and no editing — see docs/IDEAS.md for why the editable
+/** Read-only diff pop-out for an Accomplished row. Unified diff with +/-
+ * line colours only — no syntax highlighting and no editing — see docs/IDEAS.md for why the editable
  * version is not wanted. A lookup that finds nothing renders the empty
  * state rather than throwing into the panel tree. */
 export function DiffModal({ filePath, cwd, onClose }: Props) {
   const [diff, setDiff] = useState<string | null>(null);
+  const lines = useMemo(() => (diff ? diff.split("\n") : []), [diff]);
+  const roles = useMemo(() => diffLineRoles(lines), [lines]);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,7 +75,12 @@ export function DiffModal({ filePath, cwd, onClose }: Props) {
           </p>
         ) : (
           <pre className="overflow-auto rounded bg-black/30 p-2 font-mono text-[11px] whitespace-pre text-zinc-300">
-            {diff}
+            {lines.map((line, i) => (
+              <span key={i} className={LINE_CLASS[roles[i]]}>
+                {line}
+                {"\n"}
+              </span>
+            ))}
           </pre>
         )}
         <div className="mt-3 flex justify-end text-sm">
