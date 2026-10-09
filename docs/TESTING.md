@@ -5794,3 +5794,33 @@ time" with range Today.
 Automated: `npm run dashboard:check` covers enter→left, idle cap, time away,
 same-project split, open interval to now (capped), range clipping, midnight
 split, Copy update Time section.
+
+## Phase 58 — Compact re-entry brief (2026-10-08)
+
+Run in the built app. The brief is the "Since you left" card at the top of
+the side panel (expanded mode).
+
+- [x] **80.** **Brief after agent work** — leave a Claude tab, let the agent
+    edit files and run commands, come back. Expected: "Since you left · Nm
+    ago", project · agent · branch (● if dirty), Changed counts match what
+    happened. Lock-in turns the card grey.
+- [x] **81.** **Diff from Changed** — click Changed, then a file name.
+    Expected: the diff pop-out opens for that file.
+- [x] **82.** **Needs you** — come back to a tab where a decision opened
+    while you were away. Expected: Needs you counts it; clicking jumps to
+    Decisions.
+- [x] **83.** **Note only** — leave a landing note, come back with no agent
+    activity. Expected: the brief still shows You left (your note) and
+    "no agent activity"; Next isn't a copy of the note.
+- [x] **84.** **Goal line** — set a board card `now: true`. Expected: "Goal:
+    <card>" shows; clear it and the line disappears.
+- [x] **85.** **Never left** — a fresh tab you haven't left. Expected: no
+    brief, and no Since You Left icon in the compact rail.
+- [x] **86.** **Progress vs Since you left** — stay on a Claude tab while the
+    agent works. Expected: the card is titled **Progress** with no age. Switch
+    away while it works, come back. Expected: **Since you left · Nm ago**.
+
+Automated: `npm run delta:check` covers the full brief, no goal, clean/
+dirty/no branch, no note, Next deduped against the note, nothing needs
+you, loop run, last-words-only, note-only, and the null (hidden) case.
+

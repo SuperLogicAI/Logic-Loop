@@ -54,10 +54,21 @@ export function summarizeDelta(rows: EventRow[], decisionsSince: DeltaDecision[]
   for (const r of rows) {
     if (r.type === "hook:UserPromptSubmit") turns++;
     if (r.type === "hook:Stop") stops++;
-    if (r.type !== "hook:PostToolUse") continue;
+    // Claude Code reports a failed tool as PostToolUseFailure, not PostToolUse
+    // with is_error (Plan 058 live check) — count it as a failed run, same
+    // interrupt rule as detectors.ts.
+    const failure = r.type === "hook:PostToolUseFailure";
+    if (r.type !== "hook:PostToolUse" && !failure) continue;
     const p = parsePayload(r);
     if (!p) continue;
     const tool = p["tool_name"];
+    if (failure) {
+      if (tool === "Bash" || tool === "run_command") {
+        bashRuns++;
+        if (p["is_interrupt"] !== true) bashErrors++;
+      }
+      continue; // a failed edit changed nothing
+    }
     const input = (p["tool_input"] ?? {}) as Record<string, unknown>;
     // write_to_file/replace_file_content are Antigravity's own edit tools
     // (Phase 16) — file_path is normalized onto tool_input in antigravity.rs.
@@ -103,4 +114,80 @@ export function describeDelta(d: Delta): string {
   if (d.decisions.length > 0) parts.push(plural(d.decisions.length, "new decision"));
   if (d.bashErrors > 0) parts.push(plural(d.bashErrors, "failed command"));
   return parts.length > 0 ? parts.join(" · ") : "Agent activity";
+}
+
+// --- Re-entry brief (Plan 058): the since-you-left card as four fields. ---
+
+export interface BriefInput {
+  delta: Delta;
+  loopIterations: number | null; // Phase 15 loop run, else null
+  project: string;
+  agent: string;
+  branch: string;
+  dirty: boolean;
+  goal: string | null; // board Now card title — an explicit human pick only
+  landing: string | null; // open landing note body
+  agentWaiting: boolean;
+  next: string | null; // momentum text
+}
+
+export interface Brief {
+  context: string;
+  goal: string | null;
+  youLeft: string | null;
+  changed: string | null;
+  needsYou: string | null;
+  next: string | null;
+}
+
+/** Deterministic, no prose generation. Null when there's nothing to come
+ * back to: no agent activity, no landing note, nothing waiting on you. */
+export function buildBrief(input: BriefInput): Brief | null {
+  const { delta } = input;
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+
+  let changed: string | null = null;
+  if (input.loopIterations != null) {
+    changed = `${plural(input.loopIterations, "iteration")} while away`;
+  } else {
+    const parts: string[] = [];
+    if (delta.files.length > 0) parts.push(plural(delta.files.length, "file"));
+    if (delta.bashRuns > 0) {
+      parts.push(plural(delta.bashRuns, "command") + (delta.bashErrors > 0 ? ` (${delta.bashErrors} failed)` : ""));
+    }
+    if (delta.turns > 0) parts.push(plural(delta.turns, "turn"));
+    changed = parts.length > 0 ? parts.join(" · ") : delta.lastWords ? "agent replied" : null;
+  }
+
+  const needs: string[] = [];
+  if (delta.decisions.length > 0) needs.push(plural(delta.decisions.length, "new decision"));
+  if (input.agentWaiting) needs.push("agent waiting");
+  const needsYou = needs.length > 0 ? needs.join(" · ") : null;
+
+  const youLeft = input.landing?.trim() || null;
+  if (!changed && !needsYou && !youLeft) return null;
+
+  const branch = input.branch ? ` · ${input.branch}${input.dirty ? " ●" : ""}` : "";
+  const goal = input.goal?.trim() || null;
+  return {
+    context: `${input.project} · ${input.agent}${branch}`,
+    goal,
+    youLeft,
+    changed,
+    needsYou,
+    // The Next cascade starts at the landing note, then the Now card — both
+    // already shown above, so don't say them twice.
+    next: input.next && input.next !== youLeft && input.next !== goal ? input.next : null,
+  };
+}
+
+/** Plan 058: "Progress" when every counted event happened after you came back
+ * (you watched it live); "Since you left" when anything happened while you
+ * were away, when nothing happened at all (a note or a waiting decision
+ * brought the card back), or when your return wasn't recorded. */
+export function briefTitle(rows: EventRow[], decisions: DeltaDecision[], returnedAt: number | null): "Since you left" | "Progress" {
+  if (returnedAt == null) return "Since you left";
+  const live = hasDelta(summarizeDelta(rows, decisions));
+  const away = hasDelta(summarizeDelta(rows.filter((r) => r.ts < returnedAt), decisions.filter((x) => x.ts < returnedAt)));
+  return live && !away ? "Progress" : "Since you left";
 }
