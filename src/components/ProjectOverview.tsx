@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import * as repo from "../lib/repo";
-import { observedAgentTime, projectDisplayName, projectFolderLabel, buildProjectWorkLog, commitsInRange, dashboardRangeStart, projectWorkspaceChoices, type DashboardRange, type WorkLogEntry } from "../lib/dashboard";
+import { observedAgentTime, humanTime, humanTimeLines, formatDuration, projectDisplayName, projectFolderLabel, buildProjectWorkLog, commitsInRange, dashboardRangeStart, projectWorkspaceChoices, type DashboardRange, type WorkLogEntry } from "../lib/dashboard";
 import { dashboardReads, observeDashboardRead, type ReadState, type ReadDiagnostic } from "../lib/dashboardLoader";
 import { computeMomentum } from "../lib/momentum";
 import { parseBoard, peekBoard, EXAMPLE_BOARD, type BoardStatus } from "../lib/board";
@@ -67,6 +67,7 @@ interface OverviewValues {
   commits: Commit[];
   board: { state: "ready" | "missing"; cards: ReturnType<typeof parseBoard>; isExample: boolean };
   agentTime: ReturnType<typeof observedAgentTime>;
+  humanTime: ReturnType<typeof humanTime> & { allTimeMs: number };
   reentry: ReentryCandidate[];
 }
 
@@ -74,7 +75,7 @@ type OverviewReads = { [K in keyof OverviewValues]: ReadState<OverviewValues[K]>
 const loadingReads = (): OverviewReads => ({
   catalog: { state: "loading" }, openDecisions: { state: "loading" }, openBlockers: { state: "loading" },
   landing: { state: "loading" }, workLog: { state: "loading" }, commits: { state: "loading" },
-  board: { state: "loading" }, agentTime: { state: "loading" }, reentry: { state: "loading" },
+  board: { state: "loading" }, agentTime: { state: "loading" }, humanTime: { state: "loading" }, reentry: { state: "loading" },
 });
 
 /** Plan 051: stale decisions (open, >14 days, dormant session) are left out of
@@ -167,6 +168,11 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
       }, "board", 30_000),
       watch("agentTime", async () => observedAgentTime((await repo.projectAgentTimeObservations(projectKey))
         .map((o) => ({ sessionId: o.session_id, runId: o.run_id, state: o.state, observedAt: o.observed_at })))),
+      // One all-time read (~0.15 s on a 262k-row DB): the range total clips it, the all-time line doesn't.
+      watch("humanTime", async () => {
+        const events = (await repo.projectHumanTimeEvents(projectKey, 0)).map((e) => ({ tabId: e.tab_id, type: e.type, ts: e.ts }));
+        return { ...humanTime(events, until, since), allTimeMs: humanTime(events, until, 0).totalMs };
+      }, `humanTime:${range}`),
       watch("reentry", () => repo.reentryCandidates().then((rows) => rows.filter((r) => r.project_key === projectKey))),
     ];
     return () => {
@@ -189,11 +195,11 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
     catalog: value("catalog"), openDecisions: value("openDecisions") ?? [],
     openBlockers: allOpenBlockers.filter(repo.isProjectBlocker), landing: value("landing") ?? null,
     workLog: value("workLog") ?? [], commits: value("commits") ?? [],
-    board: value("board"), agentTime: value("agentTime"),
+    board: value("board"), agentTime: value("agentTime"), humanTime: value("humanTime"),
   };
   const choiceReady = reads.openDecisions.state === "ready" && reads.openBlockers.state === "ready";
   const momentumReady = choiceReady && reads.landing.state === "ready" && reads.board.state === "ready";
-  const copyReady = choiceReady && reads.workLog.state === "ready" && reads.commits.state === "ready" && reads.landing.state === "ready";
+  const copyReady = choiceReady && reads.workLog.state === "ready" && reads.commits.state === "ready" && reads.landing.state === "ready" && reads.humanTime.state === "ready";
   const workspaceChoices = projectWorkspaceChoices(tabs, projectKey, expand);
   const liveTabs = workspaceChoices.filter((t) => t.status === "live");
   const openTethers = new Set(tabs.map((t) => t.id));
@@ -353,6 +359,7 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
                   commits: data.commits,
                   openDecisions: data.openDecisions,
                   openBlockers: data.openBlockers,
+                  timeLines: data.humanTime ? humanTimeLines(data.humanTime) : [],
                   nextStep: computeMomentum({ landing: data.landing, decisions: data.openDecisions, plannedCard: null,
                     onLandingDone: async () => undefined, onDecisionDone: async () => undefined,
                     onPlannedCardDone: async () => undefined })?.text ?? null,
@@ -438,6 +445,60 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
           {data?.catalog?.firstSeenAt ? ` · first seen ${age(data.catalog.firstSeenAt, now)}` : ""}
         </p>}
 
+        {/* Plan 057: time first, with the page-wide range — the work log below can run very long. */}
+        <div className="mt-5 grid grid-cols-1 gap-4 rounded-lg border border-info-500/40 bg-info-500/5 p-4 lg:grid-cols-2">
+          <section>
+            <div className="flex h-6 items-center justify-between">
+              <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Your time</h3>
+              <div className="flex gap-1" role="tablist" aria-label="Range">
+                {(Object.keys(RANGE_LABEL) as Range[]).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    aria-selected={range === key}
+                    className={`rounded px-1.5 py-0.5 text-[10px] ${range === key ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
+                    onClick={() => setRange(key)}
+                  >
+                    {RANGE_LABEL[key]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {reads.humanTime.state !== "ready" ? <ReadStatus read={reads.humanTime} label="your time" /> : data.humanTime?.sinceDate ? (
+              <p className="mt-2 text-xs text-zinc-300">
+                <span className="text-base font-semibold text-zinc-100">{formatDuration(data.humanTime.totalMs)}</span>{" "}
+                {range === "today" ? "today" : `in the last ${RANGE_LABEL[range]}`}
+                {data.humanTime.sinceDate > dashboardRangeStart(range, Date.now()) && (
+                  <> (tracking since {new Date(data.humanTime.sinceDate).toLocaleDateString()})</>
+                )}
+                {" · "}{formatDuration(data.humanTime.allTimeMs)} all time
+                <span className="block text-[11px] text-zinc-600">
+                  Counted while a tab in this project is visible and you're active; gaps over 15 min count as 15.
+                </span>
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-zinc-600">Hidden — no time tracked in this range yet.</p>
+            )}
+          </section>
+          <section>
+            {/* Same h-6 header row as Your time (whose range tabs are taller) so both columns line up. */}
+            <div className="flex h-6 items-center">
+              <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Agent time (observed)</h3>
+            </div>
+            {reads.agentTime.state !== "ready" ? <ReadStatus read={reads.agentTime} label="agent time" /> : data.agentTime?.sinceDate ? (
+              <p className="mt-2 text-xs text-zinc-300">
+                <span className="text-base font-semibold text-zinc-100">{formatDuration(data.agentTime.totalMs)}</span>
+                {" "}across {data.agentTime.sessionCount} session{data.agentTime.sessionCount === 1 ? "" : "s"} since{" "}
+                {new Date(data.agentTime.sinceDate).toLocaleDateString()}
+                <span className="block text-[11px] text-zinc-600">Parallel sessions can exceed wall clock.</span>
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-zinc-600">Hidden — no lifecycle observations yet.</p>
+            )}
+          </section>
+        </div>
+
         <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <section>
             <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Needs a choice</h3>
@@ -492,21 +553,7 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
 
           <section>
             <div className="flex items-center justify-between">
-              <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Work log</h3>
-              <div className="flex gap-1" role="tablist" aria-label="Work log range">
-                {(Object.keys(RANGE_LABEL) as Range[]).map((key) => (
-                  <button
-                    key={key}
-                    type="button"
-                    role="tab"
-                    aria-selected={range === key}
-                    className={`rounded px-1.5 py-0.5 text-[10px] ${range === key ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
-                    onClick={() => setRange(key)}
-                  >
-                    {RANGE_LABEL[key]}
-                  </button>
-                ))}
-              </div>
+              <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Work log · {RANGE_LABEL[range]}</h3>
             </div>
             <ReadStatus read={reads.workLog} label="session activity" />
             <ReadStatus read={reads.commits} label="local commits" />
@@ -556,20 +603,6 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
         </div>
 
         <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <section>
-            <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Agent time (observed)</h3>
-            {reads.agentTime.state !== "ready" ? <ReadStatus read={reads.agentTime} label="agent time" /> : data.agentTime?.sinceDate ? (
-              <p className="mt-2 text-xs text-zinc-300">
-                {Math.floor(data.agentTime.totalMs / 3_600_000)}h {Math.floor((data.agentTime.totalMs % 3_600_000) / 60_000)}m
-                across {data.agentTime.sessionCount} session{data.agentTime.sessionCount === 1 ? "" : "s"} since{" "}
-                {new Date(data.agentTime.sinceDate).toLocaleDateString()}
-                <span className="block text-[11px] text-zinc-600">Parallel sessions can exceed wall clock.</span>
-              </p>
-            ) : (
-              <p className="mt-2 text-xs text-zinc-600">Hidden — no lifecycle observations yet.</p>
-            )}
-          </section>
-
           <section>
             <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Workspaces</h3>
             <ReadStatus read={reads.reentry} label="closed workspaces" />

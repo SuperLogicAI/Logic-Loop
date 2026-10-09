@@ -10,6 +10,7 @@ export interface CopyUpdateData {
   openDecisions: Decision[];
   openBlockers: Blocker[];
   nextStep: string | null;
+  timeLines?: string[];
 }
 
 interface Props {
@@ -31,6 +32,7 @@ export function CopyUpdateModal({ data, onClose }: Props) {
         decisionsNeeded: data.openDecisions.map((d) => ({ question: d.question, assumption: d.assumption })),
         blockerLines: data.openBlockers.map((b) => b.text),
         nextStep: data.nextStep,
+        timeLines: data.timeLines,
       }),
     [data]
   );

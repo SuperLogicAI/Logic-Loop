@@ -755,13 +755,14 @@ export default function App() {
   // Since-you-left anchor (Phase 14a): written whenever the human stops
   // looking at a tab that has a bound session — tab switch, window blur, tab
   // close. Never for a tab with no sessionId; nothing to delta against.
-  const markTabLeft = useCallback(
-    (tab: Tab) => {
+  // Plan 057 reuses the same writer for human time's tab_entered/tab_active.
+  const markTabEvent = useCallback(
+    (tab: Tab, type: "tab_left" | "tab_entered" | "tab_active") => {
       if (!tab.sessionId) return;
       void repo
         .addEvent(
           tab.sessionId,
-          "tab_left",
+          type,
           JSON.stringify({
             v: 1,
             cwd: expand(tab.cwd),
@@ -774,6 +775,7 @@ export default function App() {
     },
     [expand]
   );
+  const markTabLeft = useCallback((tab: Tab) => markTabEvent(tab, "tab_left"), [markTabEvent]);
 
   const finishCloseTab = useCallback((tabId: string) => {
     // Side effects outside the updater — StrictMode double-invokes updaters.
@@ -1508,12 +1510,18 @@ export default function App() {
   useEffect(() => {
     const next = effectiveVisibleTerminalIds(surface, activeId, splitPaneIds);
     const departed = departedTabIds(visibleForAnchorsRef.current, next);
+    // Plan 057: arrivals start human time — only while someone is looking.
+    const arrived = document.hasFocus() ? departedTabIds(next, visibleForAnchorsRef.current) : [];
     visibleForAnchorsRef.current = next;
     for (const id of departed) {
       const tab = tabsRef.current.find((t) => t.id === id);
       if (tab) markTabLeft(tab);
     }
-  }, [surface, activeId, splitPaneIds, markTabLeft]);
+    for (const id of arrived) {
+      const tab = tabsRef.current.find((t) => t.id === id);
+      if (tab) markTabEvent(tab, "tab_entered");
+    }
+  }, [surface, activeId, splitPaneIds, markTabLeft, markTabEvent]);
 
   // Since-you-left anchor, blur half: Cmd-Tabbing to another app leaves the
   // visible tabs without changing the visible set. On Home nothing is
@@ -1528,6 +1536,34 @@ export default function App() {
     window.addEventListener("blur", onBlur);
     return () => window.removeEventListener("blur", onBlur);
   }, [markTabLeft]);
+
+  // Plan 057 human time: refocusing the window re-enters the visible tabs, and
+  // any human input (presence only — never which key) heartbeats them, at most
+  // once per tab per minute.
+  const lastActiveRef = useRef(new Map<string, number>());
+  useEffect(() => {
+    const visibleTabs = () =>
+      visibleForAnchorsRef.current.flatMap((id) => tabsRef.current.find((t) => t.id === id) ?? []);
+    const onFocus = () => {
+      for (const tab of visibleTabs()) markTabEvent(tab, "tab_entered");
+    };
+    const onInput = () => {
+      if (!document.hasFocus()) return;
+      const now = Date.now();
+      for (const tab of visibleTabs()) {
+        if (now - (lastActiveRef.current.get(tab.id) ?? 0) < 60_000) continue;
+        lastActiveRef.current.set(tab.id, now);
+        markTabEvent(tab, "tab_active");
+      }
+    };
+    const inputs = ["keydown", "pointerdown", "wheel"] as const;
+    window.addEventListener("focus", onFocus);
+    for (const type of inputs) window.addEventListener(type, onInput, { capture: true, passive: true });
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      for (const type of inputs) window.removeEventListener(type, onInput, { capture: true });
+    };
+  }, [markTabEvent]);
 
   const activeTab = tabs.find((t) => t.id === activeId) ?? null;
   // Plan 054: Codex from rollout token_count; plain Claude (no adapter marker)

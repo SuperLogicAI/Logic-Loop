@@ -5770,3 +5770,27 @@ unless an item says otherwise.
 Automated: `npm run golden` (default Haiku) ×3 and
 `EXTRACTOR_MODEL=sonnet npm run golden` ×1 clean, 2026-10-08; per-call
 medians Haiku $0.00017–$0.00020 / 3.1 s, Sonnet $0.00181 / 3.3 s (cache hits).
+
+## Phase 57 — Human time in projects (2026-10-08)
+
+Run in the built app, not `npm run tauri dev` (LANDMINES: a dev reload kills
+every tab). Use one project with an agent tab; check Project Overview → "Your
+time" with range Today.
+
+- [x] **74.** **Matches a stopwatch** — work in one project tab ~5 min (type,
+    scroll). Expected: "Your time" today rose by the stopwatch time ±1 min.
+- [x] **75.** **Time away doesn't count** — Cmd-Tab to another app for 10 min,
+    come back. Expected: those 10 min are not added.
+- [x] **76.** **Idle cap** — stay focused on the tab, touch nothing for 20 min.
+    Expected: adds 15 min, not 20.
+- [x] **77.** **Same-project split counts once** — split two tabs of the same
+    project for 5 min. Expected: adds 5 min, not 10.
+- [x] **78.** **Copy update has hours** — open Copy update. Expected: a
+    **Time** section with today's line and a Total.
+- [x] **79.** **Row rate is sane** — counts only:
+    `sqlite3 <db> "SELECT type, count(*) FROM events WHERE type IN ('tab_entered','tab_active') GROUP BY type"`.
+    Expected: `tab_active` grows ~1/min per visible tab while active, not per keystroke.
+
+Automated: `npm run dashboard:check` covers enter→left, idle cap, time away,
+same-project split, open interval to now (capped), range clipping, midnight
+split, Copy update Time section.
