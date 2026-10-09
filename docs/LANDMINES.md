@@ -405,10 +405,15 @@ fix is ever reverted or bypassed. Referenced from CLAUDE.md.
   `full-reload` instead of HMR. So an agent editing docs from inside a dev
   tab reloads the webview and kills itself mid-turn. Workaround: dogfood
   agent sessions in the built app (`/Applications/Logic Loop.app`), and use
-  `tauri dev` only for UI work you drive yourself. Possible fix (not
-  applied): exclude non-UI dirs from Tailwind's scan (`@source not` for
-  `docs/`, `plans/`) so doc edits stop full-reloading; TS edits that fall
-  back to a full reload would still kill tabs.
+  `tauri dev` only for UI work you drive yourself. **Fixed 2026-10-08:**
+  `src/index.css` imports Tailwind with `source(".")`, so only `src/` is
+  scanned. Trigger confirmed with a bare Vite server + HMR socket listener:
+  appending to a Markdown file in `docs/` sent `{"type":"full-reload"}`
+  before, nothing after. Built CSS lost 18 utilities only docs/scripts
+  mentioned (none used in `src/`). Still true: a TS edit that Vite can't
+  hot-update falls back to a full reload and kills tabs — keep agent
+  sessions you depend on in the built app. Don't revert to a bare
+  `@import "tailwindcss"`.
 - **Schema-drift tripwire (`decisions.ts`) false-tripped on CLI v2.1.281's new
   `attachment` envelope.** Found 2026-09-24: user had multiple dev environments
   running against the app at once and hit "claude: transcript format doesn't
