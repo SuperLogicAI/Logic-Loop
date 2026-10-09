@@ -109,6 +109,7 @@ assert.equal(buildBrief({ ...base, dirty: false })?.context, "Logic Loop · clau
 assert.equal(buildBrief({ ...base, branch: "" })?.context, "Logic Loop · claude", "no git → no branch");
 assert.equal(buildBrief({ ...base, landing: null })?.youLeft, null);
 assert.equal(buildBrief({ ...base, next: "Write plan 058" })?.next, null, "Next repeating the landing note is hidden");
+assert.equal(buildBrief({ ...base, next: "Re-entry brief" })?.next, null, "Next repeating the Goal is hidden");
 assert.equal(buildBrief({ ...base, delta: { ...busy, decisions: [] }, agentWaiting: false })?.needsYou, null);
 assert.equal(buildBrief({ ...base, loopIterations: 3 })?.changed, "3 iterations while away");
 assert.equal(buildBrief({ ...base, delta: { ...emptyDelta, lastWords: "hi" } })?.changed, "agent replied");

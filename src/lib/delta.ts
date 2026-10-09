@@ -168,13 +168,15 @@ export function buildBrief(input: BriefInput): Brief | null {
   if (!changed && !needsYou && !youLeft) return null;
 
   const branch = input.branch ? ` · ${input.branch}${input.dirty ? " ●" : ""}` : "";
+  const goal = input.goal?.trim() || null;
   return {
     context: `${input.project} · ${input.agent}${branch}`,
-    goal: input.goal?.trim() || null,
+    goal,
     youLeft,
     changed,
     needsYou,
-    // The Next cascade starts at the landing note — don't say it twice.
-    next: input.next && input.next !== youLeft ? input.next : null,
+    // The Next cascade starts at the landing note, then the Now card — both
+    // already shown above, so don't say them twice.
+    next: input.next && input.next !== youLeft && input.next !== goal ? input.next : null,
   };
 }

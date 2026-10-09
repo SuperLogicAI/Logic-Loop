@@ -65,6 +65,8 @@ no migration, no Rust, no model call.
    underlined but opened nothing.
    *Revision 4 (live check 81):* the opened file list / loop digest now
    sits inside the Changed row (it rendered below Next).
+   *Revision 5 (live check 84):* Next is also hidden when it repeats the
+   Goal (the cascade's second step is the Now card).
 3. **Evidence one click away.** Changed → file names expand inline; each
    opens the existing diff pop-out. Needs you → jumps to Decisions. Next →
    jumps to the Next card. A loop run shows "N iterations" in Changed and
