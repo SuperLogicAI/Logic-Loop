@@ -120,7 +120,14 @@ Three features call a model, using the backend chosen on Setup's **Sidebar LM** 
 | Landing-note draft | The session's last few turns | When you leave a tab in Auto mode (Manual skips it) |
 | Commit message | The staged diff | When you use the Commit & Push footer |
 
-On Claude CLI the default model is Sonnet (`claude -p --model sonnet`), run stripped: no MCP servers, tools, settings or CLAUDE.md, so each call carries about 1.4k tokens of fixed overhead plus the turn itself. Claude's multiple-choice prompts become Decision cards straight from hooks, with no model call. On Claude or Codex CLI these calls count against your own plan limits. LM Studio or Ollama keeps them on your machine.
+On Claude CLI the default model is Haiku 5.5 (`claude -p --model claude-haiku-5-5`); type `claude-sonnet-5-5` in Sidebar LM to use Sonnet 5.5. Calls run stripped: no MCP servers, tools, settings or CLAUDE.md.
+
+| Model | Cost per extraction call | Per 1,000 calls | Median time |
+| --- | --- | --- | --- |
+| Haiku 5.5 (default) | $0.0002–$0.0007 | $0.19–$0.69 | 3.2 s |
+| Sonnet 5.5 | $0.0026–$0.0072 | $2.60–$7.20 | 3.7 s |
+
+Measured 2026-10-08 on the 14-case golden set at API list price; the low end is a prompt-cache hit. `npm run golden` reprints the figures. Landing notes and commit messages scale with the turns or diff sent. Claude's multiple-choice prompts become Decision cards straight from hooks, with no model call. On Claude or Codex CLI these calls count against your own plan limits. LM Studio or Ollama keeps them on your machine.
 
 ### What it touches
 

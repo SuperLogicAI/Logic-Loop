@@ -19,6 +19,8 @@ become cards, (c) Enable writes global hooks into a `~/.claude/settings.json`
 they keep in version control. Verified against code the same day; (a) is
 overstated, (b) and (c) are accurate. The extractor stays on Sonnet (Haiku
 failed about 1 in 7 calls when tried; revisit if Haiku 5.5 ships).
+*Update 2026-10-08: Haiku 5.5 shipped and passed golden; it is the default
+as of Plan 056.*
 
 ## Facts (verified 2026-10-07)
 

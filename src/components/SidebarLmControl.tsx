@@ -4,6 +4,9 @@ import { getExtractorSettings, setExtractorSettings } from "../lib/repo";
 import type { ExtractorSettings } from "../types";
 import { SIDEBAR_CONTROLS_REFRESH } from "../lib/sidebarControls";
 
+// Plan 056: models `npm run golden` has passed; on CLI 2.1.295 `haiku`/`sonnet` resolve to the pinned ids.
+const GOLDEN_CLAUDE_MODELS = ["claude-haiku-5-5", "claude-sonnet-5-5", "haiku", "sonnet"];
+
 export function SidebarLmControl({ compact = false, bordered = false }: { compact?: boolean; bordered?: boolean }) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -79,13 +82,16 @@ export function SidebarLmControl({ compact = false, bordered = false }: { compac
             <>
               <input
                 className="rounded bg-zinc-900 px-2 py-1 text-zinc-200 outline-none"
-                placeholder="Claude model override (optional, default sonnet)"
+                placeholder="Claude model override (optional, default claude-haiku-5-5; claude-sonnet-5-5 for Sonnet)"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
                 value={extractor.claudeModel}
                 onChange={(event) => saveExtractor({ ...extractor, claudeModel: event.target.value })}
               />
-              {extractor.claudeModel && extractor.claudeModel !== "sonnet" && (
+              {extractor.claudeModel && !GOLDEN_CLAUDE_MODELS.includes(extractor.claudeModel.toLowerCase()) && (
                 <span className="text-attn-400">
-                  Only sonnet is golden-set verified. Haiku missed ~1-in-7 decisions in testing.
+                  Only claude-haiku-5-5 and claude-sonnet-5-5 are golden-set verified.
                 </span>
               )}
             </>

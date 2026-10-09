@@ -311,7 +311,7 @@ export function onTranscript(
 }
 
 // Own chain, not the extractor queue: a card must land while the picker is
-// open, not after an in-flight Sonnet call (live: 7.2s late behind one).
+// open, not after an in-flight extractor call (live: 7.2s late behind one).
 // Ordering only matters among these writes (open → answer → dismiss).
 let askQueue: Promise<unknown> = Promise.resolve();
 
