@@ -1045,5 +1045,10 @@ note). Changed expands to files (each opens the diff pop-out) or the loop
 digest; Needs you and Next jump to their sections; agent's last words are
 collapsed by default. Shows whenever the tab has been left and there's
 activity, a note, or something waiting. `buildBrief` (`delta.ts`) is pure;
-no ingestion, migration, Rust or model call. Awaiting live checks
-(TESTING.md Phase 58, items 80-85) and acceptance.
+no ingestion, migration, Rust or model call. Revised live (6 revisions in the plan):
+failed commands now counted (Claude Code's `PostToolUseFailure` — a Phase 14
+gap), context line wraps so the dirty ● shows, Changed toggles only when
+there's something to open and opens inline, Next hidden when it repeats the
+note or the Goal, and the card is titled **Progress** when you watched the
+activity live (Plan 057's `tab_entered`). Live checks 80-86 passed.
+**PHASE 58 ACCEPTED** (2026-10-08).

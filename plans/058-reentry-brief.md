@@ -2,7 +2,7 @@
 
 Status: **APPROVED 2026-10-08 (`PHASE 58 APPROVED`, decisions 1-4 as
 recommended). Branch `feat/phase-58-reentry-brief`. Built; gates green;
-awaiting live checks (TESTING.md items 80-85) and acceptance.**
+live checks 80-86 passed. ACCEPTED 2026-10-08 (`PHASE 58 ACCEPTED`).**
 
 Source: `docs/IDEAS.md` "B. Compact re-entry brief — extends Phase 14's
 delta, not a new panel", next in that file's suggested sequence (inbox,

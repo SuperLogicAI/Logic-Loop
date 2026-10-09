@@ -5812,11 +5812,11 @@ the side panel (expanded mode).
 - [x] **83.** **Note only** — leave a landing note, come back with no agent
     activity. Expected: the brief still shows You left (your note) and
     "no agent activity"; Next isn't a copy of the note.
-- [ ] **84.** **Goal line** — set a board card `now: true`. Expected: "Goal:
+- [x] **84.** **Goal line** — set a board card `now: true`. Expected: "Goal:
     <card>" shows; clear it and the line disappears.
-- [ ] **85.** **Never left** — a fresh tab you haven't left. Expected: no
+- [x] **85.** **Never left** — a fresh tab you haven't left. Expected: no
     brief, and no Since You Left icon in the compact rail.
-- [ ] **86.** **Progress vs Since you left** — stay on a Claude tab while the
+- [x] **86.** **Progress vs Since you left** — stay on a Claude tab while the
     agent works. Expected: the card is titled **Progress** with no age. Switch
     away while it works, come back. Expected: **Since you left · Nm ago**.
 
