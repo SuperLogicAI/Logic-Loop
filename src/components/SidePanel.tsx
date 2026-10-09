@@ -1139,15 +1139,19 @@ export function SidePanel({
                 <dd className={brief.youLeft ? "break-words" : "text-zinc-600"}>{brief.youLeft ? `“${brief.youLeft}”` : "no note"}</dd>
                 <dt className="text-zinc-500">Changed</dt>
                 <dd>
-                  {brief.changed ? (
+                  {/* Only a toggle when there's something to open: files or a loop digest. Commands are counts only. */}
+                  {brief.changed && (loopIterations || (delta?.files.length ?? 0) > 0) ? (
                     <button
                       type="button"
-                      className="text-left hover:text-zinc-100 hover:underline"
+                      className="flex items-start gap-1 text-left hover:text-zinc-100"
                       aria-expanded={briefChangedOpen}
                       onClick={() => setBriefChangedOpen((o) => !o)}
                     >
-                      {brief.changed}
+                      <Chevron collapsed={!briefChangedOpen} className="mt-0.5 shrink-0 text-zinc-500" />
+                      <span className="hover:underline">{brief.changed}</span>
                     </button>
+                  ) : brief.changed ? (
+                    <span>{brief.changed}</span>
                   ) : (
                     <span className="text-zinc-600">no agent activity</span>
                   )}

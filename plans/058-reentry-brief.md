@@ -60,6 +60,9 @@ no migration, no Rust, no model call.
    delta ignored; now counted (interrupts excluded, failed edits aren't
    changed files). The context line wraps instead of truncating, which hid
    the dirty ●.
+   *Revision 3 (live check 81):* Changed is a toggle (with chevron) only
+   when there are files or a loop digest to open; with commands only it was
+   underlined but opened nothing.
 3. **Evidence one click away.** Changed → file names expand inline; each
    opens the existing diff pop-out. Needs you → jumps to Decisions. Next →
    jumps to the Next card. A loop run shows "N iterations" in Changed and
