@@ -779,6 +779,9 @@ board card) plus links to their source rows.
 
 ## C. Seen ≠ reviewed ≠ resolved — extends Phase 5's unclaimed-results model
 
+**First half implemented as Phase 60 (`plans/060-seen-reviewed-resolved.md`,
+2026-10-09); checks 96–103 passed, PHASE 60 ACCEPTED.** Second half (empty-state clarity) shipped in Phase 19.
+
 Today, focusing a tab claims its result (`App.tsx`, `claimTab`) — good
 enough for an unread dot, weak evidence the human actually acted on it.
 Real gap: nothing distinguishes "I glanced at it" from "I decided what to do
@@ -1446,6 +1449,8 @@ diff shows only the one line removed from CLAUDE.md.
 
 ## Hide Traffic / Sidebar LM when unused (sidebar header) — high value, needs a human call
 
+**Shipped as Plan 050 Part B (Phase 50, accepted 2026-10-06).** Entry kept for history.
+
 Surfaced 2026-10-05 reviewing Phase 49 (PR #68). `SidebarControls.tsx` renders
 **Sidebar LM · Traffic · Inbox** unconditionally. Traffic only does anything with
 the optional Safe Router installed (README: "Entirely optional: with no Safe
@@ -1475,6 +1480,8 @@ live pass at minimum width.
 changing notification policy.
 
 ## Semantic color tokens (replace per-feature hues) — needs a human palette call
+
+**Shipped as Plan 050 Part A (Phase 50, accepted 2026-10-06).** Entry kept for history.
 
 Surfaced 2026-10-05 reviewing Phase 49 (PR #68). **Likely sprint: same as
 "Hide Traffic / Sidebar LM when unused" (above) — color tokens are the larger
@@ -1578,6 +1585,9 @@ carries; whether flows persist as saved templates.
 ---
 
 # Token spend: TSPM + cost by project (2026-10-08, maintainer idea + research spike)
+
+**TSPM v1-v3 shipped as Plan 059 (Phase 59, accepted 2026-10-09, PR #88).**
+Still open below: per-user bar thresholds, cost by project.
 
 ## Spend-source findings (research spike, 2026-10-08)
 

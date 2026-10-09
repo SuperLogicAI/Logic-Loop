@@ -273,7 +273,8 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
         // Read-only: Overview never calls any of these. computeMomentum needs
         // the shape; nothing wires a "done" control to them here.
         onLandingDone: async () => undefined,
-        onDecisionDone: async () => undefined,
+        onDecisionDelegate: async () => undefined,
+        onDecisionDismiss: async () => undefined,
         onPlannedCardDone: async () => undefined,
       })
     : null;
@@ -366,7 +367,8 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
                   openBlockers: data.openBlockers,
                   timeLines: data.humanTime ? humanTimeLines(data.humanTime) : [],
                   nextStep: computeMomentum({ landing: data.landing, decisions: data.openDecisions, plannedCard: null,
-                    onLandingDone: async () => undefined, onDecisionDone: async () => undefined,
+                    onLandingDone: async () => undefined, onDecisionDelegate: async () => undefined,
+                    onDecisionDismiss: async () => undefined,
                     onPlannedCardDone: async () => undefined })?.text ?? null,
                 })
               }

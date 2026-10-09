@@ -27,6 +27,7 @@ import { projectKeyOf } from "./pty";
 import { resolveHomeStartSurface } from "./dashboard";
 import { staleDecisionSql } from "./staleDecisions";
 import type { SubagentEventRow, UsageRow } from "./spend";
+import { RESULTS_TO_REVIEW_SQL, type ReviewResult } from "./reviewQueue";
 
 // The pending load, not the resolved handle: concurrent first callers used to
 // each run Database.load, and tauri-plugin-sql opens a new pool per load (only
@@ -346,6 +347,23 @@ export async function unclaimedResults(cwd: string): Promise<{ session_id: strin
      ORDER BY ts DESC`,
     [cwd]
   );
+}
+
+/** Project-wide review queue, independent of the unchanged unread flags. */
+export async function resultsToReview(cwd: string): Promise<ReviewResult[]> {
+  const d = await getDb();
+  return d.select<ReviewResult[]>(RESULTS_TO_REVIEW_SQL, [cwd]);
+}
+
+/** Resolve the row the user saw, never a newer result in the same session. */
+export async function reviewResult(result: ReviewResult, action: "reviewed" | "dismissed"): Promise<void> {
+  await addEvent(result.session_id, "result_reviewed", JSON.stringify({
+    v: 1,
+    landed_id: result.id,
+    project_key: result.project_key,
+    tab_id: result.tab_id,
+    action,
+  }));
 }
 
 /** Every session holding an unclaimed result, across all projects. Startup

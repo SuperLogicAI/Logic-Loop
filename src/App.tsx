@@ -752,7 +752,10 @@ export default function App() {
             adapter_id: tab.agent,
           })
         )
-        .then(scheduleAttentionRefresh)
+        .then(() => {
+          setPanelRefresh((n) => n + 1);
+          scheduleAttentionRefresh();
+        })
         .catch(() => undefined);
     }
     setUnseenStops((s) => {
@@ -1138,7 +1141,10 @@ export default function App() {
       if (!tabId) {
         void repo
           .addHookEvent(p.session_id, `hook:${p.hook_event_name}`, JSON.stringify(payload))
-          .then(scheduleAttentionRefresh)
+          .then(() => {
+            if (isPromptSubmit) setPanelRefresh((n) => n + 1);
+            scheduleAttentionRefresh();
+          })
           .catch(() => undefined); // fail open: panel data loss must not break terminals
         return; // session from an outside terminal
       }
@@ -1165,7 +1171,10 @@ export default function App() {
               }
             : undefined
         )
-        .then(scheduleAttentionRefresh)
+        .then(() => {
+          if (isPromptSubmit) setPanelRefresh((n) => n + 1);
+          scheduleAttentionRefresh();
+        })
         .catch(() => undefined); // fail open: attention evidence never affects the terminal
       setTabs((prev) =>
         prev.map((t) =>
@@ -1214,7 +1223,10 @@ export default function App() {
                 actor_id: sourceContext.actorId,
               })
             )
-            .then(scheduleAttentionRefresh)
+            .then(() => {
+              setPanelRefresh((n) => n + 1);
+              scheduleAttentionRefresh();
+            })
             .catch(() => undefined);
         }
         if (canNotify()) notify("Finished", nudgeLabel);
@@ -1794,6 +1806,7 @@ export default function App() {
             agent={activeTab.agent}
             fanOut={fanOutRollups}
             onSelectTab={focusTab}
+            reviewTabs={tabs.map((tab) => ({ ...tab, cwd: expand(tab.cwd) }))}
             onDismissMember={dismissSpawnMember}
             onBlockersChanged={refreshBlockerCounts}
             onDecisionsChanged={refreshDecisionCounts}

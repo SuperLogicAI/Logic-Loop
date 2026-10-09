@@ -5968,3 +5968,116 @@ Automated: `cargo test --lib usage` adds Claude input normalization
 lines kept as ordered snapshots (latest per message.id wins in the query),
 and transcript paths confined to the session's own directory (name must
 match the session; symlinked children escaping it are skipped).
+
+### Phase 60: Seen ≠ reviewed ≠ resolved
+
+Status: rebuilt app live pass on 2026-10-09, including maintainer rebuild
+and relaunch; checks **96–103 passed**. Maintainer directly confirmed the
+OS Dock badge cleared for check 96. **PHASE 60 ACCEPTED** (2026-10-09).
+
+- [x] 96. Background a Claude tab, let it finish, switch to it: dock badge
+      clears as today; Accomplished keeps the row as `○ seen` with this
+      tab's title.
+- [x] 97. Click ✓ Reviewed: row gone, survives restart.
+- [x] 98. Repeat 96, then type a new prompt into that tab: row gone without
+      a click.
+- [x] 99. A loop resubmit (`auto` provenance, no keystrokes for >5 s) does
+      not close it.
+- [x] 100. First launch on an existing DB: no pre-Phase-60 results in the
+      queue; relaunch: still none, new results still appear.
+- [x] 101. Two tabs in one project, both finish in background: each tab's
+      Accomplished lists both rows; the other tab's row shows ↗ Open and
+      switches to it; close that tab: row reads "tab closed", ✓ Reviewed
+      still works.
+- [x] 102. Next card on a decision shows Ask / Delegate / Dismiss; Delegate
+      marks the decision delegated in the Decisions history, never answered.
+- [x] 103. Leave a tab, let it finish (and open a decision) while away,
+      come back: brief's Needs you shows "1 new decision · 1 to review",
+      each jumps to its own section.
+
+Automated: `npm run review-queue:check` executes production SQL and the
+actual migrations 2/6/14 in in-memory SQLite. Covers cutoff persistence,
+millisecond timestamps, unseen→seen→reviewed, stale clicks, supersession
+without resurrection, explicit human vs auto/missing provenance, dismiss,
+same-ms ordering, and two-session identity. `momentum:check` verifies
+Delegate/Dismiss callbacks and unchanged landing Done/planned Start;
+`delta:check` verifies independent Needs you links and review-only briefs.
+
+Accepted limitation: provenance is heuristic. A prompt within 5 s of input,
+or with no input history (including restart) or no tether, is labelled
+human and can close a result automatically. A delayed typed prompt can
+be labelled auto and require an explicit review click.
+
+Gate record (2026-10-09): `npm run opencode:check`, `npm run check`,
+`npx tsc --noEmit`, `npm run build`, `cargo test --lib` (177 passed,
+1 intentionally ignored), `cargo clippy --all-targets -- -D warnings`,
+and `git diff --check` passed. tsx IPC and Rust localhost tests required
+escalated execution; the initial sandbox Rust run failed only those three
+socket tests. These implementation gates preceded the live pass below.
+No golden run. Maintainer rebuilt and relaunched between the two live passes.
+PR gate continuation: full `cargo test` passed (177 library tests passed,
+1 intentionally ignored; main and doc tests passed) and
+`npm run review-queue:check` passed again before submission.
+
+Phase 60 live evidence (2026-10-09, computer use and maintainer Dock observation):
+
+- Dedicated Claude tabs `P60 A` and `P60 B` used the isolated test folder
+  `/private/tmp/logic-loop-phase60-tests`. Maintainer authorized trusting
+  that folder. Test prompts requested short sleeps, fixed replies, or an
+  unanswered test question, without reading or changing project files.
+- **96 passed:** A finished while backgrounded. B's project queue showed
+  `Agent finished · P60 A` as unseen with Open/Reviewed/Dismiss controls.
+  Open switched to A; the row remained and changed to `○ seen 4s ago`.
+  Tab glow and Inbox unseen status cleared. Direct tool inspection of
+  the OS Dock timed out; maintainer watched the post-relaunch test and
+  confirmed the Dock badge cleared when the finished tab was opened.
+- **97 passed:** Reviewed removed A's row from the shared project queue
+  (`Accomplished: 0 to review`). After maintainer rebuild/relaunch, A's
+  reviewed results remained absent while B's deliberately unreviewed
+  result persisted. Reviewed cleared that persisted result too.
+- **98 passed:** B's background result changed unseen→seen and remained
+  open. Submitted `Reply exactly P60-B-FOLLOWUP. Do not use tools or
+  change files.` via the UI; B's row disappeared without clicking
+  Reviewed, leaving A's row intact. The foreground reply completed
+  without a new background result.
+- **99 passed:** started `/loop 30s` with a `sleep 15` + fixed-reply task;
+  Claude rounded it to an every-minute session-local cron. The setup
+  reply landed while backgrounded and remained seen/to-review on B.
+  After more than 5 s without terminal input, the automatic scheduled
+  turn ran; B showed `⟳` and the brief counted a new turn. The original
+  result remained `1 to review` with its original age (~54 s), after the
+  automatic turn completed in foreground. No new background landing
+  masked closure. Cleanup cancelled only test cron `57967937`;
+  CronDelete confirmed cancellation and CronList showed no scheduled jobs.
+- **100 passed:** the existing Logic Loop project showed `Accomplished:
+  0 to review` both before and after relaunch; pre-Phase-60 results did
+  not reappear in that project. The isolated test project retained only
+  its deliberately pending result. Re-entered the restored test terminal
+  and backgrounded a fresh `sleep 10` reply (`P60-AFTER-RELAUNCH`): it
+  appeared normally as one result, then became seen without closing.
+  This live sample covers those two projects, not every historical project.
+- **101 passed:** both A and B finished in background. Both tabs showed
+  the shared queue; expanded rows had distinct titles and seen states.
+  Open on B switched to B, whose tool evidence showed its own sleep
+  description. After B's follow-up removed its row, closing A changed
+  the remaining row to `tab closed` and removed Open. Reviewed on that
+  closed-tab row cleared it.
+- **102 passed:** extracted an unanswered cobalt/coral test question from
+  B's reply. Next showed Ask / Delegate / Dismiss, with no Done. Clicking
+  Delegate removed the open card, restored the planned fallback, and
+  displayed the same question with `⤳` in Decisions history, not `✓`.
+  No answer was submitted.
+- **103 passed:** after leaving B for a delayed question/reply, the brief
+  showed `1 new decision · 1 to review`. With both sections collapsed,
+  the decision link opened Decisions alone; the review link then
+  independently opened Accomplished. Both targets were visually verified.
+
+Relaunch continuation: the restored test tab was named `Terminal`; the
+persisted result initially showed `tab closed`, with no Open action. The
+brief still counted exactly one result. Re-enter resumed the isolated
+Claude session. After the fresh post-relaunch test, Inbox's Active view
+showed `0` and "Nothing currently needs attention" while Accomplished
+still held one seen result. Reviewed was used to clean up that result.
+No test cron remains; cleanup confirmed `Accomplished: 0 to review`.
+Maintainer confirmed the OS Dock badge cleared, completing check 96.
+All Phase 60 built-app checks passed; **PHASE 60 ACCEPTED** (2026-10-09).

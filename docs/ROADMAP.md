@@ -39,8 +39,9 @@ table below until one gets its own PLAN.md.
 | Decision Tracker reconciliation and truthful answer state | DONE (Phase 33, 2026-09-11) — row was stale, superseded by later history: manual 11-step matrix passed same day, automatic reconciliation itself was descoped 2026-09-12 (Plan 016, `docs/PROGRESS.md`) after a freeze investigation found it wasn't load-bearing (manual dismiss + Answer-Now + notifications cover it). See `docs/PROGRESS.md` Phase 33/33.1 entries for the full trail. | ~1–2d | Phase 32 accepted |
 | First useful session (`plans/033-first-useful-session.md`) | DONE — Plan 033 ACCEPTED 2026-09-21, merged via PR #44 (#48 for the four live-test findings). **Numbering note resolved 2026-09-21:** the "033" collision above was never a real conflict — `plans/NNN-*.md` (Plan numbers) and `docs/PROGRESS.md` "Phase N" (Phase numbers) are two independent sequences that happen to reuse the same digits; Phase 33 (decision reconciliation, 2026-09-11) and Plan 033 (this row, 2026-09-19/21) are unrelated items that never actually shared a slot. | 2–3d | Plan 032 accepted |
 | Remaining adapters (Gemini, Copilot) | v2 | — | Codex adapter |
-| Home dashboard + Project Overview (`plans/048-project-dashboard.md`) | ACCEPTED 2026-09-29 (`PHASE 48 APPROVED`) — Phase 48, build in progress | 4–6d | Phase 47 accepted |
-| Project dashboard follow-ons (see section below) | Unscheduled | — | Plan 048 accepted |
+| Home dashboard + Project Overview (`plans/048-project-dashboard.md`) | DONE (Phase 48, `PHASE 48 ACCEPTED` 2026-10-03) | 4–6d | Phase 47 accepted |
+| Project dashboard follow-ons (see section below) | Partly done — human time (Phase 57), spend in effort units (Phase 59); rest unscheduled | — | Plan 048 accepted |
+| Seen ≠ reviewed ≠ resolved (IDEAS.md item C, first half; `plans/060-seen-reviewed-resolved.md`) | Phase 60 — ACCEPTED 2026-10-09; built-app checks 96–103 passed | ~1–1.5d | Phase 58 accepted |
 
 Phase boundaries still hard stops. Phase 5 items enter PLAN.md for approval
 before build, per process rules.
@@ -605,10 +606,11 @@ needs its own plan; order by what real users hit after 048 ships.
 - **GitHub context:** remote link, PR/CI state, PR creation. Spike first:
   existing `gh` auth, no new token store.
 - **Spend + human time:** human time done in Plan 057 ("Your time" +
-  Copy update hours); spend still open. Spike for one trustworthy per-project token source
-  (current Claude/Codex meters are account-wide). Unknown ≠ zero; estimated ≠
-  invoiced. Optional manual time tracker. No attribution → no cost UI.
-  Spike done 2026-10-08: Codex has a per-session source (`token_usage_record`,
-  children aggregated); Claude still open — see IDEAS "Token spend: TSPM +
-  cost by project".
+  Copy update hours). Spend done in Plan 059 (Phase 59, 2026-10-09) as
+  **effort units, not dollars**: per-session Claude + Codex ledger
+  (`usage_records`, children included), dock chip, Home card line, Overview
+  "Agent spend" with coverage. Still open: **cost by project** (API-equivalent
+  dollar estimate) — gated on the maintainer's client-billing call, see IDEAS
+  "Cost by project". Unknown ≠ zero; estimated ≠ invoiced. Optional manual
+  time tracker.
 - **Opt-in LLM summaries:** ingestion-time only, cited, deterministic fallback.

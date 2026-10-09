@@ -227,6 +227,18 @@ pub fn run() {
               CREATE INDEX IF NOT EXISTS idx_usage_tab ON usage_records(tab_id, source_ts);
               CREATE INDEX IF NOT EXISTS idx_usage_root ON usage_records(root_session_id, source_ts);",
         kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 14,
+        description: "start result review tracking without backfill",
+        // Phase 60: migration runs before the shared DB handle is available.
+        // Milliseconds match repo.ts; fixed dedupe identity keeps the cutoff.
+        sql: r#"INSERT OR IGNORE INTO events (session_id, type, payload_json, ts, dedupe_key)
+                VALUES ('__logic_loop_review_tracking__', 'result_review_tracking_started', '{"v":1}',
+                  CAST(strftime('%s', 'now') AS INTEGER) * 1000
+                    + CAST(substr(strftime('%f', 'now'), 4, 3) AS INTEGER),
+                  'result_review_tracking_started:v1');"#,
+        kind: MigrationKind::Up,
     }];
 
     tauri::Builder::default()
