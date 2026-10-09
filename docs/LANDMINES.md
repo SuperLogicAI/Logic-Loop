@@ -391,6 +391,24 @@ fix is ever reverted or bypassed. Referenced from CLAUDE.md.
   this and either unset the var first or launch from a plain shell.
   Likely explains a previously-unresolved mystery from Plan 017's addendum
   (below) with an identical symptom shape.
+- **Editing repo files while dogfooding in `npm run tauri dev` kills every
+  tab, including the agent doing the edit.** Hit many times; recorded
+  2026-10-08 after it killed a Phase 56 live-test session twice (once after
+  editing `SidebarLmControl.tsx` + `plans/056-*.md`, once after a `sed` on
+  `docs/TESTING.md` alone). Root cause, confirmed in code: any webview full
+  reload re-runs App's load path, which calls `ptyKillAll()` first
+  (`src/App.tsx`, "reap PTYs orphaned by a webview crash/reload") — correct
+  for a real crash, fatal for a dev reload. Trigger, inferred from the
+  `docs/`-only case plus source: `@tailwindcss/vite` (4.3.2) scans
+  non-gitignored project files for class candidates, and when a scanned file
+  outside Vite's module graph changes (Markdown in `docs/`, `plans/`) it sends
+  `full-reload` instead of HMR. So an agent editing docs from inside a dev
+  tab reloads the webview and kills itself mid-turn. Workaround: dogfood
+  agent sessions in the built app (`/Applications/Logic Loop.app`), and use
+  `tauri dev` only for UI work you drive yourself. Possible fix (not
+  applied): exclude non-UI dirs from Tailwind's scan (`@source not` for
+  `docs/`, `plans/`) so doc edits stop full-reloading; TS edits that fall
+  back to a full reload would still kill tabs.
 - **Schema-drift tripwire (`decisions.ts`) false-tripped on CLI v2.1.281's new
   `attachment` envelope.** Found 2026-09-24: user had multiple dev environments
   running against the app at once and hit "claude: transcript format doesn't
