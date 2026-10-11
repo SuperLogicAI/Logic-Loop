@@ -9,6 +9,7 @@ import { resolveAttentionRoute, type AttentionTabSnapshot } from "../lib/attenti
 import { type CopyUpdateData } from "./CopyUpdateModal";
 import { AgentSpendSection } from "./SpendMeter";
 import { OpenInEditor } from "./OpenInEditor";
+import { MarkdownEditor } from "./MarkdownEditor";
 import type { UsageThread } from "../lib/spend";
 import type { AttentionEvidence, Blocker, Commit, Decision, Note, ReentryCandidate, Tab } from "../types";
 
@@ -144,6 +145,10 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
   const [purposeDraft, setPurposeDraft] = useState("");
   const [editingPurpose, setEditingPurpose] = useState(false);
   const [diagnostics, setDiagnostics] = useState<{ identity: string; events: ReadDiagnostic[] }>({ identity: "", events: [] });
+  // Plan 062: the markdown editor replaces the overview body in place;
+  // another project always opens on its overview.
+  const [view, setView] = useState<"overview" | "markdown">("overview");
+  useEffect(() => setView("overview"), [projectKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -307,14 +312,30 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-zinc-900 px-6 py-5">
       <div className="mx-auto w-full max-w-5xl">
+        {/* Header stays in both views (Plan 062): row 1 = where you are + session
+            actions, row 2 = folder actions + project housekeeping. */}
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" className="text-sm text-zinc-500 hover:text-zinc-300" onClick={onBack}>
             Home
           </button>
           <span className="text-sm text-zinc-600">/</span>
           <h2 className="text-sm font-semibold text-zinc-100">{displayName}</h2>
-          <div className="ml-auto flex flex-wrap items-start gap-2">
-            <div className="flex flex-col items-start gap-2">
+          <div className="ml-2 flex gap-1" role="tablist" aria-label="Project view">
+            {(["overview", "markdown"] as const).map((key) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={view === key}
+                className={`rounded px-2 py-0.5 text-xs ${view === key ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
+                onClick={() => setView(key)}
+              >
+                {key === "overview" ? "Overview" : "Markdown"}
+              </button>
+            ))}
+          </div>
+          <div className="ml-auto flex flex-col items-end gap-1">
+            <div className="flex flex-wrap items-center gap-2">
               {workspaceChoices.length > 1 ? (
                 <select aria-label="Continue in workspace" value=""
                   className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-300"
@@ -351,8 +372,16 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
                   {startingSession ? "Starting…" : "New session tab"}
                 </button>
               )}
-              {sessionError && <p role="alert" className="text-xs text-attn-400">Could not start a session. Try again.</p>}
             </div>
+            {sessionError && <p role="alert" className="text-xs text-attn-400">Could not start a session. Try again.</p>}
+          </div>
+        </div>
+
+        <div className="mt-1 flex flex-wrap items-start gap-3">
+          <p className="break-all pt-1.5 text-xs text-zinc-400" title={projectKey}>{projectFolderLabel(projectKey)}</p>
+          <OpenInEditor cwd={projectKey}
+            buttonClass="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800" />
+          <div className="ml-auto flex flex-wrap items-center gap-2">
             <button
               type="button"
               disabled={!copyReady}
@@ -392,12 +421,7 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
             </button>
           </div>
         </div>
-
-        <div className="mt-1 flex flex-wrap items-start gap-3">
-          <p className="break-all pt-1.5 text-xs text-zinc-400" title={projectKey}>{projectFolderLabel(projectKey)}</p>
-          <OpenInEditor cwd={projectKey}
-            buttonClass="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800" />
-        </div>
+        {view === "markdown" ? <MarkdownEditor projectKey={projectKey} /> : <>
         {editingNickname ? (
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <input autoFocus aria-label="Project nickname" maxLength={120}
@@ -637,6 +661,7 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
           <ul>{(diagnostics.identity === identity ? diagnostics.events : []).map((event, i) =>
             <li key={i}>{event.source}: {event.outcome} · {event.durationMs}ms{event.count === undefined ? "" : ` · ${event.count} rows`}</li>)}</ul>
         </details>
+        </>}
       </div>
     </div>
   );

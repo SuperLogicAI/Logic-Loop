@@ -1162,3 +1162,55 @@ action it configures (both placements share `OpenInEditor`). `tsc` and
 `build` passed; `git diff --check` clean.
 Maintainer rebuilt and confirmed the reordered buttons still work.
 **PHASE 61 ACCEPTED** (2026-10-10).
+
+### Phase 62 — Markdown editor for project instruction files (2026-10-10)
+
+Plan: `plans/062-markdown-editor.md`; **PHASE 62 APPROVED** (2026-10-10),
+defaults 1–4 (`.claude/CLAUDE.md` included, Reload + Overwrite, 1 MB cap,
+board.md listed). Partial reversal of IDEAS "Editable code view pop-out",
+markdown only; code editing still not recommended.
+
+Built on `feat/phase-62-markdown-editor`, first stacked on the Phase 61
+branch while PR #90 was open, then moved onto `main` (`c5cc736`) after it
+merged. New
+`markdown.rs`: `md_list` (fixed set, then root `*.md`; out-pointing
+symlinks and >1 MB dropped), `md_read`, and `md_write` with
+compare-and-swap against the exact text loaded. A name must be in a fresh
+list, then pass `pty::resolve_inside`. `MarkdownEditor` view replaces the
+overview body (Markdown button first on the path line), with a plain
+textarea, Cmd+S, CRLF round-trip, a conflict banner (Reload / Overwrite),
+focus re-read, 061's Open in editor beside the filename, and a reload note
+under agent memory files. Two stated build revisions: unsaved drafts are
+kept in memory (marked `●`) instead of discard prompts, since a prompt
+can't catch leaving via a terminal tab; and the button always shows, with
+an empty state.
+
+Verification: `cargo test --lib markdown` (5 new tests),
+`npm run markdown-editor:check` (new, in `npm run check`), `npm run check`,
+`npm run opencode:check`, `npx tsc --noEmit`, `npm run build`,
+`cargo test --lib` (185 passed, 1 ignored),
+`cargo clippy --all-targets -- -D warnings`, `git diff --check` passed.
+Built-app checks 111–119 pending. No golden (no prompt change).
+
+Maintainer revisions before the manual pass (2026-10-10), recorded in the
+plan: (1) the file list also covers `docs/*.md`, one level; (2) a segmented
+Overview | Markdown toggle beside the title replaces the path-line button,
+and the header stays in both views (the editor is body-only); (3) header
+regrouped: session actions (Continue control, New session tab) top-right,
+housekeeping (Copy update, Pin, Archive) on the path row. New check 119
+covers the layout. Gates re-run green: `npm run check`,
+`npm run opencode:check`, `npx tsc --noEmit`, `npm run build`,
+`cargo test --lib` (185 passed, 1 ignored), clippy, `git diff --check`.
+
+Second revision (maintainer, 2026-10-10): syntax colours in the editor. A
+colour layer under a transparent textarea (no new dependency, still no
+preview; tokens render as React text only). `#` and `##` headings, list
+markers, bold, code, links, `@imports`, fences, quotes and rules each get
+a colour. New check 120; tokenizer asserts added to
+`npm run markdown-editor:check`. Gates: `npm run check`,
+`npm run opencode:check`, `npx tsc --noEmit`, `npm run build`,
+`git diff --check` passed (no Rust change).
+
+Built-app checks 111–120 passed (Codex computer use; 116's `/clear`
+reload confirmed by the maintainer); results in `docs/TESTING.md`.
+**PHASE 62 ACCEPTED** (2026-10-10).

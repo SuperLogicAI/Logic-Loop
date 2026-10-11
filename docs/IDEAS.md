@@ -39,8 +39,8 @@ no ingestion/schema change.
 
 ## Editable code view pop-out — considered, not recommended
 
-**Partial reversal proposed 2026-10-10, for markdown only (Plan 062
-draft, not yet approved):** a quick editor for project instruction/notes files
+**Partly reversed 2026-10-10, for markdown only (Plan 062, accepted
+2026-10-10):** a quick editor for project instruction/notes files
 (`CLAUDE.md`, `AGENTS.md`, board, root `*.md`) in a plain textarea with
 compare-and-swap saves. Code editing is still not recommended, for the
 reasons below.
@@ -1779,7 +1779,33 @@ Plan: `plans/061-open-in-editor.md`.
 
 A quick-tweak editor for `CLAUDE.md` / `AGENTS.md` / board / root `*.md`
 on the dashboard project view. No preview, no recursion, compare-and-swap
-against agent edits. Plan 062, drafted 2026-10-10, awaiting approval.
+against agent edits. Plan: `plans/062-markdown-editor.md` (accepted
+2026-10-10).
+
+## Half 1c: diff pop-out falls back to unstaged changes (small, unplanned)
+
+Found testing Phase 62 (2026-10-10). The Accomplished panel's diff pop-out
+only reads `git diff --cached` (`git_diff_cached`, `src/lib/diff.ts` slices
+it per file). Claude Code and most agents never stage their edits, so for
+the edits you actually want to check, the pop-out usually says "No staged
+diff for this file", with no red or green.
+
+**Idea.** When the file has no staged hunk, show `git diff HEAD -- <file>`
+(staged + unstaged against the last commit). Label which one is shown.
+Keep `git_diff_cached` as it is: the Commit & Push footer means staged on
+purpose.
+
+**Edges to settle in the plan:**
+- New untracked files (an agent's `Write`) show nothing in either diff.
+  Show the whole file as all-added, or say "new file, not tracked" and lean
+  on Open in editor.
+- The path is agent-reported: pass it after `--` and through
+  `resolve_inside` (Plan 061) before shelling out. Check
+  `docs/LANDMINES.md` git-shelling notes first.
+- The diff is against HEAD, not "what this turn changed". If the agent
+  committed, or the user already had edits in the file, the pop-out shows
+  more or less than the agent's edit. Say so in the empty and mixed cases;
+  don't pretend it's per-turn.
 
 ## Half 2: VS Code companion extension (parked, strategic)
 
