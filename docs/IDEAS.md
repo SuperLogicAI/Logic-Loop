@@ -1782,7 +1782,11 @@ on the dashboard project view. No preview, no recursion, compare-and-swap
 against agent edits. Plan: `plans/062-markdown-editor.md` (accepted
 2026-10-10).
 
-## Half 1c: diff pop-out falls back to unstaged changes (small, unplanned)
+## Half 1c: diff pop-out falls back to unstaged changes
+
+Plan: `plans/063-diff-unstaged-fallback.md` (accepted
+2026-10-10; built-app checks 121–128 passed). The plan
+changes the order below: HEAD first rather than staged first (Decision 1).
 
 Found testing Phase 62 (2026-10-10). The Accomplished panel's diff pop-out
 only reads `git diff --cached` (`git_diff_cached`, `src/lib/diff.ts` slices

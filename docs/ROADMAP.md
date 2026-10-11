@@ -580,6 +580,7 @@ once, against real line numbers, so the port phase doesn't re-survey.
 | `src/lib/ingest.ts:121` | `projectKey === "/"` root guard misses a Windows drive root. |
 | `src/lib/repo.ts:114` | Basename via `split("/")` — wrong for `C:\foo\bar`. |
 | `pty.rs` `open_in_editor` (Plan 061) | macOS shells `open -a <editor>` for a real exit status; other targets fall back to the opener plugin's `open_path(path, Some(editor))`, which spawns detached, so a missing editor fails silently. Verify the Windows editor name form (`code`? full exe path?) and surface the error. |
+| `git_new_file` (Plan 063, `pty.rs`) | Passes git a path relative to the canonical project root, with `--literal-pathspecs`, so Windows `\\?\` prefixes never reach git. Verify on Windows that `strip_prefix` holds (root and target canonicalize with the same prefix) and that `git diff HEAD` and `ls-files` behave the same. |
 | `markdown.rs` + `src/lib/markdownEditor.ts` (Plan 062) | CRLF is the Windows default. The textarea normalizes it to LF and `toDisk` restores CRLF when the loaded file had it, covered by `markdown-editor:check`. Verify live on Windows; a mixed-ending file becomes all-CRLF on save (accepted, `ponytail:` note in the helper). |
 | `clipboard.rs` | Entirely `pbpaste`/`osascript`. Windows needs its own path (the WKWebView permission-pill reason for avoiding `navigator.clipboard` doesn't apply on WebView2 — re-evaluate rather than port the workaround). |
 | `opencode.rs:21` | `XDG_CONFIG_HOME` → `%APPDATA%` on Windows. |

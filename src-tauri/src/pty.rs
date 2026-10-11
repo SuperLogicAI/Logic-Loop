@@ -866,19 +866,65 @@ pub async fn git_diff_cached(cwd: String) -> String {
 }
 
 fn git_diff_cached_blocking(cwd: String) -> String {
-    if !has_own_repo(&cwd) {
+    git_diff_blocking(&cwd, "--cached")
+}
+
+/// Plan 063: everything uncommitted (staged + unstaged) for the diff pop-out.
+/// `""` in a repo with no commits yet — `pickDiff` then uses the staged diff.
+#[tauri::command]
+pub async fn git_diff_head(cwd: String) -> String {
+    spawn_blocking_or_default(move || git_diff_blocking(&cwd, "HEAD")).await
+}
+
+fn git_diff_blocking(cwd: &str, against: &str) -> String {
+    if !has_own_repo(cwd) {
         return String::new();
     }
     let out = std::process::Command::new("git")
         .arg("-C")
-        .arg(&cwd)
+        .arg(cwd)
         .arg("diff")
-        .arg("--cached")
+        .arg(against)
         .output();
     match out {
         Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
         _ => String::new(),
     }
+}
+
+/// Plan 063: a new file's text for the diff pop-out, or `""`. `path` is
+/// agent-reported, so it must resolve inside `cwd` (`resolve_inside`), and
+/// git must call it untracked *and not ignored* — `.env`-style secrets an
+/// agent wrote never reach the screen. Passed to git relative to the root
+/// (no Windows `\\?\` prefix) with literal pathspecs (`:(glob)*` is a name).
+#[tauri::command]
+pub async fn git_new_file(cwd: String, path: String) -> String {
+    spawn_blocking_or_default(move || git_new_file_blocking(&cwd, &path)).await
+}
+
+fn git_new_file_blocking(cwd: &str, path: &str) -> String {
+    if !has_own_repo(cwd) {
+        return String::new();
+    }
+    let (Ok(root), Ok(target)) = (std::fs::canonicalize(cwd), resolve_inside(cwd, Some(path))) else {
+        return String::new();
+    };
+    let Ok(rel) = target.strip_prefix(&root) else {
+        return String::new();
+    };
+    let untracked = std::process::Command::new("git")
+        .arg("--literal-pathspecs")
+        .arg("-C")
+        .arg(&root)
+        .args(["ls-files", "--others", "--exclude-standard", "--"])
+        .arg(rel)
+        .output()
+        .is_ok_and(|o| o.status.success() && !o.stdout.is_empty());
+    let small = std::fs::metadata(&target).is_ok_and(|m| m.len() <= crate::markdown::MAX_BYTES);
+    if !untracked || !small {
+        return String::new();
+    }
+    crate::markdown::read_text(&target).unwrap_or_default()
 }
 
 /// Plan 061: open a file, or the project folder when `path` is `None`, in the
@@ -1656,5 +1702,77 @@ mod tests {
         let stdout = run(closed);
         assert!(stdout.lines().any(|l| l == "tether:tab-a"), "unreachable app must launch untracked: {stdout}");
         let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// Plan 063 fixture: a fresh repo under the system temp dir (never `$HOME`).
+    /// Signing and the user's global hooks are off for this repo only.
+    fn temp_repo(name: &str) -> (std::path::PathBuf, String) {
+        let base = std::env::temp_dir().join(format!("logic-loop-plan063-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let root = base.join("repo");
+        std::fs::create_dir_all(&root).unwrap();
+        let pk = root.to_string_lossy().into_owned();
+        git(&pk, &["init", "-q"]);
+        (base, pk)
+    }
+
+    fn git(cwd: &str, args: &[&str]) {
+        let ok = std::process::Command::new("git")
+            .args(["-c", "user.name=t", "-c", "user.email=t@example.invalid"])
+            .args(["-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", "-C", cwd])
+            .args(args)
+            .status()
+            .unwrap()
+            .success();
+        assert!(ok, "git {args:?}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn git_new_file_shows_only_untracked_unignored_files_inside_the_project() {
+        use super::git_new_file_blocking as new_file;
+        let _guard = crate::home::lock_env(); // HOME stable for has_own_repo
+        let (base, pk) = temp_repo("new");
+        let root = std::path::PathBuf::from(&pk);
+        std::fs::write(root.join(".gitignore"), "secret.env\nx\\*\n").unwrap();
+        std::fs::write(root.join("tracked.txt"), "t").unwrap();
+        git(&pk, &["add", ".gitignore", "tracked.txt"]);
+        std::fs::write(root.join("new.md"), "hello").unwrap();
+        std::fs::write(root.join("secret.env"), "TOKEN=placeholder").unwrap();
+        std::fs::write(base.join("outside.md"), "o").unwrap();
+        std::os::unix::fs::symlink(base.join("outside.md"), root.join("link.md")).unwrap();
+        std::fs::write(root.join("big.md"), vec![b'x'; crate::markdown::MAX_BYTES as usize + 1]).unwrap();
+        // ignored file literally named `x*`; as a glob it would match untracked `xa.md`
+        std::fs::write(root.join("x*"), "ignored").unwrap();
+        std::fs::write(root.join("xa.md"), "a").unwrap();
+
+        let got: Vec<String> =
+            ["new.md", "tracked.txt", "secret.env", "link.md", "../outside.md", "big.md", "x*", "xa.md"]
+                .iter()
+                .map(|p| new_file(&pk, p))
+                .collect();
+        let _ = std::fs::remove_dir_all(&base);
+        assert_eq!(got, ["hello", "", "", "", "", "", "", "a"]);
+    }
+
+    #[test]
+    fn git_diff_head_is_empty_before_the_first_commit_then_shows_unstaged_edits() {
+        use super::{git_diff_blocking, git_diff_cached_blocking};
+        let _guard = crate::home::lock_env();
+        let (base, pk) = temp_repo("head");
+        let file = std::path::PathBuf::from(&pk).join("a.txt");
+        std::fs::write(&file, "one\n").unwrap();
+        git(&pk, &["add", "a.txt"]);
+        let unborn_head = git_diff_blocking(&pk, "HEAD");
+        let unborn_staged = git_diff_cached_blocking(pk.clone());
+        git(&pk, &["commit", "-q", "-m", "init"]);
+        std::fs::write(&file, "one\ntwo\n").unwrap(); // unstaged edit
+        let head = git_diff_blocking(&pk, "HEAD");
+        let staged = git_diff_cached_blocking(pk.clone());
+        let _ = std::fs::remove_dir_all(&base);
+        assert_eq!(unborn_head, "");
+        assert!(unborn_staged.contains("+one"), "{unborn_staged}");
+        assert!(head.contains("+two"), "{head}");
+        assert_eq!(staged, "");
     }
 }

@@ -1214,3 +1214,34 @@ a colour. New check 120; tokenizer asserts added to
 Built-app checks 111–120 passed (Codex computer use; 116's `/clear`
 reload confirmed by the maintainer); results in `docs/TESTING.md`.
 **PHASE 62 ACCEPTED** (2026-10-10).
+
+### Phase 63 — Diff pop-out shows unstaged edits and new files (2026-10-10)
+
+Plan: `plans/063-diff-unstaged-fallback.md`; **PHASE 63 APPROVED**
+(2026-10-10), defaults 1–3: HEAD first, then staged, then new file;
+3,000-line render cap; new-file text only inside the tab's project.
+Source: IDEAS "Half 1c", found testing Phase 62.
+
+Built on `feat/phase-63-diff-fallback`.
+- `pty.rs`: `git_diff_head` (shares a `git_diff_blocking` helper with
+  `git_diff_cached`) and `git_new_file`. `git_new_file` runs
+  `resolve_inside`, then `ls-files --others --exclude-standard` with
+  `--literal-pathspecs` and a root-relative path, then reads ≤1 MB of
+  UTF-8 via `markdown::read_text`, now `pub(crate)`.
+- `diff.ts`: `newFileDiff`, `pickDiff`, and `loadFileDiff` returning
+  `{ source, text } | null`.
+- `DiffModal`: a source label, a "not only this turn" note for HEAD, a
+  3,000-line cap and new empty-state copy.
+- Commit & Push footer unchanged.
+
+Stated revisions: the cap is an inline slice, with no helper or assert. An
+extra Rust case covers literal pathspecs, and a mutation check confirmed
+it fails without the flag.
+
+Verification: `cargo test --lib git_` (2 new tests), `npm run diff:check`,
+`npm run check`, `npm run opencode:check`, `npx tsc --noEmit`,
+`npm run build`, `cargo test --lib` (187 passed, 1 ignored),
+`cargo clippy --all-targets -- -D warnings`, `git diff --check` passed.
+Built-app checks 121–128 passed (Codex computer use with labeled synthetic
+hook fixtures; evidence and coverage limits in `docs/TESTING.md`).
+**PHASE 63 ACCEPTED** (2026-10-10). No golden (no prompt change).

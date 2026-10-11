@@ -1,7 +1,7 @@
 // Self-check for the Accomplished diff pop-out's file-section slicing.
 // Run: npm run diff:check
 import { strict as assert } from "node:assert";
-import { diffLineRoles, dirOf, extractFileDiff } from "../src/lib/diff";
+import { diffLineRoles, dirOf, extractFileDiff, newFileDiff, pickDiff } from "../src/lib/diff";
 
 const section = (path: string) =>
   [
@@ -110,5 +110,24 @@ assert.deepEqual(
   ["meta", "meta", "meta", "meta", "hunk", "ctx", "del", "add", "del", "add", "ctx",
    "meta", "meta", "meta", "meta", "hunk", "add"]
 );
+
+// --- Plan 063: new untracked file → all-added diff ---
+const fresh = newFileDiff("/repo/docs/new.md", "# Title\r\n\n- a\n").split("\n");
+assert.equal(fresh[0], "diff --git a/new.md b/new.md");
+assert.equal(fresh[4], "@@ -0,0 +1,3 @@", "trailing newline isn't an extra line; CRLF counts once");
+assert.deepEqual(diffLineRoles(fresh).slice(5), ["add", "add", "add"]);
+assert.deepEqual(fresh.slice(5), ["+# Title", "+", "+- a"]);
+
+// --- Plan 063: pickDiff order ---
+const file = "/Users/x/repo/src/b/foo.ts";
+const has = section("src/b/foo.ts");
+const other = section("src/a/foo.ts");
+assert.equal(pickDiff([{ head: has, staged: has }], "", file)?.source, "head", "HEAD wins: it includes staged");
+assert.equal(pickDiff([{ head: "", staged: has }], "", file)?.source, "staged", "no commits yet → staged");
+assert.equal(pickDiff([{ head: other, staged: "" }], "text", file)?.source, "new", "new file last");
+assert.equal(pickDiff([{ head: "", staged: "" }, { head: has, staged: "" }], "", file)?.source, "head",
+  "second directory try still checked");
+assert.equal(pickDiff([{ head: other, staged: other }], "", file), null, "nothing for this file → null");
+assert.ok(pickDiff([{ head: has, staged: "" }], "", file)?.text.startsWith("diff --git a/src/b/foo.ts"));
 
 console.log("diff-check: all assertions passed");

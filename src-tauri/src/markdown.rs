@@ -9,7 +9,7 @@ use std::path::PathBuf;
 /// the project root, then directly in `docs/` — one level, no recursion.
 const FIXED: [&str; 4] = ["CLAUDE.md", "AGENTS.md", ".claude/CLAUDE.md", ".logic-loop/board.md"];
 /// Keeps the textarea responsive; larger files go through Open in editor.
-const MAX_BYTES: u64 = 1024 * 1024;
+pub(crate) const MAX_BYTES: u64 = 1024 * 1024;
 
 #[derive(Debug, PartialEq, serde::Serialize)]
 #[serde(tag = "state", rename_all = "camelCase")]
@@ -76,7 +76,7 @@ fn checked(project_key: &str, name: &str) -> Result<PathBuf, String> {
     crate::pty::resolve_inside(project_key, Some(name))
 }
 
-fn read_text(path: &PathBuf) -> Result<String, String> {
+pub(crate) fn read_text(path: &PathBuf) -> Result<String, String> {
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
     String::from_utf8(bytes).map_err(|_| "not UTF-8 text".into())
 }
