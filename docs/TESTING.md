@@ -6258,3 +6258,97 @@ wrapper for `markdown-editor:check` hit sandbox `EPERM` creating tsx's IPC
 socket; `node --import tsx scripts/markdown-editor-check.ts` ran the same
 check successfully (all assertions passed). No implementation changes were
 made during this manual pass; full build/merge gates were not repeated.
+
+### Phase 63: Diff pop-out shows unstaged edits and new files
+
+Status: macOS built-app checks 121–128 passed 2026-10-10 (Codex computer
+use, labeled synthetic hook fixtures). **PHASE 63 ACCEPTED** (2026-10-10). Plan:
+`plans/063-diff-unstaged-fallback.md`. Automated:
+- `cargo test --lib git_`: `git_new_file` returns only untracked,
+  not-ignored files inside the project, with literal pathspecs;
+  `git_diff_head` is empty before the first commit and shows unstaged edits.
+- `npm run diff:check`: `newFileDiff` and `pickDiff` order.
+
+Run in the built app, in a scratch repo under `/private/tmp/…`; archive it
+on the dashboard afterwards.
+
+- [x] 121. Agent edits a tracked file and doesn't stage it → Accomplished
+      row → pop-out shows red and green lines, labelled "Uncommitted
+      changes (vs last commit)".
+- [x] 122. Same file, now partly staged by you (`git add -p`) with a newer
+      unstaged edit from the agent: both edits show.
+- [x] 123. Agent creates a new file → all green, labelled "New file, not
+      tracked by git yet".
+- [x] 124. Agent creates a git-ignored file (e.g. `.env.local` with a fake
+      value): empty state, and the content is not shown.
+- [x] 125. Agent commits its edit: the pop-out shows the new empty-state
+      copy.
+- [x] 126. A row outside the project (e.g. a `~/.claude/…` write): empty
+      state, no content.
+- [x] 127. A new file over 3,000 lines: the cap note shows, and Open in
+      editor opens the whole file.
+- [x] 128. Commit & Push footer: staging and committing behave as before.
+
+
+Live setup and evidence (2026-10-10): installed
+`/Applications/Logic Loop.app/Contents/MacOS/app` matched
+`src-tauri/target/release/app` byte-for-byte by SHA-256
+(`15568bf1d429bf209c481925bcb84695f35604dbcd9a5f60045eb7f124c50eb7`).
+Used scratch repo `/private/tmp/logic-loop-phase63-tests-20261010` and
+labeled synthetic Claude `SessionStart` / `PostToolUse` / `Stop` events
+through the authenticated localhost ingest server, session
+`synthetic-phase63-ui-20261010`. Fixtures were created via shell; all
+Accomplished clicks, diff inspection, editor handoff, footer actions and
+archiving used computer use. This verifies the live UI/Rust behavior,
+not an agent's own hook emission. No input was sent to running terminals.
+
+- 121: `tracked.md` showed the HEAD label, explanatory second line, red
+  removal and green addition. The existing footer initially auto-staged
+  tracked edits while generating its message; reset the scratch index and
+  reopened the modal. `git diff --cached -- tracked.md` was then zero bytes,
+  while the same diff still appeared, confirming the truly unstaged case.
+- 122: used `git add -p` to stage the first hunk, then changed the distant
+  second section. Git status was `MM`; cached and working-tree diffs held
+  separate hunks. The modal visibly showed both under the HEAD label.
+- 123: `new.md` showed the new-file label and both content lines green.
+- 124: `.env.local`, ignored by the repo's `.gitignore`, showed the full
+  new empty-state copy; its fake-value content did not appear.
+- 125: after committing both tracked hunks (`ba06e40`), reopening the
+  tracked-file row showed the full new empty-state copy.
+- 126: `/private/tmp/phase63-outside.md`, outside the project and outside
+  any fixture repo, showed the same empty state without its content.
+- 127: `large.md` contained 3,105 lines. The diff visibly ended at content
+  line 2,995, followed by “110 more lines. Open in editor to see the rest.”
+  (the cap includes five diff-header lines). Open in editor opened the exact
+  file in VS Code; navigation to EOF visibly showed lines through 3,105
+  and the trailing empty line 3,106. Closed the test editor tab afterward.
+- 128: configured `origin` as a disposable local bare repo at
+  `/private/tmp/logic-loop-phase63-origin-20261010.git`. With new-file
+  inclusion unchecked, the footer staged tracked changes and committed /
+  pushed `9a77248` (“Phase 63 footer tracked-only test”), leaving `new.md`
+  and `large.md` untracked. Checking inclusion staged both new files;
+  the next footer commit / push produced `60c5ebd` (“Phase 63 footer
+  include-new test”). Both used the explicit “→ main” confirmation path.
+  Final working tree was clean, local HEAD equaled the bare remote's main,
+  and neither `.env.local` nor `.logic-loop/` was tracked. The footer then
+  read “no changes.” External hosting / PR creation were not exercised.
+
+Cleanup: marked the synthetic result Reviewed, closed the scratch shell
+without terminal input, and archived the project via its dashboard overview;
+“Unarchive” confirmed persistence. Scratch repo, local remote and test
+bookmark remain for reproduction. No editor preference or global config
+changed. No source implementation or plan changes made in this pass.
+
+Focused verification: `node --import tsx scripts/diff-check.ts` — all
+assertions passed; `cd src-tauri && cargo test --lib git_` — 5 passed,
+0 failed. Full build / merge gates were not repeated for this manual-test
+record; the approved plan records prior green gates. Windows remains
+unverified. **PHASE 63 ACCEPTED** (maintainer, 2026-10-10).
+
+
+PR preparation (2026-10-10): after acceptance, reran `npm run opencode:check`,
+`npm run check`, `npx tsc --noEmit`, `npm run build`, `cargo test --lib`
+(187 passed, 1 ignored), `cargo clippy --all-targets -- -D warnings`, and
+`git diff --check` — all passed. Initial sandbox attempts blocked tsx IPC
+and three Rust tests' local listeners with EPERM; approved unsandboxed
+reruns passed. No golden (no extraction prompt change).

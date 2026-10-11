@@ -321,6 +321,8 @@ pub fn run() {
             pty::git_untracked_files,
             pty::git_add_all,
             pty::git_diff_cached,
+            pty::git_diff_head,
+            pty::git_new_file,
             pty::open_in_editor,
             markdown::md_list,
             markdown::md_read,

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { diffLineRoles, loadFileDiff, type DiffLineRole } from "../lib/diff";
+import { diffLineRoles, loadFileDiff, type DiffLineRole, type DiffSource, type FileDiff } from "../lib/diff";
 import { basename } from "../lib/repo";
 import { OpenInEditor } from "./OpenInEditor";
 
@@ -12,6 +12,15 @@ const LINE_CLASS: Record<DiffLineRole, string> = {
   ctx: "",
 };
 
+const SOURCE_LABEL: Record<DiffSource, string> = {
+  head: "Uncommitted changes (vs last commit)",
+  staged: "Staged changes (no commits yet)",
+  new: "New file, not tracked by git yet",
+};
+
+// A new 1 MB file is ~20k lines of spans, enough to stall the modal.
+const LINE_CAP = 3000;
+
 interface Props {
   filePath: string; // agent-reported path off the Accomplished row
   cwd: string; // active tab's project dir, the fallback repo to ask
@@ -23,16 +32,17 @@ interface Props {
  * version is not wanted. A lookup that finds nothing renders the empty
  * state rather than throwing into the panel tree. */
 export function DiffModal({ filePath, cwd, onClose }: Props) {
-  const [diff, setDiff] = useState<string | null>(null);
-  const lines = useMemo(() => (diff ? diff.split("\n") : []), [diff]);
+  const [diff, setDiff] = useState<FileDiff | null | undefined>(undefined); // undefined = loading
+  const lines = useMemo(() => (diff ? diff.text.split("\n") : []), [diff]);
   const roles = useMemo(() => diffLineRoles(lines), [lines]);
+  const hidden = Math.max(0, lines.length - LINE_CAP);
 
   useEffect(() => {
     let cancelled = false;
     void loadFileDiff(filePath, cwd)
-      .catch(() => "")
-      .then((text) => {
-        if (!cancelled) setDiff(text);
+      .catch(() => null)
+      .then((found) => {
+        if (!cancelled) setDiff(found);
       });
     return () => {
       cancelled = true;
@@ -70,24 +80,35 @@ export function DiffModal({ filePath, cwd, onClose }: Props) {
           <OpenInEditor cwd={cwd} path={filePath}
             buttonClass="rounded border border-zinc-700 px-2 py-0.5 text-xs text-zinc-300 hover:bg-zinc-800" />
         </div>
-        {diff === null ? (
+        {diff === undefined ? (
           <p className="text-xs text-zinc-500">Loading diff…</p>
-        ) : diff === "" ? (
+        ) : diff === null ? (
           <p className="text-xs text-zinc-500">
-            No staged diff for this file. The app can only read staged changes
-            (<span className="font-mono">git diff --cached</span>), so an edit the agent hasn't
-            staged — or a file outside this project's repo — shows nothing here.
-            Open in editor to see the whole file.
+            No uncommitted changes in this file. It may already be committed, ignored by git, or
+            outside this project&apos;s repo. Open in editor to see the whole file.
           </p>
         ) : (
-          <pre className="overflow-auto rounded bg-black/30 p-2 font-mono text-[11px] whitespace-pre text-zinc-300">
-            {lines.map((line, i) => (
-              <span key={i} className={LINE_CLASS[roles[i]]}>
-                {line}
-                {"\n"}
-              </span>
-            ))}
-          </pre>
+          <>
+            <p className="text-xs text-zinc-300">{SOURCE_LABEL[diff.source]}</p>
+            {diff.source === "head" && (
+              <p className="text-[11px] text-zinc-500">
+                Everything uncommitted in this file, not only this turn&apos;s edit.
+              </p>
+            )}
+            <pre className="mt-2 overflow-auto rounded bg-black/30 p-2 font-mono text-[11px] whitespace-pre text-zinc-300">
+              {lines.slice(0, LINE_CAP).map((line, i) => (
+                <span key={i} className={LINE_CLASS[roles[i]]}>
+                  {line}
+                  {"\n"}
+                </span>
+              ))}
+              {hidden > 0 && (
+                <span className="text-zinc-500">
+                  … {hidden.toLocaleString()} more lines. Open in editor to see the rest.
+                </span>
+              )}
+            </pre>
+          </>
         )}
         <div className="mt-3 flex justify-end text-sm">
           <button className="rounded px-3 py-1 text-zinc-400 hover:text-zinc-200" onClick={onClose}>

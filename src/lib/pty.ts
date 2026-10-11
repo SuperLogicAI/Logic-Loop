@@ -136,6 +136,14 @@ export function gitDiffCached(cwd: string): Promise<string> {
   return invoke<string>("git_diff_cached", { cwd });
 }
 
+export function gitDiffHead(cwd: string): Promise<string> {
+  return invoke<string>("git_diff_head", { cwd });
+}
+
+export function gitNewFile(cwd: string, path: string): Promise<string> {
+  return invoke<string>("git_new_file", { cwd, path });
+}
+
 export function gitCommit(cwd: string, message: string): Promise<void> {
   return invoke("git_commit", { cwd, message });
 }
