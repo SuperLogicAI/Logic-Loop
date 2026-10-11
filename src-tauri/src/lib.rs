@@ -320,6 +320,7 @@ pub fn run() {
             pty::git_untracked_files,
             pty::git_add_all,
             pty::git_diff_cached,
+            pty::open_in_editor,
             pty::git_commit,
             pty::git_create_branch,
             pty::git_checkout,

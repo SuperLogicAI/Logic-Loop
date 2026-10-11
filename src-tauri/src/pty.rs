@@ -881,6 +881,74 @@ fn git_diff_cached_blocking(cwd: String) -> String {
     }
 }
 
+/// Plan 061: open a file, or the project folder when `path` is `None`, in the
+/// user's editor. `path` comes off Accomplished rows, i.e. agent-reported and
+/// untrusted: it must resolve (symlinks and `..` followed) to a regular file
+/// inside `cwd`. Never the default handler — on macOS that executes
+/// `.command`/`.app` targets — always the named editor app.
+#[tauri::command]
+pub async fn open_in_editor(
+    app: AppHandle,
+    cwd: String,
+    path: Option<String>,
+    editor: String,
+) -> Result<(), String> {
+    spawn_blocking_result("open_in_editor", move || {
+        if editor.trim().is_empty() {
+            return Err("no editor set".into());
+        }
+        let target = resolve_inside(&cwd, path.as_deref())?;
+        launch_editor(&app, &editor, &target)
+    })
+    .await
+}
+
+fn resolve_inside(cwd: &str, path: Option<&str>) -> Result<std::path::PathBuf, String> {
+    let root = std::fs::canonicalize(cwd).map_err(|e| format!("project folder: {e}"))?;
+    let Some(path) = path else {
+        return if root.is_dir() {
+            Ok(root)
+        } else {
+            Err("project folder is not a directory".into())
+        };
+    };
+    // join() with an absolute path replaces root, so both forms land here
+    let target = std::fs::canonicalize(root.join(path)).map_err(|e| format!("{path}: {e}"))?;
+    if !target.starts_with(&root) {
+        return Err("outside this project".into());
+    }
+    if !target.is_file() {
+        return Err("not a file".into());
+    }
+    Ok(target)
+}
+
+// `open -a` waits for its exit status, so a missing app surfaces as an error;
+// the opener plugin spawns detached and would swallow it. argv only, no shell.
+#[cfg(target_os = "macos")]
+fn launch_editor(_app: &AppHandle, editor: &str, target: &std::path::Path) -> Result<(), String> {
+    let out = std::process::Command::new("open")
+        .arg("-a")
+        .arg(editor)
+        .arg(target)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
+}
+
+// ponytail: unverified until the Phase 13 Windows port (ROADMAP gap table).
+#[cfg(not(target_os = "macos"))]
+fn launch_editor(app: &AppHandle, editor: &str, target: &std::path::Path) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_path(target.to_string_lossy(), Some(editor))
+        .map_err(|e| e.to_string())
+}
+
 /// Message reaches git as a real subprocess argument (`Command::arg`), never
 /// through a shell string — no injection surface even though the content is
 /// LLM-generated from repo data.
@@ -1034,7 +1102,7 @@ fn git_pr_create_blocking(cwd: String, title: String, body: String) -> Result<St
 #[cfg(test)]
 mod tests {
     use super::{
-        canon, codex_launch_prefix, has_own_repo, is_codex_command, project_key, resolve_spawn_cwd,
+        canon, codex_launch_prefix, has_own_repo, is_codex_command, project_key, resolve_inside, resolve_spawn_cwd,
         resume_command, spawn_ordered_writer, valid_resume_id, validate_project_dir, write_zsh_integration,
     };
     use crate::launch::{LaunchRegistry, Verdict};
@@ -1071,6 +1139,55 @@ mod tests {
         fn flush(&mut self) -> std::io::Result<()> {
             Ok(())
         }
+    }
+
+    fn editor_fixture(name: &str) -> (std::path::PathBuf, std::path::PathBuf) {
+        let base = std::env::temp_dir().join(format!("logic-loop-plan061-{name}-{}", std::process::id()));
+        let root = base.join("project");
+        std::fs::create_dir_all(root.join("sub")).unwrap();
+        std::fs::write(root.join("sub/a.md"), b"x").unwrap();
+        std::fs::write(base.join("outside.md"), b"x").unwrap();
+        (base, root)
+    }
+
+    #[test]
+    fn resolve_inside_accepts_relative_absolute_and_project_root() {
+        let (base, root) = editor_fixture("ok");
+        let cwd = root.to_string_lossy().into_owned();
+        let want_root = std::fs::canonicalize(&root).unwrap();
+        let want = want_root.join("sub/a.md");
+        let rel = resolve_inside(&cwd, Some("sub/a.md"));
+        let abs = resolve_inside(&cwd, Some(&root.join("sub/a.md").to_string_lossy()));
+        let none = resolve_inside(&cwd, None);
+        std::fs::remove_dir_all(&base).ok();
+        assert_eq!(rel.unwrap(), want);
+        assert_eq!(abs.unwrap(), want);
+        assert_eq!(none.unwrap(), want_root);
+    }
+
+    #[test]
+    fn resolve_inside_rejects_escape_directory_and_missing() {
+        let (base, root) = editor_fixture("bad");
+        let cwd = root.to_string_lossy().into_owned();
+        let escape = resolve_inside(&cwd, Some("../outside.md"));
+        let outside_abs = resolve_inside(&cwd, Some(&base.join("outside.md").to_string_lossy()));
+        let dir = resolve_inside(&cwd, Some("sub"));
+        let missing = resolve_inside(&cwd, Some("nope.md"));
+        std::fs::remove_dir_all(&base).ok();
+        assert_eq!(escape.unwrap_err(), "outside this project");
+        assert_eq!(outside_abs.unwrap_err(), "outside this project");
+        assert_eq!(dir.unwrap_err(), "not a file");
+        assert!(missing.is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolve_inside_rejects_symlink_pointing_outside() {
+        let (base, root) = editor_fixture("link");
+        std::os::unix::fs::symlink(base.join("outside.md"), root.join("link.md")).unwrap();
+        let result = resolve_inside(&root.to_string_lossy(), Some("link.md"));
+        std::fs::remove_dir_all(&base).ok();
+        assert_eq!(result.unwrap_err(), "outside this project");
     }
 
     #[test]

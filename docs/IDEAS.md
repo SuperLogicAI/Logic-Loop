@@ -39,6 +39,12 @@ no ingestion/schema change.
 
 ## Editable code view pop-out — considered, not recommended
 
+**Partial reversal proposed 2026-10-10, for markdown only (Plan 062
+draft, not yet approved):** a quick editor for project instruction/notes files
+(`CLAUDE.md`, `AGENTS.md`, board, root `*.md`) in a plain textarea with
+compare-and-swap saves. Code editing is still not recommended, for the
+reasons below.
+
 Flagged during the same discussion, kept here so it doesn't get silently
 re-proposed without the reasoning: this is a mini-IDE, not a pop-out. Real
 scope — new editor dependency, undo semantics, and a genuine save-race the
@@ -1741,3 +1747,67 @@ Anything a client sees should come from there, not from in-app estimates.
 **Decision needed:** does the maintainer bill clients for agent usage
 (flat vs pass-through; subscription vs API keys)? That decides whether
 this is worth building at all.
+
+# Editor-native users (field feedback, 2026-10-10)
+
+Source: a conversation with a non-user vibe-coder who matches today's
+typical builder profile: Windows and PowerShell, Claude Code inside VS
+Code's integrated terminal, one project at a time, small short-lived tools.
+He isn't the target user (he avoids running multiple projects on purpose),
+but he speaks for a large group that won't leave their editor.
+
+What he said, condensed:
+
+- The IDE is home. Explorer, full-file view, cross-file search/replace and
+  a terminal in one window are the minimum. He dropped Claude Desktop and
+  Antigravity for hiding his files ("where are my files?").
+- He wants to read the **whole file**, not a diff, to check the agent's
+  last edit.
+- He keeps parked ideas in a plain `.md` in the repo, which is what
+  `.logic-loop/board.md` already is.
+- Switching cost wins: he changes tools only when his current workflow hits
+  a wall.
+
+## Half 1: hand files to the user's editor (Plan 061)
+
+Open in editor and Show in Finder: per file from the diff modal, and per
+project on the dashboard's project view. This covers "show me the full
+file" without building an editor.
+Plan: `plans/061-open-in-editor.md`.
+
+## Half 1b: markdown editor for instruction files (Plan 062)
+
+A quick-tweak editor for `CLAUDE.md` / `AGENTS.md` / board / root `*.md`
+on the dashboard project view. No preview, no recursion, compare-and-swap
+against agent edits. Plan 062, drafted 2026-10-10, awaiting approval.
+
+## Half 2: VS Code companion extension (parked, strategic)
+
+**Idea.** A thin VS Code extension that shows Logic Loop's existing state
+(attention inbox, re-entry brief, open decisions for the workspace folder)
+in a VS Code side view. Logic Loop's ingestion keeps owning all
+intelligence (invariant 3), and the extension is one more dumb view. That
+puts the product where editor-native users already are, instead of asking
+them to move.
+
+**Prerequisite, do first (cheap, decides whether this is worth anything):**
+the companion-mode check. Run Claude Code in VS Code's integrated terminal,
+outside Logic Loop, in a project that has a Logic Loop tab open. Then run it
+again in one that doesn't. `bindSession` has a cwd fallback for untethered
+sessions (`src/lib/ingest.ts`). Record which panels fill in and what an
+outside session looks like when no matching tab exists. If the panels
+already work, Logic Loop can sell itself as a dashboard next to your editor
+before any extension exists.
+
+**Open questions.**
+- Transport: read the SQLite file directly (read-only), or ask the ingest
+  server over its bearer-token API? The extension needs the token, so
+  decide how it gets the token without a user copy-paste.
+- Does the companion replace the desktop window for these users, or only
+  point back to it ("open in Logic Loop")? The second is far smaller.
+- Windows. These users skew Windows, so the extension is worth little before
+  Phase 13's native Windows port lands.
+
+**Not doing, restated:** file explorer, in-app code editor, cross-file search,
+drag-in file management. That's the IDE's job, and copying it makes a worse
+IDE. See "Editable code view pop-out — considered, not recommended" above.

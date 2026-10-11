@@ -972,6 +972,19 @@ export async function setOnboardingVersion(version: number): Promise<void> {
   await setSetting(ONBOARDING_VERSION_KEY, String(safeVersion));
 }
 
+// Plan 061: the app "Open in editor" launches. Written only by the UI — agent
+// content never reaches it, which is what makes naming the app safe.
+const EDITOR_APP_KEY = "editor_app";
+export const DEFAULT_EDITOR_APP = "Visual Studio Code";
+
+export async function getEditorApp(): Promise<string> {
+  return (await getSetting(EDITOR_APP_KEY))?.trim() || DEFAULT_EDITOR_APP;
+}
+
+export async function setEditorApp(name: string): Promise<void> {
+  await setSetting(EDITOR_APP_KEY, name.trim());
+}
+
 // Separate key from ONBOARDING_VERSION on purpose (Phase 47): dismissing
 // Setup and having seen the feature tour are different facts — a future
 // tour redesign should be able to re-show itself without re-forcing Setup,
