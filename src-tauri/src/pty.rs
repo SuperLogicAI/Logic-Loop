@@ -903,7 +903,7 @@ pub async fn open_in_editor(
     .await
 }
 
-fn resolve_inside(cwd: &str, path: Option<&str>) -> Result<std::path::PathBuf, String> {
+pub(crate) fn resolve_inside(cwd: &str, path: Option<&str>) -> Result<std::path::PathBuf, String> {
     let root = std::fs::canonicalize(cwd).map_err(|e| format!("project folder: {e}"))?;
     let Some(path) = path else {
         return if root.is_dir() {

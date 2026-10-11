@@ -6149,3 +6149,112 @@ shell tab and bookmark removed. Scratch files remain for reproduction.
 Focused verification rerun: `cargo test --lib resolve_inside` — 3 passed,
 0 failed. No source changes made during this pass; prior full gates were
 not repeated. Windows/non-macOS fallback remains unverified.
+
+### Phase 62: Markdown editor for project instruction files
+
+Status: built-app checks 111–120 passed 2026-10-10 (Codex computer use
+plus maintainer follow-up for 116). **PHASE 62 ACCEPTED**
+(2026-10-10). Plan:
+`plans/062-markdown-editor.md`. Automated: `cargo test --lib markdown`
+(5 tests: list order and exclusions, out-pointing symlink dropped and
+write-rejected, unlisted/path names rejected, compare-and-swap, non-UTF-8
+and oversize) and `npm run markdown-editor:check` (CRLF round-trip).
+
+Run 111–115 and 117 in a scratch project under `/private/tmp/…` with
+`git init`; archive it on the dashboard afterwards. No check needs an app
+restart or injected hooks.
+
+- [x] 111. Dashboard → project → Markdown: the list shows CLAUDE.md,
+      AGENTS.md, board.md first, then the other root `.md` files, then
+      `docs/*.md` (as `docs/…`); nothing from `docs/` subfolders or
+      `plans/`.
+- [x] 112. Edit CLAUDE.md, Cmd+S: the file on disk matches; `git diff`
+      shows only that change.
+- [x] 113. Open a file, change it from outside (an agent in a tab, or
+      `echo x >> file` in a terminal), then type and save: the conflict
+      banner appears and the file keeps the outside change. Reload shows
+      that version; repeat and use Overwrite, which saves yours.
+- [x] 114. Dirty draft → click another file, then Back, then a terminal
+      tab, then return to Markdown: the draft is still there, and the file
+      shows `●` in the list throughout.
+- [x] 115. A CRLF `.md` (`printf 'a\r\nb\r\n' > crlf.md`): edit and save;
+      `file crlf.md` still reports CRLF and `git diff` is one line.
+- [x] 116. A Claude tab running when CLAUDE.md is edited: the muted
+      reload note is visible. After `/clear` in that tab (typed by you),
+      `/context` shows the new content.
+- [x] 117. A root `.md` symlinked to a file outside the project is not
+      listed.
+- [x] 118. In the editor view, Open in editor (061) opens the current file
+      in the configured editor.
+- [x] 119. Header layout, in both views: row 1 reads Home / project ·
+      `Overview | Markdown` toggle · Continue control + New session tab on
+      the right; row 2 reads folder path · Show in Finder · Open in editor ·
+      change editor · Copy update / Pin / Archive on the right. Switching to
+      Markdown keeps the header; Continue works from the Markdown view.
+      Check the Continue control's three forms: 2+ workspace tabs (dropdown),
+      exactly 1 (blue Continue), none (Start session).
+- [x] 120. Syntax colours: `#` and `##` headings take different colours,
+      and so do list markers, `**bold**`, `` `code` ``, links, `@imports`,
+      fenced blocks, `>` quotes and `---` rules. Typing, selecting, ⌘A and
+      arrow keys keep the caret exactly on the coloured text, including
+      long wrapped lines and the end of a long file (docs/IDEAS.md). Typing
+      at the bottom of a long file scrolls to keep the caret visible.
+
+
+Built-app evidence (2026-10-10, Codex computer use):
+
+- Scratch Git project: `/private/tmp/logic-loop-phase62-tests-20261010`.
+  No restart or injected hooks. File edits stayed in the scratch project;
+  its `docs/IDEAS.md` was a copy of the real long file. The scratch project
+  was archived via the dashboard (`Unarchive` confirmed), and both
+  test-created shell tabs were closed. Scratch files and its bookmark remain
+  available for follow-up.
+- 111 / 117: list order was `CLAUDE.md`, `AGENTS.md`,
+  `.claude/CLAUDE.md`, `.logic-loop/board.md`, then `alpha.md`, `crlf.md`,
+  `zeta.MD`, then `docs/a.md`, `docs/IDEAS.md`, `docs/z.md`.
+  `docs/nested/excluded.md`, `plans/excluded.md`, and the root
+  `outside.md` symlink to an outside file were absent.
+- 112: Cmd+S changed `original-62` to `edited-62`; exact disk content
+  matched. `git diff --stat` showed only CLAUDE.md, one line replaced.
+- 113: an external append followed by typing + Cmd+S produced the conflict
+  banner; disk retained only the external append. Reload displayed it.
+  Repeating with a second external append and choosing Overwrite saved the
+  draft, retaining the first append and replacing the second, verified on disk.
+- 114: `Retained unsaved draft 114.` and the CLAUDE.md dirty dot survived
+  switching to AGENTS.md, leaving via Home (the current Back control),
+  visiting the scratch terminal without input, and reopening Markdown.
+- 115: after replacing `a` with `A`, exact bytes were `A\r\nb\r\n`;
+  `file` reported CRLF and `git diff --numstat` reported 1 insertion,
+  1 deletion.
+- 116: the muted reload note was visible beneath CLAUDE.md and AGENTS.md,
+  including the real project's CLAUDE.md view. Maintainer completed the
+  coached reload follow-up after relaunching the app and supplied Claude's
+  response to "Without reading any files or using tools, what Test marker
+  is in your loaded project instructions?": "reload-116. It's in the
+  project CLAUDE.md." This confirms the updated memory content was loaded;
+  the follow-up is recorded from maintainer-provided evidence, not direct
+  computer-use observation of `/clear` or `/context`. Codex sent no input
+  to a running terminal.
+- 118: the file-level Open in editor opened the scratch `crlf.md` in
+  configured VS Code; its window URL was the exact file path and its status
+  bar reported CRLF.
+- 119: screenshots confirmed the two header rows in Overview and Markdown.
+  One scratch workspace showed blue Continue plus New session tab; Continue
+  from Markdown activated that workspace. After closing it, both views showed
+  Start session (no duplicate New session tab). The real project with two
+  workspaces showed Continue in… plus New session tab; its dropdown listed
+  both workspaces and selecting Codex from Markdown activated the Codex tab.
+- 120: the syntax fixture visibly distinguished heading levels, list/number
+  markers, bold, code, links, imports, fences, quotes, and rules. Cmd+A
+  selection aligned with the colour layer through wrapped lines. Arrow-key
+  insertion and selection worked at the heading and wrapped-line end. In the
+  copied long IDEAS file, typing at the end scrolled to the bottom; a final
+  `Caret visibility 120.` line and its selected period were fully visible and
+  aligned. These extra syntax/long-file edits were left unsaved in scratch
+  drafts; the real IDEAS file was not edited.
+
+Focused verification: `cargo test --lib markdown` — 5 passed. The npm
+wrapper for `markdown-editor:check` hit sandbox `EPERM` creating tsx's IPC
+socket; `node --import tsx scripts/markdown-editor-check.ts` ran the same
+check successfully (all assertions passed). No implementation changes were
+made during this manual pass; full build/merge gates were not repeated.

@@ -10,6 +10,7 @@ mod codex_meter;
 mod home;
 mod ingest;
 mod launch;
+mod markdown;
 mod opencode;
 mod pi;
 mod pty;
@@ -321,6 +322,9 @@ pub fn run() {
             pty::git_add_all,
             pty::git_diff_cached,
             pty::open_in_editor,
+            markdown::md_list,
+            markdown::md_read,
+            markdown::md_write,
             pty::git_commit,
             pty::git_create_branch,
             pty::git_checkout,
