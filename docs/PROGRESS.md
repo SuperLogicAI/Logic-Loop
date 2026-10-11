@@ -1111,3 +1111,54 @@ Verification: focused queue/momentum/delta/unclaimed checks,
 Before PR submission, full `cargo test` and `review-queue:check` also passed.
 Sandbox localhost/IPC restrictions required escalated check execution.
 Build emits the existing chunk-size warning. No golden (no prompt change).
+
+### Phase 61 — Open in editor / Show in Finder (2026-10-10)
+
+Plan: `plans/061-open-in-editor.md`; **PHASE 61 APPROVED** (2026-10-10),
+defaults 1–3 with Decision 2 revised to the dashboard project view after
+the maintainer's mockup. Source: field feedback from a non-user vibe-coder
+who lives in VS Code; recorded in IDEAS "Editor-native users".
+
+Built on `feat/phase-61-open-in-editor`: `pty::open_in_editor` resolves the
+agent-reported path inside the project (canonicalized, so `..` and
+symlinks that escape are rejected, regular files only) and opens it with
+the named editor via `open -a` on macOS, never the default handler.
+Setting `editor_app` (default Visual Studio Code). One shared
+`OpenInEditor` component on the diff modal and on the dashboard project
+view's path line; Show in Finder uses the opener plugin's
+`revealItemInDir`, already allowed by `opener:default`. No capability or
+schema change. ROADMAP's Windows gap table gained the non-macOS fallback.
+
+Verification: `cargo test --lib resolve_inside` (3 new tests),
+`npm run check`, `npm run opencode:check`, `npx tsc --noEmit`,
+`npm run build`, `cargo test --lib` (180 passed, 1 ignored),
+`cargo clippy --all-targets -- -D warnings`, `git diff --check` passed.
+Live: `open -a <missing app>` exits 1 with "Unable to find application
+named …", which is the error the UI shows. Built-app checks 104–110
+pending. No golden (no prompt change).
+
+Built-app follow-up (2026-10-10, Codex computer use): macOS checks 104–106
+and 108–110 passed, with labeled structured-hook fixtures for file rows
+and the actual project for dashboard actions. Executable `x.command`
+opened as text in both VS Code and TextEdit; `/tmp/pwn` stayed absent.
+Check 107's missing-app error and correction passed; quit/relaunch
+persistence remains pending at the maintainer's explicit request to
+preserve live Claude/Codex sessions. Original editor preference restored,
+test tab/bookmark removed, and focused `resolve_inside` tests passed 3/3.
+Details and fixture-coverage limits are in `docs/TESTING.md` Phase 61.
+No source changes or phase acceptance in this pass.
+
+Restart follow-up (2026-10-10, Codex computer use): the maintainer quit
+and reopened Logic Loop. The editor field still showed Visual Studio Code
+without resaving, and Open in editor successfully handed the project to
+VS Code. Check 107 is now passed; all macOS UI checks 104–110 are complete
+with the fixture-coverage limits documented in `docs/TESTING.md`.
+Windows/non-macOS behavior remains unverified. Phase acceptance is still
+the maintainer's decision; no source changes or next-phase work.
+
+Maintainer UI fix (2026-10-10): button order is now Show in Finder ·
+Open in editor · change editor, so the editor setting sits beside the
+action it configures (both placements share `OpenInEditor`). `tsc` and
+`build` passed; `git diff --check` clean.
+Maintainer rebuilt and confirmed the reordered buttons still work.
+**PHASE 61 ACCEPTED** (2026-10-10).

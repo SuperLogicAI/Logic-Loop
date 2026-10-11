@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { diffLineRoles, loadFileDiff, type DiffLineRole } from "../lib/diff";
 import { basename } from "../lib/repo";
+import { OpenInEditor } from "./OpenInEditor";
 
 // Semantic roles (Plan 050) so Lock-in greys these with everything else.
 const LINE_CLASS: Record<DiffLineRole, string> = {
@@ -65,6 +66,10 @@ export function DiffModal({ filePath, cwd, onClose }: Props) {
         <p className="mb-2 truncate font-mono text-[10px] text-zinc-600" title={filePath}>
           {filePath}
         </p>
+        <div className="mb-2">
+          <OpenInEditor cwd={cwd} path={filePath}
+            buttonClass="rounded border border-zinc-700 px-2 py-0.5 text-xs text-zinc-300 hover:bg-zinc-800" />
+        </div>
         {diff === null ? (
           <p className="text-xs text-zinc-500">Loading diff…</p>
         ) : diff === "" ? (
@@ -72,6 +77,7 @@ export function DiffModal({ filePath, cwd, onClose }: Props) {
             No staged diff for this file. The app can only read staged changes
             (<span className="font-mono">git diff --cached</span>), so an edit the agent hasn't
             staged — or a file outside this project's repo — shows nothing here.
+            Open in editor to see the whole file.
           </p>
         ) : (
           <pre className="overflow-auto rounded bg-black/30 p-2 font-mono text-[11px] whitespace-pre text-zinc-300">

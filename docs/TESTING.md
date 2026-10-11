@@ -6081,3 +6081,71 @@ still held one seen result. Reviewed was used to clean up that result.
 No test cron remains; cleanup confirmed `Accomplished: 0 to review`.
 Maintainer confirmed the OS Dock badge cleared, completing check 96.
 All Phase 60 built-app checks passed; **PHASE 60 ACCEPTED** (2026-10-09).
+
+### Phase 61: Open in editor / Show in Finder
+
+Status: macOS built-app UI checks run 2026-10-10 (Codex computer use).
+104–110 passed; 107's restart follow-up passed after the maintainer quit
+and reopened the app. **PHASE 61 ACCEPTED** (2026-10-10). Plan:
+`plans/061-open-in-editor.md`. Automated: `resolve_inside` unit tests
+(relative, absolute, project root, `../` escape, absolute outside,
+directory, missing, symlink pointing out).
+
+Live setup: installed `/Applications/Logic Loop.app` executable matched
+`src-tauri/target/release/app` byte-for-byte (SHA-256 comparison). File rows
+used explicitly labeled synthetic `PostToolUse` hooks through the authenticated
+localhost ingest server, with a unique test session and scratch project
+`/private/tmp/logic-loop-phase61-tests-20261010`. This exercises the actual
+Accomplished UI, Rust command, and native editor/Finder handoff; it does not
+add coverage of an agent's own hook emission. No input was sent to running
+terminals. Original Visual Studio Code preference restored; task-created
+shell tab and bookmark removed. Scratch files remain for reproduction.
+
+- [x] 104. Agent edits a tracked file → Accomplished row → diff modal →
+      Open in editor: VS Code opens that file.
+      UI fixture: `tracked.md` opened at its exact path with full current
+      contents visible in VS Code.
+- [x] 105. Agent creates a new untracked file: the modal shows "no staged
+      diff", and Open in editor still opens the whole file.
+      UI fixture: `untracked.md` showed the empty-diff guidance, then opened
+      with its full contents in VS Code.
+- [x] 106. Show in Finder selects the file in Finder.
+      Finder accessibility state confirmed the exact `tracked.md` selected.
+- [x] 107. Use "change editor" to set a missing app ("Nope"), then Open in
+      editor: inline "Unable to find application…" error and the editor
+      input appear. Set an installed editor (e.g. "Cursor" or "TextEdit");
+      the next click opens there, and the choice survives restart.
+      Passed: saving `Nope` produced "Unable to find application named
+      'Nope'" and an editor field; saving `TextEdit` cleared the error and
+      the next click opened the full file there. Visual Studio Code restored
+      and successfully used afterward, before the maintainer's restart.
+      Partial evidence (2026-10-10, read-only DB query): `settings` holds
+      `editor_app|Visual Studio Code`, the same table startup reads, so the
+      write persists.
+      Relaunch follow-up (2026-10-10, Codex computer use): after the
+      maintainer reported quitting and reopening Logic Loop, the project
+      overview's "change editor" field still read `Visual Studio Code`.
+      Cancelled without changing or saving the setting, then clicked
+      "Open in editor": VS Code displayed the `context_terminal` workspace
+      and Logic Loop showed no opening error. The restarted value checked
+      was the restored VS Code choice; TextEdit was tested before restart.
+- [x] 108. A row whose path is outside the project (e.g. a `~/.claude/…`
+      write): Open in editor shows "outside this project" and nothing opens.
+      UI fixtures: an absolute outside-project file and an in-project symlink
+      to it both produced "outside this project". VS Code stayed on its
+      existing file; the outside file was not opened.
+- [x] 109. Create `x.command` containing `echo hi > /tmp/pwn` in the
+      project and let the agent edit it: Open in editor shows the text in
+      the editor, and `/tmp/pwn` is **not** created.
+      UI fixture had executable permissions. Both TextEdit and VS Code
+      displayed the literal command as text. `/tmp/pwn` was absent before
+      the test, after TextEdit opening, and after VS Code opening.
+- [x] 110. Dashboard → open a project → path line: Open in editor opens the
+      project folder as a VS Code window; Show in Finder selects the folder
+      in Finder.
+      Actual Logic Loop project: VS Code displayed the `context_terminal`
+      workspace; Finder selected its exact folder in `dev`.
+
+Focused verification rerun: `cargo test --lib resolve_inside` — 3 passed,
+0 failed. No source changes made during this pass; prior full gates were
+not repeated. Windows/non-macOS fallback remains unverified.

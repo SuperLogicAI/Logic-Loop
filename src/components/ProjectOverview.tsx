@@ -8,6 +8,7 @@ import { parseBoard, peekBoard, EXAMPLE_BOARD, type BoardStatus } from "../lib/b
 import { resolveAttentionRoute, type AttentionTabSnapshot } from "../lib/attention";
 import { type CopyUpdateData } from "./CopyUpdateModal";
 import { AgentSpendSection } from "./SpendMeter";
+import { OpenInEditor } from "./OpenInEditor";
 import type { UsageThread } from "../lib/spend";
 import type { AttentionEvidence, Blocker, Commit, Decision, Note, ReentryCandidate, Tab } from "../types";
 
@@ -392,7 +393,11 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
           </div>
         </div>
 
-        <p className="mt-1 break-all text-xs text-zinc-400" title={projectKey}>{projectFolderLabel(projectKey)}</p>
+        <div className="mt-1 flex flex-wrap items-start gap-3">
+          <p className="break-all pt-1.5 text-xs text-zinc-400" title={projectKey}>{projectFolderLabel(projectKey)}</p>
+          <OpenInEditor cwd={projectKey}
+            buttonClass="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800" />
+        </div>
         {editingNickname ? (
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <input autoFocus aria-label="Project nickname" maxLength={120}
