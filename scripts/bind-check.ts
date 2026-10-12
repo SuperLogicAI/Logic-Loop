@@ -65,6 +65,20 @@ assert.equal(
   "tether lost to the active-tab fallback"
 );
 
+// Claude /clear replaces only the exact Claude-owned tab, including its
+// persisted re-entry location. Child, ordinary startup and foreign adapters
+// retain the existing ownership guard.
+const oldClaude = { ...tab("tab-1"), sessionId: "s-old", agent: "claude" };
+const claudeClear = ev({ hook_event_name: "SessionStart", tab_id: "tab-1", session_id: "s-clear", source: "clear", cwd: REPO });
+assert.equal(bind(claudeClear, [oldClaude]), "tab-1");
+assert.deepEqual(sessionBindingLocation(claudeClear, REPO, oldClaude), { cwd: REPO, projectKey: REPO });
+for (const extra of [{ source: "startup" }, { source: "resume" }, { agent_id: "child" }, { agent: "pi" }]) {
+  assert.equal(bind({ ...claudeClear, ...extra }, [oldClaude]), null);
+  assert.equal(sessionBindingLocation({ ...claudeClear, ...extra }, REPO, oldClaude), null);
+}
+assert.equal(bind(claudeClear, [{ ...oldClaude, agent: "codex" }]), null);
+assert.equal(sessionBindingLocation(claudeClear, REPO, { ...oldClaude, agent: "codex" }), null);
+
 // --- Untethered sessions (outside terminal) still bind by cwd. ---
 assert.equal(bind(ev(), two), "tab-1", "cwd fallback did not bind");
 assert.equal(bind(ev(), two, { bound: ["tab-1"] }), "tab-2", "did not prefer an unbound tab");

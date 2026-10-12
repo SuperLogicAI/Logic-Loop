@@ -363,6 +363,9 @@ const ZSH_FILES: [(&str, &str); 4] = [
     command codex $_ll_a "$@"
   fi
 }
+# macOS resolves `Codex` to the CLI too, but zsh functions are case-sensitive.
+# Route that spelling through the same launch registration and isolation.
+(( $+functions[Codex] || $+aliases[Codex] )) || function Codex { codex "$@" }
 "#
         ),
     ),
@@ -1542,7 +1545,7 @@ mod tests {
 
         let out = std::process::Command::new("/bin/zsh")
             .args(["-l", "-i", "-c"])
-            .arg("codex; codex --no-daemon resume 'a b'; llmark; echo zd:$ZDOTDIR; echo hf:$HISTFILE")
+            .arg("codex; Codex resume 'capitalized'; Codex --no-daemon resume 'a b'; codex --no-daemon resume 'a b'; llmark; echo zd:$ZDOTDIR; echo hf:$HISTFILE")
             .env_clear()
             .env("HOME", &home)
             .env("PATH", "/usr/bin:/bin")
@@ -1554,6 +1557,7 @@ mod tests {
         let lines: Vec<&str> = stdout.lines().collect();
         let cfg = cfg.to_str().unwrap();
         assert!(lines.contains(&"argv:[--no-daemon]"), "bare codex not wrapped: {stdout}");
+        assert!(lines.contains(&"argv:[--no-daemon][resume][capitalized]"), "capitalized Codex bypassed isolation: {stdout}");
         assert!(lines.contains(&"argv:[--no-daemon][resume][a b]"), "flag duplicated or args lost: {stdout}");
         assert!(lines.contains(&"user-rc"), "user .zshrc alias missing: {stdout}");
         assert!(lines.contains(&format!("zd:{cfg}").as_str()), "ZDOTDIR not handed back: {stdout}");
@@ -1674,7 +1678,7 @@ mod tests {
             std::fs::write(home.join(".context-terminal/ingest.env"), format!("CT_PORT={ct_port}\nCT_TOKEN=t\n")).unwrap();
             let out = std::process::Command::new("/bin/zsh")
                 .args(["-l", "-i", "-c"])
-                .arg("codex; LOGIC_LOOP_TAB_ID=tab-a:preset1234 codex; echo after:$LOGIC_LOOP_TAB_ID")
+                .arg("Codex; LOGIC_LOOP_TAB_ID=tab-a:preset1234 Codex; echo after:$LOGIC_LOOP_TAB_ID")
                 .env_clear()
                 .env("HOME", &home)
                 .env("PATH", "/usr/bin:/bin")
