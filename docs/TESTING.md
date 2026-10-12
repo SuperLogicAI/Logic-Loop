@@ -6382,14 +6382,15 @@ capitalized function or alias, using the same isolation/launch registry.
 Live verification pending the maintainer's rebuild (the running app and
 agent sessions were left in place; no configuration toggle or daemon restart):
 
-- [ ] Claude: resume an existing session, submit a prompt, `/clear`, submit
+- [x] Claude: resume an existing session, submit a prompt, `/clear`, submit
   another prompt. Dot/clock and context/usage/effort meters follow the new
   session. Restart and Re-enter resumes the new session, not its predecessor.
-- [ ] Codex: new managed zsh tab → `Codex` → prompt. Verify its hooks carry
+- [x] Codex: new managed zsh tab → `Codex` → prompt. Verify its hooks carry
   that tab's ID and registered launch; dot/clock, context/effort and usage
   meters populate. Check lowercase `codex` too and two tabs in one project.
-- [ ] Late events from the prior Claude session and nested CLI runs never
-  change the replacement session's identity or state.
+- [x] Labeled synthetic old-session error and child clear hooks never
+  change the replacement session's identity or state. An actual nested
+  CLI invocation was not performed.
 
 The already-running shared-daemon Codex client needs a fresh managed launch
 after rebuilding; the repair cannot change an existing process's environment.
@@ -6401,3 +6402,45 @@ Automated verification: `npm run opencode:check`, full `npm run check`,
 1 ignored), and `cargo clippy --all-targets -- -D warnings` passed. The final
 capitalized launch-registration test passed with a localhost fake server;
 `git diff --check` passed. Frontend build retained its chunk-size warning.
+
+### Rebuilt-app live verification — 2026-10-12, 10:57–11:03 HST
+
+Maintainer authorized computer use and testing after rebuilding. Tested the
+installed app dated 10:54:51, Claude Code 2.1.296, and Codex 0.162.1.
+Scratch project: `/private/tmp/logic-loop-session-routing-live-20261012`.
+Only disposable test tabs received test prompts/commands. Existing work
+sessions, hook configuration, daemon processes and the staged board edit
+were preserved. All three PR #93 CI jobs passed (frontend, macOS, Windows).
+
+- Current work session showed Codex working state, account limits, context
+  percentage and effort odometer immediately after the rebuild.
+- Claude baseline prompt: blue working then green idle; context 5%, effort
+  total 44k, account 5h/weekly usage populated. An initial missing-transcript
+  warning cleared after the first prompt created the transcript.
+- `/clear`: session changed from `d00fbefe` to `8c189d02` on the same tether.
+  First subsequent prompt showed working then idle; context 5%, effort total
+  42k and account usage populated. SQLite `mode=ro` confirmed old binding
+  inactive and new binding active.
+- Exited only the scratch Claude and its shell, then clicked Re-enter.
+  Structured `SessionStart.source: resume` carried `8c189d02`; the resumed
+  prompt completed normally and all three meters populated again. No full
+  app quit/relaunch was performed (would terminate this testing session).
+- Capitalized `Codex`: process metadata confirmed `--no-daemon` and a
+  registered tab:launch tether. First prompt completed with green idle,
+  Codex icon, context 3%, effort total 5k and populated account usage.
+- Lowercase `codex` in a second tab in the same project also completed
+  with context 3%, effort 5k and populated account usage. Read-only binding
+  and usage queries showed two distinct Codex sessions/tethers; the Claude
+  binding remained its own.
+- Posted two explicitly labeled synthetic fixtures through the authenticated
+  ingest server to the scratch Claude tether: prior-session PostToolUse
+  error and child SessionStart with source clear. Both returned 204 and
+  persisted; Claude stayed idle on `8c189d02`, and no child binding appeared.
+  These fixtures verify ingestion/ownership, not a CLI's own child emission.
+- Closed all three disposable tabs and returned to the existing Logic Loop
+  work tab. Scratch files and append-only test history remain as evidence.
+
+No source changes were needed after the live pass. `git diff --check` passed
+for this documentation update. No repeated build/golden/model checks; the
+prior local gates and all PR CI jobs were already green. User review and
+merge remain pending.
