@@ -202,6 +202,7 @@ export interface BindCandidate {
   sessionId?: string;
   agentState?: AgentState;
   launchId?: string;
+  agent?: string;
 }
 
 export type LaunchDecision = "replace" | "reject" | "default";
@@ -232,17 +233,35 @@ export function codexLaunchDecision(
   return typeof p["source"] === "string" && REPLACING_SOURCES.has(p["source"]) ? "replace" : "reject";
 }
 
+/** Claude's root /clear starts a new session in the same terminal. Allow that
+ * explicit lifecycle transition only on its exact Claude-owned tab; ordinary
+ * child/startup events must still fail the session ownership guard. */
+export function sessionLaunchDecision(
+  p: HookPayload,
+  tab: { id: string; sessionId?: string; launchId?: string; agent?: string }
+): LaunchDecision {
+  if (
+    (p.agent === undefined || p.agent === "claude") &&
+    (tab.agent === undefined || tab.agent === "claude") &&
+    p.tab_id === tab.id &&
+    !!tab.sessionId && tab.sessionId !== p.session_id &&
+    p.hook_event_name === "SessionStart" && p["source"] === "clear" &&
+    !isSubagentHook(p)
+  ) return "replace";
+  return codexLaunchDecision(p, tab);
+}
+
 /** Location to persist for a tethered SessionStart. Every adapter needs an
  * exact, live tab that is unclaimed or already owns this session. Agy can omit
  * workspacePaths, so its tab may supply the missing project. */
 export function sessionBindingLocation(
   p: HookPayload,
   projectKey: string | undefined,
-  tab?: { id: string; cwd: string; status: string; sessionId?: string; launchId?: string }
+  tab?: { id: string; cwd: string; status: string; sessionId?: string; launchId?: string; agent?: string }
 ): { cwd: string; projectKey: string } | null {
   if (!p.tab_id) return null;
   if (tab?.id !== p.tab_id || tab.status !== "live") return null;
-  const decision = codexLaunchDecision(p, tab);
+  const decision = sessionLaunchDecision(p, tab);
   if (decision === "reject") return null;
   if (decision !== "replace" && tab.sessionId && tab.sessionId !== p.session_id) return null;
   if (p.cwd && projectKey) return { cwd: p.cwd, projectKey };
@@ -270,7 +289,7 @@ export function bindSession(
     // Tethered to a tab that's since closed: do not fall through to cwd, or the
     // dead tab's events land on whatever unbound tab happens to match.
     if (tethered?.status !== "live") return null;
-    const decision = codexLaunchDecision(p, tethered);
+    const decision = sessionLaunchDecision(p, tethered);
     if (decision === "replace") return tethered.id;
     if (decision === "reject") return null;
     return !tethered.sessionId || tethered.sessionId === p.session_id ? tethered.id : null;
@@ -325,10 +344,10 @@ export function mergeTabIdentity(
   provenance: "human" | "auto" | undefined,
   expandCwd: (cwd: string) => string
 ): Tab {
-  const decision = codexLaunchDecision(p, t);
+  const decision = sessionLaunchDecision(p, t);
   if (decision === "reject") return t;
   if (decision === "replace") {
-    // Plan 045: a new session takes the tab even though `SessionStart` maps
+    // A replacement takes the tab even though `SessionStart` maps
     // to no state; otherwise its first prompt would fail ownership below.
     t = {
       ...t,

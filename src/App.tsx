@@ -6,7 +6,7 @@ import { homeDir } from "@tauri-apps/api/path";
 import { ask } from "@tauri-apps/plugin-dialog";
 import {
   bindSession,
-  codexLaunchDecision,
+  sessionLaunchDecision,
   computeProvenance,
   deriveClock,
   mergeTabIdentity,
@@ -1072,12 +1072,11 @@ export default function App() {
           p,
           projectKey,
           bindingTab
-            ? { id: bindingTab.id, cwd: expand(bindingTab.cwd), status: bindingTab.status, sessionId: bindingTab.sessionId, launchId: bindingTab.launchId }
+            ? { id: bindingTab.id, cwd: expand(bindingTab.cwd), status: bindingTab.status, sessionId: bindingTab.sessionId, launchId: bindingTab.launchId, agent: bindingTab.agent }
             : undefined
         );
-        // Plan 045: a Codex launch replacing the tab's session retires the
-        // old re-entry rows first, then writes the new one — in that order.
-        const replacing = !!bindingTab && tabId === bindingTab.id && codexLaunchDecision(p, bindingTab) === "replace";
+        // Retire the old re-entry rows before persisting the replacement.
+        const replacing = !!bindingTab && tabId === bindingTab.id && sessionLaunchDecision(p, bindingTab) === "replace";
         if (replacing) {
           // tabsRef syncs on render; the new session's first prompt can arrive
           // before that, and the owner check above would drop it.

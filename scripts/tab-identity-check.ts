@@ -98,6 +98,25 @@ const pluginCodex = mergeTabIdentity(
 assert.equal(pluginCodex.agent, "claude", "Codex plugin session flipped a Claude tab");
 assert.equal(pluginCodex.sessionId, "s-claude", "Codex plugin session took over a Claude tab");
 
+// Claude /clear changes the session ID. Its next prompt and meters must use
+// the new owner, while late events and subprocess sessions stay rejected.
+const clearHook = ev({ tab_id: "tab-1", session_id: "s-clear", source: "clear" });
+const afterClear = mergeTabIdentity(claudeTab, clearHook, undefined, null, false, undefined, noExpand);
+assert.equal(afterClear.sessionId, "s-clear");
+assert.equal(afterClear.agentState, undefined);
+const afterPrompt = mergeTabIdentity(afterClear, { ...clearHook, hook_event_name: "UserPromptSubmit" }, undefined, "working", true, "human", noExpand);
+assert.equal(afterPrompt.sessionId, "s-clear");
+assert.equal(afterPrompt.agentState, "working");
+assert.equal(mergeTabIdentity(afterPrompt, ev({ tab_id: "tab-1", hook_event_name: "Stop" }), undefined, "idle", false, undefined, noExpand), afterPrompt);
+for (const extra of [
+  { source: "startup" }, { source: "resume" }, { source: undefined },
+  { agent_id: "child" }, { tab_id: "other" }, { tab_id: undefined },
+  { agent: "pi" }, { hook_event_name: "PostToolUse" },
+]) {
+  assert.equal(mergeTabIdentity(claudeTab, { ...clearHook, ...extra }, undefined, null, false, undefined, noExpand), claudeTab);
+}
+assert.equal(mergeTabIdentity(tab({ sessionId: "s-codex", agent: "codex" }), clearHook, undefined, null, false, undefined, noExpand).sessionId, "s-codex");
+
 // --- Plan 045: a registered Codex launch replaces the tab's session. ---
 const merge = (t: Tab, extra: Record<string, unknown>, state: Tab["agentState"] | null = null, prompt = false) =>
   mergeTabIdentity(t, ev({ agent: "codex", tab_id: "tab-1", ...extra }), undefined, state ?? null, prompt, undefined, noExpand);
