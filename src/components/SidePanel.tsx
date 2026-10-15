@@ -32,6 +32,8 @@ import {
   gitUntrackedFiles,
 } from "../lib/pty";
 import { DiffModal } from "./DiffModal";
+import { RememberEditor } from "./RememberEditor";
+import { readDecisionLog, rememberedCards } from "../lib/decisionLog";
 import { askOptionsFromContext } from "../lib/askUserQuestion";
 import { cycle, HUES, RainbowText } from "./RainbowText";
 import {
@@ -297,6 +299,18 @@ export function SidePanel({
   const [diffPath, setDiffPath] = useState<string | null>(null);
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
   const [plannedCard, setPlannedCard] = useState<Card | null>(null);
+  // Plan 064: DECISIONS.md, keyed by cwd so another project's file never shows.
+  const [logView, setLogView] = useState({ cwd: "", text: "" });
+  const [logVersion, setLogVersion] = useState(0);
+  const [remembering, setRemembering] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void readDecisionLog(cwd).then((text) => { if (!cancelled) setLogView({ cwd, text }); });
+    return () => { cancelled = true; };
+  }, [cwd, logVersion]);
+  useEffect(() => setRemembering(null), [cwd]);
+  const decisionLog = logView.cwd === cwd ? logView.text : "";
+  const remembered = rememberedCards(decisionLog);
   const seededCwdRef = useRef<string | null>(null);
   const seededTopSessionRef = useRef<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -794,6 +808,21 @@ export function SidePanel({
   const staleDecisions = decisions.filter((d) => d.status === "open" && d.stale);
   const recentCompletions = resultsToReview;
   const closedDecisions = decisions.filter((d) => d.status !== "open").slice(0, 10);
+  // Plan 064: Remember writes DECISIONS.md only; card status never changes.
+  const rememberButton = (id: number) =>
+    remembered.has(id) ? (
+      <span className="shrink-0 text-zinc-600" title="In .logic-loop/DECISIONS.md">Remembered as {remembered.get(id)}</span>
+    ) : (
+      <button className="shrink-0 text-info-400 hover:text-info-300" title="Save this decision to .logic-loop/DECISIONS.md for future agents"
+        onClick={() => setRemembering((cur) => (cur === id ? null : id))}>
+        ◇ remember
+      </button>
+    );
+  const rememberEditor = (d: Decision) =>
+    remembering === d.id && !remembered.has(d.id) && (
+      <RememberEditor decision={d} projectKey={cwd} log={decisionLog} onCancel={() => setRemembering(null)}
+        onSaved={() => { setRemembering(null); setLogVersion((v) => v + 1); }} />
+    );
   const decisionGroups = repo.groupDecisionsBySession(openDecisions);
   const hasWarnings = adapterWarnings.length > 0 || blindPaths.length > 0 || sessionBlind;
 
@@ -1601,7 +1630,7 @@ export function SidePanel({
                                 ))}
                               </ul>
                             )}
-                            <div className="mt-1.5 flex gap-2 text-zinc-400">
+                            <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-1 text-zinc-400">
                               {askOptions ? (
                                 <span className="text-zinc-500">pick in terminal</span>
                               ) : (
@@ -1617,8 +1646,10 @@ export function SidePanel({
                               <button className="text-ok-400 hover:text-ok-300" title="Fine — agent's call" onClick={() => void setStatus(d, "delegated")}>
                                 ⤳ delegate
                               </button>
+                              {rememberButton(d.id)}
                               <span className="ml-auto text-zinc-600">{ago(d.ts)}</span>
                             </div>
+                            {rememberEditor(d)}
                           </li>
                           );
                         })}
@@ -1673,8 +1704,14 @@ export function SidePanel({
             {closedDecisions.length > 0 && (
               <ul className="mt-2 flex flex-col gap-1 border-t border-zinc-800 pt-2 text-zinc-600">
                 {closedDecisions.map((d) => (
-                  <li key={d.id} className="truncate" title={`${d.question}${d.user_answer ? ` → ${d.user_answer}` : ""}`}>
-                    {d.status === "delegated" ? "⤳" : d.status === "dismissed" ? "✕" : "✓"} {d.question}
+                  <li key={d.id}>
+                    <div className="flex items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate" title={`${d.question}${d.user_answer ? ` → ${d.user_answer}` : ""}`}>
+                        {d.status === "delegated" ? "⤳" : d.status === "dismissed" ? "✕" : "✓"} {d.question}
+                      </span>
+                      {d.status !== "dismissed" && rememberButton(d.id)}
+                    </div>
+                    {rememberEditor(d)}
                   </li>
                 ))}
               </ul>

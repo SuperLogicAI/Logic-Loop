@@ -199,7 +199,7 @@ pub fn project_key(cwd: &str) -> String {
 /// unintended operation there instead of removing it. `project_key` already
 /// refuses to attribute a project to `$HOME`'s own repo for exactly this
 /// reason — every git_* command must refuse to *run against* it too.
-fn has_own_repo(cwd: &str) -> bool {
+pub(crate) fn has_own_repo(cwd: &str) -> bool {
     let resolved = canon(cwd);
     let home = crate::home::home().map(|h| canon(&h)).unwrap_or_default();
     let mut dir = std::path::Path::new(&resolved);

@@ -1245,3 +1245,39 @@ Verification: `cargo test --lib git_` (2 new tests), `npm run diff:check`,
 Built-app checks 121–128 passed (Codex computer use with labeled synthetic
 hook fixtures; evidence and coverage limits in `docs/TESTING.md`).
 **PHASE 63 ACCEPTED** (2026-10-10). No golden (no prompt change).
+
+### Phase 64 — Remember human-confirmed decisions (2026-10-14)
+
+Plan: `plans/064-decision-log.md`; **PHASE 64 APPROVED** (2026-10-14),
+defaults 1–5: Remember on open cards plus answered/delegated closed rows;
+no status change; sharing in Project Overview; missing instruction files
+never created; DECISIONS.md listed in the Markdown view. Source: IDEAS
+"Human-confirmed project decisions" build brief.
+
+Built on `feat/phase-64-decision-log` (Parts A and B, no slip).
+- `board.rs`: `read_decision_log` (fail open to ""),
+  `append_decision_log` (single `- D-` line ≤1,000 bytes, header via
+  `create_new`, `OpenOptions::append`), `write_decision_log`
+  (compare-and-swap, supersede only), private `ensure_union_merge`, and
+  `decision_log_travel` (`has_own_repo`, now `pub(crate)`, then
+  `git check-ignore -q`, fail open to tracked).
+- `markdown.rs` `FIXED` gains `.logic-loop/DECISIONS.md`.
+- `src/lib/decisionLog.ts`: formatter, ids, entry/trailer parsing,
+  supersede, link-line add/remove, command wrappers.
+- `RememberEditor.tsx` inline under cards; `SidePanel.tsx` `◆ remember` /
+  "Remembered as D-…"; `ProjectOverview.tsx` "Remembered decisions" block
+  with Claude/Codex Share/Unshare and the "won't travel" note.
+
+Stated revisions: the header lives only in Rust (the plan's TS `HEADER`
+had no caller once Rust writes it). Decision/Reason/Revisit inputs carry
+`maxLength` at the caps; the formatter still enforces them. Remember is
+hidden on dismissed closed rows, as planned.
+
+Verification: `cargo test --lib decision_log` (6 new tests),
+`npm run decision-log:check`, `npm run check`, `npm run opencode:check`,
+`npx tsc --noEmit`, `npm run build`, `cargo test --lib` (193 passed,
+1 ignored), `cargo clippy --all-targets -- -D warnings`, `git diff --check`
+passed. Built-app checks 129–138 passed (evidence in docs/TESTING.md).
+**PHASE 64 ACCEPTED** by the maintainer on 2026-10-15. The two-week
+experiment review remains a follow-up. No golden (no prompt change), no
+migration.

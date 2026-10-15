@@ -6444,3 +6444,281 @@ No source changes were needed after the live pass. `git diff --check` passed
 for this documentation update. No repeated build/golden/model checks; the
 prior local gates and all PR CI jobs were already green. User review and
 merge remain pending.
+
+### Phase 64: Remember human-confirmed decisions (`.logic-loop/DECISIONS.md`)
+
+Status: built-app checks 129–138 passed (computer use 2026-10-14, human
+Answer verification 2026-10-15). Recall experiment steps 1–3 complete;
+phase acceptance pending. Plan:
+`plans/064-decision-log.md`. Automated:
+- `cargo test --lib decision_log`: first append writes the header and the
+  `.gitattributes` union-merge line exactly once; existing `.gitattributes`
+  lines are kept; multi-line, unprefixed, oversize and non-directory appends
+  are rejected without creating anything; a hand edit that dropped the
+  trailing newline is repaired on append; `write_decision_log` is
+  compare-and-swap; travel reports `no_repo` outside git.
+- `npm run decision-log:check`: one-line output under newline/fence/heading
+  injection, caps, ID format and collision retry, supersede (exactly one
+  line, three error cases), trailer parse ignores a fake `card #`, link-line
+  add/remove byte-identical (empty, LF, no trailing newline, CRLF).
+
+Run in the built app, in a scratch repo under `/private/tmp/…` with
+placeholder content only; archive it on the dashboard afterwards.
+
+- [x] 129. Remember on an answered card: the question and answer show
+      read-only and Decision is prefilled; Save stays disabled without a
+      Reason; the line appears in `DECISIONS.md` within 1 s, and the card
+      shows "Remembered as D-…".
+- [x] 130. The first Remember creates the header and
+      `.logic-loop/.gitattributes` (`DECISIONS.md merge=union`). A second
+      Remember adds neither again.
+- [x] 131. A Decision containing newlines, a ``` fence and a leading `#`
+      saves as one line.
+- [x] 132. Supersede: exactly one old line is prefixed `[SUPERSEDED by …]`;
+      the new line is appended; superseded entries are missing from the
+      picker.
+- [x] 133. Hand-edit `DECISIONS.md` in an external editor with the panel
+      open, then supersede in the app: the hand edit survives.
+- [x] 134. Share with Claude adds the line to `CLAUDE.md`. A fresh Claude
+      tab given a task that depends on a remembered decision names the
+      choice and the reason. Unshare makes `git diff CLAUDE.md` empty.
+- [x] 135. Share with Codex: same steps for `AGENTS.md`. Record recall
+      whether it passes or fails; this is the brief's experiment input.
+- [x] 136. Two worktree branches each Remember an entry, then merge:
+      clean, with both lines present.
+- [x] 137. With `.logic-loop/` gitignored, Overview shows "won't travel".
+- [x] 138. Regression: answer, delegate, dismiss and dismiss batch behave
+      as before, and terminals are unaffected throughout.
+
+Afterwards: the brief's recall experiment, steps 1–3 (docs/IDEAS.md), results
+recorded here. Step 4 waits for the two-week window.
+
+Live verification (2026-10-14, Codex computer use)
+
+The installed app and `src-tauri/target/release/app` matched SHA-256
+`d99e2be0d508471894ce8eb8381f38c0cc77279b215535786cb4722b7f4fcfc2`.
+Scratch repo: `/private/tmp/logic-loop-phase64-tests-20261014`.
+Labeled synthetic AskUserQuestion hooks supplied decision cards through
+normal authenticated localhost ingestion. These exercise the actual built
+UI/Rust path, not the CLI's own hook emission. No input was sent to running
+terminals; original terminal sessions were retained. No source edits or
+project-source commits were made.
+
+- 129: read-only Q/A, prefilled Decision, blank Reason and disabled Save
+  observed; saved label appeared and card stayed answered. Worktree-A Save
+  click began at epoch ms 1792057044980; watcher saw changed file bytes at
+  1792057045065.987 (~86 ms; mtime 1792057045062.6875), within 1 second.
+- 130–132: first append created the header/union attribute once; later
+  appends and supersede did not duplicate either. Heading/newline/fence
+  input became one line. `D-20261014-b8d9` superseded exactly one original
+  entry `D-20261014-cf1c`; a new picker omitted that superseded ID.
+- 133: kept a Remember draft open with `D-20261014-b8d9` selected, reopened
+  current DECISIONS.md in TextEdit, inserted/saved `Uninterrupted TextEdit
+  sentinel: keep this after supersede.`, returned to the unchanged draft,
+  and saved. `D-20261014-fa6e` superseded the selected entry and preserved
+  the external note. Forced CAS race/repeated-conflict timing was not tested.
+- 134–135: Share added precisely the Claude import/Codex pointer. Codex
+  displayed `load not observed`. Fresh read-only CLI sessions named disk
+  cache + restart-survival reason, one-day retention + bounded-storage
+  reason, followed supersession, and identified an uncovered database
+  question. Unshare restored both files byte-for-byte (`git diff
+  --exit-code -- CLAUDE.md AGENTS.md`). Test-method deviation: fresh
+  noninteractive CLI processes instead of typing into interactive tabs.
+- 136: separate worktrees `/private/tmp/logic-loop-phase64-worktree-a` and
+  `...-b`, branches `phase64-a`/`phase64-b`, started at scratch commit
+  `650ead0` with the union attribute tracked. Built-app Remember wrote
+  `D-20261014-2dd4` and `D-20261014-834c` to the respective worktrees.
+  Committed scratch fixtures, fast-forwarded A into scratch master, then
+  merged B: clean ort merge, both texts once, no unmerged index entries.
+- 137: with `.logic-loop/` ignored, reopened Overview showed `Stays on this
+  machine; won't travel with the repo.` Git check-ignore agreed. Markdown
+  view listed/opened DECISIONS.md.
+- 138 passed: structured answer closed an answered card; delegate closed
+  choice 4 and retained Remember; single dismiss closed choice 1 with no
+  Remember; dismiss batch closed choices 2–3. Scratch shell remained at its
+  prompt. The plain card `Should the placeholder export format be CSV or
+  JSON?` came through labeled OpenCode structured TranscriptLine ingestion
+  and the real extractor. Human verified 2026-10-15: `✎ answer` prefilled
+  terminal input and moved focus there, nothing submitted automatically,
+  and the card stayed open. Human cleared the input without pressing Enter.
+  This completes the terminal-prefill check without autonomous agent input.
+
+Focused helpers rerun: `node --import tsx scripts/decision-log-check.ts`
+passed. The npm wrapper initially hit sandbox IPC EPERM; the direct loader
+ran the identical assertions successfully. Prior full automated gate
+results were supplied by the implementation report and were not rerun for
+these documentation/experiment-artifact changes. No golden run.
+
+Home/panels sometimes took tens of seconds to refresh. Real-project
+Overview showed several sources “took too long”; Remembered decisions
+loaded and Share/Unshare worked. No cause attributed to Phase 64.
+
+Recall experiment, steps 1–3
+
+The user approved using standing choices documented in AGENTS.md and
+Plan 064. Eleven labeled provenance cards (#2981–2991) were individually
+saved through Remember: ten current decisions plus the historical TS
+HEADER choice superseded by Rust-only `D-20261014-daa7` (old
+`D-20261014-76a2`). Choices and reasons were copied or directly paraphrased
+from the approved docs; these cards are experiment fixtures, not historical
+sessions. Their `claude` trailer reflects the fixture adapter. Real log:
+2,343 bytes, including header and history.
+
+The identical eleven-question read-only task asked for each current choice
+and reason, header supersession, and a deliberately uncovered cloud-region
+choice. Each condition used a fresh process. Claude tools: Read/Glob/Grep;
+Codex: read-only sandbox and ephemeral session. Final answers were inspected.
+
+| Agent / condition | Choice | Reason | Supersession | Uncovered |
+| --- | --- | --- | --- | --- |
+| Claude, sharing absent | 10/10 | 10/10 | 1/1 | 1/1 |
+| Claude, app Share enabled | 10/10 | 10/10 | 1/1 | 1/1 |
+| Codex, pointer absent | 10/10 | 10/10 | 1/1 | 1/1 |
+| Codex, app Share enabled | 10/10 | 10/10 | 1/1 | 1/1 |
+
+Both baselines discovered DECISIONS.md by ordinary search. **No recall
+improvement demonstrated** in this single trial per agent/condition; this
+repo already documents many of these choices in instruction files.
+Maintainer review should apply the brief's revisit/kill criterion; the
+result does not establish a sharing benefit. Step 4 waits for the two-week
+window (earliest 2026-10-28).
+
+Scratch recall also passed with and without sharing for both agents;
+that log was 826 bytes at measurement. Outputs and exact real-repo prompt:
+`/private/tmp/phase64-{claude,codex}-{shared,baseline}.txt`,
+`/private/tmp/phase64-real-{claude,codex}-{shared,baseline}.txt`,
+`/private/tmp/phase64-real-recall-prompt.txt`.
+
+App Unshare restored real CLAUDE.md and AGENTS.md byte-for-byte against
+pre-experiment snapshots. Sharing is off. The real DECISIONS.md and union
+attribute remain as user-approved experiment artifacts, uncommitted.
+
+Cleanup verified 2026-10-15: Home → Archived → search `phase64` showed
+all three disposable projects marked Archived (main scratch repo and both
+worktrees). Closed the task-created worktree-A, worktree-B, initial blank,
+and dedicated real-repo shell tabs. The one scratch Terminal tab remains
+open intentionally for the human's check 138; original tabs were retained.
+Scratch files/worktree branches remain under /private/tmp for reproduction.
+Final `git diff --check`, instruction-file byte comparison, log entry-count
+and union-attribute assertions passed; focused decision-log helper assertions
+passed. No project changes were committed. Acceptance still pending.
+
+Check 138 completed by maintainer report, 2026-10-15. All checks 129–138
+now pass; explicit `PHASE 64 ACCEPTED` and the two-week experiment review
+remain pending. No implementation changes or commits in this update.
+
+Recall re-test, step 3a (docs/IDEAS.md)
+
+Steps 1–3 hit the ceiling: the fixture decisions were already in AGENTS.md
+and Plan 064, and both baselines found DECISIONS.md by search. Run this in
+the real repo with sharing off unless a step says otherwise.
+
+- [ ] R1. Pick about 5 answered cards from real sessions whose decision is
+      not written in any doc. For each, a choice keyword and a reason
+      keyword: `rg -i "<keyword>" --glob '!.logic-loop/**'` finds no hits.
+      Remember each one through the app. A card the panel no longer shows
+      (it renders only the newest 10 closed rows for that tab or session)
+      is appended by hand in the same line format with its `card #id`
+      trailer; checks 129–133 already cover the Remember UI. Record the
+      card IDs and `D-` IDs here, not the text.
+- [ ] R2. Write one prompt with a task per decision that depends on it
+      without naming the choice or DECISIONS.md, plus one uncovered
+      question. Save it under `/private/tmp/phase64-retest-prompt.txt`.
+- [ ] R3. Baseline: move `.logic-loop/DECISIONS.md` to `/private/tmp`.
+      Run two fresh Claude and two fresh Codex read-only processes. Restore
+      the file and check it byte-for-byte.
+- [ ] R4. File present, sharing off: two fresh runs per agent.
+- [ ] R5. File present, Share enabled: two fresh runs per agent. Unshare,
+      then `git diff --exit-code -- CLAUDE.md AGENTS.md`.
+- [ ] R6. Score the new decisions only (choice, reason, uncovered) in the
+      table below and apply the step 3a rule. Outputs:
+      `/private/tmp/phase64-retest-{claude,codex}-{baseline,file,shared}-{1,2}.txt`.
+
+| Agent / condition | Choice /5 | Reason /5 | Uncovered /1 |
+| --- | --- | --- | --- |
+| Claude, file absent | | | |
+| Claude, file, no Share | | | |
+| Claude, Share | | | |
+| Codex, file absent | | | |
+| Codex, file, no Share | | | |
+| Codex, Share | | | |
+
+Verdict: _pending_
+
+Re-test attempt (2026-10-15, Codex computer use): R1 remains pending.
+Inspected the real-project Overview and existing Claude/Codex workspaces.
+The inspected session panels exposed open cards but no eligible answered
+cards; Overview exposes open decisions only. Source inspection confirmed
+`listDecisions` is tab/session-scoped (100-row query cap), with only the
+first 10 closed rows rendered. No historical answer search is exposed in
+these views. No new decisions were saved, no recall processes were run,
+and neither the decision file nor sharing state was changed. Historical
+card inspection is needed before choosing the five qualifying answers;
+A scoped read-only historical-card inspection was subsequently authorized
+by the maintainer, who clarified that the repo.ts rule governs app code,
+not test inspection. No recall/value verdict can be drawn
+from this attempt. `git diff --check` passed.
+
+R1 scoped inspection (2026-10-15): executed the maintainer's exact SELECT
+once, read-only, against the app's `context-terminal.db` in its Tauri
+application-data directory (none was found under `~/.context-terminal/`).
+Only the specified cwd, answered status, four columns and newest 40 rows
+were queried; no events, transcripts, payloads or other projects inspected.
+Question/answer text was not saved to files.
+
+Qualifying count: **1**, card **#1865**. Separate choice and reason keyword
+searches over the repo excluding `.logic-loop/` returned no matches.
+The remaining rows were documented fixtures, test observations, one-time
+approvals/actions, or lacked an explicit decision reason. Per the
+maintainer's fewer-than-five stop rule, no entries were appended (no new
+D- IDs), and R2–R6 were not run. R1 remains incomplete; verdict pending,
+with no new evidence for or against recall value. Decision file and
+sharing unchanged. `git diff --check` passed; nothing committed.
+
+
+### Six-agent lean smoke test (2026-10-15, computer use)
+
+**PASS: 6/6 agents responded and populated a decision card.** Tested in the
+running Logic Loop desktop app, using six fresh interactive terminal tabs
+in `/private/tmp/logic-loop-agent-smoke-20261015` (empty git-initialized
+scratch project). Original tabs were retained. No synthetic hook events,
+direct database queries, source edits or extraction-prompt changes.
+
+Each agent received these two prompts in order through computer use:
+
+1. `This is a minimal Logic Loop smoke test. Do not use tools or change files. Reply only READY.`
+2. `Ask me verbatim in text: Do you want A or B?`
+
+| Agent | Launch | Starting reply | Second reply | Visible decision card |
+| --- | --- | --- | --- | --- |
+| Claude Code 2.1.300 | `claude` | READY | Do you want A or B? | PASS, one card |
+| Codex 0.162.1 | `codex --no-daemon` | READY | Do you want A or B? | PASS, one card |
+| OpenCode 1.19.0 | `opencode` | READY | Do you want A or B? | PASS, one card |
+| Antigravity 1.2.16 | `agy` | READY | Do you want A or B? | PASS, one card |
+| Pi 0.85.1 | `pi` | READY | Do you want A or B? | PASS, one card |
+| DeepSeek Harness | `dsh --profile logic-loop` | READY | Do you want A or B? | PASS, one card |
+
+Verified each exact terminal reply alongside its own tab's Decisions panel
+using desktop screenshots. Each panel showed `DECISIONS (1)` with the exact
+question and answer/context/delegate/remember controls. Activity moved
+through working to idle. Cards were left open and unanswered; the six
+scratch tabs remain open for maintainer inspection. No Remember entries
+were saved and no acceptance token is implied.
+
+Startup notes: all six adapter toggles were on. Accepted the empty scratch
+folder's trust prompts. OpenCode's startup update dialog unexpectedly
+triggered an update from 1.18.32 to 1.19.0; relaunched afterward and tested
+1.19.0. Antigravity automatically fell back from its unavailable configured
+model to Gemini 3.8 Flash (High). A pre-existing missing-transcript warning
+for the earlier Phase 64 scratch session remained visible; it did not
+prevent any of these six cards. Panels refreshed after tab selection, so
+this run does not measure extraction latency. One initial OpenCode shell
+command lost its first character during new-tab focus transfer; corrected
+before launch. A stray unsubmitted `c` remained in the Codex test input.
+
+Scope: confirms interactive startup, two simple replies, activity binding
+and plain-text decision extraction for all six installed adapters. Does
+not verify tool execution, structured question tools, answer reconciliation,
+re-entry, blockers or every adapter capability. No full build/test gates
+rerun for this manual-test record. `git diff --check` passed; nothing
+committed. Smoke test complete; no further work required for this check.

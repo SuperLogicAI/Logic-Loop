@@ -369,6 +369,10 @@ pub fn run() {
             board::read_board,
             board::write_board,
             board::peek_board,
+            board::read_decision_log,
+            board::append_decision_log,
+            board::write_decision_log,
+            board::decision_log_travel,
             safe_router_traffic::read_safe_router_traffic
         ])
         .on_window_event(|window, event| {
