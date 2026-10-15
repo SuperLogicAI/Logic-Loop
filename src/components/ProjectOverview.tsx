@@ -10,6 +10,8 @@ import { type CopyUpdateData } from "./CopyUpdateModal";
 import { AgentSpendSection } from "./SpendMeter";
 import { OpenInEditor } from "./OpenInEditor";
 import { MarkdownEditor } from "./MarkdownEditor";
+import { readMarkdown, writeMarkdown } from "../lib/markdownEditor";
+import { addLinkLine, CLAUDE_LINK, CODEX_LINK, currentEntries, decisionLogTravel, hasLinkLine, readDecisionLog, removeLinkLine } from "../lib/decisionLog";
 import type { UsageThread } from "../lib/spend";
 import type { AttentionEvidence, Blocker, Commit, Decision, Note, ReentryCandidate, Tab } from "../types";
 
@@ -104,6 +106,92 @@ function StaleDecisionsNote({ projectKey }: { projectKey: string }) {
         Dismiss all stale
       </button>
     </div>
+  );
+}
+
+/** Plan 064: remembered-decision count plus per-project, opt-in sharing of
+ * DECISIONS.md through one link line in CLAUDE.md / AGENTS.md. Never on
+ * automatically; a missing instruction file is never created. */
+const SHARE_TARGETS = [
+  { file: "CLAUDE.md", agent: "Claude", line: CLAUDE_LINK, note: "" },
+  { file: "AGENTS.md", agent: "Codex", line: CODEX_LINK, note: " · load not observed" },
+] as const;
+
+function RememberedDecisions({ projectKey }: { projectKey: string }) {
+  const [state, setState] = useState<{ count: number; travel: string; files: Record<string, string | null> } | null>(null);
+  const [version, setVersion] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([
+      readDecisionLog(projectKey),
+      decisionLogTravel(projectKey),
+      ...SHARE_TARGETS.map((t) => readMarkdown(projectKey, t.file).catch(() => null)),
+    ]).then(([log, travel, ...texts]) => {
+      if (cancelled) return;
+      const files = Object.fromEntries(SHARE_TARGETS.map((t, i) => [t.file, texts[i]]));
+      setState({ count: currentEntries(log ?? "").filter((e) => !e.superseded).length, travel: travel ?? "tracked", files });
+    });
+    return () => { cancelled = true; };
+  }, [projectKey, version]);
+  useEffect(() => setError(null), [projectKey]);
+  if (!state) return null;
+
+  const toggle = async (file: string, line: string, share: boolean) => {
+    setBusy(true);
+    setError(null);
+    try {
+      // Compare-and-swap; retry once from what's on disk if it moved.
+      let base = await readMarkdown(projectKey, file);
+      let out = await writeMarkdown(projectKey, file, base, share ? addLinkLine(base, line) : removeLinkLine(base, line));
+      if (out.state === "conflict") {
+        base = out.current;
+        out = await writeMarkdown(projectKey, file, base, share ? addLinkLine(base, line) : removeLinkLine(base, line));
+      }
+      if (out.state === "conflict") throw new Error(`${file} keeps changing on disk. Try again.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+    setBusy(false);
+    setVersion((v) => v + 1);
+  };
+
+  return (
+    <section>
+      <h3 className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Remembered decisions</h3>
+      <p className="mt-2 text-xs text-zinc-300">
+        {state.count === 0 ? "None yet. Use ◇ remember on a decision card." : `${state.count} current in .logic-loop/DECISIONS.md`}
+      </p>
+      {state.travel !== "tracked" && (
+        <p className="mt-0.5 text-[11px] text-attn-400">Stays on this machine; won't travel with the repo.</p>
+      )}
+      <ul className="mt-1.5 space-y-1 text-xs">
+        {SHARE_TARGETS.map((t) => {
+          const text = state.files[t.file];
+          const shared = text != null && hasLinkLine(text, t.line);
+          return (
+            <li key={t.file} className="flex items-center gap-2 text-zinc-400">
+              <span>{t.agent}:</span>
+              {text == null ? (
+                <span className="text-zinc-600">No {t.file} in this project</span>
+              ) : (
+                <>
+                  <span className={shared ? "text-ok-400" : "text-zinc-500"}>{shared ? `shared ✓${t.note}` : "not shared"}</span>
+                  <button type="button" disabled={busy}
+                    className="rounded border border-zinc-700 px-2 py-0.5 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200 disabled:text-zinc-600 focus-visible:outline-2 focus-visible:outline-focus-400"
+                    title={shared ? `Remove the link line from ${t.file}` : `Add one line to ${t.file} so new ${t.agent} sessions read DECISIONS.md`}
+                    onClick={() => void toggle(t.file, t.line, !shared)}>
+                    {shared ? "Unshare" : "Share"}
+                  </button>
+                </>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {error && <p role="alert" className="mt-1 text-xs text-attn-400">{error}</p>}
+    </section>
   );
 }
 
@@ -588,6 +676,8 @@ export function ProjectOverview({ projectKey, tabs, expand, now, onBack, onConti
           </section>
 
           <StaleDecisionsNote projectKey={projectKey} />
+
+          <RememberedDecisions projectKey={projectKey} />
 
           <section>
             <div className="flex items-center justify-between">

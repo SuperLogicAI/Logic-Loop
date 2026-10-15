@@ -1265,6 +1265,29 @@ the highest-effort, least drop-in of the three).
 
 ## Dynamic project context file (`.logic-loop/CONTEXT.md`) — build brief
 
+**Shelved (2026-10-14).** Replaced by "Human-confirmed project decisions
+(`.logic-loop/DECISIONS.md`)" at the end of this file. Revisit only after
+that ships and its recall experiment passes. Corrections recorded before
+anyone revives this brief:
+
+1. `decisions.user_answer` is not guaranteed human-typed. The extractor
+   writes a "short quote/paraphrase" (`src/lib/extractor.ts`), the
+   reconciler stores the user's bounded raw reply (`answerOpenDecisions`),
+   and AskUserQuestion stores the picked label. The trust boundary below
+   treats all three as human-written.
+2. Landing notes are model pre-drafted (`src/lib/landing.ts`) and then
+   saved by the human: human-confirmed, not human-typed.
+3. Codex does not expand `@` lines in `AGENTS.md`.
+   `codex-rs/core/src/agents_md.rs` concatenates AGENTS.md files raw and
+   ignores fallback filenames that contain a path (checked 2026-10-14). The
+   `target: "agents"` import line below would be inert for Codex.
+4. The inputs measured weak on the maintainer DB (aggregate counts,
+   2026-10-14): 96% of landing notes skipped, ~6% of decision rows carry
+   any answer text, and nothing marks which answers are standing decisions
+   rather than one-turn replies.
+
+Entry kept as originally written, for history.
+
 **Origin (2026-09-16):** prior-art review showed a per-project freeform
 "Instructions" textarea appended to the agent's system prompt at spawn.
 That works only when the app owns the spawn. Logic Loop doesn't (invariant
@@ -1841,3 +1864,281 @@ before any extension exists.
 **Not doing, restated:** file explorer, in-app code editor, cross-file search,
 drag-in file management. That's the IDE's job, and copying it makes a worse
 IDE. See "Editable code view pop-out — considered, not recommended" above.
+
+## Human-confirmed project decisions (`.logic-loop/DECISIONS.md`) — build brief
+
+**Origin (2026-10-14):** the maintainer asked whether decision tracking is
+groundwork for a project memory that any agent can use, inside or outside
+Logic Loop. Reviewed with Codex against ten open-source agent-memory
+projects (see "Lineage" below). Aggregate counts from the maintainer DB
+(95 days, 39 projects): 2,905 decision rows, of which 45% were dismissed,
+44% never resolved and 10% answered. Only 6% carry any answer text, and
+99.5% come from LLM extraction (14 from structured AskUserQuestion). The
+decision stream is an attention queue tuned for recall. It is a good
+source of *candidates* for memory, but it is not memory.
+
+Maintainer calls (2026-10-14): build this; for Codex, test a pointer line
+before writing entries inline; shelve the CONTEXT.md brief; handle
+transcript retention as its own entry (next section).
+
+### What it is
+
+A **Remember** action on a decision card. The human writes the decision
+and its reason, confirms, and Logic Loop appends one line to
+`<project>/.logic-loop/DECISIONS.md`. The file is git-tracked next to
+`board.md`, so it travels with the repo, and any agent that can read files
+can read it with Logic Loop closed. The DB stays the evidence store
+(`decisions.context_json`). The file holds only human-confirmed text.
+
+Memory is a feature of the attention workflow, not a new product: cards
+are the candidates and the human is the gate.
+
+### Entry format (one line per entry; merging depends on it)
+
+```
+# Project decisions
+Written by Logic Loop's Remember action and confirmed by a human. Edit freely; keep one line per entry.
+Lines starting with [SUPERSEDED ...] are history. Do not follow them.
+
+- D-20261014-7f3a · Use X for Y. Because Z. Revisit if W. (codex · 2026-10-14 · card #1234)
+- [SUPERSEDED by D-20261020-b2c1] D-20260901-a1b2 · Use P for Y. Because Q. (claude · 2026-09-01 · card #880)
+- D-20261020-b2c1 · Use R for Y. Because S. Supersedes D-20260901-a1b2. (claude · 2026-10-20 · card #1302)
+```
+
+- **ID:** `D-YYYYMMDD-xxxx`, four random hex characters
+  (`crypto.getRandomValues`), regenerated if that ID is already in the
+  file. Not sequential, since parallel branches would collide. Not the DB
+  row id, since a DB reset or a retention cleanup can restart ids.
+- **Decision** (required, ≤160 chars): prefilled from the card's
+  `user_answer` when there is one, editable.
+- **Reason** (required, ≤240): starts empty, typed by the human. "Use X"
+  alone tells a future agent little.
+- **Revisit if** (optional, ≤120).
+- **Supersedes** (optional): picked from the file's current entries.
+  Saving prefixes the old line with `[SUPERSEDED by <new id>]` and keeps
+  its text, so the history stays readable.
+- **Trailer:** agent, date, `card #<decisions.id>`. This is a pointer into
+  the local DB only.
+
+The formatter collapses all whitespace (newlines included) to single
+spaces, strips leading `#`, `>` and `-` and backtick fences from the
+fields, and enforces the caps. Each line must make sense without the DB.
+
+### Git behavior (the exact promise)
+
+- When two branches append to the same file, git reports a merge conflict.
+  Logic Loop therefore writes `.logic-loop/.gitattributes` with
+  `DECISIONS.md merge=union` (a merge driver built into git that keeps the
+  lines from both sides). Verified 2026-10-14 in a scratch repo: conflict
+  without the attribute, clean merge with it. Because the attributes file
+  sits inside `.logic-loop/`, the only change outside that directory is
+  the import or pointer line.
+- Union merge works line by line, which is why each entry is one line. It
+  can duplicate a line when both sides touch adjacent lines (one side
+  marks the last entry superseded while the other appends). That is
+  harmless, and the human tidies it.
+- What the UI promises: an entry reaches another branch or worktree when
+  that branch merges or rebases. It does not appear in existing worktrees
+  on its own.
+- A card from a worktree tab writes to that worktree's file (its project
+  key is the worktree path, `project_key` in `pty.rs`). The entry returns
+  to the main branch through the merge. An abandoned branch takes its
+  decisions with it, which is ordinary git behavior.
+- If `.logic-loop/` is gitignored in a project, the file still works
+  locally, and the UI says it won't travel.
+
+### Writes
+
+- Rust, next to `write_board` in `board.rs`: `read_decision_log`;
+  `append_decision_log(project_key, line)`, which appends with
+  `OpenOptions::append` so a concurrent hand edit isn't clobbered and, on
+  first write, creates the header and adds the `.gitattributes` line if it
+  is missing (idempotent); and `write_decision_log(project_key, content)`,
+  which writes a temp file and renames it, and is used only by supersede.
+  All of them go through `spawn_blocking_result`. Errors show in the card
+  editor. Fail open: nothing touches terminals.
+- Pure TS in `src/lib/decisionLog.ts`: `formatEntry`, `newId(existingIds)`,
+  `currentEntries(file)`, `supersede(file, oldId, newLine)`. The
+  `decision-log:check` script asserts that output is always one line, the
+  caps hold, newline and fence injection in fixtures stays on one line,
+  the ID format is right and collisions retry, and supersede prefixes
+  exactly one line (it errors on zero matches, several matches or an
+  already-superseded entry).
+- No schema change. The file is the record, and `card #id` links back.
+
+### UI
+
+- Decisions panel cards (`SidePanel.tsx`) get a Remember action next to
+  Dismiss. It opens a small inline editor: the card's question and answer
+  shown read-only for context, then the Decision, Reason, Revisit if and
+  Supersedes fields. Save stays disabled until Decision and Reason are
+  filled. A saved card shows "Remembered as D-…". No bulk Remember and no
+  automatic path.
+- In the Setup checklist (`OnboardingModal.tsx`), per project: "Share
+  remembered decisions with agents", with one row per agent target (see
+  below). Never auto-enable, never global. Remember works whether or not
+  sharing is on.
+
+### Delivery per agent
+
+- **Claude Code:** one line, `@.logic-loop/DECISIONS.md`, appended to the
+  project's `CLAUDE.md`. Imports are documented
+  (code.claude.com/docs/en/memory#import-additional-files). Setup, remove
+  and status follow the shelved brief's import-line design: idempotent,
+  removal byte-identical, unit-tested in both directions.
+- **Codex:** has no `@` expansion (see the shelved brief, correction 3).
+  v1 appends one plain line to `AGENTS.md`: "Project decisions live in
+  `.logic-loop/DECISIONS.md`. Read it before changing anything it covers;
+  lines marked SUPERSEDED are history." It uses the same
+  setup/remove/status discipline. Status always reads "load not observed"
+  because Codex has no load event.
+  - Fallback, only if the recall test shows Codex ignoring the pointer:
+    Logic Loop writes the current entries inline into `AGENTS.md` between
+    generated markers. The costs are generated text inside a
+    human-maintained file and bytes against Codex's AGENTS.md size cap.
+    That needs a separate maintainer call.
+- A `CLAUDE.md` that imports `@AGENTS.md` (this repo's does) also shows
+  Claude the pointer line. That is harmless; the `@` import is what
+  guarantees Claude loads the file.
+- OpenCode, Antigravity, Pi and DeepSeek Harness are not targets in v1.
+  Verify each agent's instruction-loading mechanism against its live CLI
+  before adding it.
+- Load observation via Claude's `InstructionsLoaded` hook is deferred. In
+  v1 the recall test serves as the load check. Add the hook only if an
+  import is seen failing silently; the design is in the shelved brief.
+
+### Trust boundary (invariant #5)
+
+- Only text the human saved through the editor enters the file. The
+  prefill is a convenience that the human must actively confirm, and the
+  Reason is always typed by the human.
+- Never written: the card's question, `assumption`, `context_json`,
+  transcript excerpts, or anything from `events`.
+- Evidence stays local by design. Transcripts can contain client data, so
+  they must never be committed into a project repo. `card #id` is a
+  pointer for whoever has the originating DB.
+- No model call anywhere in this feature.
+- Invariant #4: the file is read at the next session start, which is
+  process configuration. Nothing is written to a live PTY. A running
+  session does not pick up new entries, and that is correct.
+- Feedback loop: an agent restating a remembered decision can produce a
+  new card. The human gate catches the duplicate, so v1 has no code for
+  it.
+
+### Experiment (the point of v1)
+
+1. In this repo, Remember about 10 real standing decisions with reasons,
+   including at least one supersession.
+2. Give a fresh Claude session and a fresh Codex session tasks that
+   depend on those decisions. Score each task: names the choice, gives
+   the reason, follows the superseding entry rather than the superseded
+   one, and says so when the file doesn't cover the question.
+3. Baseline: the same tasks with the import or pointer line removed,
+   leaving instruction files plus ordinary search. Record the file's size.
+3a. Re-test (added 2026-10-15). Steps 1–3 scored 10/10 in every condition
+   and proved nothing: the decisions were copied from AGENTS.md and Plan
+   064, so the baseline could read them there, and the baseline found
+   DECISIONS.md by search anyway. Re-run with:
+   - About 5 real decisions from answered cards whose choice and reason
+     appear only in the card answer. `rg` over the repo, excluding
+     `.logic-loop/`, finds neither.
+   - Baseline: DECISIONS.md moved out of the repo, not just unlinked.
+   - Tasks that need each decision without naming it or pointing at the
+     file, plus one uncovered question. Two fresh runs per agent and
+     condition.
+   Kill if the baseline matches the with-file runs. If only the with-file
+   runs get the choices and reasons, keep the file; if search alone finds
+   it, Share adds nothing and is a candidate to cut.
+4. After two weeks, a 10-minute review of the answered cards from that
+   window (about 40 at the measured rate): count "should have remembered"
+   against "remembered", matched by `card #id`. A quiet stretch with no
+   lasting decisions is not a failure.
+5. Kill it if recall is no better than baseline, or if "should have
+   remembered" keeps outnumbering "remembered". Either means too much
+   friction or no value.
+
+Results go in `docs/TESTING.md`.
+
+### Revisit triggers (build more only when one fires)
+
+- More than about 50 current entries or 8 KB: consider task-specific
+  retrieval (search or MCP), or delivery scoped by path through
+  `.claude/rules` `paths:` globs.
+- Codex ignores the pointer: the inline fallback above.
+- An import fails to load silently: `InstructionsLoaded` verification.
+- Evidence wanted on another machine: a separate design, and never by
+  committing transcripts.
+
+### Lineage: what came from the ten memory repos
+
+Concepts only: no code, no dependency, no service. The repos are not
+structurally similar. Most are retrieval engines in which an LLM writes
+memory automatically and an agent searches it through a tool. This design
+does the opposite: the human writes every entry, there is no retrieval
+step, and the file is loaded at session start. At 171 answered-with-text
+rows in 95 days, a file beats an engine. The summaries come from Codex's
+2026-10-14 review; the repos were not re-read for this brief.
+
+| Source | Taken | Left |
+|---|---|---|
+| ai-memory | Readable markdown memory, versioned (here by git) | Search index, server, external lifecycle API |
+| claude-obsidian | Claim kept separate from source evidence; review status becomes the human gate | Vault/wiki structure |
+| agentmemory | Origin trailer, supersession chain, superseded entries marked as history | Store, benchmarks |
+| MemPalace | Explicit replacement instead of silent overwrite | Validity windows, knowledge graph |
+| Hindsight | Derived text never counts as evidence | Generated knowledge pages |
+| Supermemory | Standing knowledge kept apart from recent activity (this file vs the shelved CONTEXT.md) | Query-time retrieval |
+| Nanobot | Journal → durable knowledge only through a reviewed, reversible change (card → Remember; `git revert`) | Workspace-wide shared memory (the project boundary stays) |
+| Mem0 | Append-only writes | Hybrid retrieval, LLM extraction straight into memory |
+| Context Mode | Each entry points to where detail lives | Session snapshots |
+| Graphify | Nothing in v1; repo-relative code anchors deferred with retrieval | AST graph |
+
+### Done means
+
+`decision-log:check` green and added to `npm run check`. Rust unit tests:
+the first append creates the header and the attribute line exactly once;
+the attribute line is idempotent; supersede writes atomically; import and
+pointer setup/remove/status give a byte-identical round trip with
+existing content preserved. `tsc --noEmit`, clippy, `npm run build` and
+`git diff --check` clean. Manual `docs/TESTING.md` entries: Remember
+writes the line within 1 s; Save is disabled without a Reason; supersede
+marks exactly one line; two worktree branches that each Remember merge
+cleanly; removing the import takes only that line out of the instruction
+file.
+
+### Explicitly out of scope
+
+Auto-promotion or bulk Remember; model-drafted reasons; question or
+transcript text in the file; search, MCP, embeddings, consolidation and
+external memory engines; schema changes; OpenCode, Antigravity, Pi and
+DeepSeek targets; writing anywhere outside `<project>/.logic-loop/` except
+the single import or pointer line per instruction file; CONTEXT.md
+(shelved); transcript retention (next section).
+
+## Transcript copies in SQLite — retention, investigate (2026-10-14)
+
+Measured on the maintainer DB (aggregate counts only): the file is 4.9 GB.
+`events` holds 300k rows with about 2 GB of payload, of which
+`type = 'transcript'` accounts for 216k rows and 1.3 GB. `onTranscriptLine`
+in `App.tsx` copies every transcript line into `events`. The only reader
+found filtering on that type is `recentTranscript` (`repo.ts`), which
+feeds the landing-note draft and reads the last 20 lines of one session.
+Decision evidence doesn't depend on these rows: each extracted card
+already stores its turn pair in `decisions.context_json` (about 5 MB in
+total).
+
+Before any change: check whether the `events` queries that don't filter
+by type (`repo.ts` around lines 265, 339 and 376, plus `reviewQueue.ts`)
+scan or depend on transcript rows, and confirm `dedupe_key` doesn't rely
+on them. Options, smallest first:
+
+- Keep only the last N transcript lines per session. This works the same
+  for every adapter.
+- Stop copying and read the transcript file tail instead. This is not
+  universal: OpenCode and Antigravity post events directly and have no
+  transcript file (`ingest.rs`).
+- Age rows out by date.
+
+Deleting existing rows is destructive on user data and an exception to
+the append-only tables (invariant #3). It needs its own plan and
+maintainer approval, plus a `VACUUM` step to reclaim the disk space. Not
+part of the decisions-file work.

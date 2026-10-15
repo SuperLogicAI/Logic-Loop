@@ -7,7 +7,8 @@ use std::path::PathBuf;
 
 /// Shown first, in this order, when present. Then regular `*.md` directly in
 /// the project root, then directly in `docs/` — one level, no recursion.
-const FIXED: [&str; 4] = ["CLAUDE.md", "AGENTS.md", ".claude/CLAUDE.md", ".logic-loop/board.md"];
+const FIXED: [&str; 5] =
+    ["CLAUDE.md", "AGENTS.md", ".claude/CLAUDE.md", ".logic-loop/board.md", ".logic-loop/DECISIONS.md"];
 /// Keeps the textarea responsive; larger files go through Open in editor.
 pub(crate) const MAX_BYTES: u64 = 1024 * 1024;
 
@@ -115,6 +116,7 @@ mod tests {
         std::fs::write(root.join("AGENTS.md"), "agents").unwrap();
         std::fs::write(root.join("CLAUDE.md"), "claude").unwrap();
         std::fs::write(root.join(".logic-loop/board.md"), "board").unwrap();
+        std::fs::write(root.join(".logic-loop/DECISIONS.md"), "decisions").unwrap();
         std::fs::write(root.join("b.md"), "b").unwrap();
         std::fs::write(root.join("A.md"), "a").unwrap();
         std::fs::write(root.join("notes.MD"), "n").unwrap();
@@ -138,7 +140,7 @@ mod tests {
         // .claude/CLAUDE.md absent → skipped; docs/nested/, plans/, .txt and >1 MB excluded
         assert_eq!(
             listed,
-            ["CLAUDE.md", "AGENTS.md", ".logic-loop/board.md", "A.md", "b.md", "notes.MD", "docs/Alpha.md", "docs/deep.md"]
+            ["CLAUDE.md", "AGENTS.md", ".logic-loop/board.md", ".logic-loop/DECISIONS.md", "A.md", "b.md", "notes.MD", "docs/Alpha.md", "docs/deep.md"]
         );
     }
 
