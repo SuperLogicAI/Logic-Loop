@@ -127,4 +127,66 @@ const oneOff = toggleNow(withCap, parsedForCap[0], parsedForCap);
 assert.notEqual(oneOff, withCap, "turning a now card off succeeds regardless of the cap");
 assert.equal(parseBoard(oneOff).filter((c) => c.now).length, NOW_CAP - 1);
 
+
+
+// Phase 65: views project the same file without converting stored statuses.
+import { boardColumns, freshBoardCard, kanbanLane, kanbanStatus, parseBoardMode } from "../src/lib/boardModes";
+import type { BoardMode } from "../src/lib/boardModes";
+for (const value of [null, "", "unknown", "LIST", "workflow"]) assert.equal(parseBoardMode(value), "workflow");
+assert.equal(parseBoardMode("list"), "list");
+assert.equal(parseBoardMode("kanban"), "kanban");
+const mixedMd = `# Keep this preamble
+## Deferred
+status: later
+body: preserve me
+link: docs/thing.md
+next: think
+now: true
+color: #123456
+## Active
+status: building
+## Idea
+status: idea
+## Queued
+status: planned
+## Shipped
+status: done
+`;
+const mixed = parseBoard(mixedMd);
+const originalCards = JSON.stringify(mixed);
+for (const mode of ["workflow", "list", "kanban"] as BoardMode[]) {
+  const projected = boardColumns(mode, mixed);
+  const all = projected.flatMap((col) => col.cards);
+  assert.equal(all.length, mixed.length);
+  assert.equal(new Set(all).size, mixed.length, "each original card occurs exactly once");
+  for (const col of projected) {
+    assert.deepEqual(col.cards, mixed.filter((card) => col.cards.includes(card)), "source order retained");
+  }
+  assert.equal(boardColumns(mode, []).flatMap((col) => col.cards).length, 0);
+}
+assert.deepEqual(boardColumns("list", mixed)[0].cards, mixed);
+assert.deepEqual(boardColumns("workflow", mixed).map((col) => col.cards[0].status), ["idea", "planned", "building", "later", "done"]);
+assert.deepEqual(boardColumns("kanban", mixed).map((col) => col.cards.map((c) => c.title)), [["Deferred", "Idea", "Queued"], ["Active"], ["Shipped"]]);
+assert.equal(JSON.stringify(mixed), originalCards, "projection preserves original card metadata and offsets");
+assert.equal(kanbanStatus("later", "todo"), "later");
+assert.equal(kanbanStatus("idea", "todo"), "idea");
+assert.equal(kanbanStatus("later", "progress"), "building");
+assert.equal(kanbanStatus("building", "todo"), "planned");
+assert.equal(kanbanStatus("planned", "done"), "done");
+assert.equal(kanbanLane("later"), "todo");
+const movedMixed = moveCard(mixedMd, mixed[0], kanbanStatus(mixed[0].status, "progress"));
+assert.deepEqual({ ...parseBoard(movedMixed)[0], status: "later", end: mixed[0].end }, mixed[0]);
+assert.equal(movedMixed.slice(parseBoard(movedMixed)[1].start), mixedMd.slice(mixed[1].start), "siblings byte-identical");
+assert.equal(preambleOf(movedMixed), preambleOf(mixedMd));
+const duplicate = parseBoard("## Deferred\nstatus: idea\n## Deferred\nstatus: done\n");
+assert.throws(() => freshBoardCard(mixed[0], duplicate, mixed), /Duplicate/);
+assert.throws(() => freshBoardCard(mixed[0], mixed, duplicate), /Duplicate/);
+assert.throws(() => freshBoardCard(mixed[0], mixed, mixed.slice(1)), /removed or renamed/);
+const renamed = parseBoard(mixedMd.replace("## Deferred", "## Renamed"));
+assert.throws(() => freshBoardCard(mixed[0], mixed, renamed), /removed or renamed/);
+const inserted = parseBoard("## Inserted\nstatus: idea\n" + mixedMd);
+const resolved = freshBoardCard(mixed[0], mixed, inserted);
+assert.equal(resolved.title, "Deferred");
+assert.notEqual(resolved.start, mixed[0].start, "fresh offset used after external insertion");
+assert.equal(resolved, inserted[1]);
 console.log("board-check: all assertions passed");

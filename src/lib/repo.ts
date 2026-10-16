@@ -1,3 +1,4 @@
+import { parseBoardMode, type BoardMode } from "./boardModes";
 import Database from "@tauri-apps/plugin-sql";
 import { invoke } from "@tauri-apps/api/core";
 import type {
@@ -1089,6 +1090,27 @@ export async function setClaudeStatuslineWrapperEnabled(enabled: boolean): Promi
 
 // --- Idea Board (Phase 18): per-project collapsed/height, same settings-
 // table pattern as project mute above. ---
+
+// Serialize each project's preferences across board remounts as well as rapid
+// selections. Reads wait for pending writes before restoring that project.
+const boardModeWrites = new Map<string, Promise<void>>();
+
+export async function getBoardMode(cwd: string): Promise<BoardMode> {
+  await boardModeWrites.get(cwd)?.catch(() => undefined);
+  return parseBoardMode(await getSetting("board_mode:" + cwd));
+}
+
+export function setBoardMode(cwd: string, mode: BoardMode): Promise<void> {
+  const write = (boardModeWrites.get(cwd) ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(() => setSetting("board_mode:" + cwd, mode));
+  boardModeWrites.set(cwd, write);
+  const clear = () => {
+    if (boardModeWrites.get(cwd) === write) boardModeWrites.delete(cwd);
+  };
+  void write.then(clear, clear);
+  return write;
+}
 
 const BOARD_COLLAPSED_PREFIX = "board_collapsed:";
 const BOARD_HEIGHT_PREFIX = "board_height:";

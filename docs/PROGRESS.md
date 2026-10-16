@@ -1281,3 +1281,32 @@ passed. Built-app checks 129–138 passed (evidence in docs/TESTING.md).
 **PHASE 64 ACCEPTED** by the maintainer on 2026-10-15. The two-week
 experiment review remains a follow-up. No golden (no prompt change), no
 migration.
+
+### Phase 65 — Idea Board modes (2026-10-15)
+
+Plan: `plans/065-idea-board-modes.md`; **PHASE 65 APPROVED** by the maintainer
+2026-10-15. Implemented List / Kanban / Workflow over the existing board
+format. Mode changes only update a per-project setting; no status migration.
+Kanban preserves original status labels and maps lane changes to
+planned/building/done. Same-lane selection preserves idea/later.
+
+Added pure view/matching helpers and focused board checks. The board's inner
+component is keyed by project, with stale-load guards, serialized preference
+writes across remounts, guarded unique-title matching instead of stale-offset
+fallback, pending-mutation exclusion, and error/draft retention. Existing
+Momentum/Overview semantics and the maintainer's board remain unchanged.
+No new dependencies, Rust changes, schema changes or prompt changes.
+
+Verification: board/opencode/full frontend checks, TypeScript and production
+build passed; Rust library tests (193 passed, 1 ignored) and clippy passed.
+Initial fixture socket sandbox restrictions were resolved by rerunning with
+local-socket access. Installed-app checks covered presentation/file identity,
+grouping, mutations, empty boards, per-project modes/drafts, stale-card guards,
+external edits and basic switching isolation. A short-window dock overflow
+was fixed by clamping to workspace height with a terminal reserve; the fix
+passed component/CSS computer-use regression checks and all automated gates.
+Rebuilt installed-app verification, restart/preferences failure injection and
+forced slow-I/O races remain coverage limits in docs/TESTING.md.
+Read-before-write is still not atomic against external file writers.
+**PHASE 65 ACCEPTED** by the maintainer on 2026-10-15 with these recorded
+coverage limits. Phase 66 not begun.

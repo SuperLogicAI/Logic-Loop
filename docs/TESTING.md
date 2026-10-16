@@ -6722,3 +6722,160 @@ not verify tool execution, structured question tools, answer reconciliation,
 re-entry, blockers or every adapter capability. No full build/test gates
 rerun for this manual-test record. `git diff --check` passed; nothing
 committed. Smoke test complete; no further work required for this check.
+
+## Phase 65 — Idea Board modes (2026-10-15)
+
+Implementation approved with `PHASE 65 APPROVED`. Automated coverage:
+`board:check` covers mode parsing/defaults, all three projections, source
+order, all five statuses, empty boards, metadata preservation, Kanban lane
+mapping/no-op, guarded duplicate/renamed/removed-card mutations, and fresh
+offsets after external insertion. Existing splice and Now-cap cases pass.
+
+Automated gates: `npm run board:check`, `npm run opencode:check`,
+`npm run check`, `npx tsc --noEmit`, `npm run build`, `cargo test --lib`
+(193 passed, 1 existing ignored live Codex test),
+`cargo clippy --all-targets -- -D warnings`, and `git diff --check`.
+Initial sandbox runs could not bind fixture sockets; reruns with local-socket
+access passed. No golden: extraction prompts unchanged. Vite reports the
+existing large-chunk advisory.
+
+Limited UI observation: an isolated Vite preview under `/tmp` rendered the
+actual IdeaBoard component and CSS in Chrome, with synthetic board content
+and mocked file/settings calls backed only by preview-local browser storage.
+React StrictMode was enabled. Observed Workflow's five columns with counts,
+card controls, Now/accent, quick add and trailing meters. Observed Kanban
+To do (5), In progress (1), Done (1), with source-status labels, including
+Later on the collapsed Deferred card. No real project board/database was
+used or modified by this preview. Further UI interaction stopped when the
+computer-use tool reported user-side Chrome changes.
+
+This is not a Tauri built-app acceptance pass. All eight built-app matrix
+items in `plans/065-idea-board-modes.md` remain pending, including List visual
+inspection, actual SQLite persistence/relaunch, byte-identical file checks,
+mutations and failure paths, fast project/focus races, duplicate-title UI
+behavior, narrow/split layouts and dock resizing. Pure helper checks do not
+establish those async/UI properties. No phase acceptance claimed.
+
+### Phase 65 built-app test attempt (2026-10-15)
+
+Prepared two disposable projects at
+`/private/tmp/logic-loop-phase65-20261015/A` and `B`, each with seven cards:
+all five statuses, duplicate titles, three Now stars, accents, and distinct
+body/link/next text. Each has a `baseline.md` copy outside `.logic-loop`.
+No maintainer board was edited.
+
+The running installed Logic Loop app was inspected through native computer
+use. It showed existing active agent tabs and a collapsed Idea Board.
+Two attempted UI actions were interrupted by computer-use reports that the
+user had changed the app; the refreshed tree showed a different active
+project. UI testing paused to avoid interfering with ongoing sessions.
+Exclusive use of the app window was requested; no built-app matrix item is
+claimed passed from this attempt. No restart, fixture mutations, preference
+failure injection, or terminal input was performed.
+
+Focused verification: `node --import tsx scripts/board-check.ts` passed all
+assertions. The equivalent `npm run board:check` launcher was blocked by
+sandbox EPERM when tsx tried to create its IPC socket; running the same
+script through Node's tsx import avoided that launcher requirement.
+`git diff --check` passed before this documentation addition. Full gates
+were not rerun for this manual-test-only attempt. All eight built-app checks
+and preference-write failure remain pending; Phase 65 acceptance remains
+with the maintainer.
+
+### Phase 65 installed-app manual results (2026-10-15)
+
+Resumed after the maintainer granted exclusive computer use. Tested the
+installed `/Applications/Logic Loop.app` through native accessibility and
+screenshots, with actual file writes and application preference persistence.
+Used the two disposable fixtures from the attempt above. No source fixes,
+maintainer board edits, agent prompts, or terminal input were made.
+
+| Check | Observed result |
+| --- | --- |
+| Views and file identity | PASS: A defaulted to Workflow. Workflow → List → Kanban left its board byte-identical to baseline (SHA-256 `e5648554f361d21f2b639e50f51871bd923d9f7da5aa49f00b4c45ab5f7d608b`). Choosing the Later card's current To do lane also left it byte-identical. |
+| Grouping and order | PASS: Workflow counts 2/2/1/1/1; List all seven in source order, including done and duplicate titles; Kanban To do 5, In progress 1, Done 1. Later remained visibly labelled on the collapsed card. |
+| Kanban moves | PASS: A Deferred moved Later → In progress (`building`) → To do (`planned`) → Done (`done`). Verified Markdown and resulting UI counts/labels. Body/link/next/Now/accent survived; sibling bytes stayed identical on the first mutation. Workflow subsequently showed actual stored statuses. Overview was not checked. |
+| Controls | PASS for quick add/delete in all three views, with Idea stored; expansion and metadata display in all three; Now and accent changes in all three; Workflow/List five-status changes and Kanban lane changes. Verified List's test card stored `done`, `now: true`, `color: #ef4444`; Workflow's changed card stored `planned`, Now and blue accent. Kanban's fourth Now attempt displayed the three-card-cap notice; removing a star and adding another worked. Cap rejection was not repeated separately in List/Workflow. |
+| Empty boards | PASS: temporarily emptied B; Kanban showed three zero-count lanes, List All cards (0) and No cards yet, Workflow five zero-count columns. Mode switching kept the empty file empty. Quick add from empty List worked. Restored B baseline afterward. |
+| Persistence and drafts | PARTIAL PASS: A List and B Kanban restored independently on repeated project switches/remounts. Both new projects initially defaulted to Workflow. A failed-add draft cleared on switching away/back; B had no leaked draft. No app restart, invalid/unreadable SQLite preference, or preference-write failure injection performed. |
+| Switching isolation | PARTIAL PASS: six successive A/B switches restored the appropriate project/mode; final A showed only A content. A quick add followed immediately by selecting A saved only into B; A stayed byte-identical to its pre-action snapshot. These local operations did not force delayed I/O or establish all pending-load/save/focus interleavings. |
+| External edits | PASS: externally renamed A Capture and removed A Active while stale cards were displayed. Deletion attempts refused with “Card removed or renamed. Reload the board before editing.” File equality confirmed no write. Duplicate cards expanded separately (distinct bodies 5 and 6); deletion refused with the duplicate-title error. An external card inserted before the displayed cards shifted offsets; toggling A Deferred's Now used the fresh position and preserved the insertion, renamed card, removal, preamble sentinel and metadata. |
+| Failed add | PASS: temporarily chmod 444 on A's fixture board; add displayed Permission denied and retained the exact draft. Restored chmod 644 immediately. App/project navigation and subsequent successful controls continued working. Terminal input was not sent; this establishes UI availability/focus, not a PTY round-trip under error. |
+| Layout | FAIL at maximum dock height plus short window; reproduction below. At a smaller dock height, narrow layout retained selector/quick add and the terminal area. Side-by-side split displayed two shell panes alongside the board; exited split afterward. Full split interaction, vertical split, meter wrapping, and exhaustive keyboard/scroll coverage remain unverified. |
+
+**Layout failure reproduction:** with A expanded in Workflow at a roughly
+1200×775 logical-pixel window, drag the board's top resize handle upward to
+its maximum (480 CSS px). Shrink the window to approximately 725×550 logical
+pixels (native screenshot 1452×1104). The dock exceeds the available area:
+quick add falls below the visible bottom and the terminal area disappears.
+Dragging the dock handle down restores both. The dock has a fixed maximum
+height without a viewport-height clamp; this observation does not establish
+whether the problem predates Phase 65. No implementation change made.
+
+Remaining acceptance coverage: actual app restart; invalid/unreadable mode
+preferences; preference-write failure with the exact session-only warning;
+forced slow load/save/focus races; full split/narrow/meter/keyboard matrix;
+and actual terminal round-trip under failure. Restart would interrupt live
+agent sessions, including this testing session, so it was not attempted.
+No shared database permissions/configuration were altered to inject errors.
+The layout failure requires review/fix and retest before this matrix can pass.
+
+Final fixture state: A remains intentionally mutated for external-edit
+inspection, in List. B contains the restored seven-card baseline plus
+`B save then switch` (Idea), in Kanban. Baseline and intermediate snapshots
+remain in the disposable folders. Test bookmarks and tabs remain open at the
+maintainer's request. An attempted close of an extra shell tab was rejected
+by automatic approval review as potentially losing session state; no tab was
+closed. The maintainer then explicitly chose to leave tabs open.
+
+Verification for this manual-only follow-up: the earlier same-script
+`node --import tsx scripts/board-check.ts` pass remains applicable; no full
+build/test gates rerun. `git diff --check` passed after this record.
+No commit or phase acceptance; literal `PHASE 65 ACCEPTED` remains pending.
+
+### Phase 65 dock-height correction (2026-10-15)
+
+Implemented the layout fix requested after the installed-app failure above.
+IdeaBoard now observes its workspace and toolbar with a ResizeObserver,
+clamps the displayed dock to the available height while reserving 96 CSS px
+for the terminal area, and retains the preferred height when the window
+shrinks. Dragging starts from the actual displayed height and respects the
+current limit. Very small docks allow vertical overflow to scroll. The
+observer disconnects on collapse/unmount, including StrictMode cleanup.
+Only IdeaBoard.tsx implementation changed; no board or preference format
+change, no App/terminal/Rust change, no Plan 065 scope expansion.
+
+Computer-use regression check: native Chrome displayed the actual updated
+IdeaBoard and repo CSS in the isolated localhost fixture, with mocked file
+and preference calls and a terminal placeholder. Expanded the dock upward,
+then shrank the browser to approximately 725 px wide with a 550 px content
+viewport, and again to about 430 px content height. The terminal placeholder,
+Board view selector and quick add stayed visible; columns scrolled within
+the dock. Workflow, List and Kanban remained selectable, and typed a draft
+into quick add at the shorter height. Enlarging the window grew the dock
+again while keeping the draft. React StrictMode enabled. An initial syntax
+error in the temporary preview harness was corrected before this inspection;
+it was not a product-source error.
+
+This is a component/CSS regression pass, not a rebuilt installed-Tauri pass.
+The running installed app was not replaced/restarted because it contains
+live agent sessions. The previous installed-app failure is addressed in
+source; verification of the rebuilt app and remaining Phase 65 acceptance
+items above are still pending. No terminal input or maintainer board edits.
+
+Gates passed after the source fix: focused board assertions via
+`node --import tsx scripts/board-check.ts`, `npm run opencode:check`,
+`npm run check` (including board:check), `npx tsc --noEmit`, `npm run build`,
+`cargo test --lib` (193 passed, one existing ignored test),
+`cargo clippy --all-targets -- -D warnings`, and `git diff --check`.
+Socket-using checks ran with local-socket access after the preview server's
+sandbox bind was denied. Existing Vite large-chunk advisory only. No golden,
+no commit, no phase acceptance claimed.
+
+
+### Phase 65 maintainer acceptance (2026-10-15)
+
+Maintainer explicitly issued `PHASE 65 ACCEPTED` and authorized opening the
+PR. This acceptance does not convert the unrun checks recorded above into
+passes. The installed app still needs the rebuilt dock fix tested; restart,
+preference failure and forced slow-I/O coverage limits remain documented.
