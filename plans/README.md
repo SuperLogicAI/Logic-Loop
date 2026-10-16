@@ -41,6 +41,15 @@ verification.
 
 ## Execution order & status
 
+[Plan 065](065-idea-board-modes.md) is **Phase 65 — ACCEPTED 2026-10-15**
+(planned at `373b05f`; Phase 64 accepted). Per-project List / Kanban / Workflow
+presentations over the same Markdown cards, without status conversion on view
+changes. Automated gates and installed-app checks passed within the coverage
+recorded in docs/TESTING.md; the dock-height fix passed component/CSS preview
+checks. Rebuilt-app, restart/preference-failure and forced-race checks remain
+unverified. Includes guarded card matching and async project isolation;
+templates, IDs and drag/drop deferred.
+
 [Plan 049](049-sidebar-header-polish.md) is **Phase 49 — ACCEPTED 2026-10-03**. Sidebar app header, attached fold control,
 Home icon and scrollbar-safe dismiss spacing. Notify remains project-scoped.
 Automated gates and isolated visual preview recorded in docs/TESTING.md;
