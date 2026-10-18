@@ -104,6 +104,7 @@ import { HomeDashboard } from "./components/HomeDashboard";
 import { ProjectOverview } from "./components/ProjectOverview";
 import { CopyUpdateModal, type CopyUpdateData } from "./components/CopyUpdateModal";
 import { DashboardErrorBoundary } from "./components/DashboardErrorBoundary";
+import { ThemeToggle } from "./components/ThemeToggle";
 import {
   isLockInActive,
   shouldExpireTimedLockIn,
@@ -1740,6 +1741,15 @@ export default function App() {
       >
         <img src="/loop.png" alt="" className="pointer-events-none h-4 w-4" />
         <span className="pointer-events-none text-xs font-semibold text-zinc-400">Logic Loop</span>
+        <button
+          type="button"
+          data-tauri-drag-region="false"
+          onClick={openTour}
+          className="ml-auto rounded-full border border-zinc-800 px-3 py-0.5 text-[10px] text-zinc-500 hover:border-zinc-600 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-focus-400"
+        >
+          Tour
+        </button>
+        <ThemeToggle />
       </div>
       <TabBar
         tabs={tabs}
@@ -1747,7 +1757,6 @@ export default function App() {
         visibleIds={visibleTabIds}
         homeActive={surface.kind === "home"}
         onOpenHome={openHome}
-        onOpenTour={openTour}
         onSelect={focusTab}
         onClose={closeTab}
         onNew={() => void openTab()}

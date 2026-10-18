@@ -22,7 +22,7 @@ export function SidebarControls({ compact = false, hideInbox = false, onOpenTraf
     <div className={`flex shrink-0 items-center gap-1 ${compact ? "flex-col py-1" : "h-10 min-w-0 border-b border-zinc-800 px-2"}`} data-sidebar-controls aria-label="App controls">
       {visible.lm && <SidebarLmControl compact={compact} />}
       {visible.traffic && <button type="button" className={button} onClick={(e) => { e.currentTarget.focus(); onOpenTraffic(); }} aria-label="View Safe Router traffic across all projects" title="View Safe Router traffic across all projects">
-        {!compact && <span data-control-label>Traffic</span>}<img src="/bounce.svg" alt="" className={compact ? "h-6 w-6" : "h-4 w-4"} />
+        {!compact && <span data-control-label>Traffic</span>}<img src="/bounce.svg" alt="" className={`mono-icon ${compact ? "h-6 w-6" : "h-4 w-4"}`} />
       </button>}
       {!hideInbox && <button type="button" data-tour-target="attention" onClick={(e) => { e.currentTarget.focus(); onOpenAttention(); }}
         aria-label={`Open Attention Inbox${attentionCount ? `, ${attentionCount} items` : ""}${attentionLoading ? ", loading" : attentionStale ? ", data may be stale" : ""}`}

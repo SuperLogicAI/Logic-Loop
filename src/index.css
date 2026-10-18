@@ -2,6 +2,10 @@
    @tailwindcss/vite send full-reload, and a reload kills every tab (LANDMINES). */
 @import "tailwindcss" source(".");
 
+/* Plan 066: `light:` variant for the few spots where light needs a different
+   shade, not just the flipped one. */
+@custom-variant light (&:where([data-theme="light"], [data-theme="light"] *));
+
 /* Semantic color roles (Plan 050). Components use these, never raw hues.
    attn = needs you / stale, ok = done, danger = blocker, info = neutral
    interactive, focus = focus ring only, setup = Setup accent. Shades follow
@@ -75,6 +79,100 @@
   --color-setup-950: var(--color-teal-950);
 }
 
+/* Plan 066: light theme for app chrome. Zinc becomes a warm neutral scale
+   on #F5F0E8 (zinc-900 = app background), with literal values: redefining a
+   zinc var via another zinc var would be a cycle. Roles: 50-400 flip, 500-700
+   stay (solid fills with white text still read), 800-950 map to 400-200 so
+   tinted cards show against the cream background instead of vanishing. The
+   terminal pane keeps its own fixed dark background. */
+:root {
+  color-scheme: dark;
+  /* Warm card/modal surfaces (attention-tinted). */
+  --surface-warm: rgb(35 33 27);
+  --surface-warm-deep: #201a17;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --surface-warm: color-mix(in oklab, var(--color-amber-200) 30%, var(--color-zinc-900));
+  --surface-warm-deep: color-mix(in oklab, var(--color-amber-200) 30%, var(--color-zinc-900));
+  --color-zinc-50: oklch(16% 0.006 79.784);
+  --color-zinc-100: oklch(21.5% 0.008 79.784);
+  --color-zinc-200: oklch(27.5% 0.01 79.784);
+  --color-zinc-300: oklch(35% 0.012 79.784);
+  --color-zinc-400: oklch(42% 0.014 79.784);
+  --color-zinc-500: oklch(51% 0.016 79.784);
+  --color-zinc-600: oklch(64% 0.016 79.784);
+  --color-zinc-700: oklch(85.5% 0.018 79.784);
+  --color-zinc-800: oklch(91.449% 0.012 79.782); /* #E7E2DA */
+  --color-zinc-900: oklch(95.682% 0.012 79.784);
+  --color-zinc-950: oklch(97.8% 0.008 79.784);
+  --color-attn-50: var(--color-amber-950);
+  --color-attn-100: var(--color-amber-900);
+  --color-attn-200: var(--color-amber-800);
+  --color-attn-300: var(--color-amber-700);
+  --color-attn-400: var(--color-amber-600);
+  --color-attn-500: var(--color-amber-500);
+  --color-attn-600: var(--color-amber-600);
+  --color-attn-700: var(--color-amber-700);
+  --color-attn-800: var(--color-amber-400);
+  --color-attn-900: var(--color-amber-300);
+  --color-attn-950: var(--color-amber-200);
+  --color-ok-50: var(--color-emerald-950);
+  --color-ok-100: var(--color-emerald-900);
+  --color-ok-200: var(--color-emerald-800);
+  --color-ok-300: var(--color-emerald-700);
+  --color-ok-400: var(--color-emerald-600);
+  --color-ok-500: var(--color-emerald-500);
+  --color-ok-600: var(--color-emerald-600);
+  --color-ok-700: var(--color-emerald-700);
+  --color-ok-800: var(--color-emerald-400);
+  --color-ok-900: var(--color-emerald-300);
+  --color-ok-950: var(--color-emerald-200);
+  --color-danger-50: var(--color-red-950);
+  --color-danger-100: var(--color-red-900);
+  --color-danger-200: var(--color-red-800);
+  --color-danger-300: var(--color-red-700);
+  --color-danger-400: var(--color-red-600);
+  --color-danger-500: var(--color-red-500);
+  --color-danger-600: var(--color-red-600);
+  --color-danger-700: var(--color-red-700);
+  --color-danger-800: var(--color-red-400);
+  --color-danger-900: var(--color-red-300);
+  --color-danger-950: var(--color-red-200);
+  --color-info-50: var(--color-sky-950);
+  --color-info-100: var(--color-sky-900);
+  --color-info-200: var(--color-sky-800);
+  --color-info-300: var(--color-sky-700);
+  --color-info-400: var(--color-sky-600);
+  --color-info-500: var(--color-sky-500);
+  --color-info-600: var(--color-sky-600);
+  --color-info-700: var(--color-sky-700);
+  --color-info-800: var(--color-sky-400);
+  --color-info-900: var(--color-sky-300);
+  --color-info-950: var(--color-sky-200);
+  --color-focus-50: var(--color-blue-950);
+  --color-focus-100: var(--color-blue-900);
+  --color-focus-200: var(--color-blue-800);
+  --color-focus-300: var(--color-blue-700);
+  --color-focus-400: var(--color-blue-600);
+  --color-focus-500: var(--color-blue-500);
+  --color-focus-600: var(--color-blue-600);
+  --color-focus-700: var(--color-blue-700);
+  --color-focus-800: var(--color-blue-400);
+  --color-focus-900: var(--color-blue-300);
+  --color-focus-950: var(--color-blue-200);
+  --color-setup-50: var(--color-teal-950);
+  --color-setup-100: var(--color-teal-900);
+  --color-setup-200: var(--color-teal-800);
+  --color-setup-300: var(--color-teal-700);
+  --color-setup-400: var(--color-teal-600);
+  --color-setup-500: var(--color-teal-500);
+  --color-setup-600: var(--color-teal-600);
+  --color-setup-700: var(--color-teal-700);
+  --color-setup-800: var(--color-teal-400);
+  --color-setup-900: var(--color-teal-300);
+  --color-setup-950: var(--color-teal-200);
+}
 
 html,
 body,
@@ -82,7 +180,7 @@ body,
   height: 100%;
   margin: 0;
   overflow: hidden;
-  background: #18181b;
+  background: var(--color-zinc-900);
 }
 
 /* Tab strip overflow scrollbar — must stay clearly visible on the dark bar */
@@ -90,14 +188,14 @@ body,
   height: 7px;
 }
 .tab-strip::-webkit-scrollbar-track {
-  background: #27272a;
+  background: var(--color-zinc-800);
 }
 .tab-strip::-webkit-scrollbar-thumb {
-  background: #71717a;
+  background: var(--color-zinc-500);
   border-radius: 4px;
 }
 .tab-strip::-webkit-scrollbar-thumb:hover {
-  background: #a1a1aa;
+  background: var(--color-zinc-400);
 }
 
 /* Lock-in is presentation-only: re-point every color role to grey inside the
@@ -172,6 +270,51 @@ body,
   --color-setup-950: var(--color-zinc-950);
 }
 
+:root[data-theme="light"] .lock-in-panel {
+  --color-attn-500: var(--color-zinc-600);
+  --color-attn-600: var(--color-zinc-500);
+  --color-attn-700: var(--color-zinc-400);
+  --color-attn-800: var(--color-zinc-600);
+  --color-attn-900: var(--color-zinc-700);
+  --color-attn-950: var(--color-zinc-800);
+  --color-ok-500: var(--color-zinc-600);
+  --color-ok-600: var(--color-zinc-500);
+  --color-ok-700: var(--color-zinc-400);
+  --color-ok-800: var(--color-zinc-600);
+  --color-ok-900: var(--color-zinc-700);
+  --color-ok-950: var(--color-zinc-800);
+  --color-danger-500: var(--color-zinc-600);
+  --color-danger-600: var(--color-zinc-500);
+  --color-danger-700: var(--color-zinc-400);
+  --color-danger-800: var(--color-zinc-600);
+  --color-danger-900: var(--color-zinc-700);
+  --color-danger-950: var(--color-zinc-800);
+  --color-info-500: var(--color-zinc-600);
+  --color-info-600: var(--color-zinc-500);
+  --color-info-700: var(--color-zinc-400);
+  --color-info-800: var(--color-zinc-600);
+  --color-info-900: var(--color-zinc-700);
+  --color-info-950: var(--color-zinc-800);
+  --color-focus-500: var(--color-zinc-600);
+  --color-focus-600: var(--color-zinc-500);
+  --color-focus-700: var(--color-zinc-400);
+  --color-focus-800: var(--color-zinc-600);
+  --color-focus-900: var(--color-zinc-700);
+  --color-focus-950: var(--color-zinc-800);
+  --color-setup-500: var(--color-zinc-600);
+  --color-setup-600: var(--color-zinc-500);
+  --color-setup-700: var(--color-zinc-400);
+  --color-setup-800: var(--color-zinc-600);
+  --color-setup-900: var(--color-zinc-700);
+  --color-setup-950: var(--color-zinc-800);
+}
+
+/* Monochrome icons in public/*.svg are filled #e3e3e3 for the dark UI, and
+   an <img> can't take currentColor. In light, invert(0.75) lands them near
+   zinc-400 text (#4e4e4e). ponytail: filter, not inline SVG; swap to masks
+   if an icon ever needs per-state color. */
+:root[data-theme="light"] .mono-icon { filter: invert(0.75); }
+
 .lock-in-panel [class*="shadow-["],
 .lock-in-panel .lock-in-state {
   box-shadow: none !important;
@@ -193,10 +336,10 @@ body,
   background: transparent;
 }
 .sidebar-scroll::-webkit-scrollbar-thumb {
-  background: #3f3f46;
-  border: 2px solid #18181b;
+  background: var(--color-zinc-700);
+  border: 2px solid var(--color-zinc-900);
   border-radius: 4px;
 }
 .sidebar-scroll::-webkit-scrollbar-thumb:hover {
-  background: #71717a;
+  background: var(--color-zinc-500);
 }

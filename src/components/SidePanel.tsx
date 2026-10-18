@@ -815,7 +815,7 @@ export function SidePanel({
     ) : (
       <button className="shrink-0 text-info-400 hover:text-info-300" title="Save this decision to .logic-loop/DECISIONS.md for future agents"
         onClick={() => setRemembering((cur) => (cur === id ? null : id))}>
-        ◇ remember
+        <span className="text-[0.8em] leading-none">◇</span> remember
       </button>
     );
   const rememberEditor = (d: Decision) =>
@@ -935,7 +935,7 @@ export function SidePanel({
         >
           <span
             className={`lock-in-state h-2.5 w-2.5 rounded-full ${stateColor}`}
-            style={!lockIn && accent ? { boxShadow: `0 0 0 2px rgb(24 24 27), 0 0 0 4px ${accent}` } : undefined}
+            style={!lockIn && accent ? { boxShadow: `0 0 0 2px var(--color-zinc-900), 0 0 0 4px ${accent}` } : undefined}
           />
         </div>
         <SidebarControls compact hideInbox onOpenTraffic={onOpenTraffic} onOpenAttention={onOpenAttention}
@@ -1266,7 +1266,7 @@ export function SidePanel({
                       )}
                     </ul>
                   ) : delta.files.length > 0 && (
-                    <ul className="mt-1 flex flex-col gap-0.5 rounded bg-black/20 p-1.5">
+                    <ul className="mt-1 flex flex-col gap-0.5 rounded bg-black/20 light:bg-black/5 p-1.5">
                       {delta.files.map((f) => (
                         <li key={f}>
                           <button
@@ -1322,7 +1322,7 @@ export function SidePanel({
                     agent's last words
                   </button>
                   {lastWordsOpen && (
-                    <p className="mt-1 break-words rounded bg-black/20 p-1.5 text-zinc-400">{delta.lastWords}</p>
+                    <p className="mt-1 break-words rounded bg-black/20 light:bg-black/5 p-1.5 text-zinc-400">{delta.lastWords}</p>
                   )}
                 </div>
               )}
@@ -1360,7 +1360,7 @@ export function SidePanel({
             style={
               lockIn
                 ? undefined
-                : { background: `linear-gradient(#18181b, #18181b) padding-box, ${SUBTLE_RAINBOW_BORDER} border-box` }
+                : { background: `linear-gradient(var(--color-zinc-900), var(--color-zinc-900)) padding-box, ${SUBTLE_RAINBOW_BORDER} border-box` }
             }
             onClick={toggleLandingCapture}
           >
@@ -1380,7 +1380,7 @@ export function SidePanel({
             }`}
             style={
               landingCapture && !lockIn
-                ? { background: `linear-gradient(#27272a, #27272a) padding-box, ${SUBTLE_RAINBOW_BORDER} border-box` }
+                ? { background: `linear-gradient(var(--color-zinc-800), var(--color-zinc-800)) padding-box, ${SUBTLE_RAINBOW_BORDER} border-box` }
                 : undefined
             }
             placeholder={landingCapture ? "Leave a landing note for this project…" : "Leave a note for this project…"}
@@ -1498,7 +1498,7 @@ export function SidePanel({
                   // Panel bg (zinc-900) pre-blended with the same 5% yellow tint the
                   // other Next cards get — has to be opaque, or the gradient behind it
                   // (clipped to border-box) bleeds through the whole card, not just the ring.
-                  backgroundImage: "linear-gradient(rgb(35, 33, 27), rgb(35, 33, 27)), " + RAINBOW_BORDER,
+                  backgroundImage: "linear-gradient(var(--surface-warm), var(--surface-warm)), " + RAINBOW_BORDER,
                   backgroundOrigin: "border-box",
                   backgroundClip: "padding-box, border-box",
                 }
@@ -1639,12 +1639,12 @@ export function SidePanel({
                                     ✎ answer
                                   </button>
                                   <button className="text-attn-400 hover:text-attn-300" title="Show surrounding conversation" onClick={() => setContext(d)}>
-                                    ⌕ context
+                                    <span className="text-[1.2em] leading-none">⌕</span> context
                                   </button>
                                 </>
                               )}
                               <button className="text-ok-400 hover:text-ok-300" title="Fine — agent's call" onClick={() => void setStatus(d, "delegated")}>
-                                ⤳ delegate
+                                <span className="text-[1.2em] leading-none">⤳</span> delegate
                               </button>
                               {rememberButton(d.id)}
                               <span className="ml-auto text-zinc-600">{ago(d.ts)}</span>
@@ -1691,7 +1691,7 @@ export function SidePanel({
                             ✎ answer
                           </button>
                           <button className="text-ok-400 hover:text-ok-300" title="Fine — agent's call" onClick={() => void setStatus(d, "delegated")}>
-                            ⤳ delegate
+                            <span className="text-[1.2em] leading-none">⤳</span> delegate
                           </button>
                           <span className="ml-auto text-zinc-600">{ago(d.ts)}</span>
                         </div>
@@ -1779,7 +1779,7 @@ export function SidePanel({
                         <span className="break-words text-danger-300">
                           {promoted.label}
                           <button
-                            className="ml-1 text-zinc-100 hover:text-white"
+                            className="ml-1 text-zinc-100 hover:text-zinc-50"
                             title={expandedBlockers.has(b.id) ? "Collapse" : "Expand"}
                             onClick={() => toggleBlocker(b.id)}
                           >
@@ -2023,7 +2023,7 @@ export function SidePanel({
               overlay — so the tint is pre-composited against zinc-900 rather
               than layered. Keep in sync with the decision <li> above. */}
           <div
-            className="max-h-[70vh] w-[36rem] max-w-[90vw] overflow-y-auto rounded-lg border border-attn-800/60 bg-[#201a17] p-4"
+            className="max-h-[70vh] w-[36rem] max-w-[90vw] overflow-y-auto rounded-lg border border-attn-800/60 bg-[var(--surface-warm-deep)] p-4"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="mb-2 font-semibold text-attn-300">{context.question}</h3>
@@ -2033,9 +2033,9 @@ export function SidePanel({
                 return (
                   <>
                     <p className="mb-1 text-zinc-500">agent said:</p>
-                    <pre className="mb-3 whitespace-pre-wrap rounded bg-black/30 p-2 text-zinc-300">{pair.assistant}</pre>
+                    <pre className="mb-3 whitespace-pre-wrap rounded bg-black/30 light:bg-black/5 p-2 text-zinc-300">{pair.assistant}</pre>
                     <p className="mb-1 text-zinc-500">you replied:</p>
-                    <pre className="whitespace-pre-wrap rounded bg-black/30 p-2 text-zinc-300">
+                    <pre className="whitespace-pre-wrap rounded bg-black/30 light:bg-black/5 p-2 text-zinc-300">
                       {pair.user ?? "(no reply — turn ended)"}
                     </pre>
                   </>

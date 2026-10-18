@@ -1310,3 +1310,23 @@ forced slow-I/O races remain coverage limits in docs/TESTING.md.
 Read-before-write is still not atomic against external file writers.
 **PHASE 65 ACCEPTED** by the maintainer on 2026-10-15 with these recorded
 coverage limits. Phase 66 not begun.
+
+### Phase 66 — Light mode (2026-10-17 → 2026-10-18)
+
+Plan: `plans/066-light-mode.md`; **PHASE 66 APPROVED** by the maintainer
+2026-10-17 (defaults, toggle in the titlebar). System / Light / Dark theme
+for app chrome; terminal pane untouched. One CSS override block re-points
+zinc to a warm neutral scale on #F5F0E8 (raised surfaces #E7E2DA) and
+re-shades the Plan 050 role tokens; no class rewrites. Preference lives in
+localStorage and is applied before first render. Titlebar holds Tour and the
+theme toggle. `public/*.svg` icons darken in light via `.mono-icon`.
+No new dependencies, Rust, schema or prompt changes.
+
+Verification: `npm run check` (new `theme:check`), `npx tsc --noEmit`,
+`npm run build`, `git diff --check`. Rust untouched (cargo not rerun).
+Maintainer rebuilt and reviewed the installed app between tuning rounds; a
+preview-harness Playwright pass covered toggle behavior and the light
+surfaces (docs/TESTING.md). **PHASE 66 ACCEPTED** by the maintainer on
+2026-10-17; post-acceptance tuning (palette, icons, Tour placement) done at
+the maintainer's request on 2026-10-18. Titlebar drag and the pre-JS launch
+frame remain installed-app checks.

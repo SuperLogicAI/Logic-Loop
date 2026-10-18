@@ -98,7 +98,7 @@ assert.match(terminal, /focused: boolean/);
 assert.match(terminal, /ring-\[1\.5px\] ring-inset ring-white/);
 assert.match(terminal, /ring-2 ring-inset ring-info-700/);
 assert.match(terminal, /splitOrientation === "vertical"/);
-assert.match(tabBar, /tab\.id === activeId[\s\S]*?after:border-\[1\.5px\][\s\S]*?after:border-white/);
+assert.match(tabBar, /tab\.id === activeId[\s\S]*?after:border-\[1\.5px\][\s\S]*?after:border-zinc-50/);
 assert.match(tabBar, /visibleIds\.has\(tab\.id\)[\s\S]*?after:border-info-700/);
 assert.match(tabBar, /visibleIds\.has\(tab\.id\)[\s\S]*?after:border-2 after:border-b-0 after:border-info-700/);
 assert.doesNotMatch(app, /setSplitPaneIds\([^\n]*repo\./);

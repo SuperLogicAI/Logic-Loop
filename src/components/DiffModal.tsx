@@ -95,7 +95,7 @@ export function DiffModal({ filePath, cwd, onClose }: Props) {
                 Everything uncommitted in this file, not only this turn&apos;s edit.
               </p>
             )}
-            <pre className="mt-2 overflow-auto rounded bg-black/30 p-2 font-mono text-[11px] whitespace-pre text-zinc-300">
+            <pre className="mt-2 overflow-auto rounded bg-black/30 light:bg-black/5 p-2 font-mono text-[11px] whitespace-pre text-zinc-300">
               {lines.slice(0, LINE_CAP).map((line, i) => (
                 <span key={i} className={LINE_CLASS[roles[i]]}>
                   {line}
