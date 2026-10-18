@@ -254,7 +254,7 @@ export function AgentStatusBar({
                   disabled={!canSplit}
                   onClick={() => onToggleSplit(orientation)}
                 >
-                  <img src={orientation === "horizontal" ? "/split_screen.svg" : "/split_screen_vert.svg"} alt="" className="h-4 w-4" />
+                  <img src={orientation === "horizontal" ? "/split_screen.svg" : "/split_screen_vert.svg"} alt="" className="mono-icon h-4 w-4" />
                 </button>
               );
             })}

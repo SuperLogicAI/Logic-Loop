@@ -6879,3 +6879,65 @@ Maintainer explicitly issued `PHASE 65 ACCEPTED` and authorized opening the
 PR. This acceptance does not convert the unrun checks recorded above into
 passes. The installed app still needs the rebuilt dock fix tested; restart,
 preference failure and forced slow-I/O coverage limits remain documented.
+
+
+## Phase 66 — Light mode (Plan 066)
+
+Automated: `npm run theme:check` (pref parse/resolve/cycle, light CSS block,
+terminal background pinned). Contrast and look can't be machine-verified;
+run in the built app (not dev server, not screenshots):
+
+- [ ] Titlebar: toggle sits right-aligned on the Logic Loop row; click cycles
+      System → Light → Dark; clicking does not drag the window; dragging the
+      empty titlebar still moves/zooms the window.
+- [ ] Light: tab strip (active / split-visible / background tabs, scrollbar),
+      expanded sidebar, compact rail, hidden sidebar, Lock-in, Home dashboard
+      cards, Idea Board modes, diff pop-out, markdown editor, Setup, Landing
+      note (ring, countdown text, rainbow button), Fan-out / Isolate Loop /
+      Copy update / Attention inbox modals, decision context modal (warm
+      surface), confetti. Note any unreadable text or invisible borders.
+- [ ] Terminal pane unchanged in Light (still dark); exited-process overlay
+      card reads.
+- [ ] Dark: spot-check same surfaces for regressions vs Phase 65.
+- [ ] System: with pref System, flip macOS appearance while app is open —
+      chrome follows without reload. Forced Light/Dark ignore the OS.
+- [ ] Relaunch with Light set: no dark flash before first paint.
+
+Post-acceptance tune (2026-10-18): re-check Light on the cream background —
+decision / blocker / inbox cards visibly tinted with readable borders, Lock-in
+cards visible, dim (zinc-600) text still legible; decision card glyphs
+(✎ ⌕ ⤳ ◇) read as one size; Dark unchanged.
+Also: Tour sits in the titlebar left of the theme toggle and opens the
+tour; titlebar still drags around both. Light: Home, split horizontal /
+vertical (idle + active), Traffic (expanded + compact rail), Fan out and
+Isolate loop icons all visible; Dark icons unchanged.
+Also: Light selected tab and active Home match the bookmarks bar
+(#E7E2DA) and stay distinguishable from inactive tabs (dark outline);
+Dark selected tab unchanged.
+
+### Phase 66 preview-harness pass (2026-10-18)
+
+Computer-use tools were unavailable in this session. Instead: the real App
+and CSS were run in a temporary, gitignored localhost harness with Tauri IPC
+mocked (placeholder bookmarks/decisions, no real project data), driven by
+Playwright Chromium at 1400×900, React StrictMode on. Harness removed after.
+
+Passed in Light: titlebar Tour + toggle placement; toggle cycles System →
+Light → Dark → System, updating `data-theme` and `localStorage` each click;
+System follows emulated OS appearance live (dark → light → dark); forced Dark
+ignores an OS switch to light; first React paint already carries the stored
+theme (OS dark, pref Light → `light`). Surfaces checked by screenshot: Home
+dashboard, workspace (tabs, selected tab = bookmarks bar #E7E2DA, bookmarks,
+toolbar icons, decision cards and glyphs, blockers), split view, compact
+rail, Lock-in, Setup, Fan out, Isolate loop, Attention inbox, Model traffic,
+decision context modal, Idea Board. Terminal pane stays dark. Dark spot-check
+of the workspace matches the pre-phase look.
+
+Found and fixed during the pass: Fan out Launch text contrast, muddy inset
+wells in the context modal, faint Lock-in mid-shade text, emoji ☀.
+
+Not covered (needs the installed Tauri app): titlebar drag vs. Tour/toggle
+click (`data-tauri-drag-region` is a no-op in a browser); the native frame
+before JS runs on launch (body background is dark until the module applies
+the theme); Landing note countdown modal and diff pop-out with real content
+(not reachable without a backend); WKWebView vs Chromium rendering.

@@ -38,7 +38,6 @@ interface Props {
    * own selected/pressed state, independent of any tab's activeId. */
   homeActive: boolean;
   onOpenHome: () => void;
-  onOpenTour: () => void;
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
   onNew: () => void;
@@ -78,7 +77,6 @@ export function TabBar({
   visibleIds,
   homeActive,
   onOpenHome,
-  onOpenTour,
   onSelect,
   onClose,
   onNew,
@@ -115,10 +113,6 @@ export function TabBar({
       className="flex select-none items-end gap-1 bg-zinc-900"
     >
       <div className="ml-2 flex shrink-0 flex-col items-stretch gap-1 pt-1" data-tauri-drag-region="false">
-        <button type="button" onClick={onOpenTour}
-          className="self-center rounded-full border border-zinc-800 px-3 py-0.5 text-[10px] text-zinc-500 hover:border-zinc-600 hover:bg-zinc-800 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-focus-400">
-          Tour
-        </button>
         <button
           type="button"
           data-tauri-drag-region="false"
@@ -127,10 +121,10 @@ export function TabBar({
           title="Home"
           onClick={onOpenHome}
           className={`flex shrink-0 items-center gap-1.5 rounded-t-md border border-b-0 px-2.5 py-1 text-sm hover:border-zinc-500 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-400 ${
-            homeActive ? "border-zinc-600 bg-zinc-700 text-zinc-100" : "border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+            homeActive ? "border-zinc-600 bg-zinc-700 light:bg-zinc-800 text-zinc-100" : "border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
           }`}
         >
-          <img src="/home.svg" alt="" className="h-4 w-4" />
+          <img src="/home.svg" alt="" className="mono-icon h-4 w-4" />
           Home
         </button>
       </div>
@@ -185,7 +179,7 @@ export function TabBar({
           }}
           className={`group relative grid max-w-52 min-w-28 cursor-pointer gap-0.5 rounded-t-md px-2 pt-0.5 pb-1 text-sm transition-[background-color,opacity] after:pointer-events-none after:absolute after:inset-0 after:rounded-t-md ${
             tab.id === activeId
-              ? "bg-zinc-700 text-zinc-100 after:border-[1.5px] after:border-b-0 after:border-white"
+              ? "bg-zinc-700 light:bg-zinc-800 text-zinc-100 after:border-[1.5px] after:border-b-0 after:border-zinc-50"
               : visibleIds.has(tab.id)
                 ? "bg-zinc-700/70 text-zinc-300 after:border-2 after:border-b-0 after:border-info-700"
                 : "bg-zinc-800/70 text-zinc-500 after:border-[1.5px] after:border-zinc-800 hover:bg-zinc-700/50 hover:text-zinc-300"
@@ -307,7 +301,7 @@ export function TabBar({
         title="Fan out the active tab into N child tabs"
       >
         Fan out
-        <img src="/fan.svg" alt="" className="h-4 w-4 shrink-0" />
+        <img src="/fan.svg" alt="" className="mono-icon h-4 w-4 shrink-0" />
       </button>
       <button
         className="mr-2 mb-0.5 flex shrink-0 items-center gap-1.5 rounded-full border border-zinc-700 px-2.5 py-1 text-sm leading-none text-zinc-400 hover:border-zinc-200 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-zinc-200"
@@ -316,7 +310,7 @@ export function TabBar({
         title="Spawn a tab bound to a fresh git worktree"
       >
         Isolate loop
-        <img src="/isolate.svg" alt="" className="h-4 w-4 shrink-0" />
+        <img src="/isolate.svg" alt="" className="mono-icon h-4 w-4 shrink-0" />
       </button>
     </div>
   );

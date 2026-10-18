@@ -41,6 +41,13 @@ verification.
 
 ## Execution order & status
 
+[Plan 066](066-light-mode.md) is **Phase 66 — ACCEPTED 2026-10-17**
+(post-acceptance tuning 2026-10-18). System / Light / Dark theme for app
+chrome via a titlebar toggle; warm light palette on #F5F0E8; terminal pane
+untouched. Automated gates passed; preview-harness Playwright pass recorded
+in docs/TESTING.md. Titlebar drag and the pre-JS launch frame remain
+installed-app checks.
+
 [Plan 065](065-idea-board-modes.md) is **Phase 65 — ACCEPTED 2026-10-15**
 (planned at `373b05f`; Phase 64 accepted). Per-project List / Kanban / Workflow
 presentations over the same Markdown cards, without status conversion on view

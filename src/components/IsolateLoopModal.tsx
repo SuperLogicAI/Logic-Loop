@@ -69,13 +69,13 @@ export function IsolateLoopModal({ parentCwd, onLaunch, onCancel }: Props) {
         </p>
         <div className="mb-3 flex gap-1 text-xs">
           <button
-            className={`rounded px-2.5 py-1 ${mode === "new" ? "bg-zinc-300 text-black" : "text-zinc-400 hover:bg-zinc-800"}`}
+            className={`rounded px-2.5 py-1 ${mode === "new" ? "bg-zinc-300 text-zinc-950" : "text-zinc-400 hover:bg-zinc-800"}`}
             onClick={() => setMode("new")}
           >
             New branch
           </button>
           <button
-            className={`rounded px-2.5 py-1 ${mode === "existing" ? "bg-zinc-300 text-black" : "text-zinc-400 hover:bg-zinc-800"}`}
+            className={`rounded px-2.5 py-1 ${mode === "existing" ? "bg-zinc-300 text-zinc-950" : "text-zinc-400 hover:bg-zinc-800"}`}
             onClick={() => setMode("existing")}
           >
             Existing branch
@@ -126,7 +126,7 @@ export function IsolateLoopModal({ parentCwd, onLaunch, onCancel }: Props) {
             Cancel
           </button>
           <button
-            className="rounded bg-zinc-300 px-3 py-1 font-medium text-black hover:bg-zinc-200 disabled:opacity-50"
+            className="rounded bg-zinc-300 px-3 py-1 font-medium text-zinc-950 hover:bg-zinc-200 disabled:opacity-50"
             onClick={() => void launch()}
             disabled={busy || (mode === "new" ? !newSlug.trim() : !selected)}
           >

@@ -93,7 +93,7 @@ export function LandingNoteModal({ sessionId, onSave, onSkip }: Props) {
       <div
         className="w-[32rem] max-w-[90vw] rounded-lg border-2 border-transparent p-4 shadow-xl"
         style={{
-          background: `linear-gradient(#18181b, #18181b) padding-box, ${CARD_GRADIENT} border-box`,
+          background: `linear-gradient(var(--color-zinc-900), var(--color-zinc-900)) padding-box, ${CARD_GRADIENT} border-box`,
         }}
       >
         <div className="mb-2 flex items-center gap-3">
@@ -104,7 +104,7 @@ export function LandingNoteModal({ sessionId, onSave, onSkip }: Props) {
             </p>
           </div>
           <svg width="48" height="48" viewBox="0 0 48 48" className="shrink-0 -rotate-90">
-            <circle cx="24" cy="24" r={R} fill="none" stroke="#3f3f46" strokeWidth="3" />
+            <circle cx="24" cy="24" r={R} fill="none" stroke="var(--color-zinc-700)" strokeWidth="3" />
             <circle
               cx="24"
               cy="24"
@@ -124,7 +124,7 @@ export function LandingNoteModal({ sessionId, onSave, onSkip }: Props) {
               y="24"
               textAnchor="middle"
               dominantBaseline="central"
-              fill="rgb(255 255 255 / 0.4)"
+              fill="color-mix(in srgb, var(--color-zinc-50) 40%, transparent)"
               fontSize="13"
               // The <svg> is -rotate-90 so the ring starts at 12 o'clock; undo
               // it here or the digits read sideways.
@@ -155,12 +155,12 @@ export function LandingNoteModal({ sessionId, onSave, onSkip }: Props) {
             Skip
           </button>
           <button
-            className="rounded border-2 border-transparent px-3 py-1 font-medium text-white hover:brightness-125"
+            className="rounded border-2 border-transparent px-3 py-1 font-medium text-zinc-50 hover:brightness-125"
             // Gradient border: charcoal fill clipped to the padding box, rainbow
             // clipped to the border box. hover uses brightness because the
             // background is inline and can't be swapped by a hover: class.
             style={{
-              background: `linear-gradient(#18181b, #18181b) padding-box, ${RAINBOW_GRADIENT} border-box`,
+              background: `linear-gradient(var(--color-zinc-900), var(--color-zinc-900)) padding-box, ${RAINBOW_GRADIENT} border-box`,
             }}
             onClick={save}
           >
