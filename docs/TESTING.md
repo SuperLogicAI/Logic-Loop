@@ -6941,3 +6941,18 @@ click (`data-tauri-drag-region` is a no-op in a browser); the native frame
 before JS runs on launch (body background is dark until the module applies
 the theme); Landing note countdown modal and diff pop-out with real content
 (not reachable without a backend); WKWebView vs Chromium rendering.
+
+## Binding fix — outside session can't steal a tab (2026-10-19)
+
+Built app only (needs real hooks). Pending.
+
+1. In a plain Terminal.app window (no tether), start `claude` in project A
+   and give it a prompt that runs a few tools.
+2. While it runs, open a new Logic Loop tab in project B. Expected: the tab
+   stays project B; no agent state from the outside session appears on it.
+3. Open a new Logic Loop tab in project A, wait for the outside session to
+   fire a tool hook (it may park on this tab), then start `claude` in the
+   tab. Expected: the tab shows its own session; a question it asks lands
+   as a decision card in this tab.
+4. Relaunch the app. Expected: the tab from step 3 re-enters its own
+   session, not the outside one.

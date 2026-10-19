@@ -1,8 +1,8 @@
 // Self-check for session→tab binding (tether + cwd fallback).
 // Run: npm run bind:check
 import { strict as assert } from "node:assert";
-import { bindSession, sessionBindingLocation, type BindCandidate } from "../src/lib/ingest";
-import type { HookPayload } from "../src/types";
+import { bindSession, mergeTabIdentity, sessionBindingLocation, type BindCandidate } from "../src/lib/ingest";
+import type { HookPayload, Tab } from "../src/types";
 
 const REPO = "/Users/x/dev/proj";
 
@@ -38,11 +38,10 @@ for (const candidate of [undefined, tab("tab-2"), { ...tab("tab-1"), status: "de
 const bind = (
   p: HookPayload,
   tabs: BindCandidate[],
-  opts: { bound?: string[]; active?: string | null; projectKey?: string } = {}
+  opts: { bound?: string[]; projectKey?: string } = {}
 ) =>
   bindSession(p, tabs, {
     boundTabIds: new Set(opts.bound ?? []),
-    activeTabId: opts.active ?? null,
     // `?? REPO` would swallow an explicitly-passed undefined.
     projectKey: "projectKey" in opts ? opts.projectKey : REPO,
   });
@@ -57,12 +56,6 @@ assert.equal(
   bind(ev({ tab_id: "tab-1" }), two, { bound: ["tab-1"] }),
   "tab-1",
   "tether lost to the unbound-tab preference"
-);
-// ...and even when a different tab is active.
-assert.equal(
-  bind(ev({ tab_id: "tab-1" }), two, { active: "tab-2" }),
-  "tab-1",
-  "tether lost to the active-tab fallback"
 );
 
 // Claude /clear replaces only the exact Claude-owned tab, including its
@@ -122,43 +115,26 @@ assert.equal(
 assert.equal(bind(ev({ tab_id: "tab-1" }), [{ ...tab("tab-1"), status: "dead" }, tab("tab-2")]), null);
 assert.equal(bind(ev({ tab_id: "tab-1" }), [{ ...tab("tab-1"), sessionId: "other" }, tab("tab-2")]), null);
 assert.equal(bind(ev({ agent: "codex" }), two), null, "outside Codex session cannot use cwd fallback");
-// No cwd and no tether → unbindable, not "whatever is active".
-assert.equal(bind(ev(), two, { active: "tab-1", projectKey: undefined }), null);
-// Different repo, no active tab → no bind.
-assert.equal(bind(ev(), [tab("tab-1", "/Users/x/dev/other")], {}), null);
-// Different repo but the user is typing in the active tab → active-tab rescue.
-assert.equal(
-  bind(ev(), [tab("tab-1", "/Users/x/dev/other")], { active: "tab-1" }),
-  "tab-1",
-  "active-tab fallback did not fire"
-);
-// ...but never onto an active tab owning another session: a re-entered ghost
-// (persisted sessionId, not in the bound set) took an unrelated outside
-// session's derived rows in the Phase 48 release test.
-assert.equal(
-  bind(ev(), [{ ...tab("tab-1", "/Users/x/dev/other"), sessionId: "s-ghost" }], { active: "tab-1" }),
-  null,
-  "active-tab rescue hijacked a re-entered tab"
-);
-assert.equal(
-  bind(ev(), [tab("tab-1", "/Users/x/dev/other")], { active: "tab-1", bound: ["tab-1"] }),
-  null,
-  "active-tab rescue hijacked a bound tab"
-);
+// No cwd and no tether → unbindable.
+assert.equal(bind(ev(), two, { projectKey: undefined }), null);
+// Different repo → no bind, even onto the fresh tab the user just opened
+// (2026-10-19: the removed active-tab fallback gave an outside session a new
+// tab in another project, rewrote its cwd and orphaned that tab's own agent).
+assert.equal(bind(ev(), [tab("tab-1", "/Users/x/dev/other")]), null, "outside session took another project's tab");
 // Root cwd is never a project: the app's own `claude -p` extractor children run
 // with cwd `/` and post hooks back. Binding one overwrote the active tab's cwd
 // with `/`, which expands to "" and blanks the whole panel.
 assert.equal(
-  bind(ev(), two, { active: "tab-1", projectKey: "/" }),
+  bind(ev(), [tab("tab-1", "/")], { projectKey: "/" }),
   null,
-  "a rootless session hijacked the active tab"
+  "a rootless session hijacked a tab"
 );
 // Same hazard on Windows: a drive root is as rootless as `/`.
 for (const root of ["C:\\", "C:/", "C:", "\\", "d:\\"]) {
   assert.equal(
-    bind(ev(), two, { active: "tab-1", projectKey: root }),
+    bind(ev(), [tab("tab-1", root)], { projectKey: root }),
     null,
-    `a rootless session (${root}) hijacked the active tab`
+    `a rootless session (${root}) hijacked a tab`
   );
 }
 // ...but a real Windows project must still bind. Over-rejecting here would
@@ -177,7 +153,7 @@ assert.equal(
 );
 // A dead tab is never a fallback target.
 assert.equal(
-  bind(ev(), [{ id: "tab-1", cwd: "/Users/x/dev/other", status: "exited" }], { active: "tab-1" }),
+  bind(ev(), [{ id: "tab-1", cwd: REPO, status: "exited" }]),
   null,
   "bound a session to an exited tab"
 );
@@ -259,5 +235,27 @@ for (const agent of [undefined, "opencode", "pi", "antigravity", "deepseek"]) {
     `${agent ?? "claude"} lost first-session-wins`
   );
 }
+
+// --- 2026-10-19 replay: an outside session parks on a fresh same-project tab
+// before the tab's own agent starts. The tethered session must take the tab
+// back (and persist for re-entry); the outside session then can't rebind it,
+// and a tethered child still can't take it from the real owner. ---
+const fresh: Tab = { id: "tab-1", ptyId: 1, title: "proj", cwd: REPO, color: "blue", status: "live" };
+const noExpand = (c: string) => c;
+const outside = ev({ hook_event_name: "PostToolUse", session_id: "s-out", cwd: REPO });
+assert.equal(bind(outside, [fresh]), "tab-1", "cwd fallback did not bind the outside session");
+const parked = mergeTabIdentity(fresh, outside, REPO, "working", false, undefined, noExpand);
+assert.equal(parked.sessionUntethered, true);
+const realStart = ev({ hook_event_name: "SessionStart", session_id: "s-real", tab_id: "tab-1", source: "startup", cwd: REPO });
+assert.equal(bind(realStart, [parked]), "tab-1", "tethered session lost its tab to an outside session");
+assert.deepEqual(sessionBindingLocation(realStart, REPO, parked), { cwd: REPO, projectKey: REPO });
+const reclaimed = mergeTabIdentity(parked, realStart, REPO, null, false, undefined, noExpand);
+assert.equal(reclaimed.sessionId, "s-real");
+assert.equal(reclaimed.sessionUntethered, false);
+const owned = mergeTabIdentity(reclaimed, { ...realStart, hook_event_name: "UserPromptSubmit" }, REPO, "working", true, "human", noExpand);
+assert.equal(owned.sessionId, "s-real");
+assert.equal(bind(outside, [owned]), null, "outside session rebound a reclaimed tab");
+assert.equal(bind({ ...realStart, session_id: "s-child" }, [owned]), null, "tethered child took the tab from its owner");
+assert.equal(bind({ ...realStart, session_id: "s-sub", agent_id: "sub-1" }, [parked]), null, "subagent reclaimed a tab");
 
 console.log("bind-check: all assertions passed");

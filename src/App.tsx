@@ -1051,7 +1051,6 @@ export default function App() {
           tabsRef.current.map((t) => ({ ...t, cwd: expand(t.cwd) })),
           {
             boundTabIds: new Set(bindings.values()),
-            activeTabId: activeIdRef.current,
             projectKey,
           }
         );
@@ -1073,7 +1072,7 @@ export default function App() {
           p,
           projectKey,
           bindingTab
-            ? { id: bindingTab.id, cwd: expand(bindingTab.cwd), status: bindingTab.status, sessionId: bindingTab.sessionId, launchId: bindingTab.launchId, agent: bindingTab.agent }
+            ? { id: bindingTab.id, cwd: expand(bindingTab.cwd), status: bindingTab.status, sessionId: bindingTab.sessionId, launchId: bindingTab.launchId, agent: bindingTab.agent, sessionUntethered: bindingTab.sessionUntethered }
             : undefined
         );
         // Retire the old re-entry rows before persisting the replacement.
@@ -1082,7 +1081,7 @@ export default function App() {
           // tabsRef syncs on render; the new session's first prompt can arrive
           // before that, and the owner check above would drop it.
           tabsRef.current = tabsRef.current.map((t) =>
-            t.id === tabId ? { ...t, sessionId: p.session_id, launchId: p.launch_id } : t
+            t.id === tabId ? { ...t, sessionId: p.session_id, sessionUntethered: false, launchId: p.launch_id } : t
           );
         }
         if (location) {

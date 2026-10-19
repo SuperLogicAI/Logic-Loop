@@ -203,6 +203,7 @@ export interface BindCandidate {
   agentState?: AgentState;
   launchId?: string;
   agent?: string;
+  sessionUntethered?: boolean;
 }
 
 export type LaunchDecision = "replace" | "reject" | "default";
@@ -235,10 +236,14 @@ export function codexLaunchDecision(
 
 /** Claude's root /clear starts a new session in the same terminal. Allow that
  * explicit lifecycle transition only on its exact Claude-owned tab; ordinary
- * child/startup events must still fail the session ownership guard. */
+ * child/startup events must still fail the session ownership guard.
+ * A tab's own tethered agent also takes the tab back from an outside
+ * (untethered) session the cwd fallback parked there first — live
+ * 2026-10-19, an outside session claimed a fresh tab two minutes before its
+ * `claude` started and every decision from the real session lost its tab. */
 export function sessionLaunchDecision(
   p: HookPayload,
-  tab: { id: string; sessionId?: string; launchId?: string; agent?: string }
+  tab: { id: string; sessionId?: string; launchId?: string; agent?: string; sessionUntethered?: boolean }
 ): LaunchDecision {
   if (
     (p.agent === undefined || p.agent === "claude") &&
@@ -248,7 +253,11 @@ export function sessionLaunchDecision(
     p.hook_event_name === "SessionStart" && p["source"] === "clear" &&
     !isSubagentHook(p)
   ) return "replace";
-  return codexLaunchDecision(p, tab);
+  const codex = codexLaunchDecision(p, tab);
+  if (codex !== "default") return codex;
+  return tab.sessionUntethered && p.tab_id === tab.id && tab.sessionId !== p.session_id && !isSubagentHook(p)
+    ? "replace"
+    : "default";
 }
 
 /** Location to persist for a tethered SessionStart. Every adapter needs an
@@ -257,7 +266,7 @@ export function sessionLaunchDecision(
 export function sessionBindingLocation(
   p: HookPayload,
   projectKey: string | undefined,
-  tab?: { id: string; cwd: string; status: string; sessionId?: string; launchId?: string; agent?: string }
+  tab?: { id: string; cwd: string; status: string; sessionId?: string; launchId?: string; agent?: string; sessionUntethered?: boolean }
 ): { cwd: string; projectKey: string } | null {
   if (!p.tab_id) return null;
   if (tab?.id !== p.tab_id || tab.status !== "live") return null;
@@ -282,7 +291,7 @@ export function sessionBindingLocation(
 export function bindSession(
   p: HookPayload,
   tabs: BindCandidate[],
-  opts: { boundTabIds: Set<string>; activeTabId: string | null; projectKey?: string }
+  opts: { boundTabIds: Set<string>; projectKey?: string }
 ): string | null {
   if (typeof p.tab_id === "string") {
     const tethered = tabs.find((t) => t.id === p.tab_id);
@@ -297,7 +306,7 @@ export function bindSession(
   // Codex's shared daemon can emit hooks with another client's inherited
   // tether. An untethered Codex event has no exact client identity either.
   if (p.agent === "codex") return null;
-  const { boundTabIds, activeTabId, projectKey } = opts;
+  const { boundTabIds, projectKey } = opts;
   const liveTabs = tabs.filter((t) => t.status === "live");
   // The tab that already owns this session is the answer, even when the
   // in-memory binding map is empty (ghost tabs after relaunch never seed it)
@@ -316,14 +325,12 @@ export function bindSession(
   // persisted sessionId — a re-entered ghost) is never a fallback target: an
   // outside session would stamp its tab_id onto that tab's derived rows.
   // No eligible tab → unbound; the hook is still persisted by the caller.
+  // No active-tab fallback: every app tab carries a tether, so an untethered
+  // session is an outside one, and the active tab is just whichever tab the
+  // user opened last (live 2026-10-19: it took a fresh tab in another project
+  // and rewrote its cwd).
   const eligible = liveTabs.filter((t) => !boundTabIds.has(t.id) && !t.sessionId);
-  return (
-    eligible.find((t) => t.cwd === projectKey)?.id ??
-    // else the active tab — the user `cd`ed away from the tab's spawn cwd
-    // before running claude, and they're typing in it now.
-    eligible.find((t) => t.id === activeTabId)?.id ??
-    null
-  );
+  return eligible.find((t) => t.cwd === projectKey)?.id ?? null;
 }
 
 /** Applies one hook event to the tab it's tethered to. Gated on session
@@ -352,6 +359,7 @@ export function mergeTabIdentity(
     t = {
       ...t,
       sessionId: p.session_id,
+      sessionUntethered: false,
       launchId: p.launch_id,
       agentState: undefined,
       lastEventTs: undefined,
@@ -366,6 +374,7 @@ export function mergeTabIdentity(
   return {
     ...withAgent,
     sessionId: p.session_id,
+    sessionUntethered: !p.tab_id,
     agentState: state,
     lastEventTs: Date.now(),
     lastTurnAuto: isPromptSubmit ? provenance === "auto" : withAgent.lastTurnAuto,
