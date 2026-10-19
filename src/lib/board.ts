@@ -93,6 +93,20 @@ export function deleteCard(md: string, card: Card): string {
   return md.slice(0, card.start) + md.slice(card.end);
 }
 
+/** Plan 067: move one card's block, verbatim, to byte offset `at` (another
+ * card's `start`, or EOF). A newline is added only where the block would
+ * otherwise run into a neighbouring line (last card with no trailing "\n"). */
+export function placeCard(md: string, card: Card, at: number): string {
+  if (at >= card.start && at <= card.end) return md;
+  const block = md.slice(card.start, card.end);
+  const rest = md.slice(0, card.start) + md.slice(card.end);
+  const i = at > card.end ? at - block.length : at;
+  const head = rest.slice(0, i);
+  const tail = rest.slice(i);
+  return head + (head && !head.endsWith("\n") ? "\n" : "") + block
+    + (tail && !block.endsWith("\n") ? "\n" : "") + tail;
+}
+
 /** Convenience wrapper over splice: change only the status line. */
 export function moveCard(md: string, card: Card, status: BoardStatus): string {
   return spliceCard(md, { ...card, status });

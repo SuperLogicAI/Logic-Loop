@@ -1330,3 +1330,26 @@ surfaces (docs/TESTING.md). **PHASE 66 ACCEPTED** by the maintainer on
 2026-10-17; post-acceptance tuning (palette, icons, Tour placement) done at
 the maintainer's request on 2026-10-18. Titlebar drag and the pre-JS launch
 frame remain installed-app checks.
+
+### Phase 67 — Drag Idea Board cards (2026-10-19)
+
+Plan: `plans/067-idea-board-drag.md`; **PHASE 67 APPROVED** by the maintainer
+2026-10-19 with within-column reorder added. Cards move by dragging their
+header: another column changes status, the same column (or List view)
+reorders the file. Pointer events, not HTML5 drag (the webview's file-drop
+handler swallows DOM drops). Status select kept as a focus-revealed keyboard
+path. New `placeCard` (`board.ts`) and `dropCard` (`boardModes.ts`) move a
+card's block verbatim; a drop into the current visible slot writes nothing.
+Mid-phase revisions at the maintainer's request: board-view select replaced by
+List / Kanban / Workflow pills; page-wide `select-none` during a drag fixes
+WebKit highlighting labels mid-drag.
+No new dependencies, Rust, schema or prompt changes.
+
+Verification: `npm run check` (board checks extended), `npx tsc --noEmit`,
+`npm run build`, `git diff --check`. Rust untouched (cargo not rerun).
+Preview-harness Playwright pass covered Workflow/Kanban/List drags, no-op
+drops, click-through and the focus-revealed select (docs/TESTING.md).
+Maintainer rebuilt and used the installed app between rounds (the selection
+bug came from that pass). **PHASE 67 ACCEPTED** by the maintainer on
+2026-10-19. Release-outside-window, Finder file drop and external-rename
+checks were not individually confirmed; listed in docs/TESTING.md.

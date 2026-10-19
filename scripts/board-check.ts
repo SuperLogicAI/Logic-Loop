@@ -130,7 +130,7 @@ assert.equal(parseBoard(oneOff).filter((c) => c.now).length, NOW_CAP - 1);
 
 
 // Phase 65: views project the same file without converting stored statuses.
-import { boardColumns, freshBoardCard, kanbanLane, kanbanStatus, parseBoardMode } from "../src/lib/boardModes";
+import { boardColumns, dropCard, freshBoardCard, kanbanLane, kanbanStatus, parseBoardMode } from "../src/lib/boardModes";
 import type { BoardMode } from "../src/lib/boardModes";
 for (const value of [null, "", "unknown", "LIST", "workflow"]) assert.equal(parseBoardMode(value), "workflow");
 assert.equal(parseBoardMode("list"), "list");
@@ -189,4 +189,25 @@ const resolved = freshBoardCard(mixed[0], mixed, inserted);
 assert.equal(resolved.title, "Deferred");
 assert.notEqual(resolved.start, mixed[0].start, "fresh offset used after external insertion");
 assert.equal(resolved, inserted[1]);
+
+// --- Plan 067: drag-and-drop placement ---
+// Last card has no trailing newline; A carries a blank line that must travel with it.
+const dropMd = "# B\n\n## A\nstatus: idea\n\n## B\nstatus: planned\n## C\nstatus: idea\n## D\nstatus: planned";
+const [dA, dB, dC, dD] = parseBoard(dropMd);
+const shape = (md: string) => parseBoard(md).map((c) => `${c.title}:${c.status}`).join(" ");
+const blockA = "## A\nstatus: idea\n\n";
+assert.equal(dropCard(dropMd, "workflow", dC, "idea", dA),
+  "# B\n\n## C\nstatus: idea\n" + blockA + "## B\nstatus: planned\n## D\nstatus: planned", "reorder in column, blocks verbatim");
+assert.equal(dropCard(dropMd, "workflow", dA, "idea", dA), dropMd, "drop on itself is a no-op");
+assert.equal(dropCard(dropMd, "workflow", dC, "idea", null), dropMd, "already last in column is a no-op");
+assert.equal(dropCard(dropMd, "workflow", dA, "idea", dC), dropMd, "same visible slot is a no-op");
+assert.equal(dropCard(dropMd, "workflow", dA, "planned", null),
+  "# B\n\n## B\nstatus: planned\n## C\nstatus: idea\n## D\nstatus: planned\n## A\nstatus: planned\n", "EOF append gets a separating newline");
+assert.equal(shape(dropCard(dropMd, "workflow", dD, "planned", dB)), "A:idea D:planned B:planned C:idea", "unterminated last card moved up");
+assert.equal(dropCard(dropMd, "workflow", dD, "planned", dB).endsWith("## C\nstatus: idea\n"), true);
+assert.equal(shape(dropCard(dropMd, "workflow", dB, "idea", dC)), "A:idea B:idea C:idea D:planned", "cross-column with anchor");
+assert.equal(shape(dropCard(dropMd, "workflow", dD, "building", null)), "A:idea B:planned C:idea D:building", "empty column keeps file position");
+assert.equal(shape(dropCard(dropMd, "list", dC, "list", dA)), "C:idea A:idea B:planned D:planned", "list reorders without status change");
+assert.equal(shape(dropCard(dropMd, "kanban", dA, "progress", null)), "A:building B:planned C:idea D:planned");
+assert.equal(shape(dropCard(dropMd, "kanban", dD, "todo", dA)), "D:planned A:idea B:planned C:idea", "kanban todo keeps a todo status");
 console.log("board-check: all assertions passed");

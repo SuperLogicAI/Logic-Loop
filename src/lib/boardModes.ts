@@ -1,4 +1,4 @@
-import type { BoardStatus, Card } from "./board";
+import { moveCard, parseBoard, placeCard, type BoardStatus, type Card } from "./board";
 
 export type BoardMode = "workflow" | "list" | "kanban";
 export type KanbanLane = "todo" | "progress" | "done";
@@ -26,6 +26,22 @@ export function boardColumns(mode: BoardMode, cards: Card[]) {
   const columns = mode === "workflow" ? WORKFLOW_COLUMNS : KANBAN_COLUMNS;
   return columns.map((col) => ({ ...col, cards: cards.filter((card) =>
     (mode === "workflow" ? card.status : kanbanLane(card.status)) === col.key) }));
+}
+/** Plan 067 drag-and-drop write: place `card` before `anchor` (null = after
+ * the last card of column `key`), then give it that column's status; List
+ * keeps status. Both cards come from `parseBoard(md)` via `freshBoardCard`,
+ * so the moved card's title is unique. */
+export function dropCard(md: string, mode: BoardMode, card: Card, key: string, anchor: Card | null): string {
+  const status = mode === "list" ? card.status
+    : mode === "kanban" ? kanbanStatus(card.status, key as KanbanLane) : key as BoardStatus;
+  const column = boardColumns(mode, parseBoard(md)).find((col) => col.key === key)?.cards ?? [];
+  const others = column.filter((c) => c.start !== card.start);
+  const slot = anchor ? others.findIndex((c) => c.start === anchor.start) : others.length;
+  // Same visible slot = no file move, even when file order has other cards between.
+  const stays = anchor?.start === card.start || column.findIndex((c) => c.start === card.start) === slot;
+  const placed = stays ? md : placeCard(md, card, anchor?.start ?? others[others.length - 1]?.end ?? card.start);
+  if (status === card.status) return placed;
+  return moveCard(placed, parseBoard(placed).find((c) => c.title === card.title)!, status);
 }
 export function freshBoardCard(card: Card, displayed: Card[], fresh: Card[]): Card {
   const before = displayed.filter((c) => c.title === card.title);
