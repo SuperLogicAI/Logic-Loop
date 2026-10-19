@@ -499,3 +499,21 @@ fix is ever reverted or bypassed. Referenced from CLAUDE.md.
   segment>*"` sidesteps it since glob matching a partial pattern doesn't
   require the exact character; resolve the path that way instead of typing
   the full filename whenever a screenshot path is involved.
+
+- **"Decisions stopped surfacing" is usually binding, not extraction (found
+  2026-10-19).** Extraction kept writing rows the whole time; the panel
+  shows `cwd = tab cwd AND (tab_id = tab OR session_id = tab.sessionId)`, so
+  a session that never binds to its tab writes `tab_id NULL` rows nobody
+  sees. Three classes found in 30 days of DB history: (A) `/clear` sessions
+  rejected by first-session-wins, fixed 2026-10-12 (#93); (B) child
+  `claude` runs inheriting the tab's tether, rejected by design; (C) an
+  outside (untethered) session parked on a fresh tab via the cwd or
+  active-tab fallback 1-2 minutes before the tab's own `claude` started,
+  which then got rejected. The active-tab fallback also rewrote the tab's
+  cwd to another project. Fix: active-tab fallback deleted (every app tab
+  is tethered, so it only ever served outside sessions), and
+  `Tab.sessionUntethered` lets the tab's tethered agent take back an
+  untethered claim (`sessionLaunchDecision`). Triage next time, before
+  touching extraction: count tethered `hook:SessionStart` rows with no
+  `session_bindings` row, then check what the tab held at that moment
+  (`tab_active` events carry the held session id). Structural queries only.

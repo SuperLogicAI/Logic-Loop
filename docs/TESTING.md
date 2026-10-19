@@ -6941,3 +6941,50 @@ click (`data-tauri-drag-region` is a no-op in a browser); the native frame
 before JS runs on launch (body background is dark until the module applies
 the theme); Landing note countdown modal and diff pop-out with real content
 (not reachable without a backend); WKWebView vs Chromium rendering.
+
+## Binding fix — outside session can't steal a tab (2026-10-19)
+
+Built app only (needs real hooks). Passed 2026-10-19 (see below), except
+step 4 for a reclaimed tab.
+
+1. In a plain Terminal.app window (no tether), start `claude` in project A
+   and give it a prompt that runs a few tools.
+2. While it runs, open a new Logic Loop tab in project B. Expected: the tab
+   stays project B; no agent state from the outside session appears on it.
+3. Open a new Logic Loop tab in project A, wait for the outside session to
+   fire a tool hook (it may park on this tab), then start `claude` in the
+   tab. Expected: the tab shows its own session; a question it asks lands
+   as a decision card in this tab.
+4. Relaunch the app. Expected: the tab from step 3 re-enters its own
+   session, not the outside one.
+
+### Installed-app pass (2026-10-19)
+
+Computer use was unavailable. Instead: the rebuilt app installed and
+relaunched, the human opened fresh tabs, and outside/tethered sessions were
+headless `claude -p` runs from a shell (outside = `LOGIC_LOOP_TAB_ID` and
+`CLAUDE_CODE_CHILD_SESSION` unset; tethered = `LOGIC_LOOP_TAB_ID` set to the
+target tab). Each run ended on a question; checked via `session_bindings` and
+`decisions.tab_id` in the DB. Test cards dismissed after.
+
+Passed:
+- Relaunch: the existing context_terminal tab re-entered its own session
+  (SessionStart `resume`, binding rewritten to the same tether).
+- Human-started `claude` in two fresh tabs (two projects): each got its own
+  `session_bindings` row and its decision card carried its own tab id.
+- Outside session while every tab held a session: unbound card, no tab taken.
+- Tethered child on a tab its owner holds: no binding row, unbound card, the
+  owner keeps the tab.
+- Outside session parked on a fresh same-project tab (card carried that tab),
+  then the tab's tethered session (`startup`) took it back: binding row on
+  that tether, its card in that tab. Before the fix this left the tab with
+  the outside session and the real session's cards unbound.
+- The parked outside session resumed afterwards: unbound card, the tab stays
+  with its owner.
+- Outside session from a folder no tab matches, with a fresh session-less tab
+  in another project focused: unbound card, tab untouched. Focus was inferred
+  (this tab logged `tab_left`, no session tab entered after), not observed.
+
+Not covered: the tethered sessions ran outside the tab's PTY; cards were
+checked as rows, not seen in the panel; step 4 relaunch for a reclaimed tab
+(its binding row is correct, the relaunch itself was not repeated).

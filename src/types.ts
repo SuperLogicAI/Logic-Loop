@@ -78,6 +78,10 @@ export interface Tab {
   color: string;
   status: "live" | "dead";
   sessionId?: string;
+  /** `sessionId` came from an outside (untethered) session via the cwd
+   * fallback, so the tab's own tethered agent may take it back. Not
+   * persisted — re-entry only restores tethered bindings. */
+  sessionUntethered?: boolean;
   agentState?: AgentState;
   /** ms epoch of the last state-bearing hook (Phase 14b's clock). Not
    * persisted — a relaunch has no agentState either, both come back on the
