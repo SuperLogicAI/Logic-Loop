@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { boardColumns, freshBoardCard, kanbanLane, kanbanStatus, parseBoardMode, WORKFLOW_COLUMNS, KANBAN_COLUMNS, type BoardMode, type KanbanLane } from "../lib/boardModes";
+import { createPortal } from "react-dom";
+import { boardColumns, dropCard, freshBoardCard, kanbanLane, kanbanStatus, WORKFLOW_COLUMNS, KANBAN_COLUMNS, type BoardMode, type KanbanLane } from "../lib/boardModes";
 import * as repo from "../lib/repo";
 import { PanelIcon } from "./PanelIcon";
 import {
@@ -43,6 +44,22 @@ interface Props {
   trailing?: ReactNode; // Plan 054: right-aligned in the bar (context meter)
 }
 
+/** Plan 067: an in-flight card drag. `anchor` is the start offset of the card
+ * it would land before; null = end of column `col`. */
+type Drag = { card: Card; x: number; y: number; col: string | null; anchor: number | null };
+
+/** Column and insertion point under the pointer — first card whose midpoint
+ * is below it, else the column's end. */
+function dropTarget(x: number, y: number): Pick<Drag, "col" | "anchor"> {
+  const col = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-board-col]");
+  if (!col) return { col: null, anchor: null };
+  const below = [...col.querySelectorAll<HTMLElement>("[data-card]")].find((li) => {
+    const r = li.getBoundingClientRect();
+    return y < r.top + r.height / 2;
+  });
+  return { col: col.dataset.boardCol ?? null, anchor: below ? Number(below.dataset.card) : null };
+}
+
 const MIN_HEIGHT = 80;
 const MAX_HEIGHT = 480;
 const DEFAULT_HEIGHT = 160;
@@ -79,6 +96,8 @@ function ProjectIdeaBoard({ cwd, trailing }: Props) {
   const generation = useRef(0);
   const modeVersion = useRef(0);
   const resizeCleanup = useRef<(() => void) | null>(null);
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const dragCleanup = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const dock = dockRef.current;
@@ -128,6 +147,7 @@ function ProjectIdeaBoard({ cwd, trailing }: Props) {
       alive.current = false;
       generation.current++;
       resizeCleanup.current?.();
+      dragCleanup.current?.();
       window.removeEventListener("focus", onFocus);
     };
   }, [cwd]);
@@ -233,6 +253,53 @@ function ProjectIdeaBoard({ cwd, trailing }: Props) {
     });
   };
 
+  const drop = async (card: Card, key: string, anchor: number | null) => {
+    await withFreshBoard((fresh) => {
+      const before = cards.find((c) => c.start === anchor);
+      return dropCard(fresh, mode, resolveCard(fresh, card), key, before ? resolveCard(fresh, before) : null);
+    });
+  };
+
+  // ponytail: pointer events, not HTML5 drag — same as TabBar: the webview's
+  // file-drop handler (App.tsx onDragDropEvent) swallows DOM drop events.
+  const onCardPointerDown = (e: React.PointerEvent<HTMLElement>, card: Card) => {
+    if (e.button !== 0 || disabled) return;
+    dragCleanup.current?.();
+    const handle = e.currentTarget;
+    const { pointerId, clientX, clientY } = e;
+    let last: Drag | null = null;
+    const end = () => {
+      document.documentElement.classList.remove("select-none");
+      setDrag(null);
+      dragCleanup.current = null;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", end);
+    };
+    const onMove = (ev: PointerEvent) => {
+      if (!(ev.buttons & 1)) return end(); // missed pointerup: cancel, never drop
+      // Slack before a drag starts keeps clicks on the header's buttons working.
+      if (!last && Math.hypot(ev.clientX - clientX, ev.clientY - clientY) < 4) return;
+      if (!last) {
+        handle.setPointerCapture(pointerId); // keep events if the pointer leaves the window
+        // WebKit extends a selection from a select-none handle into nearby
+        // text (status labels, column headers); block it page-wide mid-drag.
+        document.documentElement.classList.add("select-none");
+        window.getSelection()?.removeAllRanges();
+      }
+      last = { card, x: ev.clientX, y: ev.clientY, ...dropTarget(ev.clientX, ev.clientY) };
+      setDrag(last);
+    };
+    const onUp = () => {
+      end();
+      if (last?.col) void drop(last.card, last.col, last.anchor);
+    };
+    dragCleanup.current = end;
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", end);
+  };
+
   const remove = async (card: Card) => {
     await withFreshBoard((fresh) => deleteCard(fresh, resolveCard(fresh, card)));
   };
@@ -299,13 +366,23 @@ function ProjectIdeaBoard({ cwd, trailing }: Props) {
           <PanelIcon name="idea-board" className="h-4 w-4 shrink-0" />
           Idea Board {cards.length > 0 && `(${cards.length})`}
         </span>
-        <select aria-label="Board view" value={mode} disabled={md === null}
-          className="rounded bg-zinc-800 px-1 py-0.5 text-xs text-zinc-300"
-          onChange={(e) => changeMode(parseBoardMode(e.target.value))}>
-          <option value="list">List</option>
-          <option value="kanban">Kanban</option>
-          <option value="workflow">Workflow</option>
-        </select>
+        {/* Same segmented pills as SidePanel's landing-notes mode. */}
+        <div className="flex rounded border border-zinc-700 p-0.5" role="group" aria-label="Board view">
+          {(["list", "kanban", "workflow"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={mode === option}
+              disabled={md === null}
+              className={`rounded px-1.5 py-0.5 capitalize focus-visible:outline-2 focus-visible:outline-focus-400 disabled:opacity-50 ${
+                mode === option ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-200"
+              }`}
+              onClick={() => changeMode(option)}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
         {capNotice && <span className="text-attn-600">Now is full ({NOW_CAP}/{NOW_CAP}) — remove one first</span>}
         {trailing}
       </div>
@@ -313,21 +390,31 @@ function ProjectIdeaBoard({ cwd, trailing }: Props) {
       {md === null && <p role="status" className="px-3">Loading board…</p>}
       <fieldset disabled={disabled} aria-label="Board cards" className="flex min-h-0 min-w-0 flex-1 gap-2 overflow-x-auto border-0 px-2 pb-2">
         {boardColumns(mode, cards).map((col) => (
-          <div key={col.key} className="flex min-w-[160px] flex-1 flex-col overflow-hidden rounded bg-zinc-950/40">
+          <div
+            key={col.key}
+            data-board-col={col.key}
+            className={`flex min-w-[160px] flex-1 flex-col overflow-hidden rounded bg-zinc-950/40 ${drag?.col === col.key ? "ring-1 ring-focus-500/60" : ""}`}
+          >
             <h3 className="shrink-0 border-b border-zinc-200/20 px-2 py-1 font-semibold tracking-wide text-zinc-500 uppercase">
               {col.label} ({col.cards.length})
             </h3>
-            <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-1.5 pb-1.5">
+            <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-1.5 pt-1 pb-1.5">
               {col.cards.length === 0 && <li className="p-2 text-zinc-500">No cards yet</li>}
               {col.cards.map((c) => (
                   <li
                     key={c.start}
-                    className={`relative rounded border bg-zinc-900 p-1.5 ${c.color ? "" : "border-zinc-800"}`}
+                    data-card={c.start}
+                    className={`relative rounded border bg-zinc-900 p-1.5 ${c.color ? "" : "border-zinc-800"} ${
+                      drag?.card.start === c.start ? "opacity-40" : ""} ${
+                      drag?.col === col.key && drag.anchor === c.start
+                        ? "before:absolute before:inset-x-0 before:-top-[3px] before:h-0.5 before:rounded before:bg-focus-500" : ""}`}
                     style={c.color ? { borderColor: c.color } : undefined}
                   >
                     <div
-                      className="-m-1.5 mb-0 flex items-center gap-1 rounded-t p-1.5"
+                      className="-m-1.5 mb-0 flex cursor-grab items-center gap-1 rounded-t p-1.5 select-none"
                       style={{ backgroundColor: c.color ? `${c.color}26` : undefined }}
+                      title="Drag to move"
+                      onPointerDown={(e) => onCardPointerDown(e, c)}
                     >
                       <button
                         className="shrink-0 text-zinc-400 hover:text-zinc-200"
@@ -400,9 +487,10 @@ function ProjectIdeaBoard({ cwd, trailing }: Props) {
                       </>
                     )}
                     {mode === "kanban" && <p className="mt-1 text-zinc-400">{WORKFLOW_COLUMNS.find((col) => col.key === c.status)?.label}</p>}
+                    {/* Keyboard/screen-reader path for moving; drag is the visible one. */}
                     <select
                       aria-label={`Status for ${c.title}`}
-                      className="mt-1 w-full rounded bg-zinc-800 px-1 py-0.5 text-[10px] text-zinc-400 outline-none"
+                      className="sr-only rounded bg-zinc-800 text-[10px] text-zinc-400 outline-none focus:not-sr-only focus:mt-1 focus:w-full focus:px-1 focus:py-0.5"
                       value={mode === "kanban" ? kanbanLane(c.status) : c.status}
                       onChange={(e) => void move(c, e.target.value)}
                     >
@@ -414,10 +502,20 @@ function ProjectIdeaBoard({ cwd, trailing }: Props) {
                     </select>
                   </li>
                 ))}
+              {drag?.col === col.key && drag.anchor === null && <li aria-hidden className="h-0.5 shrink-0 rounded bg-focus-500" />}
             </ul>
           </div>
         ))}
       </fieldset>
+      {drag && createPortal(
+        <div
+          className="pointer-events-none fixed z-50 max-w-48 truncate rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-200 shadow-lg"
+          style={{ left: drag.x + 10, top: drag.y + 10 }}
+        >
+          {drag.card.title}
+        </div>,
+        document.body,
+      )}
       <form
         className="flex shrink-0 gap-1.5 border-t border-zinc-800 p-1.5"
         onSubmit={(e) => {

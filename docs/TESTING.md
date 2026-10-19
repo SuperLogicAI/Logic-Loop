@@ -6988,3 +6988,69 @@ Passed:
 Not covered: the tethered sessions ran outside the tab's PTY; cards were
 checked as rows, not seen in the panel; step 4 relaunch for a reclaimed tab
 (its binding row is correct, the relaunch itself was not repeated).
+
+## Phase 67 — Drag Idea Board cards (Plan 067)
+
+### Preview-harness pass (2026-10-19)
+
+Isolated harness (`preview.local/`, gitignored, since removed): `IdeaBoard`
+alone with mocked `read_board`/`write_board` and settings, driven by
+`playwright-cli` mouse drags. Placeholder cards only.
+
+Passed:
+- Workflow: reorder within a column (Gamma dropped above Alpha); cross-column
+  drop at a column's end (Alpha → Building, after Delta in file); drop outside
+  any column writes nothing; plain click on a title still expands, no write.
+- Kanban: Building card → empty Done lane (status `done`, file position kept);
+  reorder inside To do keeps the card's own status (`planned` stays `planned`).
+- List: drag to top reorders the file, status unchanged.
+- Status select is 1px (`sr-only`) until focused, full width on focus, and
+  changing it still moves the card.
+- Mid-drag screenshot: source card dimmed, target column ringed, insertion bar
+  above the target card, title pill follows the cursor and is gone after drop.
+
+### Manual installed-app checks (pending)
+
+The harness is Chromium; the app is WKWebView behind Tauri's file-drop
+handler. In the rebuilt app:
+1. Drag a card between Workflow columns and within one; confirm
+   `.logic-loop/board.md` order/status matches what the board shows.
+2. Kanban and List drags as above.
+3. Release the mouse outside the app window mid-drag: no stray drop, board
+   unchanged, next click behaves normally.
+4. Click title / star / color / delete without moving: each still works.
+5. Drag a file from Finder onto the window: existing file-drop still works.
+6. Edit `board.md` externally (rename the dragged card), then drag it: the
+   existing "Card removed or renamed" error shows, file untouched.
+
+Known limit: no auto-scroll when dragging near the edge of a scrolled column;
+scroll with the wheel/trackpad mid-drag or enlarge the dock.
+
+### Installed-app finding: text selected mid-drag (2026-10-19)
+
+Maintainer's first installed-app pass: drags worked, but WKWebView sometimes
+highlighted status labels and column headers while dragging. The handle is
+`select-none`, yet WebKit still extends a selection from it into nearby text
+(Chromium does not, so the harness missed it). Fix: once a drag starts, add
+`select-none` to `<html>` and clear the current selection; remove it on
+drop/cancel/unmount. Harness re-check (Chromium): a pre-existing selection is
+cleared mid-drag, labels compute `user-select: none` during the drag and
+`auto` after. WebKit itself not re-run (Playwright WebKit not installed);
+re-check in the rebuilt app.
+
+### View pills replace the board-view select (2026-10-19)
+
+Harness pass (Chromium): Workflow pressed by default with five columns;
+clicking Kanban / List presses that pill and shows three / one columns;
+folded bar has no view control. Pills reuse SidePanel's landing-notes
+segmented markup (`role="group"`, `aria-pressed`). Installed app: check the
+pills' look in dark and light themes and that the chosen view persists after
+relaunch (same `setBoardMode` path as before).
+
+### Phase 67 maintainer acceptance (2026-10-19)
+
+The maintainer rebuilt and dragged cards in the installed app (Kanban shown in
+their screenshots), reported the mid-drag text selection fixed above, asked for
+the view pills, and accepted the phase. Not individually confirmed from the
+manual list: release outside the window (3), Finder file drop alongside board
+drags (5), external rename during a drag (6).
