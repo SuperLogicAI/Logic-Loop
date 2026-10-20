@@ -1,4 +1,4 @@
-[<img src="docs/assets/logic-loop-demo.gif" alt="Logic Loop: Home lists projects with waiting decisions; a project's workspace shows agent terminals beside Decisions, Since You Left and Next" width="100%">](#what-you-get)
+[<img src="docs/assets/logic-loop-workspace.png" alt="Logic Loop: a project workspace with agent terminal tabs, a live Codex session, and the Progress, Notes and Reminders sidebar" width="100%">](#what-you-get)
 <!-- TODO(maintainer): recapture from a demo profile, never the real one (no client or project names): Home → Overview → a Decisions card → Next. -->
 
 <h1 align="center">
