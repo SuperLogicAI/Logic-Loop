@@ -525,3 +525,17 @@ fix is ever reverted or bypassed. Referenced from CLAUDE.md.
   touching extraction: count tethered `hook:SessionStart` rows with no
   `session_bindings` row, then check what the tab held at that moment
   (`tab_active` events carry the held session id). Structural queries only.
+- **Logic Loop at 300-900% CPU is the Attention query, not the UI (found
+  2026-11-06).** `listAttentionEvidence` runs after every hook through
+  `scheduleAttentionRefresh`. `events` had no index on `type`, so each run
+  scanned the whole table: 12-33 s on an 18 GB database. The `cancelled` flag
+  only ignores the result, and the microtask coalescer doesn't wait for a run
+  in flight, so runs stacked until all 10 pool workers were busy. CPU reads as
+  roughly 100% per busy worker, which is why the top end is about 900%.
+  Migration 15 adds `events(type, ts)`: 12.7 s down to 112 ms on a full clone,
+  with identical output. An explicit `type` filter in the CTE only reached
+  9.8 s, and the Phase 68 cleanup alone only 3.7 s. Triage next time: run
+  `sample <pid> 6` and count threads with `sqlite3` frames, plus
+  `jsonValidFunc` versus `jsonExtractFunc`. Any new read filtering `events`
+  without a usable index repeats this. `eventsSince` still filters on `ts`
+  alone and was not fixed here.

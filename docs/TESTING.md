@@ -7066,3 +7066,20 @@ Manual, installed app after `npm run reinstall`: run a long Claude session
 with subagents and confirm no "transcript format doesn't match" banner
 appears. Not yet run; the banner isn't persisted, so the old false trip was
 only reproduced by replay.
+
+### Events type index, migration 15 (2026-11-06)
+
+Automated: `cargo test --lib` pins that the Attention query's `valid_events`
+read uses `idx_events_type_ts`. On an APFS clone of the maintainer database
+(18 GB, warm cache, `node:sqlite`): `listAttentionEvidence` 12.7 s to 112 ms,
+`listToolEvents` 1.4 s to 4 ms, `lastLeft` 235 ms to under 1 ms, identical
+output hashes, index build 1.6 s.
+
+Manual, installed app after `npm run reinstall` (not yet run):
+
+1. Note first launch time; the migration builds on a cold database and may take
+   longer than 1.6 s. Terminals should appear normally.
+2. With agents active, read CPU with `top -l 2 -s 2 -pid <pid> -stats cpu,th`.
+   Before this fix it sat at 500-900%.
+3. If CPU stays high, run `sample <pid> 6`. `eventsSince` is the next suspect;
+   it filters on `ts` alone.
