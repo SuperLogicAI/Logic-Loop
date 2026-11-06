@@ -66,7 +66,9 @@ fn attention_event_reads_use_the_type_index() {
         let repo = include_str!("../../src/lib/repo.ts");
         let valid_events = repo
             .split_once("WITH valid_events AS (").expect("valid_events moved").1
-            .split_once("),\n     outstanding_results").expect("outstanding_results moved").0;
+            .split_once("outstanding_results AS").expect("outstanding_results moved").0
+            .trim_end()
+            .trim_end_matches("),");
         let mut db = SqliteConnection::connect("sqlite::memory:").await.unwrap();
         sqlx::raw_sql("CREATE TABLE events (id INTEGER PRIMARY KEY, session_id TEXT NOT NULL, type TEXT NOT NULL,
             payload_json TEXT NOT NULL, ts INTEGER NOT NULL, dedupe_key TEXT);
