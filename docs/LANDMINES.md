@@ -473,6 +473,14 @@ fix is ever reverted or bypassed. Referenced from CLAUDE.md.
   one real scenario (CLI drops `assistant`/`user` entirely) this tripwire
   exists to catch. Stayed a named allowlist. Run `npm run check` (now
   includes `schema-drift:check`) before trusting any future change here.
+  **Recurred 2026-11-06:** simulating the tripwire over 30 days of real
+  transcripts, five Claude sessions (CLI v2.1.299-310) false-tripped, worst
+  streak 43, on `api-request`, `api-request-blob`,
+  `artifact-autoreact-ledger`, `queue-operation` and `system` lines. Codex
+  peaked at 19 of 20 on `event_msg`. All six added to the recognized list;
+  worst streak is now 12 (Claude) and 4 (Codex). Before adding a type,
+  replay recent `~/.claude/projects` and `~/.codex/sessions` files through
+  the allowlist and print envelope types only, never message content.
 
 - **Copy-paste out of a Claude Code pane silently breaks long commands
   (found 2026-09-27).** Two distinct bugs were conflated live before the

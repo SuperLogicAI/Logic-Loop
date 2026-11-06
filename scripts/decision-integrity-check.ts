@@ -122,6 +122,18 @@ for (const line of [
 ]) {
   assert.equal(transcriptEnvelopeType(line), "unrecognized", `${line} must be flagged, not silently ignored`);
 }
+// Side-channel lines that false-tripped the tripwire on CLI v2.1.299-310 and
+// nearly did on Codex (2026-11-06).
+for (const type of [
+  "api-request",
+  "api-request-blob",
+  "artifact-autoreact-ledger",
+  "queue-operation",
+  "system",
+  "event_msg",
+]) {
+  assert.equal(transcriptEnvelopeType(JSON.stringify({ type })), "recognized", `${type} is a known side channel`);
+}
 assert.equal(transcriptEnvelopeType("not json"), "unparseable");
 assert.equal(transcriptEnvelopeType('{"type":"assistant"'), "unparseable", "a partial line mid-flush is not drift");
 
