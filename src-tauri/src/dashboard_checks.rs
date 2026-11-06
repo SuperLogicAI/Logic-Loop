@@ -61,7 +61,7 @@ fn project_decisions_match_source_open_count_without_a_silent_cap() {
 }
 
 #[test]
-fn attention_event_reads_use_the_type_index() {
+fn hot_event_reads_use_their_indexes() {
     tauri::async_runtime::block_on(async {
         let repo = include_str!("../../src/lib/repo.ts");
         let valid_events = repo
@@ -69,12 +69,16 @@ fn attention_event_reads_use_the_type_index() {
             .split_once("outstanding_results AS").expect("outstanding_results moved").0
             .trim_end()
             .trim_end_matches("),");
+        let events_since = repo
+            .split_once("`SELECT id, ts, type, payload_json FROM events").expect("eventsSince moved").1
+            .split_once('`').expect("eventsSince end missing").0;
         let mut db = SqliteConnection::connect("sqlite::memory:").await.unwrap();
         sqlx::raw_sql("CREATE TABLE events (id INTEGER PRIMARY KEY, session_id TEXT NOT NULL, type TEXT NOT NULL,
             payload_json TEXT NOT NULL, ts INTEGER NOT NULL, dedupe_key TEXT);
           CREATE INDEX idx_events_session ON events(session_id, ts);")
           .execute(&mut db).await.unwrap();
         sqlx::raw_sql(crate::EVENTS_TYPE_INDEX_SQL).execute(&mut db).await.unwrap();
+        sqlx::raw_sql(crate::EVENTS_TS_INDEX_SQL).execute(&mut db).await.unwrap();
         let sql = format!(
             "EXPLAIN QUERY PLAN WITH valid_events AS ({valid_events})
              SELECT id FROM valid_events WHERE type = 'attention_state_observed'"
@@ -83,6 +87,12 @@ fn attention_event_reads_use_the_type_index() {
         assert!(
             plan.iter().any(|row| row.get::<String, _>("detail").contains("idx_events_type_ts")),
             "Attention reads fell back to a table scan"
+        );
+        let sql = format!("EXPLAIN QUERY PLAN SELECT id, ts, type, payload_json FROM events{events_since}");
+        let plan = sqlx::query(&sql).bind(0_i64).bind("tab").bind("session").fetch_all(&mut db).await.unwrap();
+        assert!(
+            plan.iter().any(|row| row.get::<String, _>("detail").contains("idx_events_ts")),
+            "eventsSince fell back to a table scan"
         );
     });
 }

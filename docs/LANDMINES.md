@@ -534,8 +534,14 @@ fix is ever reverted or bypassed. Referenced from CLAUDE.md.
   roughly 100% per busy worker, which is why the top end is about 900%.
   Migration 15 adds `events(type, ts)`: 12.7 s down to 112 ms on a full clone,
   with identical output. An explicit `type` filter in the CTE only reached
-  9.8 s, and the Phase 68 cleanup alone only 3.7 s. Triage next time: run
-  `sample <pid> 6` and count threads with `sqlite3` frames, plus
-  `jsonValidFunc` versus `jsonExtractFunc`. Any new read filtering `events`
-  without a usable index repeats this. `eventsSince` still filters on `ts`
-  alone and was not fixed here.
+  9.8 s, and the Phase 68 cleanup alone only 3.7 s. That left 30-300% with two
+  agents running: spike samples showed `pread` under `accessPayload` and
+  `getOverflowPage`, with JSON parsing near zero. `ts` is stored after
+  `payload_json`, so `eventsSince`, which filters on `ts` alone on every
+  side-panel refresh, walked each row's overflow pages to reach it. Migration
+  16 adds `events(ts)`: 919 ms down to 8 ms for a 1-hour window, with identical
+  output. Triage next time: run `sample <pid> 6` and count threads with
+  `sqlite3` frames, then compare `jsonValidFunc`, `jsonExtractFunc` and
+  `getOverflowPage`. CPU spikes are short, so trigger the sample when CPU
+  crosses a threshold. Any new read filtering `events` without a usable index
+  repeats this, and a column after `payload_json` is costlier than it looks.

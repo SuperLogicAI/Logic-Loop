@@ -31,6 +31,11 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 /// every database worker is busy. See docs/LANDMINES.md.
 const EVENTS_TYPE_INDEX_SQL: &str = "CREATE INDEX IF NOT EXISTS idx_events_type_ts ON events(type, ts);";
 
+/// `ts` is stored after `payload_json`, so filtering on it without an index
+/// walks every row's overflow pages. `eventsSince` does that on each side-panel
+/// refresh. See docs/LANDMINES.md.
+const EVENTS_TS_INDEX_SQL: &str = "CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);";
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![Migration {
@@ -250,6 +255,12 @@ pub fn run() {
         version: 15,
         description: "index events by type and time",
         sql: EVENTS_TYPE_INDEX_SQL,
+        kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 16,
+        description: "index events by time",
+        sql: EVENTS_TS_INDEX_SQL,
         kind: MigrationKind::Up,
     }];
 
