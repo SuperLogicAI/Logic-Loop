@@ -545,3 +545,10 @@ fix is ever reverted or bypassed. Referenced from CLAUDE.md.
   `getOverflowPage`. CPU spikes are short, so trigger the sample when CPU
   crosses a threshold. Any new read filtering `events` without a usable index
   repeats this, and a column after `payload_json` is costlier than it looks.
+- **`events` is not a full transcript copy (Plan 068, 2026-11-06).** `App.tsx`
+  stores a transcript line only if `textFromTranscriptLine` returns text. Tool
+  output, thinking and side-channel lines are never stored, and the one-time
+  cleanup removed the old ones. A new reader that wants them must read the source
+  file, which Claude Code deletes after about 30 days. Keep `dedupeKey`
+  synchronous: async digests resolve out of order, and lines written in the same
+  millisecond tie on `ts`, so `lastAssistantText` could pick the wrong line.

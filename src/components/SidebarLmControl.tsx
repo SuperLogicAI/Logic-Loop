@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { getExtractorSettings, setExtractorSettings } from "../lib/repo";
 import type { ExtractorSettings } from "../types";
 import { SIDEBAR_CONTROLS_REFRESH } from "../lib/sidebarControls";
+import { StorageRow } from "./StorageControls";
 
 // Plan 056: models `npm run golden` has passed; on CLI 2.1.295 `haiku`/`sonnet` resolve to the pinned ids.
 const GOLDEN_CLAUDE_MODELS = ["claude-haiku-5-5", "claude-sonnet-5-5", "haiku", "sonnet"];
@@ -160,6 +161,7 @@ export function SidebarLmControl({ compact = false, bordered = false }: { compac
               />
             </>
           )}
+          <StorageRow />
           <button className="self-end text-zinc-400 hover:text-zinc-200" onClick={() => { setShowSettings(false); buttonRef.current?.focus(); }}>
             Close
           </button>

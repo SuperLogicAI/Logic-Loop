@@ -7087,3 +7087,39 @@ Manual, installed app after `npm run reinstall` (migration 16 not yet run):
    `top -l 0 -s 5 -pid <pid> -stats cpu,th`. Expect short spikes only.
 2. If CPU holds high, run `sample <pid> 6` during a spike. CPU spikes are short,
    so trigger the sample when CPU crosses a threshold.
+
+### Phase 68: events storage (2026-11-06)
+
+Automated: `npm run check` adds `compaction:check` (fixtures for all six
+adapters, page boundary, mid-run failure and rerun, nudge rules, key size).
+`cargo test --lib` runs the real delete SQL and `VACUUM` through a WAL pool with
+a second connection open, and pins that a non-transcript id can't be deleted.
+
+APFS clone of the maintainer database, `node:sqlite`, aggregates only: 18.3 GB
+to 2.1 GB; 350,816 rows deleted in 18 s, keys nulled in 2.7 s, `VACUUM` 14.3 s,
+`quick_check` ok. Real `summarizeDelta` and `groupIterations` matched for every
+agent. The one change: 2 of 87 Claude session-days held only unreadable lines
+and vanished. Both were blank.
+
+Preview harness, real components with mocked IPC, dark and light: nudge copy,
+hidden while an agent works, button disabled while an agent works, `Not now`
+stores a 30-day snooze, snoozed and expired relaunches, cancel deletes nothing,
+`Review` reports the space reclaimed and marks the run, never returns after a
+run, stays away below 5 GB, a failed `VACUUM` reports the error, isn't marked
+done, and the nudge returns.
+
+Manual, installed app (not yet run). Quit Logic Loop first, then:
+
+1. `cp -c` the database and its `-wal` from
+   `~/Library/Application Support/com.vandershark.context-terminal/` to a backup
+   folder. This is the rollback, because the run can't be undone.
+2. `npm run reinstall`, then open the app with no agent working.
+3. Take screenshots of a work log, a re-entry brief and a loop digest.
+4. The nudge shows the size. Choose `Review`, then confirm. Record the run time.
+5. Size drops to about 2 GB in the row and the Sidebar LM popover.
+6. Work log excerpts, re-entry brief and loop digest match the screenshots.
+7. A live terminal keeps printing during `VACUUM`, and hooks still exit 0.
+8. A landing draft still appears; try a session that came back empty before.
+9. A second run from the popover finishes quickly and reclaims almost nothing.
+10. The nudge doesn't return after relaunch. To test `Not now`, restore the backup
+    or set `compaction_nudge_snoozed_until` directly.

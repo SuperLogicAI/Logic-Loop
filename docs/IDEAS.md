@@ -2116,6 +2116,10 @@ the single import or pointer line per instruction file; CONTEXT.md
 
 ## Transcript copies in SQLite — retention, investigate (2026-10-14)
 
+**Resolved by Plan 068 (2026-11-06).** Lines with no readable text are no longer
+stored, and old ones go through a human-triggered cleanup. Kept below for the
+reasoning.
+
 Measured on the maintainer DB (aggregate counts only): the file is 4.9 GB.
 `events` holds 300k rows with about 2 GB of payload, of which
 `type = 'transcript'` accounts for 216k rows and 1.3 GB. `onTranscriptLine`

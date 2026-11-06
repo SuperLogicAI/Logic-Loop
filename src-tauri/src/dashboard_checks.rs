@@ -1,5 +1,6 @@
 //! Execute the frontend's actual repo SQL against SQLite fixtures. No JS
 //! database shim or additional runtime dependency; sqlx is already in use.
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool};
 use sqlx::{Connection, Row, SqliteConnection};
 
 fn repo_sql(name: &str, quote: char) -> String {
@@ -94,5 +95,46 @@ fn hot_event_reads_use_their_indexes() {
             plan.iter().any(|row| row.get::<String, _>("detail").contains("idx_events_ts")),
             "eventsSince fell back to a table scan"
         );
+    });
+}
+
+#[test]
+fn transcript_cleanup_spares_other_rows_and_vacuums_through_a_pool() {
+    tauri::async_runtime::block_on(async {
+        let dir = std::env::temp_dir().join(format!("logic-loop-cleanup-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let options = SqliteConnectOptions::new()
+            .filename(dir.join("cleanup.db"))
+            .create_if_missing(true)
+            .journal_mode(SqliteJournalMode::Wal);
+        let pool = SqlitePool::connect_with(options).await.unwrap();
+        sqlx::raw_sql("CREATE TABLE events (id INTEGER PRIMARY KEY, session_id TEXT NOT NULL, type TEXT NOT NULL,
+            payload_json TEXT NOT NULL, ts INTEGER NOT NULL, dedupe_key TEXT);")
+          .execute(&pool).await.unwrap();
+        let payload = "x".repeat(32 * 1024);
+        for id in 1..=200_i64 {
+            sqlx::query("INSERT INTO events VALUES ($1, 's', 'transcript', $2, $1, NULL)")
+                .bind(id).bind(&payload).execute(&pool).await.unwrap();
+        }
+        sqlx::query("INSERT INTO events VALUES (500, 's', 'hook:Stop', '{}', 500, NULL)").execute(&pool).await.unwrap();
+        // An idle second connection must not stop VACUUM.
+        let idle = pool.acquire().await.unwrap();
+
+        let delete = repo_sql("DELETE_TRANSCRIPT_ROWS_SQL", '"');
+        let ids = serde_json::to_string(&(1..=199).chain([500]).collect::<Vec<i64>>()).unwrap();
+        sqlx::query(&delete).bind(ids).execute(&pool).await.unwrap();
+        let left: Vec<i64> = sqlx::query_scalar("SELECT id FROM events ORDER BY id").fetch_all(&pool).await.unwrap();
+        assert_eq!(left, [200, 500], "cleanup deleted a row it must keep");
+
+        let pages = "SELECT page_count FROM pragma_page_count()";
+        let before: i64 = sqlx::query_scalar(pages).fetch_one(&pool).await.unwrap();
+        sqlx::query("VACUUM").execute(&pool).await.unwrap();
+        sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)").execute(&pool).await.unwrap();
+        let after: i64 = sqlx::query_scalar(pages).fetch_one(&pool).await.unwrap();
+        assert!(after < before / 10, "VACUUM didn't shrink the file: {before} to {after} pages");
+
+        drop(idle);
+        pool.close().await;
+        std::fs::remove_dir_all(&dir).unwrap();
     });
 }

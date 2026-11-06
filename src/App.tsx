@@ -40,6 +40,7 @@ import type { UsageThread } from "./lib/spend";
 import { claudeContext, codexContext, type ContextUsage } from "./lib/contextMeter";
 import { SidebarControls } from "./components/SidebarControls";
 import { SidePanel } from "./components/SidePanel";
+import { setAgentsWorking } from "./components/StorageControls";
 import type { CodexMeterData, CodexMeterSnapshot } from "./components/CodexUsageBlock";
 import { LandingNoteModal } from "./components/LandingNoteModal";
 import { FanOutModal } from "./components/FanOutModal";
@@ -210,6 +211,9 @@ export default function App() {
   // agentState never changes on its own, so nothing else would re-render
   // TabBar/SidePanel as a quiet tab's age grows.
   const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    setAgentsWorking(tabs.some((t) => t.status === "live" && t.agentState === "working"));
+  }, [tabs]);
   // Stalled-edge nudge dedupe: fires once per turn (epoch), cleared on the
   // next UserPromptSubmit for that tab — not on the ring clearing, so a tool
   // call that un-stalls and re-stalls within the same turn doesn't re-notify.
@@ -1233,7 +1237,11 @@ export default function App() {
     }).then(track);
 
     void onTranscriptLine((p) => {
-      void repo.addEvent(p.session_id, "transcript", p.line).catch(() => undefined);
+      // Plan 068: only lines a reader can use are stored. Everything below
+      // reads the live line, so nothing else depends on the row.
+      if (decisions.textFromTranscriptLine(p.line)) {
+        void repo.addEvent(p.session_id, "transcript", p.line).catch(() => undefined);
+      }
       const codexUsage = codexContext(p.line);
       if (codexUsage) setCodexContextBySession((prev) => ({ ...prev, [p.session_id]: codexUsage }));
       // Plan 053 revision 2: only Codex's structured failed CommandExecution
