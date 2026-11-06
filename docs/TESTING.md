@@ -7054,3 +7054,15 @@ their screenshots), reported the mid-drag text selection fixed above, asked for
 the view pills, and accepted the phase. Not individually confirmed from the
 manual list: release outside the window (3), Finder file drop alongside board
 drags (5), external rename during a drag (6).
+
+### Schema-drift side-channel allowlist (2026-11-06)
+
+Automated: `npm run check` pins the six new types as recognized and the
+2026-09-12 types as still flagged. Offline replay over 30 days of real
+transcripts (161 Claude, 80 Codex files, envelope types only): 0 sessions
+reach the threshold, down from 5.
+
+Manual, installed app after `npm run reinstall`: run a long Claude session
+with subagents and confirm no "transcript format doesn't match" banner
+appears. Not yet run; the banner isn't persisted, so the old false trip was
+only reproduced by replay.

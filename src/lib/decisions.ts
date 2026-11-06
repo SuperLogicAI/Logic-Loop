@@ -47,6 +47,12 @@ const assistantBuf = new Map<string, PendingAssistant>(); // session_id -> pendi
 // allowlist, updated by hand each time a new benign side-channel type
 // ships (see decision-integrity-check.ts's regression test, which pins the
 // 2026-09-12 types as still-must-flag — never add those here).
+//
+// Recurrence 2026-11-06: simulated over 30 days of real transcripts, five
+// Claude sessions (CLI v2.1.299-310) false-tripped on api-request,
+// api-request-blob, artifact-autoreact-ledger, queue-operation and system
+// lines; Codex peaked at 19 of 20 on event_msg. With these added the worst
+// streak is 12 (Claude) and 4 (Codex).
 const SCHEMA_DRIFT_THRESHOLD = 20;
 const unrecognizedStreak = new Map<string, number>(); // session_id -> consecutive unrecognized-envelope lines
 const driftWarned = new Set<string>(); // session_id already warned — fire once, not per line
@@ -79,6 +85,12 @@ export function transcriptEnvelopeType(line: string): "recognized" | "unrecogniz
     obj.type === "pi_message" ||
     obj.type === "deepseek_message" ||
     obj.type === "attachment" ||
+    obj.type === "api-request" ||
+    obj.type === "api-request-blob" ||
+    obj.type === "artifact-autoreact-ledger" ||
+    obj.type === "queue-operation" ||
+    obj.type === "system" ||
+    obj.type === "event_msg" ||
     isAntigravityEnvelope(obj)
     ? "recognized"
     : "unrecognized";
