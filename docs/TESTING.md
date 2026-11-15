@@ -7066,3 +7066,24 @@ Manual, installed app after `npm run reinstall`: run a long Claude session
 with subagents and confirm no "transcript format doesn't match" banner
 appears. Not yet run; the banner isn't persisted, so the old false trip was
 only reproduced by replay.
+
+### Events indexes, migrations 15 and 16 (2026-11-06)
+
+Automated: `cargo test --lib` pins that the Attention query's `valid_events`
+read uses `idx_events_type_ts` and that `eventsSince` uses `idx_events_ts`. On
+an APFS clone of the maintainer database (18 GB, warm cache, `node:sqlite`):
+`listAttentionEvidence` 12.7 s to 112 ms, `listToolEvents` 1.4 s to 4 ms,
+`lastLeft` 235 ms to under 1 ms, `eventsSince` 919 ms to 8 ms for a 1-hour
+window and 1,560 ms to 670 ms for 7 days. Output hashes were identical. Index
+builds took 1.6 s and 1.0 s.
+
+Migration 15 on the installed app (maintainer, 2026-11-06): applied in 1.29 s on
+the real database. CPU fell from 500-900% to 1-3% at idle and 30-300% with two
+agents running.
+
+Manual, installed app after `npm run reinstall` (migration 16 not yet run):
+
+1. With two or more agents active, read CPU with
+   `top -l 0 -s 5 -pid <pid> -stats cpu,th`. Expect short spikes only.
+2. If CPU holds high, run `sample <pid> 6` during a spike. CPU spikes are short,
+   so trigger the sample when CPU crosses a threshold.

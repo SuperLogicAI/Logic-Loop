@@ -26,6 +26,16 @@ use tauri::menu::{MenuBuilder, MenuItem, SubmenuBuilder};
 use tauri::Manager;
 use tauri_plugin_sql::{Migration, MigrationKind};
 
+/// Without this, reads filtered by `events.type` scan the whole table. The
+/// Attention Inbox query runs after every hook, so those scans pile up until
+/// every database worker is busy. See docs/LANDMINES.md.
+const EVENTS_TYPE_INDEX_SQL: &str = "CREATE INDEX IF NOT EXISTS idx_events_type_ts ON events(type, ts);";
+
+/// `ts` is stored after `payload_json`, so filtering on it without an index
+/// walks every row's overflow pages. `eventsSince` does that on each side-panel
+/// refresh. See docs/LANDMINES.md.
+const EVENTS_TS_INDEX_SQL: &str = "CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);";
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![Migration {
@@ -239,6 +249,18 @@ pub fn run() {
                   CAST(strftime('%s', 'now') AS INTEGER) * 1000
                     + CAST(substr(strftime('%f', 'now'), 4, 3) AS INTEGER),
                   'result_review_tracking_started:v1');"#,
+        kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 15,
+        description: "index events by type and time",
+        sql: EVENTS_TYPE_INDEX_SQL,
+        kind: MigrationKind::Up,
+    },
+    Migration {
+        version: 16,
+        description: "index events by time",
+        sql: EVENTS_TS_INDEX_SQL,
         kind: MigrationKind::Up,
     }];
 
