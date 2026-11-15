@@ -41,6 +41,18 @@ verification.
 
 ## Execution order & status
 
+[Plan 069](069-uptime-hygiene.md) is **Phase 69 — BUILT 2026-11-15, awaiting
+`PHASE 69 ACCEPTED`** (approved 2026-11-15; planned at `03b2063`). Transcript tailers stop
+holding files open and stop when quiet, killed shells are reaped, new
+`hook:PostToolUse` payloads are stored capped (525 MB to 29 MB over 14 measured
+days), and CI runs the production build. No schema change.
+
+[Plan 070](070-handoff-between-tabs.md) is **PROPOSED 2026-11-15** for Phase 70
+(needs `PHASE 69 ACCEPTED`, then `PHASE 70 APPROVED`). A human-clicked handoff
+that prefills one agent tab's last reply, framed and quoted, into another
+same-project tab's prompt without sending it. An experiment with a 14-day
+review; offered and automatic handoffs are out of scope.
+
 [Plan 068](068-events-storage.md) is **Phase 68 — ACCEPTED 2026-11-15**.
 Transcript lines with no readable text are no longer stored, dedupe keys are a
 fixed size, and a human-triggered cleanup took the maintainer database from

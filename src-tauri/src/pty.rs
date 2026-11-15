@@ -83,6 +83,45 @@ fn kill_session(s: &mut PtySession) {
     let _ = s.child.kill();
 }
 
+/// Kill, then reap on a thread of its own. portable-pty's `kill()` usually
+/// reaps first (SIGHUP, then `try_wait` 5x over 200 ms); this covers a child
+/// that outlives that grace. `wait` must never run on a command thread:
+/// `pty_kill` is sync, and Plan 017 traced an app-wide freeze to blocking
+/// calls there.
+fn kill_and_reap(sessions: Vec<Arc<Mutex<PtySession>>>) {
+    for s in &sessions {
+        if let Ok(mut session) = s.lock() {
+            kill_session(&mut session);
+        }
+    }
+    std::thread::spawn(move || {
+        for s in sessions {
+            if let Ok(mut session) = s.lock() {
+                let _ = session.child.wait();
+            }
+        }
+    });
+}
+
+/// Reap a shell that exited on its own (Plan 069 R1: the real zombie source;
+/// a dead tab never released its PTY). Never signals: the shell exited by
+/// choice, and `killpg` could take down what it left running. The lock is
+/// held only per `try_wait`, so a command that cloned the session just before
+/// its removal never waits behind this on the main thread.
+// ponytail: gives up after ~5 s; a shell still alive past its PTY's EOF is
+// dropped unreaped, as it was before.
+fn reap_exited(session: &Mutex<PtySession>) {
+    for _ in 0..50 {
+        if let Ok(mut s) = session.lock() {
+            // Ok(Some) = reaped now; Err = already reaped elsewhere.
+            if !matches!(s.child.try_wait(), Ok(None)) {
+                return;
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
 impl PtyManager {
     pub fn live_count(&self) -> usize {
         self.sessions.lock().map(|s| s.len()).unwrap_or(0)
@@ -94,11 +133,7 @@ impl PtyManager {
             Err(_) => return,
         };
         self.launches.close_all();
-        for s in drained {
-            if let Ok(mut session) = s.lock() {
-                kill_session(&mut session);
-            }
-        }
+        kill_and_reap(drained);
     }
 }
 
@@ -531,8 +566,15 @@ pub fn pty_spawn(
                 }
             }
         }
-        app.state::<PtyManager>().launches.pty_closed(id);
+        let manager = app.state::<PtyManager>();
+        manager.launches.pty_closed(id);
+        // A killed session is already gone from the map; this is the one
+        // that exited by itself.
+        let exited = manager.sessions.lock().ok().and_then(|mut s| s.remove(&id));
         let _ = app.emit(&format!("pty://exit/{id}"), ());
+        if let Some(session) = exited {
+            reap_exited(&session);
+        }
     });
 
     Ok(id)
@@ -583,9 +625,7 @@ pub fn pty_kill(state: State<'_, PtyManager>, id: u32) -> Result<(), String> {
     state.launches.pty_closed(id);
     let removed = state.sessions.lock().map_err(|e| e.to_string())?.remove(&id);
     if let Some(session) = removed {
-        if let Ok(mut session) = session.lock() {
-            kill_session(&mut session);
-        }
+        kill_and_reap(vec![session]);
     }
     Ok(())
 }
@@ -1151,7 +1191,7 @@ fn git_pr_create_blocking(cwd: String, title: String, body: String) -> Result<St
 #[cfg(test)]
 mod tests {
     use super::{
-        canon, codex_launch_prefix, has_own_repo, is_codex_command, project_key, resolve_inside, resolve_spawn_cwd,
+        canon, codex_launch_prefix, reap_exited, PtySession, has_own_repo, is_codex_command, project_key, resolve_inside, resolve_spawn_cwd,
         resume_command, spawn_ordered_writer, valid_resume_id, validate_project_dir, write_zsh_integration,
     };
     use crate::launch::{LaunchRegistry, Verdict};
@@ -1778,5 +1818,22 @@ mod tests {
         assert!(unborn_staged.contains("+one"), "{unborn_staged}");
         assert!(head.contains("+two"), "{head}");
         assert_eq!(staged, "");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn shell_that_exits_by_itself_is_reaped_not_left_a_zombie() {
+        use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+        let pair = native_pty_system()
+            .openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 })
+            .unwrap();
+        let child = pair.slave.spawn_command(CommandBuilder::new("/usr/bin/true")).unwrap();
+        let pid = child.process_id().unwrap() as i32;
+        let session = Mutex::new(PtySession { master: pair.master, child, writer_tx: std::sync::mpsc::channel().0 });
+        reap_exited(&session);
+        // A zombie still answers signal 0; a reaped pid does not. `session`
+        // stays alive past the assert so nothing else can reap it first.
+        assert_ne!(unsafe { libc::kill(pid, 0) }, 0, "exited shell left a zombie");
+        drop(session);
     }
 }

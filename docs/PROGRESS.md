@@ -1382,4 +1382,28 @@ about 1 MB while a terminal kept printing every second, and no nudge appeared
 after relaunch. Not checked: the landing draft, hook exit codes during
 `VACUUM`, and `Not now` on the installed app (docs/TESTING.md).
 **PHASE 68 ACCEPTED** by the maintainer on 2026-11-15 with these recorded
-coverage limits. Phase 69 not begun.
+coverage limits.
+
+### Phase 69 — Stop slow leaks in a long-running app (2026-11-15)
+
+Plan: `plans/069-uptime-hygiene.md`; **PHASE 69 APPROVED** by the maintainer
+2026-11-15 with the default decisions (30-minute idle window, 2,000-char cap
+with failures kept whole, old payloads left alone, all four parts in one
+phase). Built on `feat/phase-69-uptime-hygiene`: transcript tailers hold no
+file handle and park their reader after 30 quiet minutes, resuming at the same
+offset on the same path on the next hook; a shell that exits on its own is
+removed and reaped at PTY EOF (closed tabs were already reaped by
+portable-pty's `kill()`); new `hook:PostToolUse` rows are stored through
+`trimForStorage` (`src/lib/payloadTrim.ts`); CI's `frontend` job runs
+`npm run build`. No schema change, migration, prompt change or new dependency.
+Stated revisions 1–6 are in the plan; 5 and 6 are the plan author's review
+findings R1 and R2.
+
+Verification: `npm run check` (new `payload-trim:check`), `npx tsc --noEmit`,
+`npm run build`, `cargo test --lib` (200 passed, 1 ignored; the 7 reader tests
+unchanged, 5 new; the R1 and R2 tests each shown failing with their fix
+removed), `cargo clippy --all-targets -- -D warnings`,
+`git diff --check`. Read-only reader comparison on an APFS clone, last 14 days:
+11,145 rows, 525.5 MB to 28.9 MB; the only reader difference is `detail` on 603
+long-command rows (docs/TESTING.md). Installed-app manual checks 1–6 not yet
+run. Awaiting **PHASE 69 ACCEPTED**.

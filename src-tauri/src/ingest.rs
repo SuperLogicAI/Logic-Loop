@@ -1,5 +1,5 @@
 use crate::home::home_or_tmp;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -42,9 +42,17 @@ pub(crate) fn claude_target_path() -> PathBuf {
     }
 }
 
-/// Sessions with an active transcript tailer.
+/// Sessions with a transcript tailer. `None`: a thread is running.
+/// `Some((path, reader))`: stopped after going quiet, resumable at the same
+/// offset, pending bytes and identity, so re-arming loses no line.
+// ponytail: parked readers stay for the life of the app (~100 bytes per
+// session seen); evict on session end if that ever measurably matters.
 #[derive(Default)]
-pub struct TailerRegistry(Mutex<HashSet<String>>);
+pub struct TailerRegistry(Mutex<HashMap<String, Option<(String, TranscriptReader)>>>);
+
+/// A tailer with no new record for this long stops and parks its reader.
+/// Any hook re-arms it, so the only cost of stopping is one thread spawn.
+const TAILER_IDLE: Duration = Duration::from_secs(30 * 60);
 
 fn write_endpoint(dir: &Path, port: u16, token: &str) -> std::io::Result<()> {
     fs::create_dir_all(dir)?;
@@ -462,26 +470,43 @@ fn is_subagent_lifecycle(payload: &serde_json::Value) -> bool {
 fn ensure_tailer(app: &AppHandle, session_id: String, path: String) {
     use tauri::Manager;
     let registry = app.state::<TailerRegistry>();
-    {
-        let mut set = match registry.0.lock() {
-            Ok(s) => s,
-            Err(_) => return,
-        };
-        if !set.insert(session_id.clone()) {
-            return;
+    let parked = {
+        let Ok(mut map) = registry.0.lock() else { return };
+        match map.get_mut(&session_id) {
+            Some(slot) if slot.is_some() => resumable(slot.take(), &path),
+            Some(_) => return,
+            None => {
+                map.insert(session_id.clone(), None);
+                None
+            }
         }
-    }
+    };
     let app = app.clone();
     std::thread::spawn(move || {
-        tail(&app, &session_id, &path);
-        // Every exit path lands here — missing file, deleted file, seek error.
-        // Dropping the registry entry lets the next hook re-arm the session;
-        // leaving it meant one failed open silently blinded the session for the
-        // life of the app, with no transcripts and so no decisions.
-        if let Ok(mut set) = app.state::<TailerRegistry>().0.lock() {
-            set.remove(&session_id);
+        let parked = tail(&app, &session_id, &path, parked).map(|reader| (path, reader));
+        let registry = app.state::<TailerRegistry>();
+        let Ok(mut map) = registry.0.lock() else { return };
+        match parked {
+            // Quiet: keep the reader so the next hook resumes, not restarts.
+            Some(parked) => {
+                map.insert(session_id, Some(parked));
+            }
+            // Missing file, deleted file, seek error. Dropping the entry lets
+            // the next hook re-arm the session; leaving it meant one failed
+            // open silently blinded the session for the life of the app, with
+            // no transcripts and so no decisions.
+            None => {
+                map.remove(&session_id);
+            }
         }
     });
+}
+
+/// A parked reader resumes only on the path it was tailing (Plan 069 R2).
+/// Handed a different file, `poll` would see a new identity, rewind to 0 and
+/// re-emit the whole file: duplicate rows and old text into detectors.
+fn resumable(parked: Option<(String, TranscriptReader)>, path: &str) -> Option<TranscriptReader> {
+    parked.filter(|(p, _)| p == path).map(|(_, reader)| reader)
 }
 
 /// Cross-platform (device/volume, file-id) pair used to detect a path being
@@ -535,8 +560,9 @@ fn file_identity(_file: &fs::File) -> Option<(u64, u64)> {
 /// so a record split across polls (a write still in flight) is reassembled
 /// instead of being emitted as a truncated fragment. Framing (this struct)
 /// and semantic JSON parsing (the extractor) are deliberately separate.
+/// Holds no file handle: each poll opens its own (Plan 069 — one held
+/// handle per session ever seen was walking toward the fd limit).
 struct TranscriptReader {
-    file: fs::File,
     offset: u64,
     pending: Vec<u8>,
     identity: Option<(u64, u64)>,
@@ -559,7 +585,7 @@ impl TranscriptReader {
         let mut file = fs::File::open(path)?;
         let offset = file.seek(SeekFrom::End(0))?;
         let identity = file_identity(&file);
-        Ok(Self { file, offset, pending: Vec::new(), identity })
+        Ok(Self { offset, pending: Vec::new(), identity })
     }
 
     /// Re-derive complete records from the current on-disk state. Returns
@@ -571,7 +597,7 @@ impl TranscriptReader {
     /// "how big is it now" check, replacing three separate path-based calls
     /// the original version needed.
     fn poll(&mut self, path: &Path) -> TailOutcome {
-        let Ok(probe) = fs::File::open(path) else {
+        let Ok(mut probe) = fs::File::open(path) else {
             return TailOutcome::Gone;
         };
         let Ok(meta) = probe.metadata() else {
@@ -582,7 +608,6 @@ impl TranscriptReader {
         // file. Switch to it and drop any partial fragment from the old
         // file — it belongs to content that's gone, not to this one.
         if identity.is_some() && identity != self.identity {
-            self.file = probe;
             self.offset = 0;
             self.pending.clear();
             self.identity = identity;
@@ -595,11 +620,11 @@ impl TranscriptReader {
         if meta.len() <= self.offset {
             return TailOutcome::Records(Vec::new());
         }
-        if self.file.seek(SeekFrom::Start(self.offset)).is_err() {
+        if probe.seek(SeekFrom::Start(self.offset)).is_err() {
             return TailOutcome::Gone;
         }
         let mut buf = Vec::new();
-        if self.file.read_to_end(&mut buf).is_err() {
+        if probe.read_to_end(&mut buf).is_err() {
             return TailOutcome::Gone;
         }
         self.offset += buf.len() as u64;
@@ -621,10 +646,10 @@ impl TranscriptReader {
     }
 }
 
-/// The tail loop proper. Returning means "stop tailing"; the caller
-/// de-registers so a later hook can start it again.
-fn tail(app: &AppHandle, session_id: &str, path: &str) {
-    let Ok(mut reader) = TranscriptReader::open(Path::new(path)) else {
+/// Returns the reader when the session went quiet (park it), `None` when the
+/// file is missing or gone (de-register so a later hook starts fresh).
+fn tail(app: &AppHandle, session_id: &str, path: &str, parked: Option<TranscriptReader>) -> Option<TranscriptReader> {
+    let failed = || {
         // Claude Code can report a transcript_path it has not created. That is
         // invisible without this — the session keeps sending hooks and the
         // panels just stay empty.
@@ -632,26 +657,56 @@ fn tail(app: &AppHandle, session_id: &str, path: &str) {
             "ingest://tailer-failed",
             serde_json::json!({ "session_id": session_id, "path": path }),
         );
-        return;
     };
+    let resumed = parked.is_some();
+    let reader = match parked {
+        Some(reader) => reader,
+        None => match TranscriptReader::open(Path::new(path)) {
+            Ok(reader) => reader,
+            Err(_) => {
+                failed();
+                return None;
+            }
+        },
+    };
+    let out = tail_until_idle(reader, Path::new(path), resumed, TAILER_IDLE, |line| {
+        let _ = app.emit(
+            "ingest://transcript",
+            serde_json::json!({ "session_id": session_id, "line": line }),
+        );
+    });
+    if out.is_none() {
+        failed();
+    }
+    out
+}
+
+/// The tail loop proper, split from `tail` so tests can drive it without an
+/// `AppHandle`. A resumed reader polls before its first sleep, so lines
+/// written while it was parked go out as soon as the re-arming hook lands.
+fn tail_until_idle(
+    mut reader: TranscriptReader,
+    path: &Path,
+    mut poll_first: bool,
+    idle: Duration,
+    mut emit: impl FnMut(String),
+) -> Option<TranscriptReader> {
+    let mut last_record = std::time::Instant::now();
     loop {
-        std::thread::sleep(std::time::Duration::from_millis(500));
-        match reader.poll(Path::new(path)) {
-            TailOutcome::Gone => {
-                let _ = app.emit(
-                    "ingest://tailer-failed",
-                    serde_json::json!({ "session_id": session_id, "path": path }),
-                );
-                return;
-            }
+        if !std::mem::take(&mut poll_first) {
+            std::thread::sleep(Duration::from_millis(500));
+        }
+        match reader.poll(path) {
+            TailOutcome::Gone => return None,
             TailOutcome::Records(records) => {
-                for line in records {
-                    let _ = app.emit(
-                        "ingest://transcript",
-                        serde_json::json!({ "session_id": session_id, "line": line }),
-                    );
+                if !records.is_empty() {
+                    last_record = std::time::Instant::now();
                 }
+                records.into_iter().for_each(&mut emit);
             }
+        }
+        if last_record.elapsed() >= idle {
+            return Some(reader);
         }
     }
 }
@@ -1110,6 +1165,73 @@ mod tests {
         let mut reader = TranscriptReader::open(&path).unwrap();
         fs::remove_file(&path).unwrap();
         assert!(matches!(reader.poll(&path), TailOutcome::Gone));
+    }
+
+    #[test]
+    fn tail_loop_returns_the_reader_after_the_idle_window() {
+        let path = temp_path("idle");
+        write_new(&path, b"");
+        let reader = TranscriptReader::open(&path).unwrap();
+        let mut lines = Vec::new();
+        let out = tail_until_idle(reader, &path, false, Duration::from_millis(50), |l| lines.push(l));
+        assert!(out.is_some(), "a quiet file must park, not end as Gone");
+        assert!(lines.is_empty());
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn resumed_reader_emits_lines_written_while_parked_before_sleeping() {
+        let path = temp_path("resume");
+        write_new(&path, b"");
+        let reader = TranscriptReader::open(&path).unwrap();
+        append(&path, b"half");
+        let parked = tail_until_idle(reader, &path, false, Duration::from_millis(50), |_| {}).unwrap();
+
+        append(&path, b"-done\nnext\n");
+        let start = std::time::Instant::now();
+        let mut seen = Vec::new();
+        let out = tail_until_idle(parked, &path, true, Duration::from_millis(50), |l| {
+            seen.push((l, start.elapsed()));
+        });
+        assert!(out.is_some());
+        let lines: Vec<_> = seen.iter().map(|(l, _)| l.as_str()).collect();
+        assert_eq!(lines, vec!["half-done", "next"], "offset and pending bytes must survive parking");
+        assert!(seen.iter().all(|(_, t)| *t < Duration::from_millis(250)), "resume must poll before its first sleep");
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn parked_reader_is_not_resumed_on_a_different_path() {
+        let a = temp_path("park-a");
+        let b = temp_path("park-b");
+        write_new(&a, b"");
+        let reader = TranscriptReader::open(&a).unwrap();
+        let parked = tail_until_idle(reader, &a, false, Duration::from_millis(50), |_| {}).unwrap();
+        write_new(&b, b"old-1\nold-2\n");
+
+        let (a_str, b_str) = (a.to_string_lossy().into_owned(), b.to_string_lossy().into_owned());
+        let resumed = resumable(Some((a_str, parked)), &b_str);
+        assert!(resumed.is_none(), "a different path must start fresh");
+        // What `tail` then does: open fresh, at the end of B.
+        let mut seen = Vec::new();
+        let fresh = resumed.unwrap_or_else(|| TranscriptReader::open(&b).unwrap());
+        tail_until_idle(fresh, &b, true, Duration::from_millis(50), |l| seen.push(l));
+        assert!(seen.is_empty(), "B's existing lines must not be replayed: {seen:?}");
+
+        let again = TranscriptReader::open(&a).unwrap();
+        let a_str = a.to_string_lossy().into_owned();
+        assert!(resumable(Some((a_str.clone(), again)), &a_str).is_some(), "same path resumes");
+        fs::remove_file(&a).ok();
+        fs::remove_file(&b).ok();
+    }
+
+    #[test]
+    fn tail_loop_on_a_deleted_file_ends_as_gone() {
+        let path = temp_path("loop-deleted");
+        write_new(&path, b"");
+        let reader = TranscriptReader::open(&path).unwrap();
+        fs::remove_file(&path).unwrap();
+        assert!(tail_until_idle(reader, &path, false, Duration::from_secs(60), |_| {}).is_none());
     }
 
     fn foreign_settings() -> serde_json::Value {

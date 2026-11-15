@@ -27,6 +27,7 @@ jobs:
       # Aggregate; && short-circuits, so the failing script's own output names it.
       - name: check scripts
         run: npm run check
+      - run: npm run build
 
   rust:
     name: rust (${{ matrix.os }})

@@ -552,3 +552,19 @@ fix is ever reverted or bypassed. Referenced from CLAUDE.md.
   file, which Claude Code deletes after about 30 days. Keep `dedupeKey`
   synchronous: async digests resolve out of order, and lines written in the same
   millisecond tie on `ts`, so `lastAssistantText` could pick the wrong line.
+- **Stored tool payloads are capped (Plan 069, 2026-11-15).** `App.tsx` stores
+  `hook:PostToolUse` through `trimForStorage` (`src/lib/payloadTrim.ts`): every
+  string inside `tool_input` and `tool_response` over 2,000 chars is cut, except
+  a failed response (`is_error` or non-zero `metadata.exit`), which is kept
+  whole. Rows stored before Plan 069 are full size. A new reader that wants full
+  tool output must read the agent's own transcript, which Claude Code deletes
+  after about 30 days. Detectors, tab state and AskUserQuestion read the live
+  payload, so they see everything. A long Bash command shows truncated in the
+  Accomplished panel's `detail` (603 of 11,145 rows over the 14 measured days).
+- **Transcript tailers park when quiet (Plan 069).** A tailer with no new line
+  for 30 minutes stops its thread and leaves its reader in `TailerRegistry`;
+  the next hook for that session resumes it at the same offset, so no line is
+  lost. It resumes only on the path it parked with; a different path starts
+  fresh at the end, never replaying a file. `TranscriptReader` holds no file handle: each 500 ms poll opens its
+  own. Don't add a long-lived handle back — one per session ever seen walked
+  the app toward the 256 fd soft limit after a week of uptime.
