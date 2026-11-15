@@ -41,6 +41,14 @@ verification.
 
 ## Execution order & status
 
+[Plan 068](068-events-storage.md) is **Phase 68 — ACCEPTED 2026-11-15**.
+Transcript lines with no readable text are no longer stored, dedupe keys are a
+fixed size, and a human-triggered cleanup took the maintainer database from
+18.4 GB to 2.6 GB. A row-level comparison against the pre-run backup passed;
+the landing draft, hook exit codes during `VACUUM` and `Not now` on the
+installed app were not checked (docs/TESTING.md). `hook:PostToolUse` payloads
+are the largest item left and need their own plan.
+
 [Plan 066](066-light-mode.md) is **Phase 66 — ACCEPTED 2026-10-17**
 (post-acceptance tuning 2026-10-18). System / Light / Dark theme for app
 chrome via a titlebar toggle; warm light palette on #F5F0E8; terminal pane

@@ -1,8 +1,10 @@
 # Stop the events table growing
 
-Status: **Approved 2026-11-06 (`PHASE 68 APPROVED`). Built; the installed-app run
-(Step 5) is pending. Not accepted.** The readable-text rule and the nudge were
-accepted in chat on 2026-11-06.
+Status: **ACCEPTED 2026-11-15 (`PHASE 68 ACCEPTED`).** Approved 2026-11-06. The
+cleanup ran on the installed app 2026-11-14 and a retroactive row-level check
+passed 2026-11-15; a second run and relaunch the same day passed manual checks
+5, 7, 9 and 10, with 8 not run (docs/TESTING.md).
+The readable-text rule and the nudge were accepted in chat on 2026-11-06.
 
 Prerequisite: PR #100 (`events` indexes, migrations 15 and 16) installed. It
 targets the 300-900% CPU on its own. Without it, constant scans could block
