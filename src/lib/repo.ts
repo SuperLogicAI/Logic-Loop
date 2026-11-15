@@ -120,12 +120,28 @@ export async function reorderBookmarks(ids: number[]): Promise<void> {
  * "Events dedupe key". */
 const DEDUPE_BUCKET_MS = 500;
 
+// ponytail: 64-bit cyrb53-style hash, synchronous so same-millisecond writes
+// keep their order (crypto.subtle resolves out of order). A collision needs
+// equal length inside one session, type and 500 ms bucket, and costs one row.
+function payloadHash(text: string): string {
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 2654435761);
+    h2 = Math.imul(h2 ^ c, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return `${text.length}:${(h2 >>> 0).toString(16)}${(h1 >>> 0).toString(16)}`;
+}
+
 /** Dedupe key for the events table. `tool_use_id` (PostToolUse) is a natural
  * id straight from the Anthropic API — unique per real tool call, immune to
  * concurrent subagents sharing one session_id, so it's used alone with no
  * time bucket. Types without one (Stop, Notification, UserPromptSubmit,
  * transcript lines) fall back to session + agent_id (disambiguates
- * concurrent subagents, which share the parent session_id) + full payload +
+ * concurrent subagents, which share the parent session_id) + payload hash +
  * a coarse time bucket — content alone would collapse every same-session
  * Stop into one row, since a Stop payload carries no per-turn field today. */
 export function dedupeKey(sessionId: string, type: string, payloadJson: string, ts: number): string {
@@ -140,7 +156,7 @@ export function dedupeKey(sessionId: string, type: string, payloadJson: string, 
   }
   if (toolUseId) return `${type}|${sessionId}|tool:${toolUseId}`;
   const bucket = Math.floor(ts / DEDUPE_BUCKET_MS);
-  return `${type}|${sessionId}|agent:${agentId ?? ""}|${bucket}|${payloadJson}`;
+  return `${type}|${sessionId}|agent:${agentId ?? ""}|${bucket}|${payloadHash(payloadJson)}`;
 }
 
 export interface EventWriteResult {
@@ -1211,6 +1227,67 @@ export async function recentTranscript(sessionId: string, limit = 20): Promise<s
     [sessionId, limit]
   );
   return rows.map((r) => r.payload_json).reverse();
+}
+
+// --- One-time storage cleanup (Plan 068). A human-triggered exception to the
+// append-only rule; compaction.ts decides what goes, these only carry it out.
+
+const EVENTS_COMPACTED_AT_KEY = "events_compacted_at";
+const COMPACTION_SNOOZED_UNTIL_KEY = "compaction_nudge_snoozed_until";
+
+export const DELETE_TRANSCRIPT_ROWS_SQL = "DELETE FROM events WHERE type = 'transcript' AND id IN (SELECT value FROM json_each($1))";
+
+export async function transcriptPage(afterId: number, limit: number): Promise<{ id: number; payload_json: string }[]> {
+  const d = await getDb();
+  return d.select<{ id: number; payload_json: string }[]>(
+    "SELECT id, payload_json FROM events WHERE type = 'transcript' AND id > $1 ORDER BY id LIMIT $2",
+    [afterId, limit]
+  );
+}
+
+export async function deleteTranscriptRows(ids: number[]): Promise<void> {
+  const d = await getDb();
+  await d.execute(DELETE_TRANSCRIPT_ROWS_SQL, [JSON.stringify(ids)]);
+}
+
+/** Keys only dedupe inside a 500 ms bucket and nothing else reads them, so old
+ * transcript keys can go. Each still holds a full copy of its line. */
+export async function clearTranscriptKeys(before: number): Promise<void> {
+  const d = await getDb();
+  await d.execute("UPDATE events SET dedupe_key = NULL WHERE type = 'transcript' AND ts < $1", [before]);
+}
+
+export async function databaseBytes(): Promise<number> {
+  const d = await getDb();
+  const rows = await d.select<{ bytes: number }[]>(
+    "SELECT page_count * page_size AS bytes FROM pragma_page_count(), pragma_page_size()"
+  );
+  return rows[0]?.bytes ?? 0;
+}
+
+export async function vacuumDatabase(): Promise<void> {
+  const d = await getDb();
+  await d.execute("VACUUM");
+  await d.execute("PRAGMA wal_checkpoint(TRUNCATE)");
+}
+
+export async function markEventsCompacted(at: number): Promise<void> {
+  await setSetting(EVENTS_COMPACTED_AT_KEY, String(at));
+}
+
+export async function snoozeCompactionNudge(until: number): Promise<void> {
+  await setSetting(COMPACTION_SNOOZED_UNTIL_KEY, String(until));
+}
+
+export async function compactionState(): Promise<{ compactedAt: number | null; snoozedUntil: number | null }> {
+  const [compactedAt, snoozedUntil] = await Promise.all([
+    getSetting(EVENTS_COMPACTED_AT_KEY),
+    getSetting(COMPACTION_SNOOZED_UNTIL_KEY),
+  ]);
+  return {
+    compactedAt: compactedAt ? Number(compactedAt) : null,
+    snoozedUntil: snoozedUntil ? Number(snoozedUntil) : null,
+  };
 }
 
 // --- Since-you-left delta (Phase 14a): a `tab_left` event marks the anchor;

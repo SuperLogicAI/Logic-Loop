@@ -33,6 +33,7 @@ import {
 } from "../lib/pty";
 import { DiffModal } from "./DiffModal";
 import { RememberEditor } from "./RememberEditor";
+import { StorageNudge } from "./StorageControls";
 import { readDecisionLog, rememberedCards } from "../lib/decisionLog";
 import { askOptionsFromContext } from "../lib/askUserQuestion";
 import { cycle, HUES, RainbowText } from "./RainbowText";
@@ -1100,6 +1101,7 @@ export function SidePanel({
       </div>
       <ClaudeUsageBlock agent={agent} sessionId={sessionId} lastEventTs={lastEventTs} now={now} snapshot={claudeStatusline} />
       <CodexUsageBlock agent={agent} sessionId={sessionId} snapshot={codexMeter} now={now} />
+      {!lockIn && <StorageNudge />}
       {/* Adapter warnings: e.g. foreign PostToolUse collision in older agy releases */}
       {adapterWarnings.map((w, i) => (
         <p

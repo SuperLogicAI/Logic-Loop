@@ -1353,3 +1353,33 @@ Maintainer rebuilt and used the installed app between rounds (the selection
 bug came from that pass). **PHASE 67 ACCEPTED** by the maintainer on
 2026-10-19. Release-outside-window, Finder file drop and external-rename
 checks were not individually confirmed; listed in docs/TESTING.md.
+
+### Phase 68 — Stop the events table growing (2026-11-06 → 2026-11-15)
+
+Plan: `plans/068-events-storage.md`; **PHASE 68 APPROVED** by the maintainer
+2026-11-06. Stacked on PR #100 (migrations 15 and 16, `events` indexes).
+Built on `feat/phase-68-events-storage`: transcript lines with no readable
+text are no longer stored, fallback dedupe keys are a fixed-size hash, and a
+human-triggered "Reclaim space" action, offered once by a side-panel nudge,
+deletes old unreadable lines, clears their keys and runs `VACUUM`. The cleanup
+is a one-time, human-confirmed exception to the append-only rule. No schema
+change, app Rust, prompt change or new dependency. Stated revisions 1–5 are in
+the plan.
+
+Verification: `npm run check` (new `compaction:check`), `npx tsc --noEmit`,
+`npm run build`, `cargo test --lib` (195 passed, 1 ignored),
+`cargo clippy --all-targets -- -D warnings`, `git diff --check`, rerun
+2026-11-15. Preview-harness pass in dark and light (docs/TESTING.md).
+
+Installed-app run: the maintainer ran the cleanup from the nudge on 2026-11-14
+without the planned before/after checks. A retroactive row-level comparison of
+the 2026-11-06 backup against the live database on 2026-11-15 passed: 18.41 GB
+to 2.58 GB, all 23,601 readable transcript lines kept byte-identical, all
+352,534 unreadable ones removed, all 136,858 other event rows untouched, and
+8 days of new transcript rows all readable with keys of 134 chars at most.
+A second run by the maintainer on 2026-11-15 finished in 10–15 s and reclaimed
+about 1 MB while a terminal kept printing every second, and no nudge appeared
+after relaunch. Not checked: the landing draft, hook exit codes during
+`VACUUM`, and `Not now` on the installed app (docs/TESTING.md).
+**PHASE 68 ACCEPTED** by the maintainer on 2026-11-15 with these recorded
+coverage limits. Phase 69 not begun.

@@ -7087,3 +7087,94 @@ Manual, installed app after `npm run reinstall` (migration 16 not yet run):
    `top -l 0 -s 5 -pid <pid> -stats cpu,th`. Expect short spikes only.
 2. If CPU holds high, run `sample <pid> 6` during a spike. CPU spikes are short,
    so trigger the sample when CPU crosses a threshold.
+
+### Phase 68: events storage (2026-11-06)
+
+Automated: `npm run check` adds `compaction:check` (fixtures for all six
+adapters, page boundary, mid-run failure and rerun, nudge rules, key size).
+`cargo test --lib` runs the real delete SQL and `VACUUM` through a WAL pool with
+a second connection open, and pins that a non-transcript id can't be deleted.
+
+APFS clone of the maintainer database, `node:sqlite`, aggregates only: 18.3 GB
+to 2.1 GB; 350,816 rows deleted in 18 s, keys nulled in 2.7 s, `VACUUM` 14.3 s,
+`quick_check` ok. Real `summarizeDelta` and `groupIterations` matched for every
+agent. The one change: 2 of 87 Claude session-days held only unreadable lines
+and vanished. Both were blank.
+
+Preview harness, real components with mocked IPC, dark and light: nudge copy,
+hidden while an agent works, button disabled while an agent works, `Not now`
+stores a 30-day snooze, snoozed and expired relaunches, cancel deletes nothing,
+`Review` reports the space reclaimed and marks the run, never returns after a
+run, stays away below 5 GB, a failed `VACUUM` reports the error, isn't marked
+done, and the nudge returns.
+
+Manual, installed app (planned steps; what actually happened is recorded below
+the list). Quit Logic Loop first, then:
+
+1. `cp -c` the database and its `-wal` from
+   `~/Library/Application Support/com.vandershark.context-terminal/` to a backup
+   folder. This is the rollback, because the run can't be undone.
+2. `npm run reinstall`, then open the app with no agent working.
+3. Take screenshots of a work log, a re-entry brief and a loop digest.
+4. The nudge shows the size. Choose `Review`, then confirm. Record the run time.
+5. Size drops to about 2 GB in the row and the Sidebar LM popover.
+6. Work log excerpts, re-entry brief and loop digest match the screenshots.
+7. A live terminal keeps printing during `VACUUM`, and hooks still exit 0.
+8. A landing draft still appears; try a session that came back empty before.
+9. A second run from the popover finishes quickly and reclaims almost nothing.
+10. The nudge doesn't return after relaunch. To test `Not now`, restore the backup
+    or set `compaction_nudge_snoozed_until` directly.
+
+Installed-app run as it happened (recorded 2026-11-15):
+
+- Backup taken 2026-11-06 08:09 HST with `cp -c` to
+  `~/Desktop/inbox/logic-loop-backup/`. Deviation: the app was running, not
+  quit (the Phase 68 build had launched a minute earlier). The backup passes
+  `quick_check`.
+- The maintainer chose `Review` on the nudge and confirmed on 2026-11-14 02:04
+  HST (`events_compacted_at`). No screenshots, run time or before/after sizes
+  were taken, and steps 5–10 were not watched.
+
+Retroactive check 2026-11-15, standing in for steps 3 and 6: APFS clones of the
+backup and of the live database, `node:sqlite`, the real
+`textFromTranscriptLine`, counts only.
+
+- File: 18.41 GB (backup) to 2.58 GB (live, one day after the run). Freelist 0;
+  `quick_check` ok on both.
+- Backup transcript rows: 376,135. Readable 23,601, all still present and
+  byte-identical. Unreadable 352,534, all gone. None left behind, none changed.
+- Other event rows: 136,858 in the backup, 0 missing and 0 changed (type, ts,
+  session, payload, key).
+- No old transcript row exists that the backup didn't have.
+- Write filter on real traffic: 2,021 transcript rows written since the backup,
+  all readable. Live total 25,622, with 0 unreadable.
+- Keys: no transcript key is set on rows older than the run. The longest key
+  written since the backup is 134 chars; the longest in the backup was 40.5 MB.
+- Other tables grew or stayed equal: decisions 3,900 to 4,181, blockers 416 to
+  441, notes 841 to 841, session_bindings 879 to 950, bookmarks 8 to 8,
+  spawn_groups 11 to 11, usage_records 37,131 to 47,588.
+- `lastAssistantText` and `groupIterations` read transcript rows only through
+  `textFromTranscriptLine`, so identical readable rows give identical output.
+  That is by code reading; the panels were not compared by eye.
+- Hook rows landed 12 s after the run started and kept landing for the next 15
+  minutes. This shows ingestion carried on, not that a terminal kept printing
+  during `VACUUM`.
+
+Second run by the maintainer, 2026-11-15, installed app, no agent working, with
+`while true; do date; sleep 1; done` running in a plain tab:
+
+- Started 02:28:41 HST from the Sidebar LM popover (`events_compacted_at`).
+  Reported as finishing in 10–15 s and reclaiming about 1 MB, nothing odd.
+- The clock tab printed every second from 02:27:43 to 02:29:08 with no gap
+  during the run. Its one skipped second, 02:27:46, came before the run started.
+- After: 2.58 GB, freelist 0, `quick_check` ok, 25,627 transcript rows (25,622
+  before, so nothing readable was removed).
+- App quit and reopened at 02:29:43. No nudge appeared.
+
+Step status: 1 done with the deviation above. 2 done. 3 not done, replaced by
+the row-level check. 4 done; first-run time not recorded. 5 passed: the popover
+showed 2.4 GB before the second run, which is the 2.58 GB on disk in the app's
+binary units (sizes in this section are decimal). 6 replaced by the row-level
+check. 7 passed for terminal output on the second run; hook exit codes were not
+checked directly. 8 not run. 9 passed. 10 passed; the `Not now` snooze was not
+exercised on the installed app.
