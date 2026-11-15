@@ -135,6 +135,8 @@ fn transcript_cleanup_spares_other_rows_and_vacuums_through_a_pool() {
 
         drop(idle);
         pool.close().await;
-        std::fs::remove_dir_all(&dir).unwrap();
+        // Best effort: Windows can still hold the database file for a moment
+        // after the pool closes, and that must not fail the test.
+        std::fs::remove_dir_all(&dir).ok();
     });
 }
