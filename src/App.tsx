@@ -28,6 +28,7 @@ import {
   stateForHook,
 } from "./lib/ingest";
 import { detectBlockers, detectorTextFor, detectorTextForTranscript } from "./lib/detectors";
+import { trimForStorage } from "./lib/payloadTrim";
 import * as decisions from "./lib/decisions";
 import { decisionReplyTab } from "./lib/decisionRouting";
 import { initNotifications, notify, requestNotifications } from "./lib/notify";
@@ -1143,7 +1144,7 @@ export default function App() {
 
       if (!tabId) {
         void repo
-          .addHookEvent(p.session_id, `hook:${p.hook_event_name}`, JSON.stringify(payload))
+          .addHookEvent(p.session_id, `hook:${p.hook_event_name}`, JSON.stringify(trimForStorage(payload)))
           .then(() => {
             if (isPromptSubmit) setPanelRefresh((n) => n + 1);
             scheduleAttentionRefresh();
@@ -1162,7 +1163,7 @@ export default function App() {
         .addHookEvent(
           p.session_id,
           `hook:${p.hook_event_name}`,
-          JSON.stringify(payload),
+          JSON.stringify(trimForStorage(payload)),
           state
             ? {
                 state,

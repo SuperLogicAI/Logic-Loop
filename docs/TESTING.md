@@ -7178,3 +7178,36 @@ binary units (sizes in this section are decimal). 6 replaced by the row-level
 check. 7 passed for terminal output on the second run; hook exit codes were not
 checked directly. 8 not run. 9 passed. 10 passed; the `Not now` snooze was not
 exercised on the installed app.
+
+## Phase 69 — Stop slow leaks in a long-running app
+
+Plan: `plans/069-uptime-hygiene.md`. Machine-verified: `cargo test --lib`
+(reader tests unchanged, plus idle/resume/gone loop tests and a unix reap test),
+`npm run payload-trim:check`, and a read-only reader comparison on an APFS
+clone of the maintainer database (2026-11-15, `node:sqlite` under `tsx`, real
+`listToolEvents` behind a stubbed Tauri IPC, real `summarizeDelta` and
+`groupIterations`, counts only): last 14 days, 113 sessions, 11,145
+`hook:PostToolUse` rows, 5,128 changed, 525.5 MB to 28.9 MB. `listToolEvents`
+differs only in `detail` on 603 rows, each one a `command` over 2,000 chars with
+no `file_path` (0 unexplained). `summarizeDelta` and `groupIterations`: 0
+sessions differ.
+
+On the installed app, with `<pid>` from
+`pgrep -f "Logic Loop.app/Contents/MacOS/app"`:
+
+- [ ] **1.** After a day of normal use, `lsof -p <pid> | grep -c '\.jsonl'`
+  prints 0 or close to it, and the thread count (`ps -M -p <pid> | wc -l`) is
+  far below one per session seen. Baseline before Phase 69: 80 handles, 282
+  threads after 8 days 17 hours.
+- [ ] **2.** Run `exit` in three shell tabs, restart one and close two.
+  `ps -axo ppid,stat | awk -v p=<pid> '$1==p && $2 ~ /Z/' | wc -l` prints 0.
+  Baseline: 22 after 8 days; 1 zombie with 3 live shells 80 minutes after a
+  relaunch. Zombies came from shells that exited on their own (revision 5).
+- [ ] **3.** Leave an agent session idle for over 30 minutes, then send a
+  prompt. Its decisions, work log line and re-entry brief appear as usual.
+- [ ] **4.** After a few days, daily `hook:PostToolUse` payload is a few MB:
+  `SELECT date(ts/1000,'unixepoch'), sum(length(payload_json))/1048576 FROM events WHERE type='hook:PostToolUse' GROUP BY 1 ORDER BY 1 DESC LIMIT 5`.
+  Baseline: about 35 MB a day.
+- [ ] **5.** The Accomplished panel, diff pop-out and since-you-left brief show
+  tool rows as before.
+- [ ] **6.** The PR's `frontend` CI job runs `npm run build` and passes.
